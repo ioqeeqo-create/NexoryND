@@ -355,6 +355,22 @@ function getTrackKey(track) {
   return `${src}:${title}::${artist}`
 }
 
+function getTrackCoverKeys(track) {
+  if (!track) return []
+  const src = String(track.source || 'unknown')
+  const title = String(track.title || '').trim().toLowerCase()
+  const artist = String(track.artist || '').trim().toLowerCase()
+  const keys = []
+  if (track.id) keys.push(`${src}:${String(track.id)}`)
+  if (track.ytId) keys.push(`youtube:yt:${String(track.ytId)}`)
+  if (track.spotifyId) keys.push(`spotify:sp:${String(track.spotifyId)}`)
+  if (title || artist) {
+    keys.push(`${src}:${title}::${artist}`)
+    keys.push(`meta:${title}::${artist}`)
+  }
+  return [...new Set(keys.filter(Boolean))]
+}
+
 function getCustomCoverMap() {
   try { return JSON.parse(localStorage.getItem('flow_track_covers') || '{}') || {} }
   catch { return {} }
@@ -377,9 +393,9 @@ function sanitizeMediaByGifMode(url, category) {
 }
 
 function getEffectiveCoverUrl(track) {
-  const key = getTrackKey(track)
-  if (!key) return track?.cover || ''
-  const custom = getCustomCoverMap()[key]
+  const map = getCustomCoverMap()
+  const keys = getTrackCoverKeys(track)
+  const custom = keys.map((k) => map[k]).find(Boolean)
   return sanitizeMediaByGifMode(custom || track?.cover || '', 'track')
 }
 
@@ -1376,8 +1392,8 @@ function syncTrackCoverStatus() {
     refreshTrackCoverPreview()
     return
   }
-  const key = getTrackKey(currentTrack)
-  const hasCustom = Boolean(getCustomCoverMap()[key])
+  const map = getCustomCoverMap()
+  const hasCustom = getTrackCoverKeys(currentTrack).some((k) => Boolean(map[k]))
   el.textContent = hasCustom ? 'Для текущего трека используется кастомная обложка' : 'Для текущего трека используется обложка из источника'
   refreshTrackCoverPreview()
 }
@@ -1392,10 +1408,11 @@ function setCustomTrackCover(input) {
   }
   const reader = new FileReader()
   reader.onload = (e) => {
-    const key = getTrackKey(currentTrack)
-    if (!key) return
+    const keys = getTrackCoverKeys(currentTrack)
+    if (!keys.length) return
     const map = getCustomCoverMap()
-    map[key] = e.target?.result || ''
+    const value = e.target?.result || ''
+    keys.forEach((key) => { map[key] = value })
     saveCustomCoverMap(map)
     _coverLoadState.clear()
     syncPlayerUIFromTrack()
@@ -1419,14 +1436,15 @@ function clearCustomTrackCover() {
     showToast('Сначала включи трек', true)
     return
   }
-  const key = getTrackKey(currentTrack)
-  if (!key) return
+  const keys = getTrackCoverKeys(currentTrack)
+  if (!keys.length) return
   const map = getCustomCoverMap()
-  if (!map[key]) {
+  const hasAny = keys.some((key) => Boolean(map[key]))
+  if (!hasAny) {
     showToast('Для этого трека нет кастомной обложки', true)
     return
   }
-  delete map[key]
+  keys.forEach((key) => { delete map[key] })
   saveCustomCoverMap(map)
   _coverLoadState.clear()
   syncPlayerUIFromTrack()
@@ -1440,8 +1458,8 @@ function refreshTrackCoverPreview(fileName = '') {
     setMediaPreviewBox('track-cover', '', 'Сначала включи трек')
     return
   }
-  const key = getTrackKey(currentTrack)
-  const custom = key ? (getCustomCoverMap()[key] || '') : ''
+  const map = getCustomCoverMap()
+  const custom = getTrackCoverKeys(currentTrack).map((k) => map[k]).find(Boolean) || ''
   const label = fileName || (custom ? `Текущий трек: ${currentTrack.title || 'Без названия'}` : 'Для этого трека обложка не задана')
   setMediaPreviewBox('track-cover', custom, label)
 }
@@ -1528,32 +1546,19 @@ function importFlowConfigFile(input) {
 }
 
 function updateSourceBadge() {
-  const active = String(getSettings()?.activeSource || currentSource || 'youtube').toLowerCase()
-  currentSource = active
-  const labels = {
-    youtube: 'YouTube',
-    spotify: 'Spotify',
-    soundcloud: 'SoundCloud',
-    audius: 'Audius',
-    hitmo: 'Hitmo',
-  }
-  const txt = labels[active] || 'YouTube'
+  currentSource = 'hybrid'
+  const txt = 'Spotify → SoundCloud → Audius'
   const b1 = document.getElementById('source-badge'); if (b1) b1.textContent = txt
   const b2 = document.getElementById('source-badge-search'); if (b2) b2.textContent = txt
 }
 
 function switchSearchSource(src) {
-  setActiveSource(src)
-  updateSourceBadge()
-  syncSearchSourcePills()
-  showToast(`Источник поиска: ${getSourceLabel()}`)
+  showToast('Режим фиксирован: Spotify → SoundCloud → Audius')
 }
 
 function syncSearchSourcePills() {
-  const active = String(getSettings()?.activeSource || currentSource || 'youtube').toLowerCase()
   document.querySelectorAll('.search-source-pill').forEach(p => {
-    const src = String(p.getAttribute('data-src') || '').toLowerCase()
-    p.classList.toggle('active', src === active || (src === 'yt' && active === 'youtube'))
+    p.classList.toggle('active', p.getAttribute('data-src') === 'hybrid')
   })
 }
 
@@ -3737,22 +3742,22 @@ function searchTracks(queryOverride = '') {
   const container = document.getElementById('search-results')
   if (!q) { container.innerHTML = ''; return }
 
-  container.innerHTML = `<div class="search-loading"><div class="spinner"></div><span>Поиск...</span></div>`
+  container.innerHTML = `<div class="search-loading"><div class="spinner"></div><span>Поиск: Spotify → SoundCloud → Audius...</span></div>`
 
   searchDebounceTimer = setTimeout(async () => {
     const s = getSettings()
-    const sourceKey = String(s?.activeSource || currentSource || 'youtube').toLowerCase()
-    const key = `direct:${sourceKey}:${q}:${Boolean(s.spotifyToken)}:${Boolean(s.soundcloudClientId)}`
+    const key = `hybrid:${q}:${Boolean(s.spotifyToken)}`
     const cached = cacheGet(key)
     if (cached) {
-      _lastSearchMode = cached.mode || sourceKey
+      _lastSearchMode = cached.mode || 'hybrid'
       renderResults(cached.tracks || [])
       return
     }
 
     try {
-      const results = sanitizeTrackList(await searchTracksDirect(q, s))
-      _lastSearchMode = sourceKey
+      const hybrid = await searchHybridTracks(q, s)
+      const results = sanitizeTrackList(hybrid.tracks || [])
+      _lastSearchMode = hybrid.mode || 'hybrid'
       cacheSet(key, { mode: _lastSearchMode, tracks: results })
       renderResults(results)
     } catch (err) {
@@ -3767,9 +3772,6 @@ async function searchTracksDirect(query, settings = getSettings()) {
   if (!q) return []
   const src = String(settings?.activeSource || currentSource || 'youtube').toLowerCase()
   if (src === 'hitmo' || src === 'hm') return sanitizeTrackList(await searchHitmo(q))
-  if (src === 'spotify') return sanitizeTrackList(await searchSpotify(q, settings.spotifyToken))
-  if (src === 'soundcloud' || src === 'sc') return sanitizeTrackList(await searchSoundCloud(q, settings.soundcloudClientId))
-  if (src === 'audius') return sanitizeTrackList(await searchAudius(q))
   if (src === 'youtube' || src === 'yt') {
     if (!window.api?.youtubeSearch) throw new Error('YouTube поиск доступен только в Electron')
     const result = await window.api.youtubeSearch(q)
@@ -3785,7 +3787,8 @@ async function searchTracksDirect(query, settings = getSettings()) {
       id: String(t?.id || t?.ytId || `${t?.title || ''}:${t?.artist || ''}`)
     }))).filter((t) => t.ytId)
   }
-  return sanitizeTrackList(await searchYouTube(q))
+  const hybrid = await searchHybridTracks(q, settings)
+  return sanitizeTrackList(hybrid?.tracks || [])
 }
 function renderResults(results) {
   results = sanitizeTrackList(results)
@@ -3811,17 +3814,11 @@ function renderResults(results) {
 }
 
 function getSourceLabel() {
-  const active = String(getSettings()?.activeSource || currentSource || '').toLowerCase()
-  if (active === 'youtube' || active === 'yt') return 'YouTube'
-  if (active === 'spotify') return 'Spotify'
-  if (active === 'soundcloud' || active === 'sc') return 'SoundCloud'
-  if (active === 'audius') return 'Audius'
-  if (active === 'hitmo' || active === 'hm') return 'Hitmo'
   if (_lastSearchMode === 'spotify') return 'Spotify'
   if (_lastSearchMode === 'soundcloud') return 'SoundCloud'
   if (_lastSearchMode === 'audius') return 'Audius'
   if (_lastSearchMode === 'youtube') return 'YouTube'
-  return 'YouTube'
+  return 'Spotify → SoundCloud → Audius'
 }
 
 async function searchAudius(q) {
@@ -4108,7 +4105,18 @@ function likeTrack(track) {
   if (isLiked(track)) { liked=liked.filter(t=>!(t.id===track.id&&t.source===track.source)); showToast('РЈР±СЂР°РЅРѕ РёР· Р»СЋР±РёРјС‹С…') }
   else { liked.push(track); showToast('Р”РѕР±Р°РІР»РµРЅРѕ РІ Р»СЋР±РёРјС‹Рµ в™Ґ') }
   localStorage.setItem('flow_liked', JSON.stringify(liked))
-  renderLiked(); updatePlayerLikeBtn()
+  renderLiked(); updatePlayerLikeBtn(); syncLikeButtonsInVisibleLists()
+}
+
+function syncLikeButtonsInVisibleLists() {
+  document.querySelectorAll('.track-like[data-track-json]').forEach((btn) => {
+    let track = null
+    try { track = JSON.parse(btn.getAttribute('data-track-json') || '{}') } catch {}
+    if (!track) return
+    const liked = isLiked(track)
+    btn.classList.toggle('liked', liked)
+    btn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE
+  })
 }
 
 function likeCurrentTrack() { if (currentTrack) likeTrack(currentTrack) }
@@ -4618,7 +4626,7 @@ function makeTrackEl(track, showPlaylist=false, bindDefaultPlay=true) {
       <span class="track-name">${track.title}</span>
       <span class="track-artist">${track.artist||'вЂ”'} ${badge}</span>
     </div>
-    <button class="track-like ${liked?'liked':''}" onclick="event.stopPropagation();likeTrack(${trackJson})">${liked ? HEART_FILLED : HEART_OUTLINE}</button>
+    <button class="track-like ${liked?'liked':''}" data-track-json="${trackJson}" onclick="event.stopPropagation();likeTrack(${trackJson})">${liked ? HEART_FILLED : HEART_OUTLINE}</button>
     ${showPlaylist?`<button class="track-like" onclick="event.stopPropagation();addToPlaylist(${trackJson})" title="Р’ РїР»РµР№Р»РёСЃС‚">${ICONS.plus}</button>`:''}
     <button class="track-play"><svg viewBox="0 0 24 24" width="10" height="10" style="fill:currentColor;margin-left:1px"><polygon points="5 3 19 12 5 21 5 3"/></svg></button>`
   if (bindDefaultPlay) {
