@@ -218,10 +218,12 @@
         <div class="profile-hero glass-card">
           <div class="profile-banner" id="profile-banner">
             <button class="btn-small profile-upload-btn" onclick="pickProfileBanner()">Баннер</button>
+            <button class="btn-small profile-upload-btn" style="right:92px" onclick="clearProfileBanner()">Удалить баннер</button>
           </div>
           <div class="profile-avatar-wrap">
             <div class="profile-avatar" id="profile-avatar-large">?</div>
             <button class="btn-small" onclick="pickProfileAvatar()">Аватар</button>
+            <button class="btn-small" onclick="clearProfileAvatar()">Удалить аватар</button>
           </div>
           <div class="profile-main-meta">
             <h3 id="profile-display-name">—</h3>
@@ -596,10 +598,17 @@
         <div class="glass-card" style="padding:18px;border-radius:18px;margin-top:8px;max-width:760px;">
           <div class="vs-section-title" style="margin-bottom:8px;">Discord интеграция</div>
           <input id="discord-client-id" class="token-field flow-input" placeholder="Discord Client ID" />
+          <div class="integration-hint">Как найти ID: Discord Developer Portal → ваше приложение → Settings → General Information → Application ID.</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
             <button class="btn-small" onclick="connectDiscordRpc()">Подключить Discord RPC</button>
             <button class="btn-small" onclick="disconnectDiscordRpc()">Отключить RPC</button>
           </div>
+        </div>
+        <div class="glass-card" style="padding:18px;border-radius:18px;margin-top:12px;max-width:760px;">
+          <div class="vs-section-title" style="margin-bottom:8px;">Прокси для стримов</div>
+          <input id="proxy-base-url" class="token-field flow-input" placeholder="http://127.0.0.1:порт (опционально)" />
+          <div class="integration-hint">Если провайдер режет источники без VPN, укажи локальный/внешний прокси. Пусто = авто-режим Flow.</div>
+          <button class="btn-small" onclick="saveProxySettings()" style="margin-top:10px">Сохранить прокси</button>
         </div>
         <div class="glass-card" style="padding:18px;border-radius:18px;margin-top:12px;max-width:760px;">
           <div class="vs-section-title" style="margin-bottom:8px;">Last.fm интеграция</div>

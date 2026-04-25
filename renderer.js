@@ -51,6 +51,7 @@ let _currentTrackStartedAt = 0
 let _roomServerChannel = null
 let _roomServerHeartbeatTimer = null
 let _lastAppliedServerPlaybackTs = 0
+let _lastRoomServerLoadAt = 0
 let _friendPresence = new Map()
 let _friendsPollTimer = null
 let _playlistDragIndex = -1
@@ -67,6 +68,8 @@ let _sharedQueueDragIndex = -1
 let _lastHostOnlyToastAt = 0
 let _lastUiSyncAt = 0
 let _roomHeartbeatTimer = null
+let _friendContext = null
+let _pendingRoomInvite = null
 
 function getPeerProfileCache() {
   try { return JSON.parse(localStorage.getItem('flow_peer_public_profiles') || '{}') || {} } catch { return {} }
@@ -97,6 +100,34 @@ function getCachedPeerProfile(username = '') {
   if (!safe) return null
   const cache = getPeerProfileCache()
   return cache[safe] || null
+}
+
+function getInviteMuteMap() {
+  try { return JSON.parse(localStorage.getItem('flow_invite_mutes') || '{}') || {} } catch { return {} }
+}
+
+function saveInviteMuteMap(map) {
+  try { localStorage.setItem('flow_invite_mutes', JSON.stringify(map || {})) } catch {}
+}
+
+function isInviteMutedFrom(username = '') {
+  const safe = String(username || '').trim().toLowerCase()
+  if (!safe) return false
+  const map = getInviteMuteMap()
+  const until = Number(map[safe] || 0)
+  if (!until) return false
+  if (Date.now() < until) return true
+  delete map[safe]
+  saveInviteMuteMap(map)
+  return false
+}
+
+function muteInvitesFrom(username = '', ms = 15 * 60 * 1000) {
+  const safe = String(username || '').trim().toLowerCase()
+  if (!safe) return
+  const map = getInviteMuteMap()
+  map[safe] = Date.now() + Math.max(1000, Number(ms || 0))
+  saveInviteMuteMap(map)
 }
 
 function isRoomClientRestricted() {
@@ -168,6 +199,7 @@ function updateRoomUi() {
   }
   updateHostLockUi()
   renderRoomMembers()
+  renderRoomNowPlaying()
   renderRoomQueue()
 }
 
@@ -1434,10 +1466,17 @@ const providers = {
 function getSettings() {
   const raw = JSON.parse(localStorage.getItem('flow_settings')) || {
     soundcloudClientId: '', vkToken: '', spotifyToken: '', yandexToken: '', activeSource: 'youtube',
-    discordClientId: '', discordRpcEnabled: false, lastfmApiKey: '', lastfmSharedSecret: '', lastfmSessionKey: ''
+    discordClientId: '', discordRpcEnabled: false, lastfmApiKey: '', lastfmSharedSecret: '', lastfmSessionKey: '',
+    proxyBaseUrl: ''
   }
   if (!providers[raw.activeSource]) raw.activeSource = 'youtube'
   return raw
+}
+
+function shouldUseProxyStream() {
+  const s = getSettings()
+  const mode = String(s.proxyBaseUrl || '').trim().toLowerCase()
+  return mode !== 'off'
 }
 
 function saveSettingsRaw(patch) {
@@ -2076,9 +2115,12 @@ async function saveRoomStateToServer(patch = {}) {
   } catch {}
 }
 
-async function loadRoomStateFromServer() {
+async function loadRoomStateFromServer(force = false) {
   try {
     if (!_roomState?.roomId) return
+    const now = Date.now()
+    if (!force && (now - _lastRoomServerLoadAt) < 280) return
+    _lastRoomServerLoadAt = now
     const sb = getSupabaseClient()
     if (!sb) return
     const nowIso = new Date(Date.now() - 20000).toISOString()
@@ -2128,14 +2170,14 @@ function startRoomServerSync() {
   if (!sb) return
   _roomServerChannel = sb.channel(`flow-room-sync:${_roomState.roomId}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'flow_rooms', filter: `room_id=eq.${_roomState.roomId}` }, () => {
-      loadRoomStateFromServer().catch(() => {})
+      loadRoomStateFromServer(true).catch(() => {})
     })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'flow_room_members', filter: `room_id=eq.${_roomState.roomId}` }, () => {
-      loadRoomStateFromServer().catch(() => {})
+      loadRoomStateFromServer(true).catch(() => {})
     })
     .subscribe(() => {})
   upsertRoomMemberPresence().catch(() => {})
-  loadRoomStateFromServer().catch(() => {})
+  loadRoomStateFromServer(true).catch(() => {})
   _roomServerHeartbeatTimer = setInterval(() => {
     upsertRoomMemberPresence().catch(() => {})
   }, 2500)
@@ -2271,6 +2313,16 @@ function renderRoomQueue() {
     }
     el.appendChild(row)
   })
+}
+
+function renderRoomNowPlaying() {
+  const el = document.getElementById('room-now-playing')
+  if (!el) return
+  if (!_roomState?.roomId || !currentTrack) {
+    el.textContent = 'Сейчас ничего не играет'
+    return
+  }
+  el.textContent = `Играет сейчас: ${currentTrack.title || 'Без названия'}${currentTrack.artist ? ` — ${currentTrack.artist}` : ''}`
 }
 
 function playSharedQueueTrackAt(index) {
@@ -2525,6 +2577,42 @@ function saveProfileCustom(patch = {}) {
   return next
 }
 
+async function applyProfileBannerTheme(bannerData) {
+  const page = document.getElementById('page-profile')
+  if (!page) return
+  if (!bannerData) {
+    page.style.setProperty('--profile-banner-c1', 'rgba(124,58,237,0.16)')
+    page.style.setProperty('--profile-banner-c2', 'rgba(59,130,246,0.14)')
+    return
+  }
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const el = new Image()
+      el.crossOrigin = 'anonymous'
+      el.onload = () => resolve(el)
+      el.onerror = reject
+      el.src = bannerData
+    })
+    const c = document.createElement('canvas')
+    c.width = 12
+    c.height = 12
+    const ctx = c.getContext('2d', { willReadFrequently: true })
+    if (!ctx) return
+    ctx.drawImage(img, 0, 0, c.width, c.height)
+    const d = ctx.getImageData(0, 0, c.width, c.height).data
+    let r = 0; let g = 0; let b = 0; let n = 0
+    for (let i = 0; i < d.length; i += 16) {
+      r += d[i]; g += d[i + 1]; b += d[i + 2]; n++
+    }
+    if (!n) return
+    r = Math.round(r / n); g = Math.round(g / n); b = Math.round(b / n)
+    const c1 = `rgba(${r},${g},${b},0.20)`
+    const c2 = `rgba(${Math.min(255, Math.round(r * 0.75 + 38))},${Math.min(255, Math.round(g * 0.75 + 54))},${Math.min(255, Math.round(b * 0.75 + 84))},0.16)`
+    page.style.setProperty('--profile-banner-c1', c1)
+    page.style.setProperty('--profile-banner-c2', c2)
+  } catch {}
+}
+
 function renderProfilePage() {
   if (!_profile?.username) return
   const custom = getProfileCustom()
@@ -2554,6 +2642,7 @@ function renderProfilePage() {
   }
   if (displayName) displayName.textContent = _profile.username
   if (bio) bio.textContent = custom.bio || 'Добавь описание профиля'
+  applyProfileBannerTheme(custom.bannerData).catch?.(() => {})
   if (stats) {
     const st = getListenStats()
     const hours = (Number(st.totalSeconds || 0) / 3600).toFixed(1)
@@ -2603,6 +2692,19 @@ async function pickProfileBanner() {
     renderProfilePage()
   }
   input.click()
+}
+
+function clearProfileAvatar() {
+  saveProfileCustom({ avatarData: null })
+  syncProfileUi()
+  renderProfilePage()
+  showToast('Аватар удалён')
+}
+
+function clearProfileBanner() {
+  saveProfileCustom({ bannerData: null })
+  renderProfilePage()
+  showToast('Баннер удалён')
 }
 
 function editProfileBio() {
@@ -2744,6 +2846,12 @@ function submitPlaylistPicker(selectedId) {
     const idx = Number(selectedId)
     const track = ctx.payload?.tracks?.[idx]
     if (track) enqueueSharedTrack(track)
+  } else if (ctx.mode === 'room-invite-friend') {
+    const username = String(selectedId || '').trim()
+    if (username) {
+      const state = _friendPresence.get(username) || {}
+      sendRoomInviteToFriend(username, state.peerId || `flow-${username}`)
+    }
   }
   closePlaylistPickerModal()
 }
@@ -2815,7 +2923,160 @@ function renderPinnedPlaylists() {
   })
 }
 
+function ensureFriendInteractionUI() {
+  if (!document.getElementById('friend-context-menu')) {
+    const menu = document.createElement('div')
+    menu.id = 'friend-context-menu'
+    menu.className = 'friend-context-menu hidden glass-card'
+    menu.innerHTML = `
+      <button class="friend-context-item" onclick="friendMenuJoinRoom()">Присоединиться к руме</button>
+      <button class="friend-context-item" onclick="friendMenuInviteRoom()">Пригласить в комнату</button>
+      <button class="friend-context-item" onclick="friendMenuRefresh()">Обновить</button>
+    `
+    document.body.appendChild(menu)
+    document.addEventListener('click', () => closeFriendContextMenu())
+  }
+  if (!document.getElementById('room-invite-popup')) {
+    const modal = document.createElement('div')
+    modal.id = 'room-invite-popup'
+    modal.className = 'flow-modal hidden'
+    modal.innerHTML = `
+      <div class="flow-modal-backdrop" onclick="declineRoomInvite(false)"></div>
+      <div class="flow-modal-card glass-card">
+        <h3>Приглашение в руму</h3>
+        <p id="room-invite-text" style="margin-top:8px;opacity:.9">Друг приглашает тебя в руму</p>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;opacity:.9">
+          <input type="checkbox" id="room-invite-mute15" />
+          Отклонить и не получать приглашения 15 минут
+        </label>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+          <button class="btn-small" onclick="declineRoomInvite(true)">Отклонить</button>
+          <button class="btn-small" onclick="acceptRoomInvite()">Присоединиться</button>
+        </div>
+      </div>
+    `
+    document.body.appendChild(modal)
+  }
+}
+
+function openFriendContextMenu(event, username, peerId = '', roomId = '', online = false) {
+  event?.preventDefault?.()
+  event?.stopPropagation?.()
+  ensureFriendInteractionUI()
+  const menu = document.getElementById('friend-context-menu')
+  if (!menu) return
+  _friendContext = {
+    username: String(username || ''),
+    peerId: String(peerId || ''),
+    roomId: String(roomId || ''),
+    online: Boolean(online),
+  }
+  menu.style.left = `${Math.max(8, Number(event?.clientX || 0))}px`
+  menu.style.top = `${Math.max(8, Number(event?.clientY || 0))}px`
+  menu.classList.remove('hidden')
+}
+
+function closeFriendContextMenu() {
+  const menu = document.getElementById('friend-context-menu')
+  if (menu) menu.classList.add('hidden')
+}
+
+function friendMenuInviteRoom() {
+  closeFriendContextMenu()
+  if (!_friendContext?.username) return
+  sendRoomInviteToFriend(_friendContext.username, _friendContext.peerId || _friendContext.roomId || '')
+}
+
+function friendMenuJoinRoom() {
+  closeFriendContextMenu()
+  const roomId = String(_friendContext?.roomId || '').trim()
+  if (!roomId) return showToast('У друга сейчас нет активной румы', true)
+  joinRoomById(roomId)
+}
+
+async function friendMenuRefresh() {
+  closeFriendContextMenu()
+  if (!_friendContext?.username) return
+  const username = _friendContext.username
+  const cloud = await fetchCloudPublicProfile(username).catch(() => null)
+  if (cloud) {
+    const pid = _friendContext.peerId || `flow-${username}`
+    const merged = Object.assign({}, cloud, { peerId: pid })
+    cachePeerProfile(merged, pid)
+    _peerProfiles.set(pid, merged)
+  }
+  if (_socialPeer?.requestPeerData && _friendContext.peerId) {
+    const rsp = await _socialPeer.requestPeerData(_friendContext.peerId, { type: 'presence-request' }, 1300).catch(() => null)
+    const profile = rsp?.ok ? rsp?.data?.profile : null
+    if (profile) {
+      const pid = rsp?.data?.peerId || _friendContext.peerId
+      const merged = Object.assign({}, profile, { peerId: pid })
+      cachePeerProfile(merged, pid)
+      _peerProfiles.set(pid, merged)
+    }
+  }
+  renderFriends().catch(() => {})
+  showToast('Профиль обновлён')
+}
+
+function sendRoomInviteToFriend(username, peerId = '') {
+  if (!_roomState?.roomId) return showToast('Сначала зайди в руму', true)
+  const toPeer = String(peerId || `flow-${username}`).trim()
+  if (!toPeer || !_socialPeer?.sendToPeer) return showToast('Друг офлайн', true)
+  _socialPeer.sendToPeer(toPeer, {
+    type: 'room-invite',
+    roomId: _roomState.roomId,
+    fromUsername: _profile?.username || 'user',
+  })
+  showToast(`Приглашение отправлено: ${username}`)
+}
+
+function openRoomInvitePicker() {
+  if (!_profile?.username || !peerSocial.getFriends) return
+  const friends = peerSocial.getFriends(_profile.username) || []
+  if (!friends.length) return showToast('Список друзей пуст', true)
+  openPlaylistPickerModal({
+    mode: 'room-invite-friend',
+    title: 'Пригласить друга в руму',
+    items: friends.map((name) => ({ id: String(name), label: name })),
+    payload: {}
+  })
+}
+
+function showRoomInvitePrompt(invite) {
+  ensureFriendInteractionUI()
+  _pendingRoomInvite = invite || null
+  const popup = document.getElementById('room-invite-popup')
+  const text = document.getElementById('room-invite-text')
+  const mute = document.getElementById('room-invite-mute15')
+  if (!popup || !text || !mute) return
+  mute.checked = false
+  text.textContent = `${invite?.fromUsername || 'Друг'} приглашает в руму ${invite?.roomId || ''}`
+  popup.classList.remove('hidden')
+}
+
+function acceptRoomInvite() {
+  const popup = document.getElementById('room-invite-popup')
+  if (popup) popup.classList.add('hidden')
+  const roomId = String(_pendingRoomInvite?.roomId || '').trim()
+  _pendingRoomInvite = null
+  if (roomId) joinRoomById(roomId)
+}
+
+function declineRoomInvite(withMuteChoice = true) {
+  const popup = document.getElementById('room-invite-popup')
+  if (popup) popup.classList.add('hidden')
+  const fromUser = String(_pendingRoomInvite?.fromUsername || '').trim().toLowerCase()
+  const mute = document.getElementById('room-invite-mute15')
+  if (withMuteChoice && mute?.checked && fromUser) {
+    muteInvitesFrom(fromUser, 15 * 60 * 1000)
+    showToast('Приглашения от пользователя скрыты на 15 минут')
+  }
+  _pendingRoomInvite = null
+}
+
 function ensureSocialUI() {
+  ensureFriendInteractionUI()
   if (document.getElementById('social-hub')) return
   const root = document.getElementById('page-social-content')
   if (!root) return
@@ -2870,6 +3131,7 @@ function ensureRoomsUI() {
       <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn-small" onclick="copyInviteLink()">Copy Invite Link/ID</button>
         <button class="btn-small" onclick="promptInviteJoin()">Ввести Invite</button>
+        <button class="btn-small" onclick="openRoomInvitePicker()">Пригласить друга</button>
       </div>
     </div>
     <div class="social-room-box">
@@ -2884,6 +3146,7 @@ function ensureRoomsUI() {
     </div>
     <div class="social-room-box">
       <div class="social-section-title">Очередь прослушивания</div>
+      <div id="room-now-playing" class="room-now-playing-line">Сейчас ничего не играет</div>
       <div id="room-queue-list"></div>
     </div>
   `
@@ -2921,7 +3184,7 @@ async function renderFriends() {
   }
   const fmtFriendCard = (item, onlineMode) => {
     const avatar = resolveAvatar(item.name)
-    const roomId = item.state.roomId || `flow-${item.name}`
+    const roomId = item.state.roomId || ''
     const nowPlaying = onlineMode && item.state.track?.title
       ? `${item.state.track.title}${item.state.track.artist ? ` — ${item.state.track.artist}` : ''}`
       : (onlineMode ? 'в сети' : 'не в сети')
@@ -2929,14 +3192,12 @@ async function renderFriends() {
       ? `<div class="social-friend-avatar" style="background-image:url(${avatar})"></div>`
       : `<div class="social-friend-avatar">${item.name.slice(0, 1).toUpperCase()}</div>`
     return `
-      <div class="social-friend-card ${onlineMode ? 'online' : 'offline'}">
+      <div class="social-friend-card ${onlineMode ? 'online' : 'offline'}" oncontextmenu="openFriendContextMenu(event, '${item.name}', '${item.state.peerId || ''}', '${roomId}', ${onlineMode ? 'true' : 'false'})">
         ${avatarHtml}
         <div class="social-friend-meta">
-          <strong onclick="openPeerProfile('${item.name}', '${item.state.peerId || ''}')">${item.name}</strong>
+          <strong>${item.name}</strong>
           <span>${nowPlaying}</span>
         </div>
-        <button class="btn-small" onclick="openPeerProfile('${item.name}', '${item.state.peerId || ''}')">Профиль</button>
-        ${onlineMode ? `<button class="btn-small" onclick="joinFriendRoom('${roomId}')">Join Room</button>` : ''}
       </div>
     `
   }
@@ -2970,13 +3231,22 @@ function getLastFmPayload() {
 function syncIntegrationsUI() {
   const s = getSettings()
   const d = document.getElementById('discord-client-id')
+  const p = document.getElementById('proxy-base-url')
   const k = document.getElementById('lastfm-api-key')
   const ss = document.getElementById('lastfm-shared-secret')
   const sk = document.getElementById('lastfm-session-key')
   if (d) d.value = s.discordClientId || ''
+  if (p) p.value = s.proxyBaseUrl || ''
   if (k) k.value = s.lastfmApiKey || ''
   if (ss) ss.value = s.lastfmSharedSecret || ''
   if (sk) sk.value = s.lastfmSessionKey || ''
+}
+
+function saveProxySettings() {
+  const input = document.getElementById('proxy-base-url')
+  const proxyBaseUrl = String(input?.value || '').trim()
+  saveSettingsRaw({ proxyBaseUrl })
+  showToast(proxyBaseUrl ? 'Прокси режим сохранен' : 'Прокси: авто-режим Flow')
 }
 
 async function connectDiscordRpc() {
@@ -3110,6 +3380,9 @@ function initPeerSocial() {
       const hostPeerId = _roomState.hostPeerId || _roomState.roomId
       const hostMsg = Boolean(msg._peerId && hostPeerId && msg._peerId === hostPeerId)
       if (msg.type === 'playback-sync' && msg.roomId === _roomState.roomId && !_roomState.host && (hostMsg || msg.roomId === _roomState.roomId)) {
+        const ts = Number(msg.playbackTs || msg._ts || 0)
+        if (ts && ts <= _lastAppliedServerPlaybackTs) return
+        if (ts) _lastAppliedServerPlaybackTs = ts
         if (msg.track && msg.track.id !== currentTrack?.id) {
           playTrackObj(msg.track, { remoteSync: true }).catch(() => {})
         }
@@ -3156,6 +3429,13 @@ function initPeerSocial() {
           cachePeerProfile(msg.profile, msg.peerId || msg._peerId)
         }
         renderFriends()
+      }
+      if (msg.type === 'room-invite') {
+        const fromUsername = String(msg.fromUsername || String(msg._from || '').replace(/^flow-/, '')).trim().toLowerCase()
+        if (isInviteMutedFrom(fromUsername)) return
+        const roomId = String(msg.roomId || '').trim()
+        if (!roomId) return
+        showRoomInvitePrompt({ roomId, fromUsername })
       }
       if (msg.type === 'room-profile-state' && msg.roomId === _roomState.roomId && msg.profile && msg._peerId) {
         const profileWithPeer = Object.assign({}, msg.profile, { peerId: msg._peerId })
@@ -3577,6 +3857,7 @@ function broadcastPlaybackSync(force = false) {
     type: 'playback-sync',
     roomId: _roomState.roomId,
     track: currentTrack,
+    playbackTs: Date.now(),
     currentTime: Number(audio.currentTime || 0),
     paused: Boolean(audio.paused),
     source: currentTrack?.source || null,
@@ -4095,7 +4376,7 @@ async function playTrackObj(track, opts = {}) {
   // External streams are played via local proxy for CORS/Range compatibility.
   let finalUrl = streamUrl
   // For yt-dlp direct googlevideo links, direct playback is often more stable than proxy.
-  if (window.api?.proxySetUrl && /^https?:\/\//i.test(streamUrl) && streamEngine !== 'yt-dlp') {
+  if (window.api?.proxySetUrl && shouldUseProxyStream() && /^https?:\/\//i.test(streamUrl) && streamEngine !== 'yt-dlp') {
     setStage('Прокси: подготовка…')
     try {
       finalUrl = await window.api.proxySetUrl(streamUrl)
@@ -4126,7 +4407,7 @@ async function playTrackObj(track, opts = {}) {
           if (fresh.ok && fresh.url) {
             streamUrl = fresh.url
             if (fresh.inst) _ytInstanceCache = fresh.inst
-            finalUrl = (window.api?.proxySetUrl && /^https?:\/\//i.test(streamUrl)) ? await window.api.proxySetUrl(streamUrl) : streamUrl
+            finalUrl = (window.api?.proxySetUrl && shouldUseProxyStream() && /^https?:\/\//i.test(streamUrl)) ? await window.api.proxySetUrl(streamUrl) : streamUrl
             console.log('FRESH URL AFTER 403 PROBE:', streamUrl, 'engine:', fresh.inst || 'unknown')
             setStage('YouTube: обновил поток, запускаю…')
           } else {
@@ -4187,7 +4468,7 @@ async function playTrackObj(track, opts = {}) {
     if (track.source === 'youtube') {
       try {
         const alternateUrl = finalUrl === streamUrl
-          ? ((window.api?.proxySetUrl && /^https?:\/\//i.test(streamUrl)) ? await window.api.proxySetUrl(streamUrl) : streamUrl)
+          ? ((window.api?.proxySetUrl && shouldUseProxyStream() && /^https?:\/\//i.test(streamUrl)) ? await window.api.proxySetUrl(streamUrl) : streamUrl)
           : streamUrl
         started = await tryStartPlayback(alternateUrl)
         if (!started) throw new Error('alternate playback timeout')
@@ -4206,7 +4487,7 @@ async function playTrackObj(track, opts = {}) {
             streamUrl = fresh.url
             if (fresh.inst) _ytInstanceCache = fresh.inst
             console.log('FRESH STREAM URL:', streamUrl, 'engine:', fresh.inst || 'unknown')
-            const freshProxy = window.api?.proxySetUrl && /^https?:\/\//i.test(streamUrl) ? await window.api.proxySetUrl(streamUrl) : streamUrl
+            const freshProxy = window.api?.proxySetUrl && shouldUseProxyStream() && /^https?:\/\//i.test(streamUrl) ? await window.api.proxySetUrl(streamUrl) : streamUrl
             started = await tryStartPlayback(freshProxy)
             if (!started) throw new Error('fresh stream timeout')
           } else {
@@ -4252,6 +4533,7 @@ async function playTrackObj(track, opts = {}) {
   // Р—Р°РіСЂСѓР¶Р°РµРј lyrics РµСЃР»Рё РїР°РЅРµР»СЊ РѕС‚РєСЂС‹С‚Р°
   if (_lyricsOpen) loadLyrics(track)
   prewarmNextQueueTrack()
+  renderRoomNowPlaying()
   renderRoomQueue()
   _currentTrackStartedAt = Math.floor(Date.now() / 1000)
   pushLastFmNowPlaying(track)
@@ -4303,6 +4585,10 @@ function togglePlay() {
       paused: Boolean(audio.paused),
       currentTime: Number(audio.currentTime || 0),
     })
+    saveRoomStateToServer({
+      playback_state: { paused: Boolean(audio.paused), currentTime: Number(audio.currentTime || 0) },
+      playback_ts: Date.now(),
+    }).catch(() => {})
   }
   if (_roomState?.host) broadcastPlaybackSync(true)
 }
@@ -4315,14 +4601,17 @@ function seekTo(val) {
   if (audio.duration) audio.currentTime = val * audio.duration
 }
 function setVolume(val) {
-  const volume = Math.max(0, Math.min(1, Number(val) || 0))
+  const slider = Math.max(0, Math.min(1, Number(val) || 0))
+  // Perceptual curve: mid slider is quieter, fine-grained low-volume control.
+  const volume = Math.max(0, Math.min(1, slider * slider))
   audio.volume = volume
   const v1 = document.getElementById('volume')
   const v2 = document.getElementById('pm-volume')
   const v3 = document.getElementById('pm-cover-volume')
-  if (v1) v1.value = volume
-  if (v2) v2.value = volume
-  if (v3) v3.value = volume
+  if (v1) v1.value = slider
+  if (v2) v2.value = slider
+  if (v3) v3.value = slider
+  try { localStorage.setItem('flow_volume_slider', String(slider)) } catch {}
 }
 function pickRandomQueueIndex() {
   if (!queue.length) return -1
@@ -4504,7 +4793,7 @@ function searchTracks(queryOverride = '') {
       renderResults(results)
     } catch (err) {
       const message = sanitizeDisplayText(normalizeInvokeError(err))
-      container.innerHTML = `<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.8 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0Z"/></svg></div><p>${message}</p><button class="btn-small" onclick="openPage('settings')" style="margin-top:12px"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.04 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.96 19.35a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87A1.7 1.7 0 0 0 3 13.96H2.9a2 2 0 1 1 0-4H3A1.7 1.7 0 0 0 4.64 8.4a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1-1.56V2.9a2 2 0 1 1 4 0V3a1.7 1.7 0 0 0 1.04 1.56h.09a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9c0 .69.41 1.31 1.04 1.56H21.1a2 2 0 1 1 0 4H21a1.7 1.7 0 0 0-1.6 1.04V15Z"/></svg> Настройки</button></div>`
+      container.innerHTML = `<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.8 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0Z"/></svg></div><p>${message}</p><small>Источник: ${getSourceLabel()}</small><div style="display:flex;gap:8px;justify-content:center;margin-top:12px"><button class="btn-small" onclick="searchTracks()">Повторить</button><button class="btn-small" onclick="openPage('settings')">Настройки</button></div></div>`
     }
   }, 350)
 }
@@ -5756,6 +6045,8 @@ window.addEventListener('DOMContentLoaded', () => {
   applyUiTextOverrides()
   setupSidebarResize()
   setupCardTilt()
+  const savedSlider = Number(localStorage.getItem('flow_volume_slider') || '0.8')
+  setVolume(Number.isFinite(savedSlider) ? savedSlider : 0.8)
   syncHomeCloneUI()
   syncHomeWidgetUI()
   applyHomeSliderStyle()
