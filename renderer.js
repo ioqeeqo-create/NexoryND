@@ -1,4 +1,4 @@
-﻿const { audioPlayer = {}, smartCleaning = {}, dragDrop = {}, peerSocial = {} } = window.FlowModules || {}
+const { audioPlayer = {}, smartCleaning = {}, dragDrop = {}, peerSocial = {} } = window.FlowModules || {}
 const audio = (audioPlayer.createPlayerAudio || ((onErr) => {
   const el = new Audio()
   el.volume = 0.8
