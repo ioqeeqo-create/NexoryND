@@ -48,6 +48,9 @@ let _socialPeer = null
 let _roomState = { roomId: null, host: false, hostPeerId: null }
 let _lastRoomSyncAt = 0
 let _currentTrackStartedAt = 0
+let _roomServerChannel = null
+let _roomServerHeartbeatTimer = null
+let _lastAppliedServerPlaybackTs = 0
 let _friendPresence = new Map()
 let _friendsPollTimer = null
 let _playlistDragIndex = -1
@@ -2020,6 +2023,124 @@ function scheduleProfileCloudSync() {
   }, 220)
 }
 
+function stopRoomServerSync() {
+  try {
+    const sb = getSupabaseClient()
+    if (sb && _roomServerChannel) sb.removeChannel(_roomServerChannel)
+  } catch {}
+  _roomServerChannel = null
+  if (_roomServerHeartbeatTimer) clearInterval(_roomServerHeartbeatTimer)
+  _roomServerHeartbeatTimer = null
+}
+
+async function upsertRoomMemberPresence() {
+  try {
+    if (!_roomState?.roomId || !_profile?.username) return
+    const sb = getSupabaseClient()
+    if (!sb) return
+    const peerId = String(_socialPeer?.peer?.id || `flow-${_profile.username}`)
+    const profile = getPublicProfilePayload(_profile.username)
+    await sb.from('flow_room_members').upsert({
+      room_id: _roomState.roomId,
+      peer_id: peerId,
+      username: _profile.username,
+      profile: profile || {},
+      last_seen: new Date().toISOString(),
+    }, { onConflict: 'room_id,peer_id' })
+  } catch {}
+}
+
+async function removeRoomMemberPresence(roomId = _roomState?.roomId) {
+  try {
+    const sb = getSupabaseClient()
+    const peerId = String(_socialPeer?.peer?.id || '')
+    if (!sb || !roomId || !peerId) return
+    await sb.from('flow_room_members').delete().eq('room_id', roomId).eq('peer_id', peerId)
+  } catch {}
+}
+
+async function saveRoomStateToServer(patch = {}) {
+  try {
+    if (!_roomState?.roomId || !_profile?.username) return
+    const sb = getSupabaseClient()
+    if (!sb) return
+    const hostPeerId = String(_roomState.host ? (_socialPeer?.peer?.id || _roomState.roomId) : (_roomState.hostPeerId || _roomState.roomId))
+    const payload = Object.assign({
+      room_id: _roomState.roomId,
+      host_peer_id: hostPeerId,
+      shared_queue: sharedQueue,
+      updated_by_peer_id: String(_socialPeer?.peer?.id || hostPeerId),
+      updated_at: new Date().toISOString(),
+    }, patch || {})
+    await sb.from('flow_rooms').upsert(payload, { onConflict: 'room_id' })
+  } catch {}
+}
+
+async function loadRoomStateFromServer() {
+  try {
+    if (!_roomState?.roomId) return
+    const sb = getSupabaseClient()
+    if (!sb) return
+    const nowIso = new Date(Date.now() - 20000).toISOString()
+    const [{ data: room }, { data: members }] = await Promise.all([
+      sb.from('flow_rooms').select('room_id,host_peer_id,shared_queue,now_playing,playback_ts').eq('room_id', _roomState.roomId).maybeSingle(),
+      sb.from('flow_room_members').select('peer_id,username,profile,last_seen').eq('room_id', _roomState.roomId).gte('last_seen', nowIso)
+    ])
+    if (room?.host_peer_id) _roomState.hostPeerId = String(room.host_peer_id)
+    if (Array.isArray(room?.shared_queue)) {
+      sharedQueue = room.shared_queue.map((t) => sanitizeTrack(t)).filter(Boolean)
+      renderRoomQueue()
+    }
+    if (Array.isArray(members)) {
+      const next = new Map()
+      members.forEach((m) => {
+        const pid = String(m?.peer_id || '').trim()
+        if (!pid) return
+        const profile = Object.assign({ username: m?.username || pid.replace(/^flow-/, '') }, m?.profile || {}, { peerId: pid })
+        next.set(pid, profile)
+        cachePeerProfile(profile, pid)
+      })
+      if (_socialPeer?.peer?.id && _profile?.username) next.set(_socialPeer.peer.id, getPublicProfilePayload(_profile.username))
+      _roomMembers = next
+      renderRoomMembers()
+    }
+    if (!_roomState.host && room?.now_playing && Number(room?.playback_ts || 0) > _lastAppliedServerPlaybackTs) {
+      _lastAppliedServerPlaybackTs = Number(room.playback_ts || 0)
+      const serverTrack = sanitizeTrack(room.now_playing)
+      const state = room?.playback_state || {}
+      if (serverTrack && serverTrack.id !== currentTrack?.id) {
+        playTrackObj(serverTrack, { remoteSync: true }).catch(() => {})
+      }
+      const targetTime = Number(state?.currentTime || 0)
+      if (Number.isFinite(targetTime) && Math.abs(Number(audio.currentTime || 0) - targetTime) > 0.6) {
+        audio.currentTime = Math.max(0, targetTime)
+      }
+      if (state?.paused === true && !audio.paused) audio.pause()
+      if (state?.paused === false && audio.paused) audio.play().catch(() => {})
+    }
+  } catch {}
+}
+
+function startRoomServerSync() {
+  stopRoomServerSync()
+  if (!_roomState?.roomId) return
+  const sb = getSupabaseClient()
+  if (!sb) return
+  _roomServerChannel = sb.channel(`flow-room-sync:${_roomState.roomId}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'flow_rooms', filter: `room_id=eq.${_roomState.roomId}` }, () => {
+      loadRoomStateFromServer().catch(() => {})
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'flow_room_members', filter: `room_id=eq.${_roomState.roomId}` }, () => {
+      loadRoomStateFromServer().catch(() => {})
+    })
+    .subscribe(() => {})
+  upsertRoomMemberPresence().catch(() => {})
+  loadRoomStateFromServer().catch(() => {})
+  _roomServerHeartbeatTimer = setInterval(() => {
+    upsertRoomMemberPresence().catch(() => {})
+  }, 2500)
+}
+
 function renderRoomMembers() {
   const el = document.getElementById('room-members-list')
   if (!el) return
@@ -2156,6 +2277,7 @@ function broadcastQueueUpdate() {
     roomId: _roomState.roomId,
     sharedQueue,
   })
+  saveRoomStateToServer({ shared_queue: sharedQueue }).catch(() => {})
 }
 
 function enqueueSharedTrack(track) {
@@ -2167,14 +2289,29 @@ function enqueueSharedTrack(track) {
     broadcastQueueUpdate()
     return showToast('Трек добавлен в очередь комнаты')
   }
-  const payload = {
-    type: 'room-queue-add',
-    roomId: _roomState.roomId,
-    track: cleanTrack,
-  }
-  if (typeof _socialPeer?.sendToPeer === 'function' && _roomState?.hostPeerId) _socialPeer.sendToPeer(_roomState.hostPeerId, payload)
-  else _socialPeer?.send(payload)
-  showToast('Запрос на добавление отправлен хосту')
+  // Optimistic update for clients: show item in queue instantly after click.
+  sharedQueue.push(cleanTrack)
+  renderRoomQueue()
+  showToast('Трек добавлен в очередь комнаты')
+
+  // Server-first queue append for non-host users (reliable even when direct peer messaging fails).
+  ;(async () => {
+    try {
+      const sb = getSupabaseClient()
+      if (!sb) throw new Error('no supabase')
+      const { data } = await sb.from('flow_rooms').select('shared_queue').eq('room_id', _roomState.roomId).maybeSingle()
+      const nextQueue = Array.isArray(data?.shared_queue) ? data.shared_queue.slice() : []
+      nextQueue.push(cleanTrack)
+      await saveRoomStateToServer({ shared_queue: nextQueue })
+    } catch {
+      const payload = { type: 'room-queue-add', roomId: _roomState.roomId, track: cleanTrack }
+      // Broadcast in room channel is more robust than direct-only messages.
+      _socialPeer?.send(payload)
+      if (typeof _socialPeer?.sendToPeer === 'function' && _roomState?.hostPeerId) {
+        _socialPeer.sendToPeer(_roomState.hostPeerId, payload)
+      }
+    }
+  })()
 }
 
 function removeSharedQueueTrack(index) {
@@ -2184,6 +2321,7 @@ function removeSharedQueueTrack(index) {
   sharedQueue.splice(idx, 1)
   renderRoomQueue()
   broadcastQueueUpdate()
+  saveRoomStateToServer({ shared_queue: sharedQueue }).catch(() => {})
 }
 
 function moveSharedQueueTrack(index, dir) {
@@ -2197,6 +2335,7 @@ function moveSharedQueueTrack(index, dir) {
   sharedQueue[j] = tmp
   renderRoomQueue()
   broadcastQueueUpdate()
+  saveRoomStateToServer({ shared_queue: sharedQueue }).catch(() => {})
 }
 
 function reorderSharedQueueTrack(fromIndex, toIndex) {
@@ -2208,6 +2347,7 @@ function reorderSharedQueueTrack(fromIndex, toIndex) {
   sharedQueue.splice(to, 0, moved)
   renderRoomQueue()
   broadcastQueueUpdate()
+  saveRoomStateToServer({ shared_queue: sharedQueue }).catch(() => {})
 }
 
 async function searchRoomQueueTracks() {
@@ -2954,7 +3094,8 @@ function initPeerSocial() {
     onMessage: (msg, fromPeerId) => {
       if (!msg || typeof msg !== 'object') return
       const hostPeerId = _roomState.hostPeerId || _roomState.roomId
-      if (msg.type === 'playback-sync' && !_roomState.host && msg._peerId && hostPeerId && msg._peerId === hostPeerId) {
+      const hostMsg = Boolean(msg._peerId && hostPeerId && msg._peerId === hostPeerId)
+      if (msg.type === 'playback-sync' && msg.roomId === _roomState.roomId && !_roomState.host && (hostMsg || msg.roomId === _roomState.roomId)) {
         if (msg.track && msg.track.id !== currentTrack?.id) {
           playTrackObj(msg.track, { remoteSync: true }).catch(() => {})
         }
@@ -3002,7 +3143,7 @@ function initPeerSocial() {
         }
         renderFriends()
       }
-      if (msg.type === 'room-profile-state' && msg.profile && msg._peerId) {
+      if (msg.type === 'room-profile-state' && msg.roomId === _roomState.roomId && msg.profile && msg._peerId) {
         const profileWithPeer = Object.assign({}, msg.profile, { peerId: msg._peerId })
         _peerProfiles.set(msg._peerId, profileWithPeer)
         cachePeerProfile(profileWithPeer, msg._peerId)
@@ -3012,7 +3153,7 @@ function initPeerSocial() {
         resetRoomHeartbeat()
         updateRoomUi()
       }
-      if (msg.type === 'room-members-state' && Array.isArray(msg.members)) {
+      if (msg.type === 'room-members-state' && msg.roomId === _roomState.roomId && Array.isArray(msg.members)) {
         const map = new Map()
         msg.members.forEach((item) => {
           if (!item?.peerId || !item?.profile) return
@@ -3026,24 +3167,38 @@ function initPeerSocial() {
         resetRoomHeartbeat()
         updateRoomUi()
       }
-      if (msg.type === 'room-queue-add' && _roomState.host && msg.track) {
+      if (msg.type === 'room-queue-add' && msg.roomId === _roomState.roomId && _roomState.host && msg.track) {
         const t = sanitizeTrack(msg.track)
         sharedQueue.push(t)
         broadcastQueueUpdate()
         _socialPeer.send({ type: 'room-profile-state', roomId: _roomState.roomId, profile: getPublicProfilePayload(_profile?.username), sharedQueue })
+        saveRoomStateToServer({ shared_queue: sharedQueue }).catch(() => {})
         renderRoomQueue()
       }
-      if (msg.type === 'room-queue-sync-request' && _roomState.host) {
+      if (msg.type === 'room-control-toggle' && msg.roomId === _roomState.roomId && msg._peerId && msg._peerId !== _socialPeer?.peer?.id) {
+        const shouldPause = Boolean(msg.paused)
+        if (shouldPause && !audio.paused) audio.pause()
+        if (!shouldPause && audio.paused) audio.play().catch(() => {})
+        if (_roomState?.host) {
+          saveRoomStateToServer({
+            playback_state: { paused: Boolean(audio.paused), currentTime: Number(audio.currentTime || 0) },
+            playback_ts: Date.now(),
+          }).catch(() => {})
+        }
+      }
+      if (msg.type === 'room-queue-sync-request' && msg.roomId === _roomState.roomId && _roomState.host) {
         const payload = { type: 'room-queue-sync-state', roomId: _roomState.roomId, sharedQueue }
         if (typeof _socialPeer.sendToPeer === 'function' && msg._peerId) _socialPeer.sendToPeer(msg._peerId, payload)
         else _socialPeer.send(payload)
       }
-      if (msg.type === 'room-queue-sync-state' && Array.isArray(msg.sharedQueue)) {
+      if (msg.type === 'room-queue-sync-state' && msg.roomId === _roomState.roomId && Array.isArray(msg.sharedQueue)) {
         sharedQueue = msg.sharedQueue
+        saveRoomStateToServer({ shared_queue: sharedQueue }).catch(() => {})
         renderRoomQueue()
       }
-      if (msg.type === (peerSocial?.EVENTS?.QUEUE_UPDATE || 'queue-update') && Array.isArray(msg.sharedQueue)) {
+      if (msg.type === (peerSocial?.EVENTS?.QUEUE_UPDATE || 'queue-update') && msg.roomId === _roomState.roomId && Array.isArray(msg.sharedQueue)) {
         sharedQueue = msg.sharedQueue
+        saveRoomStateToServer({ shared_queue: sharedQueue }).catch(() => {})
         renderRoomQueue()
       }
     },
@@ -3076,6 +3231,8 @@ function submitAuth() {
 }
 
 function logout() {
+  removeRoomMemberPresence(_roomState?.roomId).catch(() => {})
+  stopRoomServerSync()
   try { _socialPeer?.destroy() } catch {}
   _socialPeer = null
   _roomState = { roomId: null, host: false, hostPeerId: null }
@@ -3149,6 +3306,8 @@ function createRoom() {
   if (_socialPeer?.peer?.id) _roomMembers.set(_socialPeer.peer.id, getPublicProfilePayload(_profile?.username))
   setRoomStatus(`Рума ${r.roomId}: участников 1/3`)
   resetRoomHeartbeat()
+  startRoomServerSync()
+  saveRoomStateToServer({ shared_queue: [], now_playing: null, playback_ts: Date.now() }).catch(() => {})
   updateRoomUi()
   showToast('Рума создана')
 }
@@ -3165,6 +3324,8 @@ function joinRoomById(forceRoomId = '') {
   if (_socialPeer?.peer?.id) _roomMembers.set(_socialPeer.peer.id, getPublicProfilePayload(_profile?.username))
   setRoomStatus(`Подключение к руме ${r.roomId}...`)
   resetRoomHeartbeat()
+  startRoomServerSync()
+  loadRoomStateFromServer().catch(() => {})
   updateRoomUi()
   showToast('Подключение к руме...')
 }
@@ -3174,6 +3335,9 @@ function joinFriendRoom(roomId) {
 }
 
 function leaveRoom() {
+  const prevRoomId = _roomState?.roomId
+  removeRoomMemberPresence(prevRoomId).catch(() => {})
+  stopRoomServerSync()
   if (!_socialPeer) return
   if (typeof _socialPeer.leaveRoom === 'function') _socialPeer.leaveRoom()
   _roomState = { roomId: null, host: false, hostPeerId: null }
@@ -3404,6 +3568,12 @@ function broadcastPlaybackSync(force = false) {
     source: currentTrack?.source || null,
     sharedQueue,
   })
+  saveRoomStateToServer({
+    now_playing: currentTrack,
+    shared_queue: sharedQueue,
+    playback_state: { paused: Boolean(audio.paused), currentTime: Number(audio.currentTime || 0) },
+    playback_ts: Date.now(),
+  }).catch(() => {})
 }
 
 // в”Ђв”Ђв”Ђ APP START в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
@@ -3530,6 +3700,59 @@ function setupSidebarResize() {
     dragging = false
     document.body.style.cursor = ''
   })
+}
+
+function setupCardTilt() {
+  const selector = '.track-card, .playlist-card, .social-friend-card, .profile-card, .home-card'
+  let activeCard = null
+  let rafId = 0
+  let pendingEvt = null
+
+  const resetCard = (el) => {
+    if (!el) return
+    el.style.setProperty('--card-tilt-x', '0deg')
+    el.style.setProperty('--card-tilt-y', '0deg')
+    el.style.setProperty('--card-tilt-glow-x', '50%')
+    el.style.setProperty('--card-tilt-glow-y', '50%')
+    el.classList.remove('is-tilting')
+  }
+
+  const updateTilt = () => {
+    rafId = 0
+    const e = pendingEvt
+    const card = activeCard
+    if (!e || !card) return
+    const rect = card.getBoundingClientRect()
+    if (!rect.width || !rect.height) return
+    const px = (e.clientX - rect.left) / rect.width
+    const py = (e.clientY - rect.top) / rect.height
+    const rx = (0.5 - py) * 4.6
+    const ry = (px - 0.5) * 4.6
+    card.style.setProperty('--card-tilt-x', `${rx.toFixed(2)}deg`)
+    card.style.setProperty('--card-tilt-y', `${ry.toFixed(2)}deg`)
+    card.style.setProperty('--card-tilt-glow-x', `${Math.max(0, Math.min(100, px * 100)).toFixed(1)}%`)
+    card.style.setProperty('--card-tilt-glow-y', `${Math.max(0, Math.min(100, py * 100)).toFixed(1)}%`)
+    card.classList.add('is-tilting')
+  }
+
+  document.addEventListener('pointermove', (e) => {
+    const card = e.target?.closest?.(selector) || null
+    if (card !== activeCard) {
+      resetCard(activeCard)
+      activeCard = card
+    }
+    if (!activeCard) return
+    pendingEvt = e
+    if (!rafId) rafId = requestAnimationFrame(updateTilt)
+  }, { passive: true })
+
+  document.addEventListener('pointerleave', () => {
+    pendingEvt = null
+    if (rafId) cancelAnimationFrame(rafId)
+    rafId = 0
+    resetCard(activeCard)
+    activeCard = null
+  }, { passive: true })
 }
 
 function syncHomeCloneUI() {
@@ -4044,12 +4267,9 @@ function prewarmNextQueueTrack() {
 }
 
 function togglePlay() {
-  if (isRoomClientRestricted()) {
-    showHostOnlyToast()
-    return
-  }
   if (!audio.src) return
   const playBtn = document.getElementById('play-btn')
+  const isRoomParticipant = Boolean(_roomState?.roomId)
   if (audio.paused) {
     audio.play()
     if (_audioCtx?.state === 'suspended') _audioCtx.resume().catch(() => {})
@@ -4062,7 +4282,15 @@ function togglePlay() {
     const icon = document.getElementById('pm-play-icon')
     if (icon) icon.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"/>'
   }
-  broadcastPlaybackSync(true)
+  if (isRoomParticipant) {
+    _socialPeer?.send?.({
+      type: 'room-control-toggle',
+      roomId: _roomState.roomId,
+      paused: Boolean(audio.paused),
+      currentTime: Number(audio.currentTime || 0),
+    })
+  }
+  if (_roomState?.host) broadcastPlaybackSync(true)
 }
 
 function seekTo(val) {
@@ -4192,6 +4420,7 @@ audio.onended = () => {
     const nextRoomTrack = sharedQueue.shift()
     renderRoomQueue()
     broadcastQueueUpdate()
+    saveRoomStateToServer({ shared_queue: sharedQueue, playback_ts: Date.now() }).catch(() => {})
     if (nextRoomTrack) {
       playTrackObj(nextRoomTrack, { fromSharedQueue: true }).catch(() => {})
       return
@@ -5512,6 +5741,7 @@ window.addEventListener('DOMContentLoaded', () => {
   startApp()
   applyUiTextOverrides()
   setupSidebarResize()
+  setupCardTilt()
   syncHomeCloneUI()
   syncHomeWidgetUI()
   applyHomeSliderStyle()

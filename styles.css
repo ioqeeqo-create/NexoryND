@@ -1927,3 +1927,40 @@ body.visual-premium .track-like.liked {
 body.visual-premium .results-source-label {
   color: rgba(251,182,216,0.92);
 }
+
+/* 3D micro-tilt cards */
+.track-card,
+.playlist-card,
+.social-friend-card,
+.profile-card,
+.home-card {
+  --card-tilt-x: 0deg;
+  --card-tilt-y: 0deg;
+  --card-tilt-glow-x: 50%;
+  --card-tilt-glow-y: 50%;
+  transform-style: preserve-3d;
+  will-change: transform;
+  transition: transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease, border-color 180ms ease;
+}
+
+.track-card.is-tilting,
+.playlist-card.is-tilting,
+.social-friend-card.is-tilting,
+.profile-card.is-tilting,
+.home-card.is-tilting {
+  transform: perspective(820px) rotateX(var(--card-tilt-x)) rotateY(var(--card-tilt-y)) translateZ(0);
+}
+
+.track-card.is-tilting::after,
+.playlist-card.is-tilting::after,
+.social-friend-card.is-tilting::after,
+.profile-card.is-tilting::after,
+.home-card.is-tilting::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(220px circle at var(--card-tilt-glow-x) var(--card-tilt-glow-y), rgba(255,255,255,0.16), transparent 65%);
+  opacity: 0.8;
+}
