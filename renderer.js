@@ -1,4 +1,4 @@
-const { audioPlayer = {}, smartCleaning = {}, dragDrop = {}, peerSocial = {} } = window.FlowModules || {}
+﻿const { audioPlayer = {}, smartCleaning = {}, dragDrop = {}, peerSocial = {} } = window.FlowModules || {}
 const audio = (audioPlayer.createPlayerAudio || ((onErr) => {
   const el = new Audio()
   el.volume = 0.8
@@ -2258,6 +2258,10 @@ function renderRoomQueue() {
       ? `<button class="playlist-track-action danger">✕</button>`
       : ''
     row.innerHTML = `${cover}<span>${t.title} — ${t.artist || '—'}</span>${controls}`
+    row.addEventListener('click', () => {
+      if (!_roomState?.host) return
+      playSharedQueueTrackAt(i)
+    })
     if (canEdit) {
       row.querySelector('button')?.addEventListener('click', (event) => {
         event.preventDefault()
@@ -2267,6 +2271,16 @@ function renderRoomQueue() {
     }
     el.appendChild(row)
   })
+}
+
+function playSharedQueueTrackAt(index) {
+  if (!_roomState?.host) return
+  const idx = Number(index)
+  if (!Number.isFinite(idx) || idx < 0 || idx >= sharedQueue.length) return
+  const [track] = sharedQueue.splice(idx, 1)
+  renderRoomQueue()
+  broadcastQueueUpdate()
+  if (track) playTrackObj(track, { fromSharedQueue: true }).catch(() => {})
 }
 
 function broadcastQueueUpdate() {
