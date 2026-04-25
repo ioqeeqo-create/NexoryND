@@ -4176,6 +4176,12 @@ function openPlaylist(idx) {
   document.getElementById('playlist-view-name').textContent = pl.name
   const metaEl = document.getElementById('playlist-view-meta')
   if (metaEl) metaEl.textContent = pl.description || `${pl.tracks.length} треков`
+  const coverEl = document.getElementById('playlist-view-cover')
+  if (coverEl) {
+    const playlistCover = sanitizeMediaByGifMode(pl.coverData || '', 'playlist')
+    coverEl.style.backgroundImage = playlistCover ? `url(${playlistCover})` : ''
+    coverEl.innerHTML = playlistCover ? '' : '<svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'
+  }
   document.getElementById('playlists-list').classList.add('hidden')
   document.querySelector('.section-header')?.classList.add('hidden')
   document.getElementById('playlist-view').classList.remove('hidden')
@@ -4428,7 +4434,7 @@ function renderPlaylists() {
       ? `background-image:url(${playlistCover});background-size:cover;background-position:center;`
       : ''
     el.innerHTML=`
-      <div class="playlist-icon" style="${coverStyle}" title="Клик или Drop для обложки">${playlistCover ? '' : '<svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'}</div>
+      <div class="playlist-icon" style="${coverStyle}" title="Плейлист">${playlistCover ? '' : '<svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'}</div>
       <div class="playlist-info" onclick="openPlaylist(${idx})" style="cursor:pointer">
         <span class="playlist-name">${pl.name}</span>
         <span class="playlist-count">${pl.tracks.length} треков${pl.description ? ` • ${pl.description}` : ''}</span>
@@ -4437,28 +4443,40 @@ function renderPlaylists() {
         <button class="playlist-del" onclick="event.stopPropagation();editPlaylistMeta(${idx})" title="Редактировать">✎</button>
         <button class="playlist-del" onclick="event.stopPropagation();deletePlaylist(${idx})">${ICONS.close}</button>
       </div>`
-    const icon = el.querySelector('.playlist-icon')
-    if (icon) {
-      icon.addEventListener('click', (event) => {
-        event.preventDefault()
-        event.stopPropagation()
-        pickPlaylistCover(idx)
-      })
-      icon.addEventListener('dragover', (event) => {
-        event.preventDefault()
-        icon.classList.add('playlist-icon-drop')
-      })
-      icon.addEventListener('dragleave', () => icon.classList.remove('playlist-icon-drop'))
-      icon.addEventListener('drop', async (event) => {
-        event.preventDefault()
-        icon.classList.remove('playlist-icon-drop')
-        const file = Array.from(event.dataTransfer?.files || [])[0]
-        if (!file || !file.type.startsWith('image/')) return
-        await setPlaylistCoverFromFile(idx, file)
-      })
-    }
+    el.addEventListener('click', () => openPlaylist(idx))
     container.appendChild(el)
   })
+}
+
+function playOpenPlaylist() {
+  if (openPlaylistIndex == null) return
+  const pl = normalizePlaylist(getPlaylists()[openPlaylistIndex])
+  if (!pl?.tracks?.length) return showToast('Плейлист пуст', true)
+  queue = pl.tracks.slice()
+  queueIndex = 0
+  queueScope = 'playlist'
+  playTrackObj(queue[0]).catch(() => {})
+}
+
+function shuffleOpenPlaylist() {
+  if (openPlaylistIndex == null) return
+  const pl = normalizePlaylist(getPlaylists()[openPlaylistIndex])
+  if (!pl?.tracks?.length) return showToast('Плейлист пуст', true)
+  const shuffled = pl.tracks.slice().sort(() => Math.random() - 0.5)
+  queue = shuffled
+  queueIndex = 0
+  queueScope = 'playlist'
+  playTrackObj(queue[0]).catch(() => {})
+}
+
+function editOpenPlaylist() {
+  if (openPlaylistIndex == null) return
+  editPlaylistMeta(openPlaylistIndex)
+  // Keep cover change inside the same edit flow.
+  setTimeout(() => {
+    const shouldPickCover = confirm('Сменить обложку плейлиста сейчас?')
+    if (shouldPickCover) pickPlaylistCover(openPlaylistIndex)
+  }, 40)
 }
 
 function exportPlaylistsFile() {

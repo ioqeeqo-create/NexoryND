@@ -721,6 +721,28 @@ input:not([type])::placeholder {
 .playlist-del:hover { color:#ef4444; background:rgba(239,68,68,0.1); }
 .playlist-view-header { display:flex; align-items:center; gap:12px; margin-bottom:20px; }
 .playlist-view-header h3 { font-family:var(--font-title); font-size:18px; font-weight:700; }
+.playlist-view-hero {
+  display:flex;
+  gap:14px;
+  align-items:center;
+  padding:12px;
+  border-radius:14px;
+}
+.playlist-view-cover {
+  width:104px;
+  height:104px;
+  border-radius:12px;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  background-size:cover;
+  background-position:center;
+  flex-shrink:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.playlist-view-main { min-width:0; flex:1; }
+.playlist-view-meta { font-size:12px; opacity:.75; margin-top:2px; }
+.playlist-view-controls { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
 .playlist-track-row { display:flex; align-items:center; gap:8px; margin-bottom:6px; border-radius:12px; }
 .playlist-track-row.drag-over { background:rgba(255,255,255,0.06); }
 .playlist-track-row.dragging { opacity:0.65; }
