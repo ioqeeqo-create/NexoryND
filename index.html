@@ -189,7 +189,6 @@
       <div id="playlists-list" class="playlists-grid"></div>
       <div id="playlist-view" class="hidden">
         <div class="playlist-view-header">
-          <button class="btn-icon-back" onclick="closePlaylist()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg></button>
           <div class="playlist-view-hero glass-card" style="flex:1;min-width:0">
             <div class="playlist-view-cover" id="playlist-view-cover"></div>
             <div class="playlist-view-main">
@@ -199,6 +198,7 @@
                 <button class="btn-small" onclick="playOpenPlaylist()">▶ Слушать</button>
                 <button class="btn-small" onclick="shuffleOpenPlaylist()">⇄</button>
                 <button class="btn-small" onclick="editOpenPlaylist()">✎ Редактировать</button>
+                <button class="btn-small playlist-close-x" onclick="closePlaylist()" title="Ко всем плейлистам">✕</button>
               </div>
             </div>
           </div>
@@ -286,10 +286,17 @@
               <label class="vs-label">Подсветка активного пункта меню</label>
               <div class="vs-toggle" id="toggle-nav-active" onclick="toggleNavActiveHighlight()"><div class="vs-toggle-thumb"></div></div>
             </div>
+            <div class="vs-row">
+              <label class="vs-label">Расположение меню</label>
+              <div class="vs-btn-group">
+                <button class="vsb" id="layout-left" onclick="setSidebarPosition('left')">Слева</button>
+                <button class="vsb" id="layout-top" onclick="setSidebarPosition('top')">Сверху</button>
+              </div>
+            </div>
           </div>
 
           <div class="vs-section glass-card">
-            <div class="vs-section-title">Фон</div>
+            <div class="vs-section-title">Фон и обложки</div>
             <div class="vs-row">
               <label class="vs-label">Тип фона</label>
               <div class="vs-btn-group">
@@ -310,6 +317,24 @@
               <div class="vs-media-preview-meta">
                 <div class="vs-media-preview-title">Превью фона</div>
                 <div class="vs-media-preview-sub" id="custom-bg-preview-text">Ничего не выбрано</div>
+              </div>
+            </div>
+            <div class="vs-divider"></div>
+            <div class="vs-row" style="align-items:flex-start;flex-direction:column;gap:8px">
+              <label class="vs-label">Кастомная обложка для текущего трека</label>
+              <div class="vs-btn-group">
+                <input type="file" id="track-cover-input" accept="image/*" onchange="setCustomTrackCover(this)" style="display:none">
+                <button class="vsb" onclick="pickCustomTrackCover('image')">Обложка: фото</button>
+                <button class="vsb" onclick="pickCustomTrackCover('gif')">Обложка: GIF</button>
+                <button class="vsb" onclick="clearCustomTrackCover()">Сбросить обложку</button>
+              </div>
+              <div class="token-msg" id="track-cover-status" style="display:block">Выбери трек и задай для него свою обложку</div>
+              <div class="vs-media-preview" id="track-cover-preview-box">
+                <div class="vs-media-preview-thumb" id="track-cover-preview-thumb"></div>
+                <div class="vs-media-preview-meta">
+                  <div class="vs-media-preview-title">Превью обложки</div>
+                  <div class="vs-media-preview-sub" id="track-cover-preview-text">Сначала включи трек</div>
+                </div>
               </div>
             </div>
             <div class="vs-row">
@@ -429,23 +454,6 @@
 
           <div class="vs-section glass-card">
             <div class="vs-section-title">Плеер</div>
-            <div class="vs-row" style="align-items:flex-start;flex-direction:column;gap:8px">
-              <label class="vs-label">Кастомная обложка для текущего трека</label>
-              <div class="vs-btn-group">
-                <input type="file" id="track-cover-input" accept="image/*" onchange="setCustomTrackCover(this)" style="display:none">
-                <button class="vsb" onclick="pickCustomTrackCover('image')">Обложка: фото</button>
-                <button class="vsb" onclick="pickCustomTrackCover('gif')">Обложка: GIF</button>
-                <button class="vsb" onclick="clearCustomTrackCover()">Сбросить обложку</button>
-              </div>
-              <div class="token-msg" id="track-cover-status" style="display:block">Выбери трек и задай для него свою обложку</div>
-              <div class="vs-media-preview hidden" id="track-cover-preview-box">
-                <div class="vs-media-preview-thumb" id="track-cover-preview-thumb"></div>
-                <div class="vs-media-preview-meta">
-                  <div class="vs-media-preview-title">Превью обложки</div>
-                  <div class="vs-media-preview-sub" id="track-cover-preview-text">Ничего не выбрано</div>
-                </div>
-              </div>
-            </div>
             <div class="vs-row">
               <label class="vs-label">Перемешка</label>
               <button class="vsb" id="toggle-shuffle-btn" onclick="toggleShuffleMode()">Выключена</button>
@@ -818,6 +826,7 @@
   </div>
 </div>
 <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="src/modules/utils/smart-cleaning.js"></script>
 <script src="src/modules/audio/player-core.js"></script>
 <script src="src/modules/network/peer-social.js"></script>

@@ -1957,34 +1957,103 @@ ipcMain.handle('youtube-prefetch-streams', async (e, { ids = [], instance }) => 
 // в”Ђв”Ђв”Ђ LYRICS: LRCLIB в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 ipcMain.handle('get-lyrics', async (e, { title, artist, duration }) => {
   try {
-    const q = encodeURIComponent(`${artist} ${title}`)
-    // РЎРЅР°С‡Р°Р»Р° С‚РѕС‡РЅС‹Р№ РїРѕРёСЃРє
-    const r = await httpsGetJson('lrclib.net',
-      `/api/get?track_name=${encodeURIComponent(title)}&artist_name=${encodeURIComponent(artist)}${duration ? '&duration=' + Math.round(duration) : ''}`,
-      { 'User-Agent': 'FlowPlayer/0.2 (github.com)' },
-      10000
-    )
-    if (r.status === 200 && r.body) {
-      return {
-        ok: true,
-        synced: r.body.syncedLyrics || null,
-        plain: r.body.plainLyrics || null
+    const normalizeLyricsPart = (value) => String(value || '')
+      .replace(/\[[^\]]*\]/g, ' ')
+      .replace(/\([^)]*\)/g, ' ')
+      .replace(/\{[^}]*\}/g, ' ')
+      .replace(/\b(feat|ft)\.?\s+[^\-–|,/]+/gi, ' ')
+      .replace(/\b(official(\s+video)?|music\s*video|visualizer|audio|lyrics?|lyric\s*video|video)\b/gi, ' ')
+      .replace(/\b(speed[\s_-]*up|sped[\s_-]*up|nightcore|slowed(\s*down)?|reverb|bass\s*boost(ed)?|8d|remix|edit|version)\b/gi, ' ')
+      .replace(/[|/\\]+/g, ' ')
+      .replace(/["'`]+/g, ' ')
+      .replace(/[^\p{L}\p{N}\s\-]/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+
+    const rawTitle = String(title || '').trim()
+    const rawArtist = String(artist || '').trim()
+    const cleanTitle = normalizeLyricsPart(rawTitle)
+    const cleanArtist = normalizeLyricsPart(rawArtist)
+
+    const titleCandidates = [...new Set([
+      cleanTitle,
+      cleanTitle.replace(/\b(speed[\s_-]*up|sped[\s_-]*up|nightcore|slowed(\s*down)?|reverb|bass\s*boost(ed)?|8d)\b/gi, ' ').replace(/\s+/g, ' ').trim(),
+      cleanTitle.replace(/\s*[-–|,]\s*.*$/g, '').replace(/\s+/g, ' ').trim(),
+      rawTitle.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim(),
+    ].filter(Boolean))]
+
+    const artistCandidates = [...new Set([
+      cleanArtist,
+      rawArtist.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim(),
+      rawArtist.split(',')[0]?.trim() || '',
+    ].filter(Boolean))]
+
+    const tryGetByMeta = async (artistName, trackName) => {
+      const r = await httpsGetJson('lrclib.net',
+        `/api/get?track_name=${encodeURIComponent(trackName)}&artist_name=${encodeURIComponent(artistName)}${duration ? '&duration=' + Math.round(duration) : ''}`,
+        { 'User-Agent': 'FlowPlayer/0.2 (github.com)' },
+        10000
+      )
+      if (r.status === 200 && r.body) {
+        return {
+          ok: true,
+          synced: r.body.syncedLyrics || null,
+          plain: r.body.plainLyrics || null
+        }
+      }
+      return null
+    }
+
+    const trySearch = async (artistName, trackName) => {
+      const q = encodeURIComponent(`${artistName} ${trackName}`.trim())
+      const r = await httpsGetJson('lrclib.net',
+        `/api/search?q=${q}`,
+        { 'User-Agent': 'FlowPlayer/0.2 (github.com)' },
+        10000
+      )
+      if (r.status === 200 && Array.isArray(r.body) && r.body.length > 0) {
+        const best = r.body[0]
+        return {
+          ok: true,
+          synced: best.syncedLyrics || null,
+          plain: best.plainLyrics || null
+        }
+      }
+      return null
+    }
+
+    for (const a of artistCandidates) {
+      for (const t of titleCandidates) {
+        const byMeta = await tryGetByMeta(a, t)
+        if (byMeta) return byMeta
       }
     }
-    // Fallback: РїРѕРёСЃРє РїРѕ Р·Р°РїСЂРѕСЃСѓ
-    const r2 = await httpsGetJson('lrclib.net',
-      `/api/search?q=${q}`,
-      { 'User-Agent': 'FlowPlayer/0.2 (github.com)' },
-      10000
-    )
-    if (r2.status === 200 && Array.isArray(r2.body) && r2.body.length > 0) {
-      const best = r2.body[0]
-      return {
-        ok: true,
-        synced: best.syncedLyrics || null,
-        plain: best.plainLyrics || null
+
+    for (const a of artistCandidates) {
+      for (const t of titleCandidates) {
+        const bySearch = await trySearch(a, t)
+        if (bySearch) return bySearch
       }
     }
+
+    for (const a of artistCandidates) {
+      for (const t of titleCandidates) {
+        const lyo = await httpsGetJson(
+          'api.lyrics.ovh',
+          `/v1/${encodeURIComponent(a)}/${encodeURIComponent(t)}`,
+          { 'User-Agent': 'FlowPlayer/0.2 (github.com)' },
+          10000
+        )
+        if (lyo.status === 200 && lyo.body?.lyrics) {
+          return {
+            ok: true,
+            synced: null,
+            plain: String(lyo.body.lyrics || '').trim() || null
+          }
+        }
+      }
+    }
+
     return { ok: false, error: 'РўРµРєСЃС‚ РЅРµ РЅР°Р№РґРµРЅ' }
   } catch (err) {
     return { ok: false, error: err.message }
@@ -2005,6 +2074,152 @@ const SC_PATTERNS = [
   /\?client_id=([a-zA-Z0-9]{32})/,
   /client_id\s*=\s*"([a-zA-Z0-9]{32})"/,
 ]
+
+async function resolveScClientIdForServerSearch(manualId = '') {
+  const direct = String(manualId || '').trim()
+  if (direct) return direct
+  const now = Date.now()
+  if (_scClientIdCache && now < _scClientIdExpiry) return _scClientIdCache
+
+  const page = await httpsGetRaw('soundcloud.com', '/', {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9'
+  }, 15000)
+  if (!page.raw) throw new Error('SC: не удалось загрузить soundcloud.com')
+
+  const scriptUrls = [...page.raw.matchAll(/src="(https:\/\/a-v2\.sndcdn\.com\/assets\/[^"]+\.js)"/g)].map((m) => m[1])
+  if (!scriptUrls.length) throw new Error('SC: JS бандлы не найдены')
+  const candidates = scriptUrls.slice(-8).reverse()
+
+  for (const scriptUrl of candidates) {
+    try {
+      const parsed = new URL(scriptUrl)
+      const js = await httpsGetRaw(parsed.hostname, parsed.pathname, {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }, 20000)
+      if (!js.raw || js.status !== 200) continue
+      for (const pattern of SC_PATTERNS) {
+        const match = js.raw.match(pattern)
+        if (match?.[1]?.length === 32) {
+          _scClientIdCache = match[1]
+          _scClientIdExpiry = now + 6 * 60 * 60 * 1000
+          return _scClientIdCache
+        }
+      }
+    } catch {}
+  }
+  throw new Error('SC: client_id не найден')
+}
+
+ipcMain.handle('server-search', async (e, { q, settings = {} }) => {
+  const query = String(q || '').trim()
+  if (!query) return { ok: true, mode: 'empty', tracks: [] }
+
+  const spotifyToken = String(settings?.spotifyToken || '').trim()
+  const manualScId = String(settings?.soundcloudClientId || '').trim()
+  let spotifyErr = null
+  let scErr = null
+  let audiusErr = null
+
+  if (spotifyToken) {
+    try {
+      const sp = await httpsGetJsonUrl(
+        `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=20`,
+        { Authorization: `Bearer ${spotifyToken}` },
+        9000
+      )
+      if (sp.status === 200 && Array.isArray(sp?.body?.tracks?.items)) {
+        const tracks = sp.body.tracks.items.map((t) => ({
+          title: t?.name || 'Без названия',
+          artist: Array.isArray(t?.artists) ? t.artists.map((a) => a?.name).filter(Boolean).join(', ') : '—',
+          url: t?.preview_url || null,
+          cover: t?.album?.images?.[0]?.url || null,
+          bg: 'linear-gradient(135deg,#1db954,#1ed760)',
+          source: 'spotify',
+          id: String(t?.id || `${t?.name || ''}:${t?.artists?.[0]?.name || ''}`)
+        }))
+        if (tracks.length) return { ok: true, mode: 'spotify', tracks }
+      } else {
+        spotifyErr = new Error(`Spotify: ${sp.status || 'bad response'}`)
+      }
+    } catch (err) {
+      spotifyErr = err
+    }
+  }
+
+  try {
+    const scClientId = await resolveScClientIdForServerSearch(manualScId)
+    const endpoints = [
+      { h: 'api-v2.soundcloud.com', p: `/search/tracks?q=${encodeURIComponent(query)}&client_id=${scClientId}&limit=20&linked_partitioning=1` },
+      { h: 'api.soundcloud.com', p: `/tracks?q=${encodeURIComponent(query)}&client_id=${scClientId}&limit=20&linked_partitioning=1` },
+    ]
+    for (const ep of endpoints) {
+      const r = await httpsGetJson(ep.h, ep.p, {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Origin': 'https://soundcloud.com',
+        'Referer': 'https://soundcloud.com/'
+      }, 10000)
+      if (r.status !== 200 || !r.body) continue
+      const rows = Array.isArray(r.body) ? r.body : (r.body.collection || r.body.tracks || [])
+      const tracks = rows.map((t) => {
+        let transcodingUrl = null
+        if (Array.isArray(t?.media?.transcodings) && t.media.transcodings.length > 0) {
+          const prog = t.media.transcodings.find((tr) => tr?.format?.protocol === 'progressive')
+          transcodingUrl = (prog || t.media.transcodings[0])?.url || null
+        }
+        return {
+          title: t?.title || 'Без названия',
+          artist: t?.user?.username || '—',
+          url: t?.stream_url ? `${t.stream_url}?client_id=${scClientId}` : null,
+          scTranscoding: transcodingUrl,
+          scClientId,
+          cover: t?.artwork_url ? String(t.artwork_url).replace('large', 't300x300') : null,
+          bg: 'linear-gradient(135deg,#f26f23,#ff5500)',
+          source: 'soundcloud',
+          id: String(t?.id || `${t?.title || ''}:${t?.user?.username || ''}`)
+        }
+      }).filter((t) => t.scTranscoding || t.url)
+      if (tracks.length) return { ok: true, mode: 'soundcloud', tracks }
+    }
+    scErr = new Error('SoundCloud: не удалось получить результаты')
+  } catch (err) {
+    scErr = err
+  }
+
+  try {
+    let host = await getAudiusHost(false)
+    let r = await httpsGetJsonUrl(`${host}/v1/tracks/search?query=${encodeURIComponent(query)}&limit=20&app_name=flow`, {}, 10000)
+    if (r.status !== 200 || !Array.isArray(r?.body?.data)) {
+      host = await getAudiusHost(true)
+      r = await httpsGetJsonUrl(`${host}/v1/tracks/search?query=${encodeURIComponent(query)}&limit=20&app_name=flow`, {}, 10000)
+    }
+    const items = Array.isArray(r?.body?.data) ? r.body.data : []
+    const tracks = items.map((t) => {
+      const id = String(t?.id || '')
+      return {
+        title: t?.title || 'Без названия',
+        artist: t?.user?.name || '—',
+        url: id ? `${host}/v1/tracks/${encodeURIComponent(id)}/stream?app_name=flow` : null,
+        cover: t?.artwork?.['480x480'] || t?.artwork?.['1000x1000'] || t?.artwork?.['150x150'] || null,
+        bg: 'linear-gradient(135deg,#2dd4bf,#0ea5e9)',
+        source: 'audius',
+        id: id || `${t?.title || ''}:${t?.user?.name || ''}`
+      }
+    }).filter((t) => t.url)
+    if (tracks.length) return { ok: true, mode: 'audius', tracks }
+    audiusErr = new Error('Audius: пустой результат')
+  } catch (err) {
+    audiusErr = err
+  }
+
+  const reasons = [
+    spotifyErr ? `Spotify: ${spotifyErr.message || spotifyErr}` : '',
+    scErr ? `SoundCloud: ${scErr.message || scErr}` : '',
+    audiusErr ? `Audius: ${audiusErr.message || audiusErr}` : '',
+  ].filter(Boolean)
+  return { ok: false, error: reasons.join(' | ') || 'Ничего не найдено', mode: 'none', tracks: [] }
+})
 
 ipcMain.handle('sc-fetch-client-id', async () => {
   const now = Date.now()

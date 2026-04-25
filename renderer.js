@@ -63,6 +63,7 @@ let _roomSearchResults = []
 let _sharedQueueDragIndex = -1
 let _lastHostOnlyToastAt = 0
 let _lastUiSyncAt = 0
+let _roomHeartbeatTimer = null
 
 function getPeerProfileCache() {
   try { return JSON.parse(localStorage.getItem('flow_peer_public_profiles') || '{}') || {} } catch { return {} }
@@ -74,7 +75,7 @@ function savePeerProfileCache(map) {
 
 function cachePeerProfile(profile, peerId = '') {
   if (!profile || typeof profile !== 'object') return
-  const username = String(profile.username || '').trim()
+  const username = String(profile.username || '').trim().toLowerCase()
   if (!username) return
   const cache = getPeerProfileCache()
   cache[username] = {
@@ -89,7 +90,7 @@ function cachePeerProfile(profile, peerId = '') {
 }
 
 function getCachedPeerProfile(username = '') {
-  const safe = String(username || '').trim()
+  const safe = String(username || '').trim().toLowerCase()
   if (!safe) return null
   const cache = getPeerProfileCache()
   return cache[safe] || null
@@ -211,6 +212,7 @@ const defaultVisual = {
   homeWidget: { enabled: true, mode: 'bars', image: null },
   effects: { orbs: false, glow: true, dyncolor: false, accentFromCover: false },
   navActiveHighlight: false,
+  sidebarPosition: 'left',
   gifMode: { bg: true, track: true, playlist: true },
   lyrics: { scrollMode: 'smooth', align: 'left', size: 16, blur: 4 }
 }
@@ -360,6 +362,9 @@ function getTrackCoverKeys(track) {
   const src = String(track.source || 'unknown')
   const title = String(track.title || '').trim().toLowerCase()
   const artist = String(track.artist || '').trim().toLowerCase()
+  const norm = (v) => String(v || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').replace(/\s+/g, ' ').trim()
+  const normTitle = norm(title)
+  const normArtist = norm(artist)
   const keys = []
   if (track.id) keys.push(`${src}:${String(track.id)}`)
   if (track.ytId) keys.push(`youtube:yt:${String(track.ytId)}`)
@@ -367,8 +372,54 @@ function getTrackCoverKeys(track) {
   if (title || artist) {
     keys.push(`${src}:${title}::${artist}`)
     keys.push(`meta:${title}::${artist}`)
+    keys.push(`title:${title}`)
+    if (normTitle || normArtist) {
+      keys.push(`norm:${normTitle}::${normArtist}`)
+      keys.push(`norm-title:${normTitle}`)
+    }
   }
   return [...new Set(keys.filter(Boolean))]
+}
+
+function normalizeTrackSignature(track) {
+  const norm = (v) => String(v || '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const t = norm(track?.title)
+  const a = norm(track?.artist)
+  return `${t}::${a}`
+}
+
+function isSameTrackLoose(a, b) {
+  if (!a || !b) return false
+  const aKeys = new Set(getTrackCoverKeys(a))
+  const bKeys = getTrackCoverKeys(b)
+  if (bKeys.some((k) => aKeys.has(k))) return true
+  return normalizeTrackSignature(a) === normalizeTrackSignature(b)
+}
+
+function applyCustomCoverToCollections(baseTrack, coverUrl) {
+  if (!baseTrack || !coverUrl) return
+  const applyToArray = (arr) => {
+    if (!Array.isArray(arr)) return
+    arr.forEach((t) => {
+      if (!t || typeof t !== 'object') return
+      if (isSameTrackLoose(baseTrack, t)) t.cover = coverUrl
+    })
+  }
+  applyToArray(queue)
+  applyToArray(sharedQueue)
+  if (currentTrack && isSameTrackLoose(baseTrack, currentTrack)) currentTrack.cover = coverUrl
+
+  const liked = getLiked()
+  applyToArray(liked)
+  localStorage.setItem('flow_liked', JSON.stringify(liked))
+
+  const playlists = getPlaylists().map(normalizePlaylist)
+  playlists.forEach((pl) => applyToArray(pl.tracks))
+  savePlaylists(playlists)
 }
 
 function getCustomCoverMap() {
@@ -378,6 +429,11 @@ function getCustomCoverMap() {
 
 function saveCustomCoverMap(map) {
   localStorage.setItem('flow_track_covers', JSON.stringify(map || {}))
+}
+
+function getGlobalCustomCover(map = null) {
+  const sourceMap = map || getCustomCoverMap()
+  return String(sourceMap?.__global__ || '').trim()
 }
 
 function isGifUrl(url) {
@@ -394,9 +450,204 @@ function sanitizeMediaByGifMode(url, category) {
 
 function getEffectiveCoverUrl(track) {
   const map = getCustomCoverMap()
+  const globalCustom = getGlobalCustomCover(map)
+  // User-selected custom cover (especially GIF) should never be dropped by gifMode filter.
+  if (globalCustom) return String(globalCustom).trim()
   const keys = getTrackCoverKeys(track)
   const custom = keys.map((k) => map[k]).find(Boolean)
-  return sanitizeMediaByGifMode(custom || track?.cover || '', 'track')
+  if (custom) return String(custom).trim()
+  return sanitizeMediaByGifMode(track?.cover || '', 'track')
+}
+
+function getListCoverUrl(track) {
+  // Lists/queues should display source artwork; custom cover is playback-only.
+  const map = getCustomCoverMap()
+  const globalCustom = getGlobalCustomCover(map)
+  const sourceCover = String(track?._sourceCover || track?.sourceCover || track?.originalCover || '').trim()
+  const rawCover = String(track?.cover || '').trim()
+  let safeCover = sourceCover || rawCover
+  const isDataImage = /^data:image\//i.test(safeCover)
+  // Data URL in lists is usually injected custom cover; hide/replace it outside player.
+  if (isDataImage && String(track?.source || '').toLowerCase() !== 'local') {
+    safeCover = sourceCover || ''
+  }
+  if (globalCustom && safeCover && safeCover === globalCustom) return ''
+  return sanitizeMediaByGifMode(safeCover, 'track')
+}
+
+function restoreSourceCoversInCollections() {
+  const normalize = (arr) => {
+    if (!Array.isArray(arr)) return false
+    let changed = false
+    arr.forEach((t) => {
+      if (!t || typeof t !== 'object') return
+      const cover = String(t.cover || '').trim()
+      const backup = String(t._sourceCover || t.sourceCover || t.originalCover || '').trim()
+      const isDataImage = /^data:image\//i.test(cover)
+      if (isDataImage && String(t.source || '').toLowerCase() !== 'local') {
+        const next = backup || ''
+        if (cover !== next) {
+          t.cover = next
+          changed = true
+        }
+      }
+    })
+    return changed
+  }
+
+  normalize(queue)
+  normalize(sharedQueue)
+
+  const liked = getLiked()
+  if (normalize(liked)) localStorage.setItem('flow_liked', JSON.stringify(liked))
+
+  const playlists = getPlaylists().map(normalizePlaylist)
+  let playlistsChanged = false
+  playlists.forEach((pl) => {
+    if (normalize(pl.tracks)) playlistsChanged = true
+  })
+  if (playlistsChanged) savePlaylists(playlists)
+}
+
+const COVER_CACHE_DB_NAME = 'flow_cover_cache'
+const COVER_CACHE_STORE = 'covers'
+const COVER_CACHE_MAX_ITEMS = 500
+let _coverCacheDbPromise = null
+const _coverObjectUrlMap = new Map()
+
+function openCoverCacheDb() {
+  if (_coverCacheDbPromise) return _coverCacheDbPromise
+  _coverCacheDbPromise = new Promise((resolve) => {
+    try {
+      const req = indexedDB.open(COVER_CACHE_DB_NAME, 1)
+      req.onupgradeneeded = () => {
+        const db = req.result
+        if (!db.objectStoreNames.contains(COVER_CACHE_STORE)) {
+          const store = db.createObjectStore(COVER_CACHE_STORE, { keyPath: 'key' })
+          store.createIndex('updatedAt', 'updatedAt', { unique: false })
+        }
+      }
+      req.onsuccess = () => resolve(req.result)
+      req.onerror = () => resolve(null)
+    } catch {
+      resolve(null)
+    }
+  })
+  return _coverCacheDbPromise
+}
+
+function coverCacheTx(db, mode, runner) {
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(COVER_CACHE_STORE, mode)
+      const store = tx.objectStore(COVER_CACHE_STORE)
+      runner(store, resolve)
+      tx.onerror = () => resolve(null)
+    } catch {
+      resolve(null)
+    }
+  })
+}
+
+function coverCacheKey(url, trackId = '') {
+  return `${String(trackId || 'global')}::${String(url || '').trim()}`
+}
+
+async function enforceCoverCacheLimit(db) {
+  if (!db) return
+  await coverCacheTx(db, 'readonly', (store, done) => {
+    const countReq = store.count()
+    countReq.onsuccess = async () => {
+      const total = Number(countReq.result || 0)
+      const overflow = total - COVER_CACHE_MAX_ITEMS
+      if (overflow <= 0) return done(true)
+      await coverCacheTx(db, 'readwrite', (rwStore, doneRw) => {
+        const idx = rwStore.index('updatedAt')
+        const cursorReq = idx.openCursor()
+        let removed = 0
+        cursorReq.onsuccess = (ev) => {
+          const cursor = ev.target.result
+          if (!cursor || removed >= overflow) return doneRw(true)
+          const val = cursor.value
+          if (val?.key) rwStore.delete(val.key)
+          removed += 1
+          cursor.continue()
+        }
+        cursorReq.onerror = () => doneRw(null)
+      })
+      done(true)
+    }
+    countReq.onerror = () => done(null)
+  })
+}
+
+async function getAndCacheCover(url, trackId = '') {
+  const raw = String(url || '').trim()
+  if (!raw) return ''
+  if (raw.startsWith('data:image/')) return raw
+  const key = coverCacheKey(raw, trackId)
+  const db = await openCoverCacheDb()
+  if (!db) return raw
+
+  const fromCache = await coverCacheTx(db, 'readwrite', (store, done) => {
+    const req = store.get(key)
+    req.onsuccess = () => {
+      const row = req.result
+      if (!row?.blob) return done(null)
+      row.updatedAt = Date.now()
+      try { store.put(row) } catch {}
+      done(row.blob)
+    }
+    req.onerror = () => done(null)
+  })
+  if (fromCache instanceof Blob) {
+    const prev = _coverObjectUrlMap.get(key)
+    if (prev) return prev
+    const objectUrl = URL.createObjectURL(fromCache)
+    _coverObjectUrlMap.set(key, objectUrl)
+    return objectUrl
+  }
+
+  try {
+    const resp = await fetch(raw)
+    if (!resp.ok) return raw
+    const blob = await resp.blob()
+    await coverCacheTx(db, 'readwrite', (store, done) => {
+      try {
+        store.put({ key, url: raw, trackId: String(trackId || ''), updatedAt: Date.now(), blob })
+      } catch {}
+      done(true)
+    })
+    await enforceCoverCacheLimit(db)
+    const prev = _coverObjectUrlMap.get(key)
+    if (prev) return prev
+    const objectUrl = URL.createObjectURL(blob)
+    _coverObjectUrlMap.set(key, objectUrl)
+    return objectUrl
+  } catch {
+    return raw
+  }
+}
+
+function applyCachedCoverBackground(el, coverUrl, fallbackBg, trackId = '') {
+  if (!el) return
+  const url = String(coverUrl || '').trim()
+  if (!url) {
+    el.style.backgroundImage = ''
+    if (fallbackBg) el.style.background = fallbackBg
+    el.innerHTML = COVER_ICON
+    return
+  }
+  const token = `${Date.now()}_${Math.random()}`
+  el.dataset.coverToken = token
+  getAndCacheCover(url, trackId).then((cachedUrl) => {
+    if (!cachedUrl || el.dataset.coverToken !== token) return
+    el.style.background = ''
+    el.style.backgroundImage = `url(${cachedUrl})`
+    el.style.backgroundSize = 'cover'
+    el.style.backgroundPosition = 'center'
+    if (el.innerHTML === COVER_ICON) el.innerHTML = ''
+  }).catch(() => {})
 }
 
 function applyCoverArt(el, coverUrl, fallbackBg) {
@@ -417,26 +668,24 @@ function applyCoverArt(el, coverUrl, fallbackBg) {
   }
   const token = `${Date.now()}_${Math.random()}`
   el.dataset.coverToken = token
-  const img = new Image()
-  img.onload = () => {
+  getAndCacheCover(url, '').then((cachedUrl) => {
+    if (!cachedUrl) throw new Error('no cover')
     _coverLoadState.set(url, true)
     if (el.dataset.coverToken !== token) return
     el.style.opacity = '0.35'
     el.style.background = ''
-    el.style.backgroundImage = `url(${url})`
+    el.style.backgroundImage = `url(${cachedUrl})`
     el.style.backgroundSize = 'cover'
     el.style.backgroundPosition = 'center'
     el.innerHTML = ''
     requestAnimationFrame(() => { el.style.opacity = '1' })
-  }
-  img.onerror = () => {
+  }).catch(() => {
     _coverLoadState.set(url, false)
     if (el.dataset.coverToken !== token) return
     el.style.backgroundImage = ''
     if (fallbackBg) el.style.background = fallbackBg
     el.innerHTML = COVER_ICON
-  }
-  img.src = url
+  })
 }
 
 function applyVisualSettings() {
@@ -540,13 +789,13 @@ function clearCustomBg() {
   showToast('Фон убран')
 }
 
-function setMediaPreviewBox(prefix, mediaUrl, text) {
+function setMediaPreviewBox(prefix, mediaUrl, text, keepVisible = false) {
   const box = document.getElementById(`${prefix}-preview-box`)
   const thumb = document.getElementById(`${prefix}-preview-thumb`)
   const sub = document.getElementById(`${prefix}-preview-text`)
   if (!box || !thumb || !sub) return
   const hasMedia = Boolean(mediaUrl)
-  box.classList.toggle('hidden', !hasMedia)
+  box.classList.toggle('hidden', !hasMedia && !keepVisible)
   thumb.style.backgroundImage = hasMedia ? `url(${mediaUrl})` : ''
   sub.textContent = text || (hasMedia ? 'Выбран файл' : 'Ничего не выбрано')
 }
@@ -779,6 +1028,7 @@ function initVisualSettings() {
   document.body.classList.toggle('nav-active-highlight', Boolean(v.navActiveHighlight))
   const navToggle = document.getElementById('toggle-nav-active')
   if (navToggle) navToggle.classList.toggle('active', Boolean(v.navActiveHighlight))
+  applySidebarPosition(v.sidebarPosition || 'left')
   const gifMode = Object.assign({ bg: true, track: true, playlist: true }, v.gifMode || {})
   const gifBg = document.getElementById('toggle-gif-bg')
   const gifTrack = document.getElementById('toggle-gif-track')
@@ -811,6 +1061,24 @@ function toggleNavActiveHighlight() {
   const v = getVisual()
   saveVisual({ navActiveHighlight: !Boolean(v.navActiveHighlight) })
   applyVisualSettings()
+}
+
+function applySidebarPosition(position) {
+  const safe = position === 'top' ? 'top' : 'left'
+  document.body.classList.toggle('layout-top-nav', safe === 'top')
+  const sidebar = document.getElementById('sidebar')
+  if (sidebar && safe === 'top') sidebar.classList.remove('collapsed')
+  const leftBtn = document.getElementById('layout-left')
+  const topBtn = document.getElementById('layout-top')
+  if (leftBtn) leftBtn.classList.toggle('active', safe === 'left')
+  if (topBtn) topBtn.classList.toggle('active', safe === 'top')
+}
+
+function setSidebarPosition(position) {
+  const safe = position === 'top' ? 'top' : 'left'
+  saveVisual({ sidebarPosition: safe })
+  applySidebarPosition(safe)
+  showToast(safe === 'top' ? 'Меню перемещено наверх' : 'Меню возвращено влево')
 }
 
 function switchSettingsTab(tab) {
@@ -1136,10 +1404,20 @@ function enableMojibakeAutoFix() {
 
 // в”Ђв”Ђв”Ђ SEARCH CACHE в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 const searchCache = new Map()
-function cacheGet(key) { return searchCache.get(key) || null }
+const SEARCH_CACHE_TTL_MS = 2 * 60 * 1000
+function cacheGet(key) {
+  const entry = searchCache.get(key) || null
+  if (!entry) return null
+  const ts = Number(entry.ts || 0)
+  if (ts && (Date.now() - ts > SEARCH_CACHE_TTL_MS)) {
+    searchCache.delete(key)
+    return null
+  }
+  return entry.val ?? null
+}
 function cacheSet(key, val) {
   if (searchCache.size >= 60) searchCache.delete(searchCache.keys().next().value)
-  searchCache.set(key, val)
+  searchCache.set(key, { ts: Date.now(), val })
 }
 
 // в”Ђв”Ђв”Ђ PROVIDERS в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
@@ -1331,12 +1609,15 @@ function loadSettingsPage() {
   updateScStatus(s.soundcloudClientId)
   updateVkStatus(s.vkToken)
   updateSpotifyStatus(s.spotifyToken)
-  syncPlaybackModeUI()
-  syncTrackCoverStatus()
-  setFlowConfigStatus('Экспорт создаёт JSON с визуалом, профилем, плейлистами и настройками.', false)
-  syncFontControls()
-  syncHomeWidgetUI()
-  applyHomeSliderStyle()
+  // Keep settings opening snappy; run heavier sync in next frame.
+  requestAnimationFrame(() => {
+    syncPlaybackModeUI()
+    syncTrackCoverStatus()
+    setFlowConfigStatus('Экспорт создаёт JSON с визуалом, профилем, плейлистами и настройками.', false)
+    syncFontControls()
+    syncHomeWidgetUI()
+    applyHomeSliderStyle()
+  })
 }
 
 function syncPlaybackModeUI() {
@@ -1387,12 +1668,18 @@ function toggleRepeatMode() {
 function syncTrackCoverStatus() {
   const el = document.getElementById('track-cover-status')
   if (!el) return
+  const map = getCustomCoverMap()
+  const globalCustom = getGlobalCustomCover(map)
+  if (globalCustom) {
+    el.textContent = 'Кастомная обложка используется только в плеере'
+    refreshTrackCoverPreview()
+    return
+  }
   if (!currentTrack) {
     el.textContent = 'Выбери трек и задай для него свою обложку'
     refreshTrackCoverPreview()
     return
   }
-  const map = getCustomCoverMap()
   const hasCustom = getTrackCoverKeys(currentTrack).some((k) => Boolean(map[k]))
   el.textContent = hasCustom ? 'Для текущего трека используется кастомная обложка' : 'Для текущего трека используется обложка из источника'
   refreshTrackCoverPreview()
@@ -1409,16 +1696,20 @@ function setCustomTrackCover(input) {
   const reader = new FileReader()
   reader.onload = (e) => {
     const keys = getTrackCoverKeys(currentTrack)
-    if (!keys.length) return
     const map = getCustomCoverMap()
     const value = e.target?.result || ''
+    map.__global__ = value
     keys.forEach((key) => { map[key] = value })
     saveCustomCoverMap(map)
     _coverLoadState.clear()
     syncPlayerUIFromTrack()
+    renderQueue()
+    renderPlaylists()
+    renderLiked()
+    renderRoomQueue()
     syncTrackCoverStatus()
     refreshTrackCoverPreview(file.name)
-    showToast('Кастомная обложка сохранена')
+    showToast('Кастомная обложка сохранена для плеера')
     input.value = ''
   }
   reader.readAsDataURL(file)
@@ -1432,36 +1723,46 @@ function pickCustomTrackCover(kind = 'image') {
 }
 
 function clearCustomTrackCover() {
-  if (!currentTrack) {
-    showToast('Сначала включи трек', true)
-    return
-  }
-  const keys = getTrackCoverKeys(currentTrack)
-  if (!keys.length) return
   const map = getCustomCoverMap()
-  const hasAny = keys.some((key) => Boolean(map[key]))
+  const globalCustom = getGlobalCustomCover(map)
+  const hasPerTrack = Object.keys(map).some((k) => k !== '__global__' && Boolean(map[k]))
+  const hasAny = Boolean(globalCustom) || hasPerTrack
   if (!hasAny) {
-    showToast('Для этого трека нет кастомной обложки', true)
+    showToast('Кастомная обложка не задана', true)
     return
   }
-  keys.forEach((key) => { delete map[key] })
+  // Full reset: clear global and legacy per-track bindings.
+  Object.keys(map).forEach((key) => { delete map[key] })
   saveCustomCoverMap(map)
+  const input = document.getElementById('track-cover-input')
+  if (input) input.value = ''
+  restoreSourceCoversInCollections()
   _coverLoadState.clear()
   syncPlayerUIFromTrack()
+  renderQueue()
+  renderPlaylists()
+  renderLiked()
+  renderRoomQueue()
   syncTrackCoverStatus()
   refreshTrackCoverPreview()
   showToast('Кастомная обложка удалена')
 }
 
 function refreshTrackCoverPreview(fileName = '') {
-  if (!currentTrack) {
-    setMediaPreviewBox('track-cover', '', 'Сначала включи трек')
+  const map = getCustomCoverMap()
+  const globalCustom = getGlobalCustomCover(map)
+  if (globalCustom) {
+    const label = fileName || 'Кастомная обложка плеера'
+    setMediaPreviewBox('track-cover', globalCustom, label, true)
     return
   }
-  const map = getCustomCoverMap()
+  if (!currentTrack) {
+    setMediaPreviewBox('track-cover', '', 'Сначала включи трек', true)
+    return
+  }
   const custom = getTrackCoverKeys(currentTrack).map((k) => map[k]).find(Boolean) || ''
   const label = fileName || (custom ? `Текущий трек: ${currentTrack.title || 'Без названия'}` : 'Для этого трека обложка не задана')
-  setMediaPreviewBox('track-cover', custom, label)
+  setMediaPreviewBox('track-cover', custom, label, true)
 }
 
 function setFlowConfigStatus(text, isError = false) {
@@ -1638,6 +1939,87 @@ function getPublicProfilePayload(username = _profile?.username) {
   }
 }
 
+let _supabaseProfileSyncTimer = null
+function getSupabaseClient() {
+  try {
+    const factory = window?.supabase?.createClient
+    if (typeof factory !== 'function') return null
+    const url = String(localStorage.getItem('flow_supabase_url') || '').trim()
+    const key = String(localStorage.getItem('flow_supabase_key') || '').trim()
+    if (!url || !key) return null
+    if (!window.__flowSbProfileClient) window.__flowSbProfileClient = factory(url, key)
+    return window.__flowSbProfileClient
+  } catch {
+    return null
+  }
+}
+
+function ensureActiveProfile() {
+  if (_profile?.username) return _profile
+  try {
+    const current = typeof peerSocial.getCurrentProfile === 'function' ? peerSocial.getCurrentProfile() : null
+    if (current?.username) _profile = current
+  } catch {}
+  return _profile
+}
+
+async function fetchCloudPublicProfile(username) {
+  const safe = String(username || '').trim().toLowerCase()
+  if (!safe) return null
+  try {
+    const sb = getSupabaseClient()
+    if (!sb) return null
+    const { data } = await sb
+      .from('flow_profiles')
+      .select('username,avatar_data,banner_data,bio,pinned_tracks,pinned_playlists,total_tracks,total_seconds,last_seen')
+      .eq('username', safe)
+      .maybeSingle()
+    if (!data?.username) return null
+    return {
+      username: String(data.username || safe),
+      avatarData: data.avatar_data || null,
+      bannerData: data.banner_data || null,
+      bio: data.bio || '',
+      pinnedTracks: Array.isArray(data.pinned_tracks) ? data.pinned_tracks.slice(0, 5) : [],
+      pinnedPlaylists: Array.isArray(data.pinned_playlists) ? data.pinned_playlists.slice(0, 5) : [],
+      stats: {
+        totalTracks: Number(data.total_tracks || 0),
+        totalSeconds: Number(data.total_seconds || 0),
+      }
+    }
+  } catch {
+    return null
+  }
+}
+
+function scheduleProfileCloudSync() {
+  if (!ensureActiveProfile()?.username) return
+  if (_supabaseProfileSyncTimer) clearTimeout(_supabaseProfileSyncTimer)
+  _supabaseProfileSyncTimer = setTimeout(async () => {
+    _supabaseProfileSyncTimer = null
+    try {
+      const me = ensureActiveProfile()
+      if (!me?.username) return
+      const custom = getProfileCustom()
+      const stats = getListenStats()
+      const sb = getSupabaseClient()
+      if (!sb) return
+      await sb.from('flow_profiles').upsert({
+        username: me.username,
+        online: true,
+        last_seen: new Date().toISOString(),
+        avatar_data: custom.avatarData || null,
+        banner_data: custom.bannerData || null,
+        bio: custom.bio || '',
+        pinned_tracks: Array.isArray(custom.pinnedTracks) ? custom.pinnedTracks.slice(0, 5) : [],
+        pinned_playlists: Array.isArray(custom.pinnedPlaylists) ? custom.pinnedPlaylists.slice(0, 5) : [],
+        total_tracks: Number(stats.totalTracks || 0),
+        total_seconds: Number(stats.totalSeconds || 0),
+      }, { onConflict: 'username' })
+    } catch {}
+  }, 220)
+}
+
 function renderRoomMembers() {
   const el = document.getElementById('room-members-list')
   if (!el) return
@@ -1645,7 +2027,27 @@ function renderRoomMembers() {
     el.innerHTML = '<div class="social-empty">Рума не активна</div>'
     return
   }
-  const members = Array.from(_roomMembers.values())
+  const members = Array.from(_roomMembers.values()).map((m) => {
+    if (!m?.username) return m
+    const cached = getCachedPeerProfile(m.username)
+    return cached ? Object.assign({}, cached, m) : m
+  })
+  // Safety fallback: if profile packets are delayed, still show connected peers.
+  const connectedPeerIds = Array.from(_socialPeer?.connections?.keys?.() || [])
+  connectedPeerIds.forEach((peerId) => {
+    if (!peerId || _roomMembers.has(peerId)) return
+    const guessedName = String(peerId).replace(/^flow-/, '') || 'user'
+    members.push({
+      username: guessedName,
+      peerId,
+      avatarData: null,
+      bannerData: null,
+      bio: '',
+      stats: { totalTracks: 0, totalSeconds: 0 },
+      pinnedTracks: [],
+      pinnedPlaylists: [],
+    })
+  })
   if (!members.length && _profile?.username) members.push(getPublicProfilePayload(_profile.username))
   el.innerHTML = members.map((m) => {
     if (!m) return ''
@@ -1669,6 +2071,28 @@ function broadcastRoomMembersState() {
     roomId: _roomState.roomId,
     members,
   })
+}
+
+function syncRoomPresenceHeartbeat() {
+  if (!_socialPeer || !_roomState?.roomId || !_profile?.username) return
+  const me = getPublicProfilePayload(_profile.username)
+  if (_socialPeer?.peer?.id && me) _roomMembers.set(_socialPeer.peer.id, me)
+  if (_roomState.host) {
+    _socialPeer.send({ type: 'room-profile-state', roomId: _roomState.roomId, profile: me, sharedQueue })
+    broadcastRoomMembersState()
+  } else {
+    _socialPeer.send({ type: 'room-profile-state', roomId: _roomState.roomId, profile: me, sharedQueue })
+    _socialPeer.send({ type: 'room-queue-sync-request', roomId: _roomState.roomId })
+  }
+  updateRoomUi()
+}
+
+function resetRoomHeartbeat() {
+  if (_roomHeartbeatTimer) clearInterval(_roomHeartbeatTimer)
+  _roomHeartbeatTimer = null
+  if (!_roomState?.roomId) return
+  syncRoomPresenceHeartbeat()
+  _roomHeartbeatTimer = setInterval(() => syncRoomPresenceHeartbeat(), 8000)
 }
 
 function renderRoomQueue() {
@@ -1705,8 +2129,9 @@ function renderRoomQueue() {
         row.classList.remove('dragging')
       })
     }
-    const cover = t.cover
-      ? `<div class="profile-row-cover" style="background-image:url(${t.cover})"></div>`
+    const coverUrl = getListCoverUrl(t)
+    const cover = coverUrl
+      ? `<div class="profile-row-cover" style="background-image:url(${coverUrl})"></div>`
       : `<div class="profile-row-cover profile-row-cover-fallback">♪</div>`
     const controls = canEdit
       ? `<button class="playlist-track-action danger">✕</button>`
@@ -1807,8 +2232,9 @@ async function searchRoomQueueTracks() {
         return
       }
       list.innerHTML = _roomSearchResults.map((t, i) => {
-        const cover = t.cover
-          ? `<div class="profile-row-cover" style="background-image:url(${t.cover})"></div>`
+        const coverUrl = getListCoverUrl(t)
+        const cover = coverUrl
+          ? `<div class="profile-row-cover" style="background-image:url(${coverUrl})"></div>`
           : `<div class="profile-row-cover profile-row-cover-fallback">♪</div>`
         return `<button class="profile-picker-item" onclick="addRoomSearchTrack(${i})" style="display:flex;align-items:center;gap:8px">${cover}<span>${t.title} — ${t.artist || '—'}</span></button>`
       }).join('')
@@ -1845,52 +2271,63 @@ async function openPeerProfile(username, peerId = '') {
   let data = byPeer || byName || { username }
   const cached = getCachedPeerProfile(username)
   if (cached) data = Object.assign({}, cached, data)
+  const renderModal = (profileData) => {
+    const avatar = profileData.avatarData
+      ? `<div class="profile-avatar" style="background-image:url(${profileData.avatarData});background-size:cover;background-position:center"></div>`
+      : `<div class="profile-avatar">${String(profileData.username || '?').slice(0,1).toUpperCase()}</div>`
+    const banner = profileData.bannerData
+      ? `linear-gradient(0deg, rgba(8,10,16,.35), rgba(8,10,16,.35)), url(${profileData.bannerData})`
+      : 'linear-gradient(135deg,#1f2937,#111827)'
+    const pinnedTracks = Array.isArray(profileData.pinnedTracks) ? profileData.pinnedTracks : []
+    const friends = Array.from(_friendPresence.entries()).map(([name]) => name).slice(0, 24)
+    body.innerHTML = `
+      <div class="profile-shell peer-profile-shell" style="padding:0">
+        <div class="profile-hero glass-card">
+          <div class="profile-banner" style="background-image:${banner}"></div>
+          <div class="profile-avatar-wrap">${avatar}</div>
+          <div class="profile-main-meta">
+            <h3>${profileData.username || 'user'}</h3>
+            <p>${profileData.bio || 'Описание отсутствует'}</p>
+          </div>
+        </div>
+        <div class="profile-grid">
+          <div class="glass-card profile-card">
+            <div class="profile-card-head"><strong>Закрепленные треки</strong></div>
+            ${pinnedTracks.length ? pinnedTracks.map((t) => `<div class="profile-row"><span>${t.title} — ${t.artist || '—'}</span></div>`).join('') : '<div class="social-empty">Нет данных</div>'}
+          </div>
+          <div class="glass-card profile-card">
+            <div class="profile-card-head"><strong>Отслеживание</strong></div>
+            <div class="profile-stat-line"><strong>${((Number(profileData?.stats?.totalSeconds || 0))/3600).toFixed(1)}ч</strong> прослушивания</div>
+            <div class="profile-stat-line"><strong>${Number(profileData?.stats?.totalTracks || 0)}</strong> треков</div>
+          </div>
+          <div class="glass-card profile-card">
+            <div class="profile-card-head"><strong>Друзья</strong></div>
+            ${friends.length ? friends.map((f) => `<div class="profile-row"><span>${f}</span></div>`).join('') : '<div class="social-empty">Нет данных</div>'}
+          </div>
+        </div>
+      </div>
+    `
+    modal.classList.remove('hidden')
+  }
+  renderModal(data)
   const targetPeerId = String(peerId || data?.peerId || `flow-${username}` || '').trim()
+  const cloud = await fetchCloudPublicProfile(username).catch(() => null)
+  if (cloud) {
+    data = Object.assign({}, data, cloud, { peerId: targetPeerId || data.peerId || null })
+    if (data.peerId) _peerProfiles.set(data.peerId, data)
+    cachePeerProfile(data, data.peerId)
+    renderModal(data)
+  }
   if (_socialPeer?.requestPeerData && targetPeerId && targetPeerId !== _socialPeer?.peer?.id) {
-    const rsp = await _socialPeer.requestPeerData(targetPeerId, { type: 'presence-request' }, 2400).catch(() => null)
+    const rsp = await _socialPeer.requestPeerData(targetPeerId, { type: 'presence-request' }, 1300).catch(() => null)
     const remoteProfile = rsp?.ok ? rsp?.data?.profile : null
     if (remoteProfile) {
       data = Object.assign({}, data, remoteProfile, { peerId: rsp?.data?.peerId || targetPeerId })
       _peerProfiles.set(data.peerId, data)
       cachePeerProfile(data, data.peerId)
+      renderModal(data)
     }
   }
-  const avatar = data.avatarData
-    ? `<div class="profile-avatar" style="background-image:url(${data.avatarData});background-size:cover;background-position:center"></div>`
-    : `<div class="profile-avatar">${String(data.username || '?').slice(0,1).toUpperCase()}</div>`
-  const banner = data.bannerData
-    ? `linear-gradient(0deg, rgba(8,10,16,.35), rgba(8,10,16,.35)), url(${data.bannerData})`
-    : 'linear-gradient(135deg,#1f2937,#111827)'
-  const pinnedTracks = Array.isArray(data.pinnedTracks) ? data.pinnedTracks : []
-  const friends = Array.from(_friendPresence.entries()).map(([name]) => name).slice(0, 24)
-  body.innerHTML = `
-    <div class="profile-shell peer-profile-shell" style="padding:0">
-      <div class="profile-hero glass-card">
-        <div class="profile-banner" style="background-image:${banner}"></div>
-        <div class="profile-avatar-wrap">${avatar}</div>
-        <div class="profile-main-meta">
-          <h3>${data.username || 'user'}</h3>
-          <p>${data.bio || 'Описание отсутствует'}</p>
-        </div>
-      </div>
-      <div class="profile-grid">
-        <div class="glass-card profile-card">
-          <div class="profile-card-head"><strong>Закрепленные треки</strong></div>
-          ${pinnedTracks.length ? pinnedTracks.map((t) => `<div class="profile-row"><span>${t.title} — ${t.artist || '—'}</span></div>`).join('') : '<div class="social-empty">Нет данных</div>'}
-        </div>
-        <div class="glass-card profile-card">
-          <div class="profile-card-head"><strong>Отслеживание</strong></div>
-          <div class="profile-stat-line"><strong>${((Number(data?.stats?.totalSeconds || 0))/3600).toFixed(1)}ч</strong> прослушивания</div>
-          <div class="profile-stat-line"><strong>${Number(data?.stats?.totalTracks || 0)}</strong> треков</div>
-        </div>
-        <div class="glass-card profile-card">
-          <div class="profile-card-head"><strong>Друзья</strong></div>
-          ${friends.length ? friends.map((f) => `<div class="profile-row"><span>${f}</span></div>`).join('') : '<div class="social-empty">Нет данных</div>'}
-        </div>
-      </div>
-    </div>
-  `
-  modal.classList.remove('hidden')
 }
 
 function closePeerProfile() {
@@ -1905,17 +2342,32 @@ function getListenStats() {
 }
 
 function saveListenStats(patch = {}) {
-  if (!_profile?.username) return
+  if (!ensureActiveProfile()?.username) return
   const key = `flow_listen_stats_${_profile.username}`
   const next = Object.assign(getListenStats(), patch || {})
   localStorage.setItem(key, JSON.stringify(next))
+  scheduleProfileCloudSync()
 }
 
 function saveProfileCustom(patch = {}) {
-  if (!_profile?.username) return getProfileCustom()
+  if (!ensureActiveProfile()?.username) {
+    showToast('Сначала войди в профиль', true)
+    return getProfileCustom()
+  }
   const key = `flow_profile_custom_${_profile.username}`
   const next = Object.assign(getProfileCustom(), patch || {})
   localStorage.setItem(key, JSON.stringify(next))
+  try {
+    const publicPayload = getPublicProfilePayload(_profile.username)
+    if (_socialPeer?.peer?.id && publicPayload) {
+      _peerProfiles.set(_socialPeer.peer.id, publicPayload)
+      cachePeerProfile(publicPayload, _socialPeer.peer.id)
+    }
+    if (_roomState?.roomId && _socialPeer?.send) {
+      _socialPeer.send({ type: 'room-profile-state', roomId: _roomState.roomId, profile: publicPayload, sharedQueue })
+    }
+  } catch {}
+  scheduleProfileCloudSync()
   return next
 }
 
@@ -2167,8 +2619,9 @@ function renderPinnedTracks() {
   custom.pinnedTracks.forEach((track, i) => {
     const row = document.createElement('div')
     row.className = 'profile-row'
-    const cover = track.cover
-      ? `<div class="profile-row-cover" style="background-image:url(${track.cover})"></div>`
+    const coverUrl = getListCoverUrl(track)
+    const cover = coverUrl
+      ? `<div class="profile-row-cover" style="background-image:url(${coverUrl})"></div>`
       : `<div class="profile-row-cover profile-row-cover-fallback">♪</div>`
     row.innerHTML = `${cover}<span>${track.title} — ${track.artist || '—'}</span><button class="playlist-track-action danger">✕</button>`
     row.querySelector('span')?.addEventListener('click', () => playTrackObj(track))
@@ -2224,7 +2677,11 @@ function ensureSocialUI() {
     <div class="social-add-box">
       <div class="social-section-title">Добавить друга</div>
       <input id="friend-search-input" class="token-field flow-input" placeholder="Username друга" style="flex:1;min-width:180px" />
-      <button class="btn-small" onclick="addFriendByUsername()">Добавить друга</button>
+      <button class="btn-small" onclick="addFriendByUsername()">Отправить запрос</button>
+    </div>
+    <div class="social-friends-box">
+      <div class="social-section-title">Входящие заявки</div>
+      <div id="friend-requests-list"><div class="social-empty">Нет входящих заявок</div></div>
     </div>
     <div class="social-friends-box">
       <div class="social-section-title">Друзья</div>
@@ -2279,9 +2736,10 @@ function ensureRoomsUI() {
   root.appendChild(box)
 }
 
-function renderFriends() {
+async function renderFriends() {
   const el = document.getElementById('friends-list')
   if (!el || !_profile?.username || !peerSocial.getFriends) return
+  renderFriendRequests().catch(() => {})
   const list = peerSocial.getFriends(_profile.username)
   if (!list.length) {
     el.innerHTML = '<div class="social-empty">Пока нет друзей</div>'
@@ -2449,13 +2907,27 @@ function initPeerSocial() {
         setRoomStatus(`Рума ${_roomState.roomId || '—'}: участников ${_socialPeer.peersCount()}/3`)
         const me = getPublicProfilePayload(_profile?.username)
         if (me && _socialPeer?.peer?.id) _roomMembers.set(_socialPeer.peer.id, me)
+        if (evt.peerId && !_roomMembers.has(evt.peerId)) {
+          _roomMembers.set(evt.peerId, {
+            username: String(evt.peerId).replace(/^flow-/, '') || 'user',
+            peerId: evt.peerId,
+            avatarData: null,
+            bannerData: null,
+            bio: '',
+            stats: { totalTracks: 0, totalSeconds: 0 },
+            pinnedTracks: [],
+            pinnedPlaylists: [],
+          })
+        }
         if (_roomState?.roomId && _roomState.host) _socialPeer.send({ type: 'room-profile-state', roomId: _roomState.roomId, profile: me, sharedQueue })
         if (_roomState?.roomId && !_roomState.host && evt.peerId && _socialPeer?.sendToPeer) {
           _socialPeer.sendToPeer(evt.peerId, { type: 'room-profile-state', roomId: _roomState.roomId, profile: me, sharedQueue })
           _socialPeer.sendToPeer(evt.peerId, { type: 'room-queue-sync-request', roomId: _roomState.roomId })
         }
         broadcastRoomMembersState()
+        resetRoomHeartbeat()
         updateRoomUi()
+        if (evt.peerId) showToast(`${String(evt.peerId).replace(/^flow-/, '')}: вошёл в руму`)
       }
       if (evt.type === 'peer-left') {
         setRoomStatus(`Рума ${_roomState.roomId || '—'}: участников ${_socialPeer.peersCount()}/3`)
@@ -2470,7 +2942,9 @@ function initPeerSocial() {
           setRoomStatus('Хост отключился, автономный режим активирован')
         }
         broadcastRoomMembersState()
+        resetRoomHeartbeat()
         updateRoomUi()
+        if (evt.peerId) showToast(`${String(evt.peerId).replace(/^flow-/, '')}: вышел из румы`)
       }
       if (evt.type === 'error') {
         setSocialStatus(`error: ${evt.error}`)
@@ -2501,6 +2975,7 @@ function initPeerSocial() {
       if (msg.type === 'presence-request' && fromPeerId && _socialPeer) {
         const payload = {
           type: 'presence-state',
+          _responseTo: msg?._reqId || null,
           toPeerId: fromPeerId,
           track: currentTrack ? { title: currentTrack.title || '', artist: currentTrack.artist || '' } : null,
           roomId: _roomState.roomId || null,
@@ -2528,11 +3003,13 @@ function initPeerSocial() {
         renderFriends()
       }
       if (msg.type === 'room-profile-state' && msg.profile && msg._peerId) {
-        _peerProfiles.set(msg._peerId, msg.profile)
-        cachePeerProfile(msg.profile, msg._peerId)
-        _roomMembers.set(msg._peerId, msg.profile)
+        const profileWithPeer = Object.assign({}, msg.profile, { peerId: msg._peerId })
+        _peerProfiles.set(msg._peerId, profileWithPeer)
+        cachePeerProfile(profileWithPeer, msg._peerId)
+        _roomMembers.set(msg._peerId, profileWithPeer)
         if (Array.isArray(msg.sharedQueue)) sharedQueue = msg.sharedQueue
         if (_roomState.host) broadcastRoomMembersState()
+        resetRoomHeartbeat()
         updateRoomUi()
       }
       if (msg.type === 'room-members-state' && Array.isArray(msg.members)) {
@@ -2546,6 +3023,7 @@ function initPeerSocial() {
           map.set(_socialPeer.peer.id, getPublicProfilePayload(_profile.username))
         }
         _roomMembers = map
+        resetRoomHeartbeat()
         updateRoomUi()
       }
       if (msg.type === 'room-queue-add' && _roomState.host && msg.track) {
@@ -2604,6 +3082,8 @@ function logout() {
   _friendPresence.clear()
   _roomMembers.clear()
   sharedQueue = []
+  if (_roomHeartbeatTimer) clearInterval(_roomHeartbeatTimer)
+  _roomHeartbeatTimer = null
   if (_friendsPollTimer) clearInterval(_friendsPollTimer)
   _friendsPollTimer = null
   updateRoomUi()
@@ -2617,18 +3097,46 @@ function logout() {
 async function addFriendByUsername() {
   const input = document.getElementById('friend-search-input')
   const friend = String(input?.value || '').trim()
-  if (!_profile?.username || !friend || typeof peerSocial.addFriend !== 'function') return
-  const r = peerSocial.addFriend(_profile.username, friend)
-  if (!r?.ok) return showToast(r?.error || 'Не удалось добавить', true)
-  renderFriends()
-  pollFriendsPresence().catch(() => {})
+  if (!_profile?.username || !friend || typeof peerSocial.sendFriendRequest !== 'function') return
+  const r = await peerSocial.sendFriendRequest(_profile.username, friend)
+  if (!r?.ok) return showToast(r?.error || 'Не удалось отправить запрос', true)
+  renderFriends().catch(() => {})
   input.value = ''
-  let onlineHint = ''
-  if (_socialPeer?.probeUser) {
-    const online = await _socialPeer.probeUser(friend, 1500).catch(() => false)
-    onlineHint = online ? ' (в сети)' : ' (добавлен, офлайн)'
+  const online = await _socialPeer?.probeUser?.(friend, 1500).catch(() => false)
+  showToast(online ? 'Запрос в друзья отправлен' : 'Запрос в друзья отправлен (доставится при входе)')
+}
+
+async function renderFriendRequests() {
+  const el = document.getElementById('friend-requests-list')
+  if (!el || !_profile?.username || typeof peerSocial.getIncomingFriendRequests !== 'function') return
+  const reqs = await peerSocial.getIncomingFriendRequests(_profile.username).catch(() => [])
+  if (!Array.isArray(reqs) || !reqs.length) {
+    el.innerHTML = '<div class="social-empty">Нет входящих заявок</div>'
+    return
   }
-  showToast(`Друг добавлен${onlineHint}`)
+  el.innerHTML = reqs.map((req) => {
+    const from = String(req.from_username || '')
+    return `
+      <div class="social-friend-card online">
+        <div class="social-friend-avatar">${from.slice(0,1).toUpperCase()}</div>
+        <div class="social-friend-meta">
+          <strong>${from}</strong>
+          <span>Предложение в друзья</span>
+        </div>
+        <button class="btn-small" onclick="respondFriendRequest('${from}', true)">Принять</button>
+        <button class="btn-small" onclick="respondFriendRequest('${from}', false)">Отклонить</button>
+      </div>
+    `
+  }).join('')
+}
+
+async function respondFriendRequest(fromUsername, accept) {
+  if (!_profile?.username || typeof peerSocial.respondFriendRequest !== 'function') return
+  const r = await peerSocial.respondFriendRequest(_profile.username, fromUsername, Boolean(accept))
+  if (!r?.ok) return showToast(r?.error || 'Ошибка обработки заявки', true)
+  showToast(accept ? 'Друг добавлен' : 'Запрос отклонен')
+  renderFriends().catch(() => {})
+  pollFriendsPresence().catch(() => {})
 }
 
 function createRoom() {
@@ -2640,6 +3148,7 @@ function createRoom() {
   sharedQueue = []
   if (_socialPeer?.peer?.id) _roomMembers.set(_socialPeer.peer.id, getPublicProfilePayload(_profile?.username))
   setRoomStatus(`Рума ${r.roomId}: участников 1/3`)
+  resetRoomHeartbeat()
   updateRoomUi()
   showToast('Рума создана')
 }
@@ -2655,6 +3164,7 @@ function joinRoomById(forceRoomId = '') {
   sharedQueue = []
   if (_socialPeer?.peer?.id) _roomMembers.set(_socialPeer.peer.id, getPublicProfilePayload(_profile?.username))
   setRoomStatus(`Подключение к руме ${r.roomId}...`)
+  resetRoomHeartbeat()
   updateRoomUi()
   showToast('Подключение к руме...')
 }
@@ -2669,6 +3179,8 @@ function leaveRoom() {
   _roomState = { roomId: null, host: false, hostPeerId: null }
   _roomMembers.clear()
   sharedQueue = []
+  if (_roomHeartbeatTimer) clearInterval(_roomHeartbeatTimer)
+  _roomHeartbeatTimer = null
   setRoomStatus('Рума: не активна')
   updateRoomUi()
   showToast('Вы покинули руму')
@@ -2939,6 +3451,8 @@ function startApp() {
     })
     localStorage.setItem('flow_first_launch_done', '1')
   }
+  // Repair previously injected custom covers in collections on each launch.
+  restoreSourceCoversInCollections()
   renderLiked(); renderPlaylists(); updateSourceBadge(); syncSearchSourcePills()
   initVisualSettings()
   syncPlaybackModeUI()
@@ -3151,7 +3665,21 @@ function syncPlayerUIFromTrack() {
 }
 
 // в”Ђв”Ђв”Ђ NAVIGATION в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-function openPage(id) {
+let _activePageId = 'home'
+let _deferredPageRenderRaf = 0
+
+function runDeferredPageRender(id) {
+  if (id === 'liked') return renderLiked()
+  if (id === 'library') return renderPlaylists()
+  if (id === 'social') return renderFriends()
+  if (id === 'rooms') { renderRoomMembers(); return renderRoomQueue() }
+  if (id === 'profile') return renderProfilePage()
+  if (id === 'settings') return loadSettingsPage()
+}
+
+function openPage(id, opts = {}) {
+  const force = Boolean(opts && opts.force)
+  if (!force && id === _activePageId) return
   if (id === 'social') ensureSocialUI()
   if (id === 'rooms') ensureRoomsUI()
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'))
@@ -3160,13 +3688,12 @@ function openPage(id) {
   const pages = ['home','search','library','liked','social','rooms','settings']
   const idx = pages.indexOf(id)
   if (idx >= 0) document.querySelectorAll('.nav-item')[idx]?.classList.add('active')
-  if (id === 'liked') renderLiked()
-  if (id === 'library') renderPlaylists()
-  if (id === 'social') renderFriends()
-  if (id === 'rooms') { renderRoomMembers(); renderRoomQueue() }
-  if (id === 'profile') renderProfilePage()
-  if (id === 'settings') loadSettingsPage()
-  applyUiTextOverrides()
+  _activePageId = id
+  if (_deferredPageRenderRaf) cancelAnimationFrame(_deferredPageRenderRaf)
+  _deferredPageRenderRaf = requestAnimationFrame(() => {
+    _deferredPageRenderRaf = 0
+    runDeferredPageRender(id)
+  })
 }
 
 // в”Ђв”Ђв”Ђ PLAYER в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
@@ -3178,6 +3705,14 @@ async function playTrackObj(track, opts = {}) {
   const reqId = ++_playRequestSeq
   const isStale = () => reqId !== _playRequestSeq
   track = sanitizeTrack(track)
+  const forcedCover = getEffectiveCoverUrl(track)
+  if (forcedCover) {
+    track = Object.assign({}, track, {
+      _sourceCover: track?._sourceCover || track?.cover || '',
+      cover: forcedCover,
+      _customCover: true
+    })
+  }
   console.log('TRACK:', track)
   const originalRequestTrack = track
   const tryAlternateYoutubeVersion = async () => {
@@ -3193,7 +3728,7 @@ async function playTrackObj(track, opts = {}) {
       await playTrackObj(Object.assign({}, candidate, {
         title: originalRequestTrack?.title || candidate.title,
         artist: originalRequestTrack?.artist || candidate.artist,
-        cover: originalRequestTrack?.cover || candidate.cover
+        cover: getEffectiveCoverUrl(originalRequestTrack) || originalRequestTrack?.cover || candidate.cover
       }))
       return true
     } catch {
@@ -3213,7 +3748,7 @@ async function playTrackObj(track, opts = {}) {
         return playTrackObj(Object.assign({}, scResults[0], {
           title: track.title,
           artist: track.artist,
-          cover: track.cover || scResults[0].cover
+          cover: getEffectiveCoverUrl(track) || track.cover || scResults[0].cover
         }))
       }
       const audResults = await searchAudius(query).catch(() => [])
@@ -3222,7 +3757,7 @@ async function playTrackObj(track, opts = {}) {
         return playTrackObj(Object.assign({}, audResults[0], {
           title: track.title,
           artist: track.artist,
-          cover: track.cover || audResults[0].cover
+          cover: getEffectiveCoverUrl(track) || track.cover || audResults[0].cover
         }))
       }
       showToast('Spotify: не найдено в SoundCloud/Audius', true)
@@ -3472,8 +4007,7 @@ async function playTrackObj(track, opts = {}) {
   if (tinfo) tinfo.textContent = track.title + (track.artist ? ' вЂ” ' + track.artist : '')
   // Р”РёРЅР°РјРёС‡РµСЃРєРёР№ С„РѕРЅ РѕС‚ РѕР±Р»РѕР¶РєРё
   if (effectiveCover) updateOrbsFromCover(effectiveCover)
-  const v = getVisual()
-  if (v.bgType === 'cover') updateBackground()
+  updateBackground()
   // РЎРёРЅС…СЂРѕРЅРёР·РёСЂСѓРµРј fullscreen РїР»РµРµСЂ
   syncPlayerModeUI()
   syncTrackCoverStatus()
@@ -3686,51 +4220,16 @@ function pickFallbackSource(failedSource) {
 }
 
 async function searchHybridTracks(q, settings) {
-  let spotifyErr = null
-  let scErr = null
-  let audErr = null
-  if (settings.spotifyToken) {
-    try {
-      const sp = sanitizeTrackList(await searchSpotify(q, settings.spotifyToken))
-      if (sp.length) return { mode: 'spotify', tracks: sp }
-    } catch (err) {
-      spotifyErr = err
-      console.warn('Spotify search failed, fallback to SoundCloud:', err?.message || err)
-    }
+  if (window.api?.serverSearch) {
+    const payload = await withTimeout(window.api.serverSearch(q, {
+      spotifyToken: settings?.spotifyToken || '',
+      soundcloudClientId: settings?.soundcloudClientId || ''
+    }), 10000, null)
+    if (payload?.ok) return { mode: payload.mode || 'hybrid', tracks: sanitizeTrackList(payload.tracks || []) }
+    if (payload && !payload.ok) throw new Error(payload.error || 'Поиск на сервере не дал результатов')
+    throw new Error('Серверный поиск недоступен')
   }
-
-  try {
-    const sc = sanitizeTrackList(await searchSoundCloud(q, settings.soundcloudClientId))
-    if (sc.length) return { mode: 'soundcloud', tracks: sc }
-  } catch (err) {
-    scErr = err
-    console.warn('SoundCloud search failed, fallback to Audius:', err?.message || err)
-  }
-  try {
-    const ad = sanitizeTrackList(await searchAudius(q))
-    if (ad.length) return { mode: 'audius', tracks: ad }
-  } catch (err) {
-    audErr = err
-    console.warn('Audius search failed:', err?.message || err)
-  }
-
-  // Last-resort fallback so search still works when APIs are flaky.
-  if (window.api?.youtubeSearch) {
-    try {
-      const ytRaw = await window.api.youtubeSearch(q)
-      const yt = sanitizeTrackList(Array.isArray(ytRaw) ? ytRaw : [])
-      if (yt.length) return { mode: 'youtube', tracks: yt }
-    } catch (ytErr) {
-      console.warn('YouTube fallback failed:', ytErr?.message || ytErr)
-    }
-  }
-
-  const reasons = [
-    spotifyErr ? `Spotify: ${normalizeInvokeError(spotifyErr)}` : '',
-    scErr ? `SoundCloud: ${normalizeInvokeError(scErr)}` : '',
-    audErr ? `Audius: ${normalizeInvokeError(audErr)}` : '',
-  ].filter(Boolean)
-  throw new Error(reasons.length ? reasons.join(' | ') : 'Ничего не найдено')
+  throw new Error('Серверный поиск недоступен в этой версии приложения')
 }
 
 function searchTracks(queryOverride = '') {
@@ -3853,24 +4352,19 @@ async function getScClientId(manualId) {
 
 async function searchSoundCloud(q, manualClientId) {
   const clientId = await getScClientId(manualClientId)
-  if (window.api?.scSearch) {
-    const result = await window.api.scSearch(q, clientId)
-    if (!result.ok) {
-      if (result.expired && !manualClientId) {
-        _scAutoClientId = null
-        const freshId = await getScClientId(null)
-        const retry = await window.api.scSearch(q, freshId)
-        if (!retry.ok) throw new Error('SoundCloud: ' + retry.error)
-        return mapScTracks(retry.tracks, freshId)
-      }
-      throw new Error('SoundCloud: ' + result.error)
+  if (!window.api?.scSearch) throw new Error('SoundCloud серверный поиск недоступен')
+  const result = await window.api.scSearch(q, clientId)
+  if (!result.ok) {
+    if (result.expired && !manualClientId) {
+      _scAutoClientId = null
+      const freshId = await getScClientId(null)
+      const retry = await window.api.scSearch(q, freshId)
+      if (!retry.ok) throw new Error('SoundCloud: ' + retry.error)
+      return mapScTracks(retry.tracks, freshId)
     }
-    return mapScTracks(result.tracks, clientId)
+    throw new Error('SoundCloud: ' + result.error)
   }
-  const res = await fetch(`https://api.soundcloud.com/tracks?q=${encodeURIComponent(q)}&client_id=${clientId}&limit=20&linked_partitioning=1`)
-  if (!res.ok) { if ((res.status===401||res.status===403)&&!manualClientId) { _scAutoClientId=null; throw new Error('SC Client ID СѓСЃС‚Р°СЂРµР» вЂ” РїРµСЂРµР·Р°РїСѓСЃС‚Рё РїРѕРёСЃРє') } throw new Error(`SoundCloud РѕС€РёР±РєР° ${res.status}`) }
-  const data = await res.json()
-  return mapScTracks(Array.isArray(data) ? data : (data.collection||[]), clientId)
+  return mapScTracks(result.tracks, clientId)
 }
 
 async function mapScTracks(tracks, clientId) {
@@ -3925,25 +4419,10 @@ async function searchVK(q, token) {
 
 // в”Ђв”Ђв”Ђ HITMO в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 async function searchHitmo(q) {
-  // Hitmo search via their site scraping (works in Electron via main process)
-  if (window.api?.hitmoSearch) {
-    const result = await window.api.hitmoSearch(q)
-    if (!result.ok) throw new Error('Hitmo: ' + (result.error || 'РѕС€РёР±РєР° РїРѕРёСЃРєР°'))
-    return result.tracks
-  }
-  // Fallback: direct fetch (may face CORS in browser, works in Electron with webSecurity:false)
-  const searchUrl = `https://ru.hitmoz.org/search/?q=${encodeURIComponent(q)}`
-  let html
-  if (window.api?.fetchHtml) {
-    const r = await window.api.fetchHtml(searchUrl)
-    if (!r.ok) throw new Error('Hitmo: ' + r.error)
-    html = r.html
-  } else {
-    const res = await fetch(searchUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } })
-    if (!res.ok) throw new Error(`Hitmo: РѕС€РёР±РєР° ${res.status}`)
-    html = await res.text()
-  }
-  return parseHitmoResults(html)
+  if (!window.api?.hitmoSearch) throw new Error('Hitmo серверный поиск недоступен')
+  const result = await window.api.hitmoSearch(q)
+  if (!result.ok) throw new Error('Hitmo: ' + (result.error || 'ошибка поиска'))
+  return result.tracks
 }
 
 function parseHitmoResults(html) {
@@ -4132,21 +4611,34 @@ function updatePlayerLikeBtn() {
   if (pmCoverBtn) { pmCoverBtn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; pmCoverBtn.classList.toggle('liked', liked) }
 }
 
+let _likedRenderToken = 0
 function renderLiked() {
+  const token = ++_likedRenderToken
   const liked = getLiked()
   const container = document.getElementById('liked-list'); if (!container) return
   if (!liked.length) { container.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.35-9.5-8A5.5 5.5 0 0 1 12 5.1 5.5 5.5 0 0 1 21.5 13c-2.5 3.65-9.5 8-9.5 8Z"/></svg></div><p>Ты еще не лайкнул ни одного трека</p></div>`; return }
   container.innerHTML = ''
-  liked.forEach((track, i) => {
-    const el = makeTrackEl(track, true, false)
-    el.addEventListener('click', () => {
-      queue = liked.slice()
-      queueIndex = i
-      queueScope = 'liked'
-      playTrackObj(track)
-    })
-    container.appendChild(el)
-  })
+  let i = 0
+  const chunkSize = 18
+  const renderChunk = () => {
+    if (token !== _likedRenderToken) return
+    const fragment = document.createDocumentFragment()
+    for (let n = 0; n < chunkSize && i < liked.length; n++, i++) {
+      const rowIndex = i
+      const track = liked[rowIndex]
+      const el = makeTrackEl(track, true, false)
+      el.addEventListener('click', () => {
+        queue = liked.slice()
+        queueIndex = rowIndex
+        queueScope = 'liked'
+        playTrackObj(track)
+      })
+      fragment.appendChild(el)
+    }
+    container.appendChild(fragment)
+    if (i < liked.length) setTimeout(renderChunk, 0)
+  }
+  renderChunk()
 }
 
 // в”Ђв”Ђв”Ђ PLAYLISTS в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
@@ -4192,7 +4684,12 @@ function openPlaylist(idx) {
   }
   document.getElementById('playlists-list').classList.add('hidden')
   document.querySelector('.section-header')?.classList.add('hidden')
-  document.getElementById('playlist-view').classList.remove('hidden')
+  const viewEl = document.getElementById('playlist-view')
+  if (viewEl) {
+    viewEl.classList.remove('hidden')
+    viewEl.classList.remove('is-opening')
+    requestAnimationFrame(() => viewEl.classList.add('is-opening'))
+  }
   const container = document.getElementById('playlist-tracks')
   if (!pl.tracks.length) { container.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div><p>Плейлист пуст</p></div>`; return }
   container.innerHTML=''
@@ -4256,7 +4753,11 @@ function openPlaylist(idx) {
 
 function closePlaylist() {
   openPlaylistIndex=null
-  document.getElementById('playlist-view').classList.add('hidden')
+  const viewEl = document.getElementById('playlist-view')
+  if (viewEl) {
+    viewEl.classList.add('hidden')
+    viewEl.classList.remove('is-opening')
+  }
   document.getElementById('playlists-list').classList.remove('hidden')
   document.querySelector('.section-header')?.classList.remove('hidden')
 }
@@ -4430,30 +4931,45 @@ function addToPlaylist(track) {
   })
 }
 
+let _playlistRenderToken = 0
 function renderPlaylists() {
+  const token = ++_playlistRenderToken
   const pls = getPlaylists().map(normalizePlaylist)
   const container = document.getElementById('playlists-list'); if (!container) return
   if (!pls.length) { container.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg></div><p>Нет плейлистов — создай первый!</p></div>`; return }
   container.innerHTML=''
-  pls.forEach((pl,idx) => {
-    const el = document.createElement('div'); el.className='playlist-card'
-    const playlistCover = sanitizeMediaByGifMode(pl.coverData || '', 'playlist')
-    const coverStyle = playlistCover
-      ? `background-image:url(${playlistCover});background-size:cover;background-position:center;`
-      : ''
-    el.innerHTML=`
-      <div class="playlist-icon" style="${coverStyle}" title="Плейлист">${playlistCover ? '' : '<svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'}</div>
-      <div class="playlist-info" onclick="openPlaylist(${idx})" style="cursor:pointer">
-        <span class="playlist-name">${pl.name}</span>
-        <span class="playlist-count">${pl.tracks.length} треков${pl.description ? ` • ${pl.description}` : ''}</span>
-      </div>
-      <div class="playlist-card-actions">
-        <button class="playlist-del" onclick="event.stopPropagation();editPlaylistMeta(${idx})" title="Редактировать">✎</button>
-        <button class="playlist-del" onclick="event.stopPropagation();deletePlaylist(${idx})">${ICONS.close}</button>
-      </div>`
-    el.addEventListener('click', () => openPlaylist(idx))
-    container.appendChild(el)
-  })
+  let idx = 0
+  const chunkSize = 20
+  const renderChunk = () => {
+    if (token !== _playlistRenderToken) return
+    const fragment = document.createDocumentFragment()
+    for (let n = 0; n < chunkSize && idx < pls.length; n++, idx++) {
+      const currentIdx = idx
+      const pl = pls[currentIdx]
+      const el = document.createElement('div'); el.className='playlist-card'
+      const playlistCover = sanitizeMediaByGifMode(pl.coverData || '', 'playlist')
+      const coverStyle = ''
+      el.innerHTML=`
+        <div class="playlist-icon" style="${coverStyle}" title="Плейлист">${playlistCover ? '' : '<svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'}</div>
+        <div class="playlist-info" onclick="openPlaylist(${currentIdx})" style="cursor:pointer">
+          <span class="playlist-name">${pl.name}</span>
+          <span class="playlist-count">${pl.tracks.length} треков${pl.description ? ` • ${pl.description}` : ''}</span>
+        </div>
+        <div class="playlist-card-actions">
+          <button class="playlist-del" onclick="event.stopPropagation();editPlaylistMeta(${currentIdx})" title="Редактировать">✎</button>
+          <button class="playlist-del" onclick="event.stopPropagation();deletePlaylist(${currentIdx})">${ICONS.close}</button>
+        </div>`
+      if (playlistCover) {
+        const icon = el.querySelector('.playlist-icon')
+        applyCachedCoverBackground(icon, playlistCover, '', `playlist:${currentIdx}`)
+      }
+      el.addEventListener('click', () => openPlaylist(currentIdx))
+      fragment.appendChild(el)
+    }
+    container.appendChild(fragment)
+    if (idx < pls.length) setTimeout(renderChunk, 0)
+  }
+  renderChunk()
 }
 
 function playOpenPlaylist() {
@@ -4609,13 +5125,13 @@ function editPlaylistMeta(idx) {
 const SRC_LABELS = { soundcloud:'SC', vk:'VK', hitmo:'HM', youtube:'YT', spotify:'SP' }
 
 function makeTrackEl(track, showPlaylist=false, bindDefaultPlay=true) {
+  track = sanitizeTrack(track)
   const el = document.createElement('div'); el.className='track-card'
   const liked = isLiked(track)
   const trackJson = JSON.stringify(track).replace(/"/g,'&quot;')
-  const trackCover = sanitizeMediaByGifMode(track.cover || '', 'track')
-  const coverStyle = trackCover
-    ? `background-image:url(${trackCover});background-size:cover;background-position:center;`
-    : `background:${track.bg||'linear-gradient(135deg,#7c3aed,#a855f7)'};`
+  const trackCover = getListCoverUrl(track)
+  const fallbackBg = track.bg||'linear-gradient(135deg,#7c3aed,#a855f7)'
+  const coverStyle = `background:${fallbackBg};`
   const srcLbl = SRC_LABELS[track.source]||''
   const badge = srcLbl ? `<span class="track-source track-source-${track.source}">${srcLbl}</span>` : ''
   el.innerHTML=`
@@ -4629,6 +5145,10 @@ function makeTrackEl(track, showPlaylist=false, bindDefaultPlay=true) {
     <button class="track-like ${liked?'liked':''}" data-track-json="${trackJson}" onclick="event.stopPropagation();likeTrack(${trackJson})">${liked ? HEART_FILLED : HEART_OUTLINE}</button>
     ${showPlaylist?`<button class="track-like" onclick="event.stopPropagation();addToPlaylist(${trackJson})" title="Р’ РїР»РµР№Р»РёСЃС‚">${ICONS.plus}</button>`:''}
     <button class="track-play"><svg viewBox="0 0 24 24" width="10" height="10" style="fill:currentColor;margin-left:1px"><polygon points="5 3 19 12 5 21 5 3"/></svg></button>`
+  if (trackCover) {
+    const coverEl = el.querySelector('.track-cover')
+    applyCachedCoverBackground(coverEl, trackCover, fallbackBg, getTrackKey(track))
+  }
   if (bindDefaultPlay) {
     el.addEventListener('click', () => {
       queue = [track]

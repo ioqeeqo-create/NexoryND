@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('api', {
   vkBrowserAuth: () => ipcRenderer.invoke('vk-browser-auth'),
   vkSearch: (q, token) => ipcRenderer.invoke('vk-search', { q, token }),
   yandexSearch: (q, token) => ipcRenderer.invoke('yandex-search', { q, token }),
+  serverSearch: (q, settings = {}) => ipcRenderer.invoke('server-search', { q, settings }),
   importPlaylistLink: (url, tokens = {}) => ipcRenderer.invoke('import-playlist-link', { url, tokens }),
   audiusSearch: (q) => ipcRenderer.invoke('audius-search', { q }),
   youtubeSearch: (q) => ipcRenderer.invoke('youtube-search', { q }),

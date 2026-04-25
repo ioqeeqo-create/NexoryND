@@ -3,7 +3,15 @@
     profiles: 'flow_profiles',
     current: 'flow_current_user',
     friendsPrefix: 'flow_friends_',
+    supabaseUrl: 'flow_supabase_url',
+    supabaseKey: 'flow_supabase_key',
   }
+
+  const DEFAULT_SUPABASE_URL = 'https://cdfwiqgwwxdzznvbpcgj.supabase.co'
+  const DEFAULT_SUPABASE_KEY = 'sb_publishable_fAF9-Qezjp_51olpGfpkYw_K1q1Yzxm'
+  const DB_PROFILES = 'flow_profiles'
+  const DB_FRIENDS = 'flow_friends'
+  const DB_FRIEND_REQUESTS = 'flow_friend_requests'
 
   function getProfiles() {
     try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.profiles) || '[]') || [] } catch { return [] }
@@ -60,7 +68,144 @@
     const list = getFriends(username)
     if (!list.includes(safe)) list.push(safe)
     localStorage.setItem(STORAGE_KEYS.friendsPrefix + username, JSON.stringify(list))
+    syncFriendToCloud(username, safe).catch(() => {})
     return { ok: true, list }
+  }
+
+  function getSupabaseConfig() {
+    const url = String(localStorage.getItem(STORAGE_KEYS.supabaseUrl) || DEFAULT_SUPABASE_URL || '').trim()
+    const key = String(localStorage.getItem(STORAGE_KEYS.supabaseKey) || DEFAULT_SUPABASE_KEY || '').trim()
+    return { url, key }
+  }
+
+  let _supabase = null
+  function getSupabase() {
+    try {
+      if (_supabase) return _supabase
+      const cfg = getSupabaseConfig()
+      const factory = window?.supabase?.createClient
+      if (!factory || !cfg.url || !cfg.key) return null
+      _supabase = factory(cfg.url, cfg.key, { realtime: { params: { eventsPerSecond: 30 } } })
+      return _supabase
+    } catch {
+      return null
+    }
+  }
+
+  async function upsertProfileCloud(username) {
+    try {
+      const sb = getSupabase()
+      if (!sb || !username) return
+      await sb.from(DB_PROFILES).upsert({
+        username,
+        online: true,
+        last_seen: new Date().toISOString(),
+      }, { onConflict: 'username' })
+    } catch {}
+  }
+
+  async function setProfileOfflineCloud(username) {
+    try {
+      const sb = getSupabase()
+      if (!sb || !username) return
+      await sb.from(DB_PROFILES).upsert({
+        username,
+        online: false,
+        last_seen: new Date().toISOString(),
+      }, { onConflict: 'username' })
+    } catch {}
+  }
+
+  async function pullFriendsFromCloud(username) {
+    try {
+      const sb = getSupabase()
+      if (!sb || !username) return
+      const { data } = await sb.from(DB_FRIENDS)
+        .select('friend_username')
+        .eq('owner_username', username)
+      if (!Array.isArray(data)) return
+      const list = [...new Set(data.map((x) => normalizeUsername(x?.friend_username)).filter(Boolean))]
+      localStorage.setItem(STORAGE_KEYS.friendsPrefix + username, JSON.stringify(list))
+    } catch {}
+  }
+
+  async function syncFriendToCloud(ownerUsername, friendUsername) {
+    try {
+      const sb = getSupabase()
+      if (!sb || !ownerUsername || !friendUsername) return
+      await sb.from(DB_FRIENDS).upsert({
+        owner_username: ownerUsername,
+        friend_username: friendUsername,
+      }, { onConflict: 'owner_username,friend_username' })
+      await sb.from(DB_FRIENDS).upsert({
+        owner_username: friendUsername,
+        friend_username: ownerUsername,
+      }, { onConflict: 'owner_username,friend_username' })
+    } catch {}
+  }
+
+  async function sendFriendRequestCloud(fromUsername, toUsername) {
+    const from = normalizeUsername(fromUsername)
+    const to = normalizeUsername(toUsername)
+    if (!from || !to || from === to) return { ok: false, error: 'Некорректный запрос' }
+    try {
+      const sb = getSupabase()
+      if (!sb) return { ok: false, error: 'Supabase недоступен' }
+      const { data: existing } = await sb.from(DB_FRIENDS)
+        .select('owner_username')
+        .eq('owner_username', from)
+        .eq('friend_username', to)
+        .maybeSingle()
+      if (existing) return { ok: false, error: 'Вы уже друзья' }
+      const { error } = await sb.from(DB_FRIEND_REQUESTS).upsert({
+        from_username: from,
+        to_username: to,
+        status: 'pending',
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'from_username,to_username' })
+      if (error) return { ok: false, error: error.message || 'Не удалось отправить запрос' }
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: e?.message || String(e) }
+    }
+  }
+
+  async function getIncomingFriendRequestsCloud(username) {
+    const safe = normalizeUsername(username)
+    if (!safe) return []
+    try {
+      const sb = getSupabase()
+      if (!sb) return []
+      const { data } = await sb.from(DB_FRIEND_REQUESTS)
+        .select('from_username,to_username,status,updated_at')
+        .eq('to_username', safe)
+        .eq('status', 'pending')
+        .order('updated_at', { ascending: false })
+      return Array.isArray(data) ? data : []
+    } catch {
+      return []
+    }
+  }
+
+  async function respondFriendRequestCloud(currentUsername, fromUsername, accept = true) {
+    const to = normalizeUsername(currentUsername)
+    const from = normalizeUsername(fromUsername)
+    if (!to || !from) return { ok: false, error: 'Некорректные данные' }
+    try {
+      const sb = getSupabase()
+      if (!sb) return { ok: false, error: 'Supabase недоступен' }
+      const status = accept ? 'accepted' : 'rejected'
+      const { error } = await sb.from(DB_FRIEND_REQUESTS)
+        .update({ status, updated_at: new Date().toISOString() })
+        .eq('from_username', from)
+        .eq('to_username', to)
+        .eq('status', 'pending')
+      if (error) return { ok: false, error: error.message || 'Ошибка ответа' }
+      if (accept) await syncFriendToCloud(to, from)
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: e?.message || String(e) }
+    }
   }
 
   class FlowPeerSocial {
@@ -73,82 +218,133 @@
       this.onMessage = typeof opts.onMessage === 'function' ? opts.onMessage : () => {}
       this.onStatus = typeof opts.onStatus === 'function' ? opts.onStatus : () => {}
       this.sharedQueue = []
+      this._sb = null
+      this._globalChannel = null
+      this._roomChannel = null
+      this._pending = new Map()
+      this._knownPeers = new Set()
+      this._incomingReqByPeer = new Map()
     }
 
     init() {
-      if (!window.Peer || !this.username) return { ok: false, error: 'PeerJS недоступен' }
-      const peer = new window.Peer(`flow-${this.username}`)
-      this.peer = peer
-      peer.on('open', () => this.onStatus({ type: 'ready', id: peer.id }))
-      peer.on('connection', (conn) => this._wireConn(conn, true))
-      peer.on('error', (err) => this.onStatus({ type: 'error', error: err?.message || String(err) }))
+      if (!this.username) return { ok: false, error: 'Username не задан' }
+      this.peer = { id: `flow-${this.username}` }
+      this._sb = getSupabase()
+      this.onStatus({ type: 'ready', id: this.peer.id })
+      upsertProfileCloud(this.username).catch(() => {})
+      pullFriendsFromCloud(this.username).catch(() => {})
+      this._wireGlobalChannel()
       return { ok: true }
     }
 
-    destroy() {
-      this.connections.forEach((c) => { try { c.close() } catch {} })
-      this.connections.clear()
-      if (this.peer) {
-        try { this.peer.destroy() } catch {}
+    _wireGlobalChannel() {
+      if (!this._sb || this._globalChannel) return
+      this._globalChannel = this._sb.channel('flow-global')
+        .on('broadcast', { event: 'direct' }, ({ payload }) => {
+          const to = String(payload?.toPeerId || '').trim()
+          const from = String(payload?.fromPeerId || '').trim()
+          const msg = payload?.message
+          if (!to || to !== this.peer?.id || !msg) return
+          if (msg._reqId && !msg._responseTo && from) this._incomingReqByPeer.set(from, msg._reqId)
+          if (msg._responseTo && this._pending.has(msg._responseTo)) {
+            const done = this._pending.get(msg._responseTo)
+            this._pending.delete(msg._responseTo)
+            done({ ok: true, data: msg })
+            return
+          }
+          this.onMessage(msg, from)
+        })
+        .subscribe(() => {})
+    }
+
+    _wireRoomChannel(roomId) {
+      if (!this._sb) return
+      if (this._roomChannel) {
+        try { this._sb.removeChannel(this._roomChannel) } catch {}
       }
+      this._roomChannel = this._sb.channel(`flow-room:${roomId}`, { config: { presence: { key: this.peer.id } } })
+        .on('presence', { event: 'sync' }, () => {
+          const state = this._roomChannel.presenceState()
+          const next = new Set()
+          Object.keys(state || {}).forEach((peerId) => {
+            if (!peerId || peerId === this.peer.id) return
+            next.add(peerId)
+            if (!this.connections.has(peerId)) {
+              this.connections.set(peerId, { peer: peerId })
+              this.onStatus({ type: 'peer-joined', peerId, incoming: true })
+            }
+          })
+          this._knownPeers.forEach((peerId) => {
+            if (!next.has(peerId)) {
+              this.connections.delete(peerId)
+              this.onStatus({ type: 'peer-left', peerId })
+            }
+          })
+          this._knownPeers = next
+        })
+        .on('broadcast', { event: 'room-message' }, ({ payload }) => {
+          const from = String(payload?.fromPeerId || '').trim()
+          const msg = payload?.message
+          if (!msg || !from || from === this.peer?.id) return
+          this.onMessage(msg, from)
+        })
+        .subscribe(async (status) => {
+          if (status === 'SUBSCRIBED') {
+            try {
+              await this._roomChannel.track({
+                peerId: this.peer.id,
+                username: this.username,
+                ts: Date.now(),
+              })
+            } catch {}
+          }
+        })
+    }
+
+    destroy() {
+      this.leaveRoom()
+      if (this._sb && this._globalChannel) {
+        try { this._sb.removeChannel(this._globalChannel) } catch {}
+      }
+      this._globalChannel = null
+      this.connections.clear()
+      setProfileOfflineCloud(this.username).catch(() => {})
       this.peer = null
       this.roomId = null
     }
 
-    _wireConn(conn, incoming = false) {
-      if (!conn?.peer) return
-      const isTransient = Boolean(conn?.metadata?.transient)
-      conn.on('open', () => {
-        if (isTransient) return
-        if (this.connections.size >= this.maxPeers) {
-          conn.send({ type: 'room-full', roomId: this.roomId })
-          conn.close()
-          return
-        }
-        this.connections.set(conn.peer, conn)
-        this.onStatus({ type: 'peer-joined', peerId: conn.peer, incoming })
-      })
-      conn.on('data', (msg) => this.onMessage(msg, conn.peer))
-      conn.on('close', () => {
-        if (isTransient) return
-        this.connections.delete(conn.peer)
-        this.onStatus({ type: 'peer-left', peerId: conn.peer })
-      })
-      conn.on('error', (err) => this.onStatus({ type: 'conn-error', peerId: conn.peer, error: err?.message || String(err) }))
-    }
-
     createRoom() {
-      if (!this.peer) return { ok: false, error: 'Peer не инициализирован' }
+      if (!this.peer) return { ok: false, error: 'Соц модуль не инициализирован' }
       this.roomId = this.peer.id
+      this._wireRoomChannel(this.roomId)
       return { ok: true, roomId: this.roomId, host: true }
     }
 
     joinRoom(roomId) {
-      if (!this.peer) return { ok: false, error: 'Peer не инициализирован' }
+      if (!this.peer) return { ok: false, error: 'Соц модуль не инициализирован' }
       const target = String(roomId || '').trim()
       if (!target) return { ok: false, error: 'Укажи ID румы' }
       this.roomId = target
-      const conn = this.peer.connect(target, { reliable: true, serialization: 'json' })
-      this._wireConn(conn, false)
+      this._wireRoomChannel(target)
       return { ok: true, roomId: target, host: false }
     }
 
     probeUser(username, timeoutMs = 3500) {
       return new Promise((resolve) => {
-        if (!this.peer) return resolve(false)
-        const target = `flow-${normalizeUsername(username)}`
-        if (!target || target === this.peer.id) return resolve(false)
-        let done = false
-        const conn = this.peer.connect(target, { reliable: false, serialization: 'json', metadata: { transient: true } })
-        const finish = (ok) => {
-          if (done) return
-          done = true
-          try { conn.close() } catch {}
-          resolve(Boolean(ok))
-        }
-        const timer = setTimeout(() => finish(false), Math.max(1000, Number(timeoutMs || 0)))
-        conn.on('open', () => { clearTimeout(timer); finish(true) })
-        conn.on('error', () => { clearTimeout(timer); finish(false) })
+        const sb = this._sb || getSupabase()
+        const safe = normalizeUsername(username)
+        if (!sb || !safe) return resolve(false)
+        Promise.race([
+          sb.from(DB_PROFILES).select('online,last_seen').eq('username', safe).maybeSingle(),
+          new Promise((r) => setTimeout(() => r({ data: null }), Math.max(1000, Number(timeoutMs || 0))))
+        ]).then((r) => {
+          const row = r?.data
+          if (!row) return resolve(false)
+          if (row.online === true) return resolve(true)
+          const seen = Date.parse(String(row.last_seen || ''))
+          if (!Number.isNaN(seen) && (Date.now() - seen) < 120000) return resolve(true)
+          resolve(false)
+        }).catch(() => resolve(false))
       })
     }
 
@@ -157,70 +353,112 @@
         if (!this.peer) return resolve({ ok: false, error: 'Peer не инициализирован' })
         const target = String(peerId || '').trim()
         if (!target || target === this.peer.id) return resolve({ ok: false, error: 'Некорректный PeerID' })
-        let done = false
-        let timer = null
-        const conn = this.peer.connect(target, { reliable: true, serialization: 'json', metadata: { transient: true } })
-        const finish = (result) => {
-          if (done) return
-          done = true
-          if (timer) clearTimeout(timer)
-          try { conn.close() } catch {}
+        const reqId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+        const timer = setTimeout(() => {
+          this._pending.delete(reqId)
+          resolve({ ok: false, error: 'timeout' })
+        }, Math.max(1200, Number(timeoutMs || 0)))
+        this._pending.set(reqId, (result) => {
+          clearTimeout(timer)
           resolve(result)
-        }
-        timer = setTimeout(() => finish({ ok: false, error: 'timeout' }), Math.max(1200, Number(timeoutMs || 0)))
-        conn.on('open', () => {
-          try { conn.send({ ...(message || {}), _from: this.username, _peerId: this.peer?.id || null, _ts: Date.now() }) } catch {}
         })
-        conn.on('data', (msg) => finish({ ok: true, data: msg }))
-        conn.on('error', (err) => finish({ ok: false, error: err?.message || String(err) }))
+        this.sendToPeer(target, Object.assign({}, message || {}, { _reqId: reqId }))
       })
     }
 
     send(message) {
       const payload = { ...(message || {}), _ts: Date.now(), _from: this.username, _peerId: this.peer?.id || null }
-      this.connections.forEach((conn) => {
-        try { conn.send(payload) } catch {}
-      })
+      if (!this._roomChannel) return
+      try {
+        this._roomChannel.send({
+          type: 'broadcast',
+          event: 'room-message',
+          payload: { fromPeerId: this.peer?.id || null, message: payload },
+        })
+      } catch {}
     }
 
     sendToPeer(peerId, message) {
       const target = String(peerId || '').trim()
       if (!target) return
       const payload = { ...(message || {}), _ts: Date.now(), _from: this.username, _peerId: this.peer?.id || null }
-      const conn = this.connections.get(target)
-      if (conn) {
-        try { conn.send(payload) } catch {}
-        return
+      if (!payload._responseTo && this._incomingReqByPeer.has(target)) {
+        payload._responseTo = this._incomingReqByPeer.get(target)
+        this._incomingReqByPeer.delete(target)
       }
-      if (!this.peer || target === this.peer.id) return
-      const temp = this.peer.connect(target, { reliable: true, serialization: 'json', metadata: { transient: true } })
-      temp.on('open', () => {
-        try { temp.send(payload) } catch {}
-        try { temp.close() } catch {}
-      })
-      temp.on('error', () => {})
+      if (payload._reqId) payload._expectsResponse = true
+      if (payload._responseTo) payload._expectsResponse = false
+      if (!this._globalChannel) return
+      try {
+        this._globalChannel.send({
+          type: 'broadcast',
+          event: 'direct',
+          payload: {
+            toPeerId: target,
+            fromPeerId: this.peer?.id || null,
+            message: payload,
+          },
+        })
+      } catch {}
     }
 
     disconnectPeer(peerId) {
       const target = String(peerId || '').trim()
       if (!target) return false
-      const conn = this.connections.get(target)
-      if (!conn) return false
-      try { conn.close() } catch {}
-      this.connections.delete(target)
-      return true
+      return this.connections.delete(target)
     }
 
     leaveRoom() {
-      this.connections.forEach((conn) => { try { conn.close() } catch {} })
+      if (this._roomChannel && this._sb) {
+        try { this._sb.removeChannel(this._roomChannel) } catch {}
+      }
+      this._roomChannel = null
       this.connections.clear()
+      this._knownPeers.clear()
       this.roomId = null
       return { ok: true }
     }
 
     peersCount() {
-      return this.connections.size + 1
+      return this.roomId ? (this.connections.size + 1) : 1
     }
+  }
+
+  const _origCreateProfile = createProfile
+  const _origLoginProfile = loginProfile
+  const _origLogoutProfile = logoutProfile
+  const _origGetFriends = getFriends
+  const _origAddFriend = addFriend
+
+  function createProfileCloudAware(rawName) {
+    const res = _origCreateProfile(rawName)
+    if (res?.ok && res?.profile?.username) upsertProfileCloud(res.profile.username).catch(() => {})
+    return res
+  }
+
+  function loginProfileCloudAware(rawName) {
+    const res = _origLoginProfile(rawName)
+    if (res?.ok && res?.profile?.username) {
+      upsertProfileCloud(res.profile.username).catch(() => {})
+      pullFriendsFromCloud(res.profile.username).catch(() => {})
+    }
+    return res
+  }
+
+  function logoutProfileCloudAware() {
+    const cur = getCurrentProfile()
+    if (cur?.username) setProfileOfflineCloud(cur.username).catch(() => {})
+    _origLogoutProfile()
+  }
+
+  function getFriendsCloudAware(username) {
+    const list = _origGetFriends(username)
+    pullFriendsFromCloud(username).catch(() => {})
+    return list
+  }
+
+  function addFriendCloudAware(username, friendUsername) {
+    return _origAddFriend(username, friendUsername)
   }
 
   window.FlowModules = window.FlowModules || {}
@@ -230,12 +468,15 @@
     },
     STORAGE_KEYS,
     normalizeUsername,
-    createProfile,
-    loginProfile,
+    createProfile: createProfileCloudAware,
+    loginProfile: loginProfileCloudAware,
     getCurrentProfile,
-    logoutProfile,
-    getFriends,
-    addFriend,
+    logoutProfile: logoutProfileCloudAware,
+    getFriends: getFriendsCloudAware,
+    addFriend: addFriendCloudAware,
+    sendFriendRequest: sendFriendRequestCloud,
+    getIncomingFriendRequests: getIncomingFriendRequestsCloud,
+    respondFriendRequest: respondFriendRequestCloud,
     FlowPeerSocial,
   }
 })()
