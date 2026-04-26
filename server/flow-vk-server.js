@@ -71,19 +71,31 @@ function parseVkPlaylistRef(link) {
   const raw = String(link || '').trim()
   if (!raw) return null
   let text = raw
+  let searchParams = null
   try {
     const url = new URL(raw)
     text = `${url.pathname}${url.search}${url.hash}`
+    searchParams = url.searchParams
   } catch {}
   const decoded = decodeURIComponent(text)
+  const section = searchParams?.get('section') || ''
   const patterns = [
     /audio_playlist(-?\d+)_(\d+)(?:[_?&]access_key=([a-zA-Z0-9_-]+))?/i,
     /playlist\/(-?\d+)_(\d+)(?:[_?&]access_key=([a-zA-Z0-9_-]+))?/i,
+    /music\/playlist\/(-?\d+)_(\d+)(?:[_/?#&]([a-zA-Z0-9_-]+))?/i,
+    /audios(-?\d+).*?[?&]section=playlist_(-?\d+)_(\d+)(?:_([a-zA-Z0-9_-]+))?/i,
     /z=audio_playlist(-?\d+)_(\d+)(?:\/([a-zA-Z0-9_-]+))?/i,
+    /playlist_(-?\d+)_(\d+)(?:_([a-zA-Z0-9_-]+))?/i,
   ]
   for (const rx of patterns) {
     const m = decoded.match(rx)
-    if (m) return { ownerId: m[1], albumId: m[2], accessKey: m[3] || '' }
+    if (!m) continue
+    if (rx.source.startsWith('audios')) return { ownerId: m[2], albumId: m[3], accessKey: m[4] || '' }
+    return { ownerId: m[1], albumId: m[2], accessKey: m[3] || '' }
+  }
+  const sm = String(section || '').match(/^playlist_(-?\d+)_(\d+)(?:_([a-zA-Z0-9_-]+))?$/i)
+  if (sm) {
+    return { ownerId: sm[1], albumId: sm[2], accessKey: sm[3] || '' }
   }
   return null
 }
@@ -156,12 +168,17 @@ function extractRowsFromHtml(html, max = 260) {
 
   const dataAudioRx = /data-audio=(?:"([^"]+)"|'([^']+)')/g
   while ((m = dataAudioRx.exec(raw)) && rows.length < max) {
-    const packed = cleanupVkText(m[1] || m[2] || '')
+    const packed = decodeJsEscapes(decodeHtmlEntities(m[1] || m[2] || '')).trim()
     if (!packed || packed[0] !== '[') continue
     try {
       const arr = JSON.parse(packed)
       if (Array.isArray(arr)) push(arr[4] || arr[6] || '', arr[3] || arr[5] || '')
     } catch {}
+  }
+
+  const audioArrayRx = /\[\s*-?\d+\s*,\s*-?\d+\s*,\s*(?:"[^"]*"|false|null)\s*,\s*"([^"]{1,260})"\s*,\s*"([^"]{1,220})"/g
+  while ((m = audioArrayRx.exec(raw)) && rows.length < max) {
+    push(m[2], m[1])
   }
 
   const pairs = [
@@ -186,9 +203,14 @@ function extractRowsFromHtml(html, max = 260) {
 
 async function fetchViaHtml(link, ref) {
   const candidates = [String(link || '').trim()]
-  if (ref?.ownerId && ref?.albumId) candidates.push(`https://m.vk.com/audio?act=audio_playlist${ref.ownerId}_${ref.albumId}`)
+  if (ref?.ownerId && ref?.albumId) {
+    candidates.push(`https://vk.com/music/playlist/${ref.ownerId}_${ref.albumId}${ref.accessKey ? `_${ref.accessKey}` : ''}`)
+    candidates.push(`https://vk.com/audios${ref.ownerId}?section=playlist_${ref.ownerId}_${ref.albumId}${ref.accessKey ? `_${ref.accessKey}` : ''}`)
+    candidates.push(`https://m.vk.com/audio?act=audio_playlist${ref.ownerId}_${ref.albumId}${ref.accessKey ? `&access_key=${encodeURIComponent(ref.accessKey)}` : ''}`)
+  }
   let name = 'VK Playlist'
   let tracks = []
+  const errors = []
   for (const url of candidates) {
     if (!url) continue
     try {
@@ -203,13 +225,16 @@ async function fetchViaHtml(link, ref) {
         maxRedirects: 6,
         validateStatus: () => true,
       })
+      if (rsp.status >= 400) errors.push(`${rsp.status} ${url}`)
       const parsed = extractRowsFromHtml(String(rsp?.data || ''))
       if (parsed.name) name = parsed.name
       tracks = uniqueTracks([...tracks, ...(parsed.tracks || [])])
       if (tracks.length >= 8) break
-    } catch {}
+    } catch (err) {
+      errors.push(`${err?.message || err} ${url}`)
+    }
   }
-  return tracks.length ? { name, tracks } : null
+  return tracks.length ? { name, tracks } : { name, tracks: [], error: errors.slice(0, 3).join(' | ') }
 }
 
 async function resolveVkPlaylist(link, token = '') {
@@ -221,10 +246,10 @@ async function resolveVkPlaylist(link, token = '') {
   const api = await fetchViaVkApi(ref, String(token || '').trim()).catch(() => null)
   if (api?.tracks?.length) return api
 
-  const html = await fetchViaHtml(safeLink, ref).catch(() => null)
+  const html = await fetchViaHtml(safeLink, ref).catch((err) => ({ error: err?.message || String(err), tracks: [] }))
   if (html?.tracks?.length) return html
 
-  throw new Error('playlist parse failed')
+  throw new Error(`playlist parse failed${html?.error ? `: ${html.error}` : ''}`)
 }
 
 const server = http.createServer(async (req, res) => {
