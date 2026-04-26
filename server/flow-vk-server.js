@@ -331,11 +331,88 @@ function collectTracksDeep(value, rows = [], max = 260) {
   return rows
 }
 
+function collectAudioIdsDeep(value, ref, ids = [], max = 300) {
+  if (ids.length >= max || value == null) return ids
+  const ownerId = String(ref?.ownerId || '')
+  const add = (id) => {
+    const text = String(id || '').trim()
+    if (!text || ids.includes(text)) return
+    ids.push(text)
+  }
+  if (typeof value === 'string') {
+    const rx = new RegExp(`${ownerId}_\\d+`, 'g')
+    let m
+    while ((m = rx.exec(value)) && ids.length < max) add(m[0])
+    return ids
+  }
+  if (Array.isArray(value)) {
+    if (value.length >= 2 && String(value[1]) === ownerId && Number.isFinite(Number(value[0]))) {
+      add(`${value[1]}_${value[0]}`)
+    }
+    for (const item of value) {
+      if (ids.length >= max) break
+      collectAudioIdsDeep(item, ref, ids, max)
+    }
+    return ids
+  }
+  if (typeof value === 'object') {
+    const contentId = value.content_id || value.fullId || value.full_id || value.audio_id
+    if (contentId) add(contentId)
+    if (value.owner_id && value.id) add(`${value.owner_id}_${value.id}`)
+    for (const item of Object.values(value)) {
+      if (ids.length >= max) break
+      collectAudioIdsDeep(item, ref, ids, max)
+    }
+  }
+  return ids
+}
+
+async function reloadVkAudios(audioIds, ref) {
+  const cookie = getVkCookie()
+  if (!cookie || !audioIds?.length) return null
+  const rsp = await axios.post('https://vk.com/al_audio.php?act=reload_audios', new URLSearchParams({
+    al: '1',
+    audio_ids: audioIds.join(','),
+  }).toString(), {
+    headers: {
+      'User-Agent': BROWSER_UA,
+      'Accept': '*/*',
+      'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Origin': 'https://vk.com',
+      'Referer': `https://vk.com/audios${ref.ownerId}?section=all`,
+      'X-Requested-With': 'XMLHttpRequest',
+      'Cookie': cookie,
+    },
+    responseType: 'text',
+    timeout: 17000,
+    maxRedirects: 3,
+    validateStatus: () => true,
+  })
+  if (rsp.status >= 400) throw new Error(`VK reload_audios HTTP ${rsp.status}`)
+  const raw = String(rsp?.data || '')
+  const parsed = parseVkJsonPayload(raw)
+  const tracks = uniqueTracks(collectTracksDeep(parsed || raw))
+  return tracks.length ? { name: 'VK Playlist', tracks } : null
+}
+
 async function fetchViaVkAjax(ref) {
   const cookie = getVkCookie()
   if (!ref?.ownerId || !ref?.albumId || !cookie) return null
   const attempts = [
     {
+      method: 'get',
+      url: `https://vk.com/al_audio.php?${new URLSearchParams({
+        act: 'load_section',
+        al: '1',
+        owner_id: String(ref.ownerId),
+        section: `playlist_${ref.ownerId}_${ref.albumId}${ref.accessKey ? `_${ref.accessKey}` : ''}`,
+        type: 'playlist',
+        offset: '0',
+      }).toString()}`,
+    },
+    {
+      method: 'post',
       url: 'https://vk.com/al_audio.php?act=load_section',
       data: {
         al: '1',
@@ -348,6 +425,7 @@ async function fetchViaVkAjax(ref) {
       },
     },
     {
+      method: 'post',
       url: 'https://vk.com/al_audio.php?act=load_section',
       data: {
         al: '1',
@@ -361,16 +439,27 @@ async function fetchViaVkAjax(ref) {
   const errors = []
   for (const attempt of attempts) {
     try {
-      const rsp = await axios.post(attempt.url, new URLSearchParams(attempt.data).toString(), {
+      const headers = {
+        'User-Agent': BROWSER_UA,
+        'Accept': '*/*',
+        'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Origin': 'https://vk.com',
+        'Referer': `https://vk.com/audios${ref.ownerId}?section=all`,
+        'X-Requested-With': 'XMLHttpRequest',
+        'Cookie': cookie,
+      }
+      const rsp = attempt.method === 'get'
+        ? await axios.get(attempt.url, {
+          headers,
+          responseType: 'text',
+          timeout: 17000,
+          maxRedirects: 3,
+          validateStatus: () => true,
+        })
+        : await axios.post(attempt.url, new URLSearchParams(attempt.data).toString(), {
         headers: {
-          'User-Agent': BROWSER_UA,
-          'Accept': '*/*',
-          'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+          ...headers,
           'Content-Type': 'application/x-www-form-urlencoded',
-          'Origin': 'https://vk.com',
-          'Referer': `https://vk.com/audios${ref.ownerId}?section=all`,
-          'X-Requested-With': 'XMLHttpRequest',
-          'Cookie': cookie,
         },
         responseType: 'text',
         timeout: 17000,
@@ -385,6 +474,12 @@ async function fetchViaVkAjax(ref) {
       const parsed = parseVkJsonPayload(raw)
       const tracks = uniqueTracks(collectTracksDeep(parsed || raw))
       if (tracks.length) return { name: 'VK Playlist', tracks }
+      const audioIds = collectAudioIdsDeep(parsed || raw, ref)
+      const reloaded = await reloadVkAudios(audioIds, ref).catch((err) => {
+        errors.push(err?.message || String(err))
+        return null
+      })
+      if (reloaded?.tracks?.length) return reloaded
       errors.push(`VK AJAX empty response ${raw.slice(0, 80).replace(/\s+/g, ' ')}`)
     } catch (err) {
       errors.push(err?.message || String(err))
