@@ -1982,12 +1982,14 @@ function getPublicProfilePayload(username = _profile?.username) {
 }
 
 let _supabaseProfileSyncTimer = null
+const DEFAULT_SUPABASE_URL = 'https://cdfwiqgwwxdzznvbpcgj.supabase.co'
+const DEFAULT_SUPABASE_KEY = 'sb_publishable_fAF9-Qezjp_51olpGfpkYw_K1q1Yzxm'
 function getSupabaseClient() {
   try {
     const factory = window?.supabase?.createClient
     if (typeof factory !== 'function') return null
-    const url = String(localStorage.getItem('flow_supabase_url') || '').trim()
-    const key = String(localStorage.getItem('flow_supabase_key') || '').trim()
+    const url = String(localStorage.getItem('flow_supabase_url') || DEFAULT_SUPABASE_URL || '').trim()
+    const key = String(localStorage.getItem('flow_supabase_key') || DEFAULT_SUPABASE_KEY || '').trim()
     if (!url || !key) return null
     if (!window.__flowSbProfileClient) window.__flowSbProfileClient = factory(url, key)
     return window.__flowSbProfileClient
@@ -2929,6 +2931,7 @@ function ensureFriendInteractionUI() {
     menu.id = 'friend-context-menu'
     menu.className = 'friend-context-menu hidden glass-card'
     menu.innerHTML = `
+      <button class="friend-context-item" onclick="friendMenuOpenProfile()">Зайти в профиль</button>
       <button class="friend-context-item" onclick="friendMenuJoinRoom()">Присоединиться к руме</button>
       <button class="friend-context-item" onclick="friendMenuInviteRoom()">Пригласить в комнату</button>
       <button class="friend-context-item" onclick="friendMenuRefresh()">Обновить</button>
@@ -2992,6 +2995,12 @@ function friendMenuJoinRoom() {
   const roomId = String(_friendContext?.roomId || '').trim()
   if (!roomId) return showToast('У друга сейчас нет активной румы', true)
   joinRoomById(roomId)
+}
+
+function friendMenuOpenProfile() {
+  closeFriendContextMenu()
+  if (!_friendContext?.username) return
+  openPeerProfile(_friendContext.username, _friendContext.peerId || '')
 }
 
 async function friendMenuRefresh() {
@@ -3386,10 +3395,10 @@ function initPeerSocial() {
         if (msg.track && msg.track.id !== currentTrack?.id) {
           playTrackObj(msg.track, { remoteSync: true }).catch(() => {})
         }
-        if (typeof msg.currentTime === 'number' && audio.duration) {
+        if (typeof msg.currentTime === 'number') {
           const latencySec = Math.max(0, (Date.now() - Number(msg._ts || Date.now())) / 1000)
           const targetTime = Math.max(0, msg.currentTime + latencySec)
-          if (Math.abs(audio.currentTime - targetTime) > 0.45) audio.currentTime = targetTime
+          if (Math.abs(audio.currentTime - targetTime) > 0.10) audio.currentTime = targetTime
         }
         if (typeof msg.paused === 'boolean') {
           if (msg.paused && !audio.paused) audio.pause()
@@ -3474,6 +3483,7 @@ function initPeerSocial() {
         if (shouldPause && !audio.paused) audio.pause()
         if (!shouldPause && audio.paused) audio.play().catch(() => {})
         if (_roomState?.host) {
+          broadcastPlaybackSync(true)
           saveRoomStateToServer({
             playback_state: { paused: Boolean(audio.paused), currentTime: Number(audio.currentTime || 0) },
             playback_ts: Date.now(),
