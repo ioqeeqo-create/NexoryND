@@ -823,11 +823,12 @@
   <div class="flow-modal-card glass-card">
     <h3 id="playlist-picker-title">Выбор</h3>
     <div id="playlist-picker-list" class="profile-picker-list" style="margin-top:10px"></div>
-    <div style="margin-top:10px;display:flex;gap:8px">
+    <div id="playlist-picker-create-row" style="margin-top:10px;display:flex;gap:8px">
       <input id="playlist-picker-new-name" class="token-field flow-input" placeholder="Новый плейлист..." style="flex:1" />
       <button class="btn-small" onclick="createPlaylistFromPicker()">Создать</button>
     </div>
-    <div style="display:flex;justify-content:flex-end;margin-top:10px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
+      <button id="playlist-picker-apply-btn" class="btn-small" style="display:none" onclick="applyPlaylistPickerSelection()">Добавить выбранные</button>
       <button class="btn-small" onclick="closePlaylistPickerModal()">Закрыть</button>
     </div>
   </div>

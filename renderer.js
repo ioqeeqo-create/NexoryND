@@ -58,6 +58,7 @@ let _playlistDragIndex = -1
 let _playlistEditContext = null
 let _libraryActionMode = null
 let _playlistPickerContext = null
+let _playlistPickerSelection = new Set()
 let _listenTickAt = 0
 let _peerProfiles = new Map()
 let _roomMembers = new Map()
@@ -2152,14 +2153,16 @@ async function saveRoomStateToServer(patch = {}) {
     if (!_roomState?.roomId || !_profile?.username) return
     const sb = getSupabaseClient()
     if (!sb) return
-    const hostPeerId = String(_roomState.host ? (_socialPeer?.peer?.id || _roomState.roomId) : (_roomState.hostPeerId || _roomState.roomId))
+    const hostPeerId = _roomState.host
+      ? String(_socialPeer?.peer?.id || _roomState.roomId)
+      : ((_roomState.hostPeerId && _roomState.hostPeerId !== _roomState.roomId) ? String(_roomState.hostPeerId) : null)
     const payload = Object.assign({
       room_id: _roomState.roomId,
-      host_peer_id: hostPeerId,
       shared_queue: sharedQueue,
-      updated_by_peer_id: String(_socialPeer?.peer?.id || hostPeerId),
+      updated_by_peer_id: String(_socialPeer?.peer?.id || hostPeerId || _roomState.roomId),
       updated_at: new Date().toISOString(),
     }, patch || {})
+    if (hostPeerId) payload.host_peer_id = hostPeerId
     await sb.from('flow_rooms').upsert(payload, { onConflict: 'room_id' })
   } catch {}
 }
@@ -2894,17 +2897,31 @@ function getAllKnownTracks() {
 
 function openPlaylistPickerModal(ctx) {
   _playlistPickerContext = ctx || null
+  _playlistPickerSelection = new Set()
   const modal = document.getElementById('playlist-picker-modal')
   const title = document.getElementById('playlist-picker-title')
   const list = document.getElementById('playlist-picker-list')
-  if (!modal || !title || !list) return
+  const createRow = document.getElementById('playlist-picker-create-row')
+  const applyBtn = document.getElementById('playlist-picker-apply-btn')
+  if (!modal || !title || !list || !createRow || !applyBtn) return
   title.textContent = ctx?.title || 'Выбери'
   list.innerHTML = ''
+  createRow.style.display = ctx?.mode === 'add-track-playlist' ? 'flex' : 'none'
+  applyBtn.style.display = ctx?.multi ? 'inline-flex' : 'none'
   ;(ctx?.items || []).forEach((item) => {
     const btn = document.createElement('button')
     btn.className = 'profile-picker-item'
-    btn.textContent = item.label
-    btn.addEventListener('click', () => submitPlaylistPicker(item.id))
+    if (ctx?.multi) {
+      btn.innerHTML = `<span style="opacity:.92">${item.label}</span><span class="profile-chip" data-picked="0">○</span>`
+      btn.style.display = 'flex'
+      btn.style.justifyContent = 'space-between'
+      btn.style.alignItems = 'center'
+      btn.addEventListener('click', () => togglePlaylistPickerSelection(item.id))
+    } else {
+      btn.textContent = item.label
+      btn.addEventListener('click', () => submitPlaylistPicker(item.id))
+    }
+    btn.dataset.pickId = String(item.id)
     list.appendChild(btn)
   })
   modal.classList.remove('hidden')
@@ -2913,7 +2930,45 @@ function openPlaylistPickerModal(ctx) {
 function closePlaylistPickerModal() {
   const modal = document.getElementById('playlist-picker-modal')
   if (modal) modal.classList.add('hidden')
+  _playlistPickerSelection = new Set()
   _playlistPickerContext = null
+}
+
+function togglePlaylistPickerSelection(itemId) {
+  const id = String(itemId)
+  if (_playlistPickerSelection.has(id)) _playlistPickerSelection.delete(id)
+  else _playlistPickerSelection.add(id)
+  const list = document.getElementById('playlist-picker-list')
+  if (!list) return
+  const rows = Array.from(list.querySelectorAll('.profile-picker-item'))
+  const row = rows.find((el) => String(el.dataset.pickId || '') === id)
+  if (!row) return
+  const chip = row.querySelector('[data-picked]')
+  const selected = _playlistPickerSelection.has(id)
+  if (chip) chip.textContent = selected ? '●' : '○'
+  row.classList.toggle('active', selected)
+}
+
+function applyPlaylistPickerSelection() {
+  const ctx = _playlistPickerContext
+  if (!ctx || !ctx.multi) return
+  const ids = Array.from(_playlistPickerSelection)
+  if (!ids.length) return showToast('Выбери минимум один трек', true)
+  if (ctx.mode === 'room-own-liked-track-multi' || ctx.mode === 'room-own-playlist-track-multi') {
+    const tracks = ctx.payload?.tracks || []
+    let added = 0
+    ids.forEach((id) => {
+      const idx = Number(id)
+      const track = tracks[idx]
+      if (!track) return
+      enqueueSharedTrack(track)
+      added++
+    })
+    closePlaylistPickerModal()
+    showToast(`Добавлено в очередь: ${added}`)
+    return
+  }
+  closePlaylistPickerModal()
 }
 
 function submitPlaylistPicker(selectedId) {
@@ -2948,8 +3003,9 @@ function submitPlaylistPicker(selectedId) {
     if (selectedId === 'liked') {
       const liked = getLiked()
       openPlaylistPickerModal({
-        mode: 'room-own-liked-track',
-        title: 'Выбери трек из любимых',
+        mode: 'room-own-liked-track-multi',
+        title: 'Выбери треки из любимых',
+        multi: true,
         items: liked.map((t, idx) => ({ id: String(idx), label: `${t.title} — ${t.artist || '—'}` })),
         payload: { tracks: liked }
       })
@@ -2974,13 +3030,18 @@ function submitPlaylistPicker(selectedId) {
     const playlist = ctx.payload?.playlists?.[idx]
     if (playlist?.tracks?.length) {
       openPlaylistPickerModal({
-        mode: 'room-own-playlist-track',
+        mode: 'room-own-playlist-track-multi',
         title: `Треки: ${playlist.name}`,
+        multi: true,
         items: playlist.tracks.map((t, tIdx) => ({ id: String(tIdx), label: `${t.title} — ${t.artist || '—'}` })),
         payload: { tracks: playlist.tracks }
       })
       return
     }
+  } else if (ctx.mode === 'room-own-liked-track-multi') {
+    return
+  } else if (ctx.mode === 'room-own-playlist-track-multi') {
+    return
   } else if (ctx.mode === 'room-own-playlist-track') {
     const idx = Number(selectedId)
     const track = ctx.payload?.tracks?.[idx]
@@ -2988,7 +3049,7 @@ function submitPlaylistPicker(selectedId) {
   } else if (ctx.mode === 'room-invite-friend') {
     const username = String(selectedId || '').trim()
     if (username) {
-      const state = _friendPresence.get(username) || {}
+      const state = _friendPresence.get(username.toLowerCase()) || {}
       sendRoomInviteToFriend(username, state.peerId || `flow-${username}`)
     }
   }
@@ -3540,8 +3601,9 @@ function initPeerSocial() {
     onMessage: (msg, fromPeerId) => {
       if (!msg || typeof msg !== 'object') return
       if (msg.type === 'playback-sync' && msg.roomId === _roomState.roomId && !_roomState.host) {
-        const expectedHostId = String(_roomState.hostPeerId || _roomState.roomId || '').trim()
+        const expectedHostId = String(_roomState.hostPeerId || '').trim()
         const senderId = String(msg._peerId || fromPeerId || '').trim()
+        if (!_roomState.hostPeerId && senderId) _roomState.hostPeerId = senderId
         if (expectedHostId && senderId && senderId !== expectedHostId) return
         const ts = Number(msg.playbackTs || msg._ts || 0)
         if (ts && ts <= _lastAppliedServerPlaybackTs) return
@@ -3760,7 +3822,7 @@ function createRoom() {
   if (!_socialPeer) return
   const r = _socialPeer.createRoom()
   if (!r?.ok) return showToast(r?.error || 'Ошибка создания', true)
-  _roomState = { roomId: r.roomId, host: true, hostPeerId: r.roomId }
+  _roomState = { roomId: r.roomId, host: true, hostPeerId: _socialPeer?.peer?.id || r.roomId }
   _roomMembers.clear()
   sharedQueue = []
   if (_socialPeer?.peer?.id) _roomMembers.set(_socialPeer.peer.id, getPublicProfilePayload(_profile?.username))
@@ -3778,7 +3840,7 @@ function joinRoomById(forceRoomId = '') {
   if (!_socialPeer || !roomId) return
   const r = _socialPeer.joinRoom(roomId)
   if (!r?.ok) return showToast(r?.error || 'Ошибка входа', true)
-  _roomState = { roomId: r.roomId, host: false, hostPeerId: r.roomId }
+  _roomState = { roomId: r.roomId, host: false, hostPeerId: null }
   _roomMembers.clear()
   sharedQueue = []
   if (_socialPeer?.peer?.id) _roomMembers.set(_socialPeer.peer.id, getPublicProfilePayload(_profile?.username))
