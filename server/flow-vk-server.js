@@ -102,6 +102,14 @@ function getVkToken(token) {
 function parseVkPlaylistRef(link) {
   const raw = String(link || '').trim()
   if (!raw) return null
+  const widgetArgs = raw.match(/VK\.Widgets\.Playlist\(\s*["'][^"']+["']\s*,\s*(-?\d+)\s*,\s*(\d+)\s*,\s*["']([a-zA-Z0-9_-]+)["']/i)
+  if (widgetArgs) {
+    return { ownerId: widgetArgs[1], albumId: widgetArgs[2], accessKey: widgetArgs[3] || '' }
+  }
+  const widgetObject = raw.match(/VK\.Widgets\.Playlist\([^)]*owner_id\s*:\s*(-?\d+)[^)]*playlist_id\s*:\s*(\d+)[^)]*(?:hash|access_hash|access_key)\s*:\s*["']([a-zA-Z0-9_-]+)["']/is)
+  if (widgetObject) {
+    return { ownerId: widgetObject[1], albumId: widgetObject[2], accessKey: widgetObject[3] || '' }
+  }
   let text = raw
   let searchParams = null
   try {
@@ -271,8 +279,55 @@ function extractRowsFromHtml(html, max = 260) {
   }
 }
 
+async function fetchViaWidget(ref) {
+  if (!ref?.ownerId || !ref?.albumId || !ref?.accessKey) return null
+  const params = {
+    owner_id: String(ref.ownerId),
+    playlist_id: String(ref.albumId),
+    hash: String(ref.accessKey),
+  }
+  const candidates = [
+    `https://vk.com/widget_playlist.php?${new URLSearchParams(params).toString()}`,
+    `https://vk.com/widget_playlist.php?${new URLSearchParams(Object.assign({ app: '0', _ver: '1', width: '100%' }, params)).toString()}`,
+    `https://vk.com/widget_playlist.php?${new URLSearchParams({
+      oid: String(ref.ownerId),
+      pid: String(ref.albumId),
+      hash: String(ref.accessKey),
+    }).toString()}`,
+  ]
+  const errors = []
+  for (const url of candidates) {
+    try {
+      const rsp = await axios.get(url, {
+        headers: {
+          'User-Agent': BROWSER_UA,
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+          'Referer': 'https://vk.com/',
+        },
+        timeout: 20000,
+        maxRedirects: 6,
+        validateStatus: () => true,
+      })
+      if (rsp.status >= 400) {
+        errors.push(`VK widget HTTP ${rsp.status}`)
+        continue
+      }
+      const parsed = extractRowsFromHtml(String(rsp?.data || ''))
+      if (parsed?.tracks?.length) {
+        return { name: parsed.name || 'VK Playlist', tracks: parsed.tracks }
+      }
+      errors.push(`VK widget empty response ${String(rsp?.data || '').slice(0, 80).replace(/\s+/g, ' ')}`)
+    } catch (err) {
+      errors.push(err?.message || String(err))
+    }
+  }
+  return { name: 'VK Playlist', tracks: [], error: errors.slice(0, 3).join(' | ') }
+}
+
 async function fetchViaHtml(link, ref) {
-  const candidates = [String(link || '').trim()]
+  const safeLink = String(link || '').trim()
+  const candidates = /^https?:\/\//i.test(safeLink) ? [safeLink] : []
   if (ref?.ownerId && ref?.albumId) {
     candidates.push(`https://vk.com/music/playlist/${ref.ownerId}_${ref.albumId}${ref.accessKey ? `_${ref.accessKey}` : ''}`)
     candidates.push(`https://vk.com/audios${ref.ownerId}?section=playlist_${ref.ownerId}_${ref.albumId}${ref.accessKey ? `_${ref.accessKey}` : ''}`)
@@ -309,8 +364,8 @@ async function fetchViaHtml(link, ref) {
 
 async function resolveVkPlaylist(link, token = '') {
   const safeLink = String(link || '').trim()
-  if (!/^https?:\/\/(m\.)?vk\.com\//i.test(safeLink)) throw new Error('bad VK url')
   const ref = parseVkPlaylistRef(safeLink)
+  if (!/^https?:\/\/(m\.)?vk\.com\//i.test(safeLink) && !ref?.accessKey) throw new Error('bad VK url')
   if (!ref) throw new Error('cannot parse VK playlist id')
   const vkToken = getVkToken(token)
   const hasToken = Boolean(vkToken)
@@ -323,11 +378,14 @@ async function resolveVkPlaylist(link, token = '') {
   })
   if (api?.tracks?.length) return api
 
+  const widget = await fetchViaWidget(ref).catch((err) => ({ error: err?.message || String(err), tracks: [] }))
+  if (widget?.tracks?.length) return widget
+
   const html = await fetchViaHtml(safeLink, ref).catch((err) => ({ error: err?.message || String(err), tracks: [] }))
   if (html?.tracks?.length) return html
 
   if (!hasToken) throw new Error('auth_required')
-  const details = [apiError, html?.error].filter(Boolean).join(' | ')
+  const details = [apiError, widget?.error, html?.error].filter(Boolean).join(' | ')
   throw new Error(`playlist parse failed${details ? `: ${details}` : ''}`)
 }
 

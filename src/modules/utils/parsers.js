@@ -18,6 +18,14 @@ function parseYandexPlaylistRef(input) {
 function parseVkPlaylistRef(input) {
   const raw = String(input || '').trim()
   if (!raw) return null
+  const widgetArgs = raw.match(/VK\.Widgets\.Playlist\(\s*["'][^"']+["']\s*,\s*(-?\d+)\s*,\s*(\d+)\s*,\s*["']([a-zA-Z0-9_-]+)["']/i)
+  if (widgetArgs) {
+    return { ownerId: widgetArgs[1], albumId: widgetArgs[2], accessKey: widgetArgs[3] || null }
+  }
+  const widgetObject = raw.match(/VK\.Widgets\.Playlist\([^)]*owner_id\s*:\s*(-?\d+)[^)]*playlist_id\s*:\s*(\d+)[^)]*(?:hash|access_hash|access_key)\s*:\s*["']([a-zA-Z0-9_-]+)["']/is)
+  if (widgetObject) {
+    return { ownerId: widgetObject[1], albumId: widgetObject[2], accessKey: widgetObject[3] || null }
+  }
   const patterns = [
     /audio_playlist(-?\d+)_([0-9]+)(?:_([a-zA-Z0-9]+))?/i,
     /music\.vk\.com\/playlist\/(-?\d+)_([0-9]+)(?:_([a-zA-Z0-9]+))?/i,
