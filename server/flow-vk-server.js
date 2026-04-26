@@ -381,12 +381,23 @@ function collectAudioIdsDeep(value, ref, ids = [], max = 300) {
   return ids
 }
 
+function normalizeReloadAudioIds(audioIds) {
+  return (audioIds || [])
+    .map((item) => String(item || '').trim())
+    .filter(Boolean)
+    .map((item) => {
+      const parts = item.split('_')
+      return parts.length === 2 ? `${item}_` : item
+    })
+}
+
 async function reloadVkAudios(audioIds, ref) {
   const cookie = getVkCookie()
   if (!cookie || !audioIds?.length) return null
+  const normalizedAudioIds = normalizeReloadAudioIds(audioIds)
   const rsp = await axios.post('https://vk.com/al_audio.php?act=reload_audios', new URLSearchParams({
     al: '1',
-    audio_ids: audioIds.join(','),
+    audio_ids: normalizedAudioIds.join(','),
   }).toString(), {
     headers: {
       'User-Agent': BROWSER_UA,
@@ -407,7 +418,11 @@ async function reloadVkAudios(audioIds, ref) {
   const raw = String(rsp?.data || '')
   const parsed = parseVkJsonPayload(raw)
   const tracks = uniqueTracks(collectTracksDeep(parsed || raw))
-  return tracks.length ? { name: 'VK Playlist', tracks } : null
+  return tracks.length ? { name: 'VK Playlist', tracks } : {
+    name: 'VK Playlist',
+    tracks: [],
+    error: `VK reload_audios empty response ${raw.slice(0, 120).replace(/\s+/g, ' ')}`,
+  }
 }
 
 async function fetchViaCatalogSection(ref) {
@@ -454,7 +469,7 @@ async function fetchViaConfiguredAudioIds(ref) {
   return reloaded?.tracks?.length ? reloaded : {
     name: 'VK Playlist',
     tracks: [],
-    error: `VK_AUDIO_IDS did not return tracks (${audioIds.length} ids)`,
+    error: reloaded?.error || `VK_AUDIO_IDS did not return tracks (${audioIds.length} ids)`,
   }
 }
 
