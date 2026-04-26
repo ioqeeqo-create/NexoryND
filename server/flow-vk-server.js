@@ -160,12 +160,24 @@ async function vkApi(method, params, timeout = 15000) {
     timeout,
     validateStatus: () => true,
   })
-  if (rsp?.data?.error) throw new Error(rsp.data.error.error_msg || 'VK API error')
+  if (rsp.status >= 400) {
+    const err = new Error(`VK API ${method}: HTTP ${rsp.status}`)
+    err.vkMethod = method
+    throw err
+  }
+  if (rsp?.data?.error) {
+    const apiError = rsp.data.error
+    const err = new Error(`VK API ${method}: ${apiError.error_msg || 'VK API error'}${apiError.error_code ? ` (code ${apiError.error_code})` : ''}`)
+    err.vkCode = apiError.error_code
+    err.vkMethod = method
+    throw err
+  }
   return rsp?.data?.response
 }
 
 async function fetchViaVkApi(ref, token) {
   if (!ref || !token) return null
+  const errors = []
   const base = {
     owner_id: String(ref.ownerId),
     access_token: String(token),
@@ -187,20 +199,34 @@ async function fetchViaVkApi(ref, token) {
       original_id: t?.owner_id && t?.id ? `${t.owner_id}_${t.id}` : (t?.id || ''),
     })))
     if (tracks.length) return { name: String(row?.title || 'VK Playlist'), tracks }
-  } catch {}
+  } catch (err) {
+    errors.push(err)
+  }
 
-  const list = await vkApi('audio.get', Object.assign({}, base, {
-    album_id: String(ref.albumId),
-    count: '600',
-  }))
-  const items = Array.isArray(list?.items) ? list.items : []
-  const tracks = uniqueTracks(items.map((t) => ({
-    title: t?.title,
-    artist: t?.artist,
-    duration: t?.duration,
-    original_id: t?.owner_id && t?.id ? `${t.owner_id}_${t.id}` : (t?.id || ''),
-  })))
-  return tracks.length ? { name: 'VK Playlist', tracks } : null
+  try {
+    const list = await vkApi('audio.get', Object.assign({}, base, {
+      album_id: String(ref.albumId),
+      count: '600',
+    }))
+    const items = Array.isArray(list?.items) ? list.items : []
+    const tracks = uniqueTracks(items.map((t) => ({
+      title: t?.title,
+      artist: t?.artist,
+      duration: t?.duration,
+      original_id: t?.owner_id && t?.id ? `${t.owner_id}_${t.id}` : (t?.id || ''),
+    })))
+    if (tracks.length) return { name: 'VK Playlist', tracks }
+  } catch (err) {
+    errors.push(err)
+  }
+
+  if (errors.length) {
+    const err = new Error(errors.map((item) => item?.message || String(item)).join(' | '))
+    const authErr = errors.find((item) => Number(item?.vkCode) === 5)
+    if (authErr) err.vkCode = authErr.vkCode
+    throw err
+  }
+  return null
 }
 
 function extractRowsFromHtml(html, max = 260) {
@@ -288,15 +314,21 @@ async function resolveVkPlaylist(link, token = '') {
   if (!ref) throw new Error('cannot parse VK playlist id')
   const vkToken = getVkToken(token)
   const hasToken = Boolean(vkToken)
+  let apiError = ''
 
-  const api = await fetchViaVkApi(ref, vkToken).catch(() => null)
+  const api = await fetchViaVkApi(ref, vkToken).catch((err) => {
+    apiError = err?.message || String(err)
+    if (Number(err?.vkCode) === 5) apiError = `server_vk_token_invalid: ${apiError}`
+    return null
+  })
   if (api?.tracks?.length) return api
 
   const html = await fetchViaHtml(safeLink, ref).catch((err) => ({ error: err?.message || String(err), tracks: [] }))
   if (html?.tracks?.length) return html
 
   if (!hasToken) throw new Error('auth_required')
-  throw new Error(`playlist parse failed${html?.error ? `: ${html.error}` : ''}`)
+  const details = [apiError, html?.error].filter(Boolean).join(' | ')
+  throw new Error(`playlist parse failed${details ? `: ${details}` : ''}`)
 }
 
 const server = http.createServer(async (req, res) => {
