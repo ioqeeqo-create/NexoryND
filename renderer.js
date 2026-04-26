@@ -79,19 +79,36 @@ function savePeerProfileCache(map) {
   try { localStorage.setItem('flow_peer_public_profiles', JSON.stringify(map || {})) } catch {}
 }
 
+function mergeProfileData(base, incoming, peerId = '') {
+  const prev = (base && typeof base === 'object') ? base : {}
+  const next = (incoming && typeof incoming === 'object') ? incoming : {}
+  const resolvedPeerId = String(peerId || next.peerId || prev.peerId || '').trim() || null
+  const merged = Object.assign({}, prev, next)
+  merged.username = String(next.username || prev.username || '').trim().toLowerCase()
+  merged.peerId = resolvedPeerId
+  merged.avatarData = next.avatarData || prev.avatarData || null
+  merged.bannerData = next.bannerData || prev.bannerData || null
+  merged.bio = typeof next.bio === 'string' ? next.bio : (prev.bio || '')
+  if (Array.isArray(next.pinnedTracks)) merged.pinnedTracks = next.pinnedTracks
+  else if (Array.isArray(prev.pinnedTracks)) merged.pinnedTracks = prev.pinnedTracks
+  if (Array.isArray(next.pinnedPlaylists)) merged.pinnedPlaylists = next.pinnedPlaylists
+  else if (Array.isArray(prev.pinnedPlaylists)) merged.pinnedPlaylists = prev.pinnedPlaylists
+  const prevStats = prev.stats && typeof prev.stats === 'object' ? prev.stats : {}
+  const nextStats = next.stats && typeof next.stats === 'object' ? next.stats : {}
+  merged.stats = {
+    totalTracks: Number.isFinite(Number(nextStats.totalTracks)) ? Number(nextStats.totalTracks) : Number(prevStats.totalTracks || 0),
+    totalSeconds: Number.isFinite(Number(nextStats.totalSeconds)) ? Number(nextStats.totalSeconds) : Number(prevStats.totalSeconds || 0),
+  }
+  return merged
+}
+
 function cachePeerProfile(profile, peerId = '') {
   if (!profile || typeof profile !== 'object') return
   const username = String(profile.username || '').trim().toLowerCase()
   if (!username) return
   const cache = getPeerProfileCache()
-  cache[username] = {
-    username,
-    avatarData: profile.avatarData || null,
-    bannerData: profile.bannerData || null,
-    bio: profile.bio || '',
-    peerId: String(peerId || profile.peerId || '').trim() || null,
-    updatedAt: Date.now(),
-  }
+  const prev = cache[username] || {}
+  cache[username] = Object.assign(mergeProfileData(prev, Object.assign({}, profile, { username }), peerId), { updatedAt: Date.now() })
   savePeerProfileCache(cache)
 }
 
@@ -2140,7 +2157,11 @@ async function loadRoomStateFromServer(force = false) {
       members.forEach((m) => {
         const pid = String(m?.peer_id || '').trim()
         if (!pid) return
-        const profile = Object.assign({ username: m?.username || pid.replace(/^flow-/, '') }, m?.profile || {}, { peerId: pid })
+    const profile = mergeProfileData(
+      getCachedPeerProfile(m?.username || pid.replace(/^flow-/, '')) || _peerProfiles.get(pid) || { username: m?.username || pid.replace(/^flow-/, '') },
+      Object.assign({ username: m?.username || pid.replace(/^flow-/, '') }, m?.profile || {}, { peerId: pid }),
+      pid
+    )
         next.set(pid, profile)
         cachePeerProfile(profile, pid)
       })
@@ -2195,7 +2216,7 @@ function renderRoomMembers() {
   const members = Array.from(_roomMembers.values()).map((m) => {
     if (!m?.username) return m
     const cached = getCachedPeerProfile(m.username)
-    return cached ? Object.assign({}, cached, m) : m
+    return cached ? mergeProfileData(cached, m, m?.peerId || cached?.peerId || '') : m
   })
   // Safety fallback: if profile packets are delayed, still show connected peers.
   const connectedPeerIds = Array.from(_socialPeer?.connections?.keys?.() || [])
@@ -2521,7 +2542,7 @@ async function openPeerProfile(username, peerId = '') {
   const targetPeerId = String(peerId || data?.peerId || `flow-${username}` || '').trim()
   const cloud = await fetchCloudPublicProfile(username).catch(() => null)
   if (cloud) {
-    data = Object.assign({}, data, cloud, { peerId: targetPeerId || data.peerId || null })
+    data = mergeProfileData(data, cloud, targetPeerId || data.peerId || '')
     if (data.peerId) _peerProfiles.set(data.peerId, data)
     cachePeerProfile(data, data.peerId)
     renderModal(data)
@@ -2530,7 +2551,7 @@ async function openPeerProfile(username, peerId = '') {
     const rsp = await _socialPeer.requestPeerData(targetPeerId, { type: 'presence-request' }, 1300).catch(() => null)
     const remoteProfile = rsp?.ok ? rsp?.data?.profile : null
     if (remoteProfile) {
-      data = Object.assign({}, data, remoteProfile, { peerId: rsp?.data?.peerId || targetPeerId })
+      data = mergeProfileData(data, remoteProfile, rsp?.data?.peerId || targetPeerId || '')
       _peerProfiles.set(data.peerId, data)
       cachePeerProfile(data, data.peerId)
       renderModal(data)
@@ -3010,7 +3031,7 @@ async function friendMenuRefresh() {
   const cloud = await fetchCloudPublicProfile(username).catch(() => null)
   if (cloud) {
     const pid = _friendContext.peerId || `flow-${username}`
-    const merged = Object.assign({}, cloud, { peerId: pid })
+    const merged = mergeProfileData(_peerProfiles.get(pid) || getCachedPeerProfile(username), Object.assign({}, cloud, { peerId: pid }), pid)
     cachePeerProfile(merged, pid)
     _peerProfiles.set(pid, merged)
   }
@@ -3019,7 +3040,7 @@ async function friendMenuRefresh() {
     const profile = rsp?.ok ? rsp?.data?.profile : null
     if (profile) {
       const pid = rsp?.data?.peerId || _friendContext.peerId
-      const merged = Object.assign({}, profile, { peerId: pid })
+      const merged = mergeProfileData(_peerProfiles.get(pid) || getCachedPeerProfile(username), Object.assign({}, profile, { peerId: pid }), pid)
       cachePeerProfile(merged, pid)
       _peerProfiles.set(pid, merged)
     }
@@ -3434,8 +3455,10 @@ function initPeerSocial() {
           updatedAt: Date.now(),
         })
         if (msg.profile && (msg.peerId || msg._peerId)) {
-          _peerProfiles.set(msg.peerId || msg._peerId, msg.profile)
-          cachePeerProfile(msg.profile, msg.peerId || msg._peerId)
+          const pid = msg.peerId || msg._peerId
+          const merged = mergeProfileData(_peerProfiles.get(pid) || getCachedPeerProfile(msg.profile.username), Object.assign({}, msg.profile, { peerId: pid }), pid)
+          _peerProfiles.set(pid, merged)
+          cachePeerProfile(merged, pid)
         }
         renderFriends()
       }
@@ -3447,7 +3470,7 @@ function initPeerSocial() {
         showRoomInvitePrompt({ roomId, fromUsername })
       }
       if (msg.type === 'room-profile-state' && msg.roomId === _roomState.roomId && msg.profile && msg._peerId) {
-        const profileWithPeer = Object.assign({}, msg.profile, { peerId: msg._peerId })
+        const profileWithPeer = mergeProfileData(_peerProfiles.get(msg._peerId) || getCachedPeerProfile(msg.profile.username), Object.assign({}, msg.profile, { peerId: msg._peerId }), msg._peerId)
         _peerProfiles.set(msg._peerId, profileWithPeer)
         cachePeerProfile(profileWithPeer, msg._peerId)
         _roomMembers.set(msg._peerId, profileWithPeer)
@@ -3847,8 +3870,10 @@ async function pollFriendsPresence() {
           updatedAt: Date.now(),
         }
         if (p.profile && (p.peerId || p._peerId)) {
-          _peerProfiles.set(p.peerId || p._peerId, p.profile)
-          cachePeerProfile(p.profile, p.peerId || p._peerId)
+          const pid = p.peerId || p._peerId
+          const merged = mergeProfileData(_peerProfiles.get(pid) || getCachedPeerProfile(p.profile.username), Object.assign({}, p.profile, { peerId: pid }), pid)
+          _peerProfiles.set(pid, merged)
+          cachePeerProfile(merged, pid)
         }
       }
     }
