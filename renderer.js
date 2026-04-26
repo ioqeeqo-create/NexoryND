@@ -73,6 +73,7 @@ let _roomHeartbeatTimer = null
 let _friendContext = null
 let _pendingRoomInvite = null
 let _myWaveRenderedTracks = []
+let _profileEditDraft = null
 const FRIEND_POLL_INTERVAL_MS = 3500
 const FRIEND_FRESH_ONLINE_MS = 18000
 const FRIEND_PROFILE_REFRESH_MS = 15000
@@ -101,6 +102,7 @@ function mergeProfileData(base, incoming, peerId = '') {
   merged.avatarData = next.avatarData || (sameUser ? (prev.avatarData || null) : null)
   merged.bannerData = next.bannerData || (sameUser ? (prev.bannerData || null) : null)
   merged.bio = typeof next.bio === 'string' ? next.bio : (prev.bio || '')
+  merged.profileColor = typeof next.profileColor === 'string' ? next.profileColor : (prev.profileColor || '')
   if (Array.isArray(next.pinnedTracks)) merged.pinnedTracks = next.pinnedTracks
   else if (Array.isArray(prev.pinnedTracks)) merged.pinnedTracks = prev.pinnedTracks
   if (Array.isArray(next.pinnedPlaylists)) merged.pinnedPlaylists = next.pinnedPlaylists
@@ -679,30 +681,9 @@ async function getAndCacheCover(url, trackId = '') {
     return objectUrl
   }
 
-  const buildEdgeCoverUrl = (sourceUrl) => {
-    const proxyBase = String(getSettings()?.proxyBaseUrl || '').trim()
-    if (!proxyBase || !/^https?:\/\//i.test(proxyBase)) return String(sourceUrl || '')
-    const clean = proxyBase.replace(/\/+$/, '')
-    return `${clean}/cover?u=${encodeURIComponent(String(sourceUrl || ''))}`
-  }
-
-  const fetchWithTimeout = async (targetUrl, timeoutMs = 9000) => {
-    const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), Math.max(1000, Number(timeoutMs || 0)))
-    try {
-      return await fetch(targetUrl, { signal: ctrl.signal })
-    } finally {
-      clearTimeout(timer)
-    }
-  }
-
   try {
-    const primaryUrl = buildEdgeCoverUrl(raw) || raw
-    let resp = await fetchWithTimeout(primaryUrl, 9000).catch(() => null)
-    if ((!resp || !resp.ok) && primaryUrl !== raw) {
-      resp = await fetchWithTimeout(raw, 9000).catch(() => null)
-    }
-    if (!resp || !resp.ok) return raw
+    const resp = await fetch(raw)
+    if (!resp.ok) return raw
     const blob = await resp.blob()
     await coverCacheTx(db, 'readwrite', (store, done) => {
       try {
@@ -2011,12 +1992,13 @@ function syncProfileUi() {
 }
 
 function getProfileCustom() {
-  if (!_profile?.username) return { bio: '', avatarData: null, bannerData: null, pinnedTracks: [], pinnedPlaylists: [] }
+  const defaults = { bio: '', avatarData: null, bannerData: null, profileColor: '', pinnedTracks: [], pinnedPlaylists: [] }
+  if (!_profile?.username) return defaults
   const key = `flow_profile_custom_${_profile.username}`
   try {
-    return Object.assign({ bio: '', avatarData: null, bannerData: null, pinnedTracks: [], pinnedPlaylists: [] }, JSON.parse(localStorage.getItem(key) || '{}'))
+    return Object.assign({}, defaults, JSON.parse(localStorage.getItem(key) || '{}'))
   } catch {
-    return { bio: '', avatarData: null, bannerData: null, pinnedTracks: [], pinnedPlaylists: [] }
+    return defaults
   }
 }
 
@@ -2031,6 +2013,7 @@ function getPublicProfilePayload(username = _profile?.username) {
     peerId: _socialPeer?.peer?.id || null,
     avatarData: custom.avatarData || null,
     bannerData: custom.bannerData || null,
+    profileColor: custom.profileColor || '',
     bio: custom.bio || '',
     stats: getListenStats(),
     pinnedTracks: Array.isArray(custom.pinnedTracks) ? custom.pinnedTracks.slice(0, 5) : [],
@@ -2070,16 +2053,27 @@ async function fetchCloudPublicProfile(username) {
   try {
     const sb = getSupabaseClient()
     if (!sb) return null
-    const { data } = await sb
+    let { data, error } = await sb
       .from('flow_profiles')
-      .select('username,avatar_data,banner_data,bio,pinned_tracks,pinned_playlists,total_tracks,total_seconds,last_seen')
+      .select('username,avatar_data,banner_data,bio,profile_color,pinned_tracks,pinned_playlists,total_tracks,total_seconds,last_seen')
       .eq('username', safe)
       .maybeSingle()
+    if (error && String(error.message || '').toLowerCase().includes('profile_color')) {
+      const fallback = await sb
+        .from('flow_profiles')
+        .select('username,avatar_data,banner_data,bio,pinned_tracks,pinned_playlists,total_tracks,total_seconds,last_seen')
+        .eq('username', safe)
+        .maybeSingle()
+      data = fallback.data
+      error = fallback.error
+    }
+    if (error) return null
     if (!data?.username) return null
     return {
       username: String(data.username || safe),
       avatarData: data.avatar_data || null,
       bannerData: data.banner_data || null,
+      profileColor: data.profile_color || '',
       bio: data.bio || '',
       pinnedTracks: Array.isArray(data.pinned_tracks) ? data.pinned_tracks.slice(0, 5) : [],
       pinnedPlaylists: Array.isArray(data.pinned_playlists) ? data.pinned_playlists.slice(0, 5) : [],
@@ -2134,31 +2128,42 @@ async function refreshFriendProfileFromCloud(username, force = false) {
   return merged
 }
 
+async function syncProfileCloudNow() {
+  const me = ensureActiveProfile()
+  if (!me?.username) return { ok: false, error: 'no profile' }
+  const sb = getSupabaseClient()
+  if (!sb) return { ok: false, error: 'no supabase' }
+  const custom = getProfileCustom()
+  const stats = getListenStats()
+  const payload = {
+    username: me.username,
+    online: true,
+    last_seen: new Date().toISOString(),
+    avatar_data: custom.avatarData || null,
+    banner_data: custom.bannerData || null,
+    profile_color: custom.profileColor || null,
+    bio: custom.bio || '',
+    pinned_tracks: Array.isArray(custom.pinnedTracks) ? custom.pinnedTracks.slice(0, 5) : [],
+    pinned_playlists: Array.isArray(custom.pinnedPlaylists) ? custom.pinnedPlaylists.slice(0, 5) : [],
+    total_tracks: Number(stats.totalTracks || 0),
+    total_seconds: Number(stats.totalSeconds || 0),
+  }
+  let { error } = await sb.from('flow_profiles').upsert(payload, { onConflict: 'username' })
+  if (error && String(error.message || '').toLowerCase().includes('profile_color')) {
+    const fallbackPayload = Object.assign({}, payload)
+    delete fallbackPayload.profile_color
+    ;({ error } = await sb.from('flow_profiles').upsert(fallbackPayload, { onConflict: 'username' }))
+  }
+  if (error) return { ok: false, error: error.message || String(error) }
+  return { ok: true }
+}
+
 function scheduleProfileCloudSync() {
   if (!ensureActiveProfile()?.username) return
   if (_supabaseProfileSyncTimer) clearTimeout(_supabaseProfileSyncTimer)
   _supabaseProfileSyncTimer = setTimeout(async () => {
     _supabaseProfileSyncTimer = null
-    try {
-      const me = ensureActiveProfile()
-      if (!me?.username) return
-      const custom = getProfileCustom()
-      const stats = getListenStats()
-      const sb = getSupabaseClient()
-      if (!sb) return
-      await sb.from('flow_profiles').upsert({
-        username: me.username,
-        online: true,
-        last_seen: new Date().toISOString(),
-        avatar_data: custom.avatarData || null,
-        banner_data: custom.bannerData || null,
-        bio: custom.bio || '',
-        pinned_tracks: Array.isArray(custom.pinnedTracks) ? custom.pinnedTracks.slice(0, 5) : [],
-        pinned_playlists: Array.isArray(custom.pinnedPlaylists) ? custom.pinnedPlaylists.slice(0, 5) : [],
-        total_tracks: Number(stats.totalTracks || 0),
-        total_seconds: Number(stats.totalSeconds || 0),
-      }, { onConflict: 'username' })
-    } catch {}
+    await syncProfileCloudNow().catch(() => {})
   }, 220)
 }
 
@@ -2201,6 +2206,7 @@ function startProfilesRealtimeSync() {
         username,
         avatarData: row?.avatar_data || null,
         bannerData: row?.banner_data || null,
+        profileColor: row?.profile_color || '',
         bio: row?.bio || '',
         pinnedTracks: Array.isArray(row?.pinned_tracks) ? row.pinned_tracks.slice(0, 5) : [],
         pinnedPlaylists: Array.isArray(row?.pinned_playlists) ? row.pinned_playlists.slice(0, 5) : [],
@@ -2515,29 +2521,24 @@ function enqueueSharedTrack(track) {
     broadcastQueueUpdate()
     return showToast('Трек добавлен в очередь комнаты')
   }
-  // Optimistic update for clients: show item in queue instantly after click.
   sharedQueue.push(cleanTrack)
   renderRoomQueue()
-  showToast('Трек добавлен в очередь комнаты')
-
-  // Server-first queue append for non-host users (reliable even when direct peer messaging fails).
   ;(async () => {
     try {
       const sb = getSupabaseClient()
-      if (!sb) throw new Error('no supabase')
+      if (!sb) return
       const { data } = await sb.from('flow_rooms').select('shared_queue').eq('room_id', _roomState.roomId).maybeSingle()
-      const nextQueue = Array.isArray(data?.shared_queue) ? data.shared_queue.slice() : []
+      const nextQueue = Array.isArray(data?.shared_queue) ? data.shared_queue.map((t) => sanitizeTrack(t)).filter(Boolean) : []
       nextQueue.push(cleanTrack)
       await saveRoomStateToServer({ shared_queue: nextQueue })
-    } catch {
-      const payload = { type: 'room-queue-add', roomId: _roomState.roomId, track: cleanTrack }
-      // Broadcast in room channel is more robust than direct-only messages.
-      _socialPeer?.send(payload)
-      if (typeof _socialPeer?.sendToPeer === 'function' && _roomState?.hostPeerId) {
-        _socialPeer.sendToPeer(_roomState.hostPeerId, payload)
-      }
-    }
+    } catch {}
   })()
+  const payload = { type: 'room-queue-add', roomId: _roomState.roomId, track: cleanTrack }
+  _socialPeer?.send(payload)
+  if (typeof _socialPeer?.sendToPeer === 'function' && _roomState?.hostPeerId) {
+    _socialPeer.sendToPeer(_roomState.hostPeerId, payload)
+  }
+  showToast('Трек добавлен в очередь комнаты')
 }
 
 function removeSharedQueueTrack(index) {
@@ -2827,12 +2828,41 @@ function saveProfileCustom(patch = {}) {
   return next
 }
 
-async function applyProfileBannerTheme(bannerData) {
+function normalizeProfileColor(value = '') {
+  const raw = String(value || '').trim()
+  return /^#[0-9a-f]{6}$/i.test(raw) ? raw.toLowerCase() : ''
+}
+
+function hexToRgb(hex = '') {
+  const safe = normalizeProfileColor(hex)
+  if (!safe) return null
+  return {
+    r: parseInt(safe.slice(1, 3), 16),
+    g: parseInt(safe.slice(3, 5), 16),
+    b: parseInt(safe.slice(5, 7), 16),
+  }
+}
+
+function applyProfileColorTheme(profileColor = '') {
+  const page = document.getElementById('page-profile')
+  if (!page) return false
+  const rgb = hexToRgb(profileColor)
+  if (!rgb) return false
+  const { r, g, b } = rgb
+  page.style.setProperty('--profile-banner-c1', `rgba(${r},${g},${b},0.24)`)
+  page.style.setProperty('--profile-banner-c2', `rgba(${Math.min(255, Math.round(r * 0.7 + 48))},${Math.min(255, Math.round(g * 0.7 + 48))},${Math.min(255, Math.round(b * 0.7 + 70))},0.18)`)
+  page.style.setProperty('--profile-accent', profileColor)
+  return true
+}
+
+async function applyProfileBannerTheme(bannerData, profileColor = '') {
   const page = document.getElementById('page-profile')
   if (!page) return
+  if (applyProfileColorTheme(profileColor)) return
   if (!bannerData) {
     page.style.setProperty('--profile-banner-c1', 'rgba(124,58,237,0.16)')
     page.style.setProperty('--profile-banner-c2', 'rgba(59,130,246,0.14)')
+    page.style.setProperty('--profile-accent', 'var(--accent2)')
     return
   }
   try {
@@ -2860,6 +2890,7 @@ async function applyProfileBannerTheme(bannerData) {
     const c2 = `rgba(${Math.min(255, Math.round(r * 0.75 + 38))},${Math.min(255, Math.round(g * 0.75 + 54))},${Math.min(255, Math.round(b * 0.75 + 84))},0.16)`
     page.style.setProperty('--profile-banner-c1', c1)
     page.style.setProperty('--profile-banner-c2', c2)
+    page.style.setProperty('--profile-accent', `rgb(${r},${g},${b})`)
   } catch {}
 }
 
@@ -2892,7 +2923,7 @@ function renderProfilePage() {
   }
   if (displayName) displayName.textContent = _profile.username
   if (bio) bio.textContent = custom.bio || 'Добавь описание профиля'
-  applyProfileBannerTheme(custom.bannerData).catch?.(() => {})
+  applyProfileBannerTheme(custom.bannerData, custom.profileColor).catch?.(() => {})
   if (stats) {
     const st = getListenStats()
     const hours = (Number(st.totalSeconds || 0) / 3600).toFixed(1)
@@ -2911,6 +2942,92 @@ function renderProfilePage() {
       : '<span style="opacity:.75">Пока нет друзей</span>'
   }
   renderPinnedTracks()
+  syncProfileEditModal()
+}
+
+function syncProfileEditModal() {
+  const modal = document.getElementById('profile-edit-modal')
+  if (!modal || modal.classList.contains('hidden')) return
+  const draft = _profileEditDraft || getProfileCustom()
+  const avatar = document.getElementById('profile-edit-avatar-preview')
+  const banner = document.getElementById('profile-edit-banner-preview')
+  const bio = document.getElementById('profile-edit-bio')
+  const color = document.getElementById('profile-edit-color')
+  const colorText = document.getElementById('profile-edit-color-text')
+  if (avatar) {
+    avatar.textContent = draft.avatarData ? '' : String(_profile?.username || '?').slice(0, 1).toUpperCase()
+    avatar.style.backgroundImage = draft.avatarData ? `url(${draft.avatarData})` : ''
+  }
+  if (banner) {
+    banner.style.backgroundImage = draft.bannerData
+      ? `linear-gradient(0deg, rgba(8,10,16,.28), rgba(8,10,16,.28)), url(${draft.bannerData})`
+      : 'linear-gradient(135deg, rgba(59,130,246,.24), rgba(139,92,246,.22))'
+  }
+  if (bio && document.activeElement !== bio) bio.value = draft.bio || ''
+  const safeColor = normalizeProfileColor(draft.profileColor || '') || '#9ca3af'
+  if (color && document.activeElement !== color) color.value = safeColor
+  if (colorText && document.activeElement !== colorText) colorText.value = normalizeProfileColor(draft.profileColor || '')
+}
+
+function openProfileEditModal() {
+  if (!_profile?.username) return showToast('Сначала войди в профиль', true)
+  _profileEditDraft = Object.assign({}, getProfileCustom())
+  const modal = document.getElementById('profile-edit-modal')
+  const name = document.getElementById('profile-edit-username')
+  if (name) name.textContent = _profile.username
+  modal?.classList.remove('hidden')
+  syncProfileEditModal()
+}
+
+function closeProfileEditModal() {
+  const modal = document.getElementById('profile-edit-modal')
+  if (modal) modal.classList.add('hidden')
+  _profileEditDraft = null
+}
+
+function setProfileEditDraft(patch = {}) {
+  _profileEditDraft = Object.assign({}, _profileEditDraft || getProfileCustom(), patch || {})
+  syncProfileEditModal()
+}
+
+async function pickProfileEditImage(kind) {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'image/*,.gif'
+  input.onchange = async () => {
+    const file = input.files?.[0]
+    if (!file) return
+    const dataUrl = await readFileAsDataUrl(file).catch(() => '')
+    if (!dataUrl) return showToast(kind === 'avatar' ? 'Не удалось загрузить аватар' : 'Не удалось загрузить баннер', true)
+    setProfileEditDraft(kind === 'avatar' ? { avatarData: dataUrl } : { bannerData: dataUrl })
+  }
+  input.click()
+}
+
+function clearProfileEditImage(kind) {
+  setProfileEditDraft(kind === 'avatar' ? { avatarData: null } : { bannerData: null })
+}
+
+function setProfileEditColor(value) {
+  setProfileEditDraft({ profileColor: normalizeProfileColor(value) })
+}
+
+async function submitProfileEditModal() {
+  if (!_profile?.username) return
+  const bio = document.getElementById('profile-edit-bio')
+  const colorText = document.getElementById('profile-edit-color-text')
+  const draft = Object.assign({}, _profileEditDraft || getProfileCustom(), {
+    bio: String(bio?.value || '').trim().slice(0, 180),
+    profileColor: normalizeProfileColor(colorText?.value || _profileEditDraft?.profileColor || ''),
+  })
+  saveProfileCustom(draft)
+  syncProfileUi()
+  renderProfilePage()
+  const result = await syncProfileCloudNow().catch((err) => ({ ok: false, error: err?.message || String(err) }))
+  if (!result?.ok) return showToast(`Профиль сохранён локально, но сервер не ответил: ${result?.error || 'ошибка'}`, true)
+  closeProfileEditModal()
+  showToast('Профиль сохранён и синхронизирован с сервером')
+  renderFriends().catch(() => {})
 }
 
 async function pickProfileAvatar() {
@@ -2958,11 +3075,7 @@ function clearProfileBanner() {
 }
 
 function editProfileBio() {
-  const cur = getProfileCustom()
-  const next = window.prompt('Описание профиля:', cur.bio || '')
-  if (next === null) return
-  saveProfileCustom({ bio: String(next || '').trim().slice(0, 180) })
-  renderProfilePage()
+  openProfileEditModal()
 }
 
 function addPinnedTrack() {
@@ -3315,14 +3428,6 @@ async function friendMenuRefresh() {
   if (!_friendContext?.username) return
   const username = String(_friendContext.username || '').trim().toLowerCase()
   if (!username) return
-  const cloud = await fetchCloudPublicProfile(username).catch(() => null)
-  if (cloud) {
-    const pid = _friendContext.peerId || `flow-${username}`
-    const merged = mergeProfileData(_peerProfiles.get(pid) || getCachedPeerProfile(username), Object.assign({}, cloud, { peerId: pid }), pid)
-    cachePeerProfile(merged, pid)
-    _peerProfiles.set(pid, merged)
-    if (_roomMembers.has(pid)) _roomMembers.set(pid, merged)
-  }
   if (_socialPeer?.requestPeerData && _friendContext.peerId) {
     const rsp = await _socialPeer.requestPeerData(_friendContext.peerId, { type: 'presence-request' }, 1300).catch(() => null)
     const profile = rsp?.ok ? rsp?.data?.profile : null
@@ -3343,6 +3448,14 @@ async function friendMenuRefresh() {
         updatedAt: Date.now(),
       }))
     }
+  }
+  const cloud = await fetchCloudPublicProfile(username).catch(() => null)
+  if (cloud) {
+    const pid = _friendContext.peerId || `flow-${username}`
+    const merged = mergeProfileData(_peerProfiles.get(pid) || getCachedPeerProfile(username), Object.assign({}, cloud, { peerId: pid }), pid)
+    cachePeerProfile(merged, pid)
+    _peerProfiles.set(pid, merged)
+    if (_roomMembers.has(pid)) _roomMembers.set(pid, merged)
   }
   renderRoomMembers()
   renderFriends().catch(() => {})
@@ -3971,7 +4084,7 @@ async function addFriendByUsername() {
   renderFriends().catch(() => {})
   input.value = ''
   const online = await _socialPeer?.probeUser?.(friend, 1500).catch(() => false)
-  showToast(online ? 'Запрос в друзья отправлен' : 'Запрос в друзья отправлен (доставится при входе)')
+  showToast(online ? `Запрос в друзья отправлен: ${friend}` : `Запрос в друзья отправлен: ${friend} (доставится при входе)`)
 }
 
 async function renderFriendRequests() {
@@ -5831,11 +5944,13 @@ async function importPlaylistFromLink(urlFromUi = '') {
   openImportProgress(0)
   _importProgressOpenedAt = Date.now()
   setImportProgressIndeterminate(true)
-  updateImportProgress(0, 0, 'Разбираю ссылку и получаю список треков...')
+  const isVkLink = /(^|\/\/)(m\.)?vk\.com\//i.test(url)
+  updateImportProgress(0, 0, isVkLink ? 'Отправляю VK плейлист на РФ сервер и получаю список треков...' : 'Разбираю ссылку и получаю список треков...')
   const imported = await window.api.importPlaylistLink(url.trim(), {
     spotify: settings.spotifyToken || '',
     yandex: settings.yandexToken || '',
-    vk: settings.vkToken || ''
+    vk: settings.vkToken || '',
+    serverBaseUrl: settings.proxyBaseUrl || '',
   }).catch((e) => ({ ok: false, error: e?.message || String(e) }))
   setImportProgressIndeterminate(false)
 
@@ -5855,6 +5970,7 @@ async function importPlaylistFromLink(urlFromUi = '') {
   }
 
   try {
+    if (imported?.via === 'flow-vk-server') showToast(`VK сервер вернул треков: ${srcTracks.length}`)
     const stats = await processPlaylistImport(srcTracks, imported)
     showToast(`Импорт завершен. Добавлено ${stats.added} треков, ${stats.missed} не найдено`)
   } catch (err) {
@@ -6590,6 +6706,12 @@ window.addEventListener('DOMContentLoaded', () => {
       if (editModal && !editModal.classList.contains('hidden')) {
         e.preventDefault()
         closePlaylistEditModal()
+        return
+      }
+      const profileEditModal = document.getElementById('profile-edit-modal')
+      if (profileEditModal && !profileEditModal.classList.contains('hidden')) {
+        e.preventDefault()
+        closeProfileEditModal()
         return
       }
       const libraryModal = document.getElementById('library-action-modal')

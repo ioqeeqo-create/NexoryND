@@ -1438,6 +1438,33 @@ ipcMain.handle('yandex-search', async (e, { q, token }) => {
   }))
 })
 
+async function fetchVkPlaylistFromFlowServer(serverBaseUrl, link, token = '') {
+  const base = String(serverBaseUrl || '').trim().replace(/\/+$/, '')
+  if (!/^https?:\/\//i.test(base)) return null
+  const rsp = await axios.post(`${base}/vk/playlist`, {
+    url: String(link || '').trim(),
+    token: String(token || '').trim(),
+  }, {
+    timeout: 30000,
+    maxBodyLength: 256 * 1024,
+    validateStatus: () => true,
+    headers: { 'Content-Type': 'application/json' },
+  })
+  const body = rsp?.data || {}
+  if (!body?.ok) throw new Error(body?.error || `server status ${rsp?.status || 0}`)
+  const tracks = Array.isArray(body.tracks)
+    ? body.tracks.map((t) => ({ title: t?.title || null, artist: t?.artist || '—' })).filter((t) => t.title)
+    : []
+  if (!tracks.length) throw new Error('server returned empty VK playlist')
+  return {
+    ok: true,
+    service: 'vk',
+    name: String(body.name || 'VK Playlist'),
+    tracks,
+    via: 'flow-vk-server',
+  }
+}
+
 ipcMain.handle('import-playlist-link', async (e, { url, tokens = {} }) => {
   const link = String(url || '').trim()
   if (!link) return { ok: false, error: 'empty url' }
@@ -1445,8 +1472,18 @@ ipcMain.handle('import-playlist-link', async (e, { url, tokens = {} }) => {
   const vkRef = parseVkPlaylistRef(link)
   if (vkRef) {
     const vkToken = String(tokens?.vk || '').trim()
+    const serverBaseUrl = String(tokens?.serverBaseUrl || '').trim()
     let apiErr = null
+    let serverErr = null
     let bridgeErr = null
+    if (serverBaseUrl) {
+      try {
+        const fromServer = await fetchVkPlaylistFromFlowServer(serverBaseUrl, link, vkToken)
+        if (fromServer?.tracks?.length) return fromServer
+      } catch (err) {
+        serverErr = err
+      }
+    }
     try {
       if (vkToken) {
         // Primary modern method for VK playlists.
@@ -1530,7 +1567,9 @@ ipcMain.handle('import-playlist-link', async (e, { url, tokens = {} }) => {
       bridgeErr = bridge?.error || null
     } catch {}
     if (bridgeErr) return { ok: false, error: 'VK import: ' + String(bridgeErr) }
+    if (serverErr && apiErr) return { ok: false, error: 'VK import server: ' + (serverErr?.message || String(serverErr)) + ' | local: ' + (apiErr?.message || String(apiErr)) }
     if (apiErr) return { ok: false, error: 'VK import: ' + (apiErr?.message || String(apiErr)) + ' (html fallback failed)' }
+    if (serverErr) return { ok: false, error: 'VK import server: ' + (serverErr?.message || String(serverErr)) }
     return { ok: false, error: 'VK import: playlist parse failed (try public playlist or valid VK token)' }
   }
 

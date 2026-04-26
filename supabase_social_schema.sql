@@ -8,6 +8,7 @@ create table if not exists public.flow_profiles (
   last_seen timestamptz not null default now(),
   avatar_data text,
   banner_data text,
+  profile_color text,
   bio text not null default '',
   pinned_tracks jsonb not null default '[]'::jsonb,
   pinned_playlists jsonb not null default '[]'::jsonb,
@@ -17,6 +18,7 @@ create table if not exists public.flow_profiles (
 
 alter table public.flow_profiles add column if not exists avatar_data text;
 alter table public.flow_profiles add column if not exists banner_data text;
+alter table public.flow_profiles add column if not exists profile_color text;
 alter table public.flow_profiles add column if not exists password_hash text;
 alter table public.flow_profiles add column if not exists password_salt text;
 alter table public.flow_profiles add column if not exists bio text not null default '';

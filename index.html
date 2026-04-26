@@ -224,26 +224,20 @@
       <div class="content-header"><h2>Профиль</h2><p class="content-sub">Твой Flow профиль</p></div>
       <div class="profile-shell">
         <div class="profile-hero glass-card">
-          <div class="profile-banner" id="profile-banner">
-            <button class="btn-small profile-upload-btn" onclick="pickProfileBanner()">Баннер</button>
-            <button class="btn-small profile-upload-btn" style="right:92px" onclick="clearProfileBanner()">Удалить баннер</button>
-          </div>
+          <div class="profile-banner" id="profile-banner"></div>
           <div class="profile-avatar-wrap">
             <div class="profile-avatar" id="profile-avatar-large">?</div>
-            <button class="btn-small" onclick="pickProfileAvatar()">Аватар</button>
-            <button class="btn-small" onclick="clearProfileAvatar()">Удалить аватар</button>
           </div>
           <div class="profile-main-meta">
             <h3 id="profile-display-name">—</h3>
             <p id="profile-bio">Добавь описание профиля</p>
-            <button class="btn-small" onclick="editProfileBio()">Редактировать профиль</button>
+            <button class="btn-small profile-edit-main-btn" onclick="openProfileEditModal()">Редактировать профиль</button>
           </div>
         </div>
         <div class="profile-grid">
           <div class="glass-card profile-card">
             <div class="profile-card-head">
               <strong>Любимые треки</strong>
-              <button class="btn-small" onclick="addPinnedTrack()">Добавить</button>
             </div>
             <div id="profile-pinned-tracks"></div>
           </div>
@@ -780,6 +774,63 @@
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
       <button class="btn-small" onclick="closeInviteModal()">Отмена</button>
       <button class="btn-small" onclick="submitInviteJoin()">Подключиться</button>
+    </div>
+  </div>
+</div>
+<div id="profile-edit-modal" class="flow-modal hidden">
+  <div class="flow-modal-backdrop" onclick="closeProfileEditModal()"></div>
+  <div class="flow-modal-card glass-card profile-edit-card">
+    <div class="profile-edit-head">
+      <div>
+        <h3>Редактировать профиль</h3>
+        <p id="profile-edit-username">—</p>
+      </div>
+      <button class="btn-small" onclick="closeProfileEditModal()">Закрыть</button>
+    </div>
+    <div class="profile-edit-preview">
+      <div id="profile-edit-banner-preview" class="profile-edit-banner-preview"></div>
+      <div id="profile-edit-avatar-preview" class="profile-edit-avatar-preview">?</div>
+    </div>
+    <div class="profile-edit-grid">
+      <div class="profile-edit-section">
+        <strong>Аватар</strong>
+        <span>GIF или картинка, сразу видно что поставил</span>
+        <div class="profile-edit-actions">
+          <button class="btn-small" onclick="pickProfileEditImage('avatar')">Поставить</button>
+          <button class="btn-small danger" onclick="clearProfileEditImage('avatar')">Удалить</button>
+        </div>
+      </div>
+      <div class="profile-edit-section">
+        <strong>Баннер</strong>
+        <span>Шапка профиля, GIF тоже можно</span>
+        <div class="profile-edit-actions">
+          <button class="btn-small" onclick="pickProfileEditImage('banner')">Поставить</button>
+          <button class="btn-small danger" onclick="clearProfileEditImage('banner')">Удалить</button>
+        </div>
+      </div>
+      <div class="profile-edit-section profile-edit-section-wide">
+        <strong>Описание</strong>
+        <textarea id="profile-edit-bio" class="flow-input profile-edit-bio" maxlength="180" placeholder="Описание профиля"></textarea>
+      </div>
+      <div class="profile-edit-section">
+        <strong>Цвет профиля</strong>
+        <span>Цвет карточек и свечения профиля</span>
+        <div class="profile-edit-color-row">
+          <input id="profile-edit-color" type="color" value="#9ca3af" oninput="setProfileEditColor(this.value)" />
+          <input id="profile-edit-color-text" class="flow-input" placeholder="#9ca3af" oninput="setProfileEditColor(this.value)" />
+        </div>
+      </div>
+      <div class="profile-edit-section">
+        <strong>Любимые треки</strong>
+        <span>Добавить трек в профиль</span>
+        <div class="profile-edit-actions">
+          <button class="btn-small" onclick="addPinnedTrack()">Добавить трек</button>
+        </div>
+      </div>
+    </div>
+    <div class="profile-edit-footer">
+      <button class="btn-small" onclick="closeProfileEditModal()">Отмена</button>
+      <button class="btn-main profile-edit-save" onclick="submitProfileEditModal()">Сохранить и синхронизировать</button>
     </div>
   </div>
 </div>
