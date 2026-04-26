@@ -25,13 +25,56 @@
     return String(value || '').trim().toLowerCase().replace(/[^a-z0-9_\-.]/g, '').slice(0, 32)
   }
 
-  function createProfile(rawName) {
+  function randomSalt(len = 16) {
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    let out = ''
+    for (let i = 0; i < len; i++) out += chars[Math.floor(Math.random() * chars.length)]
+    return out
+  }
+
+  async function hashPassword(password, salt) {
+    const input = String(password || '') + '::' + String(salt || '')
+    try {
+      if (window?.crypto?.subtle && window?.TextEncoder) {
+        const enc = new TextEncoder()
+        const bytes = enc.encode(input)
+        const digest = await window.crypto.subtle.digest('SHA-256', bytes)
+        const arr = Array.from(new Uint8Array(digest))
+        return arr.map((b) => b.toString(16).padStart(2, '0')).join('')
+      }
+    } catch {}
+    return btoa(unescape(encodeURIComponent(input))).slice(0, 120)
+  }
+
+  async function createProfile(rawName, rawPassword = '') {
     const username = normalizeUsername(rawName)
     if (!username || username.length < 3) return { ok: false, error: 'Username: минимум 3 символа [a-z0-9_-.]' }
-    const profiles = getProfiles()
-    if (profiles.some((p) => p.username === username)) {
-      return { ok: false, error: 'Такой Username уже занят' }
+    const password = String(rawPassword || '')
+    if (password.length < 4) return { ok: false, error: 'Пароль: минимум 4 символа' }
+    const sb = getSupabase()
+    if (!sb) return { ok: false, error: 'Сервер недоступен' }
+    try {
+      const { data: existing } = await sb
+        .from(DB_PROFILES)
+        .select('username')
+        .eq('username', username)
+        .maybeSingle()
+      if (existing?.username) return { ok: false, error: 'Такой Username уже занят' }
+      const salt = randomSalt(24)
+      const passHash = await hashPassword(password, salt)
+      const { error } = await sb.from(DB_PROFILES).insert({
+        username,
+        password_salt: salt,
+        password_hash: passHash,
+        online: true,
+        last_seen: new Date().toISOString(),
+      })
+      if (error) return { ok: false, error: error.message || 'Не удалось создать аккаунт' }
+    } catch (e) {
+      return { ok: false, error: e?.message || String(e) }
     }
+    const profiles = getProfiles()
+    if (profiles.some((p) => p.username === username)) return { ok: true, profile: { username, createdAt: Date.now() } }
     const profile = { username, createdAt: Date.now() }
     profiles.push(profile)
     saveProfiles(profiles)
@@ -39,12 +82,83 @@
     return { ok: true, profile }
   }
 
-  function loginProfile(rawName) {
+  async function loginProfile(rawName, rawPassword = '') {
     const username = normalizeUsername(rawName)
-    const profile = getProfiles().find((p) => p.username === username)
-    if (!profile) return { ok: false, error: 'Профиль не найден, зарегистрируйся' }
+    const password = String(rawPassword || '')
+    if (!username) return { ok: false, error: 'Введите Username' }
+    if (!password) return { ok: false, error: 'Введите пароль' }
+    const sb = getSupabase()
+    if (!sb) return { ok: false, error: 'Сервер недоступен' }
+    let row = null
+    try {
+      const { data, error } = await sb
+        .from(DB_PROFILES)
+        .select('username,password_hash,password_salt')
+        .eq('username', username)
+        .maybeSingle()
+      if (error) return { ok: false, error: error.message || 'Ошибка входа' }
+      if (!data?.username) return { ok: false, error: 'Профиль не найден, зарегистрируйся' }
+      row = data
+      const salt = String(row.password_salt || '')
+      const expected = String(row.password_hash || '')
+      if (!salt || !expected) {
+        return { ok: false, legacy: true, error: 'Старый аккаунт без пароля. Нужна миграция.' }
+      }
+      const actual = await hashPassword(password, salt)
+      if (actual !== expected) return { ok: false, error: 'Неверный пароль' }
+    } catch (e) {
+      return { ok: false, error: e?.message || String(e) }
+    }
+    const profile = getProfiles().find((p) => p.username === username) || { username, createdAt: Date.now() }
+    const profiles = getProfiles()
+    if (!profiles.some((p) => p.username === username)) {
+      profiles.push(profile)
+      saveProfiles(profiles)
+    }
     localStorage.setItem(STORAGE_KEYS.current, username)
     return { ok: true, profile }
+  }
+
+  async function migrateLegacyAccount(rawName, rawPassword = '') {
+    const username = normalizeUsername(rawName)
+    const password = String(rawPassword || '')
+    if (!username) return { ok: false, error: 'Введите Username' }
+    if (password.length < 4) return { ok: false, error: 'Пароль: минимум 4 символа' }
+    const sb = getSupabase()
+    if (!sb) return { ok: false, error: 'Сервер недоступен' }
+    try {
+      const { data, error } = await sb
+        .from(DB_PROFILES)
+        .select('username,password_hash,password_salt')
+        .eq('username', username)
+        .maybeSingle()
+      if (error) return { ok: false, error: error.message || 'Ошибка миграции' }
+      if (!data?.username) return { ok: false, error: 'Профиль не найден' }
+      const hasPassword = String(data.password_hash || '').trim() && String(data.password_salt || '').trim()
+      if (hasPassword) return { ok: false, error: 'Аккаунт уже мигрирован. Войди через пароль.' }
+      const salt = randomSalt(24)
+      const passHash = await hashPassword(password, salt)
+      const { error: upError } = await sb
+        .from(DB_PROFILES)
+        .update({
+          password_hash: passHash,
+          password_salt: salt,
+          last_seen: new Date().toISOString(),
+          online: true,
+        })
+        .eq('username', username)
+        .is('password_hash', null)
+      if (upError) return { ok: false, error: upError.message || 'Не удалось завершить миграцию' }
+      const profiles = getProfiles()
+      if (!profiles.some((p) => p.username === username)) {
+        profiles.push({ username, createdAt: Date.now() })
+        saveProfiles(profiles)
+      }
+      localStorage.setItem(STORAGE_KEYS.current, username)
+      return { ok: true, profile: { username } }
+    } catch (e) {
+      return { ok: false, error: e?.message || String(e) }
+    }
   }
 
   function getCurrentProfile() {
@@ -69,6 +183,16 @@
     if (!list.includes(safe)) list.push(safe)
     localStorage.setItem(STORAGE_KEYS.friendsPrefix + username, JSON.stringify(list))
     syncFriendToCloud(username, safe).catch(() => {})
+    return { ok: true, list }
+  }
+
+  function removeFriend(username, friendUsername) {
+    const owner = normalizeUsername(username)
+    const safe = normalizeUsername(friendUsername)
+    if (!owner || !safe || safe === owner) return { ok: false, error: 'Некорректный Username друга' }
+    const list = getFriends(owner).filter((item) => normalizeUsername(item) !== safe)
+    localStorage.setItem(STORAGE_KEYS.friendsPrefix + owner, JSON.stringify(list))
+    removeFriendFromCloud(owner, safe).catch(() => {})
     return { ok: true, list }
   }
 
@@ -141,6 +265,21 @@
         owner_username: friendUsername,
         friend_username: ownerUsername,
       }, { onConflict: 'owner_username,friend_username' })
+    } catch {}
+  }
+
+  async function removeFriendFromCloud(ownerUsername, friendUsername) {
+    try {
+      const sb = getSupabase()
+      if (!sb || !ownerUsername || !friendUsername) return
+      await sb.from(DB_FRIENDS)
+        .delete()
+        .eq('owner_username', ownerUsername)
+        .eq('friend_username', friendUsername)
+      await sb.from(DB_FRIENDS)
+        .delete()
+        .eq('owner_username', friendUsername)
+        .eq('friend_username', ownerUsername)
     } catch {}
   }
 
@@ -224,6 +363,7 @@
       this._pending = new Map()
       this._knownPeers = new Set()
       this._incomingReqByPeer = new Map()
+      this._profileHeartbeatTimer = null
     }
 
     init() {
@@ -232,9 +372,17 @@
       this._sb = getSupabase()
       this.onStatus({ type: 'ready', id: this.peer.id })
       upsertProfileCloud(this.username).catch(() => {})
+      this._startProfileHeartbeat()
       pullFriendsFromCloud(this.username).catch(() => {})
       this._wireGlobalChannel()
       return { ok: true }
+    }
+
+    _startProfileHeartbeat() {
+      if (this._profileHeartbeatTimer) clearInterval(this._profileHeartbeatTimer)
+      this._profileHeartbeatTimer = setInterval(() => {
+        upsertProfileCloud(this.username).catch(() => {})
+      }, 25000)
     }
 
     _wireGlobalChannel() {
@@ -307,6 +455,8 @@
         try { this._sb.removeChannel(this._globalChannel) } catch {}
       }
       this._globalChannel = null
+      if (this._profileHeartbeatTimer) clearInterval(this._profileHeartbeatTimer)
+      this._profileHeartbeatTimer = null
       this.connections.clear()
       setProfileOfflineCloud(this.username).catch(() => {})
       this.peer = null
@@ -340,9 +490,10 @@
         ]).then((r) => {
           const row = r?.data
           if (!row) return resolve(false)
-          if (row.online === true) return resolve(true)
           const seen = Date.parse(String(row.last_seen || ''))
-          if (!Number.isNaN(seen) && (Date.now() - seen) < 120000) return resolve(true)
+          const seenFresh = !Number.isNaN(seen) && (Date.now() - seen) < 75000
+          if (row.online === true && seenFresh) return resolve(true)
+          if (seenFresh) return resolve(true)
           resolve(false)
         }).catch(() => resolve(false))
       })
@@ -429,15 +580,16 @@
   const _origLogoutProfile = logoutProfile
   const _origGetFriends = getFriends
   const _origAddFriend = addFriend
+  const _origRemoveFriend = removeFriend
 
-  function createProfileCloudAware(rawName) {
-    const res = _origCreateProfile(rawName)
+  async function createProfileCloudAware(rawName, rawPassword = '') {
+    const res = await _origCreateProfile(rawName, rawPassword)
     if (res?.ok && res?.profile?.username) upsertProfileCloud(res.profile.username).catch(() => {})
     return res
   }
 
-  function loginProfileCloudAware(rawName) {
-    const res = _origLoginProfile(rawName)
+  async function loginProfileCloudAware(rawName, rawPassword = '') {
+    const res = await _origLoginProfile(rawName, rawPassword)
     if (res?.ok && res?.profile?.username) {
       upsertProfileCloud(res.profile.username).catch(() => {})
       pullFriendsFromCloud(res.profile.username).catch(() => {})
@@ -461,6 +613,10 @@
     return _origAddFriend(username, friendUsername)
   }
 
+  function removeFriendCloudAware(username, friendUsername) {
+    return _origRemoveFriend(username, friendUsername)
+  }
+
   window.FlowModules = window.FlowModules || {}
   window.FlowModules.peerSocial = {
     EVENTS: {
@@ -474,6 +630,8 @@
     logoutProfile: logoutProfileCloudAware,
     getFriends: getFriendsCloudAware,
     addFriend: addFriendCloudAware,
+    removeFriend: removeFriendCloudAware,
+    migrateLegacyAccount,
     sendFriendRequest: sendFriendRequestCloud,
     getIncomingFriendRequests: getIncomingFriendRequestsCloud,
     respondFriendRequest: respondFriendRequestCloud,

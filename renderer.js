@@ -50,6 +50,7 @@ let _lastRoomSyncAt = 0
 let _currentTrackStartedAt = 0
 let _roomServerChannel = null
 let _roomServerHeartbeatTimer = null
+let _profilesRealtimeChannel = null
 let _lastAppliedServerPlaybackTs = 0
 let _lastRoomServerLoadAt = 0
 let _friendPresence = new Map()
@@ -74,8 +75,10 @@ let _pendingRoomInvite = null
 let _myWaveRenderedTracks = []
 const FRIEND_POLL_INTERVAL_MS = 3500
 const FRIEND_FRESH_ONLINE_MS = 18000
+const FRIEND_PROFILE_REFRESH_MS = 15000
 const MY_WAVE_MIN_TRACKS = 10
 const MY_WAVE_MAX_TRACKS = 30
+const _friendProfileRefreshAt = new Map()
 
 function getPeerProfileCache() {
   try { return JSON.parse(localStorage.getItem('flow_peer_public_profiles') || '{}') || {} } catch { return {} }
@@ -2077,21 +2080,37 @@ async function fetchCloudFriendsForUser(username) {
     if (!sb) return []
     const { data } = await sb
       .from('flow_friends')
-      .select('user_a,user_b')
-      .or(`user_a.eq.${safe},user_b.eq.${safe}`)
+      .select('owner_username,friend_username')
+      .eq('owner_username', safe)
       .limit(200)
     if (!Array.isArray(data)) return []
-    const out = []
-    for (const row of data) {
-      const a = String(row?.user_a || '').trim().toLowerCase()
-      const b = String(row?.user_b || '').trim().toLowerCase()
-      if (a === safe && b) out.push(b)
-      else if (b === safe && a) out.push(a)
-    }
+    const out = data
+      .map((row) => String(row?.friend_username || '').trim().toLowerCase())
+      .filter(Boolean)
     return Array.from(new Set(out)).slice(0, 50)
   } catch {
     return []
   }
+}
+
+async function refreshFriendProfileFromCloud(username, force = false) {
+  const safe = String(username || '').trim().toLowerCase()
+  if (!safe) return null
+  const now = Date.now()
+  const lastPullAt = Number(_friendProfileRefreshAt.get(safe) || 0)
+  if (!force && (now - lastPullAt) < FRIEND_PROFILE_REFRESH_MS) return null
+  _friendProfileRefreshAt.set(safe, now)
+  const cloud = await fetchCloudPublicProfile(safe).catch(() => null)
+  if (!cloud) return null
+  const knownPeerId = `flow-${safe}`
+  const merged = mergeProfileData(
+    _peerProfiles.get(knownPeerId) || getCachedPeerProfile(safe),
+    Object.assign({}, cloud, { peerId: knownPeerId }),
+    knownPeerId
+  )
+  _peerProfiles.set(knownPeerId, merged)
+  cachePeerProfile(merged, knownPeerId)
+  return merged
 }
 
 function scheduleProfileCloudSync() {
@@ -2130,6 +2149,60 @@ function stopRoomServerSync() {
   _roomServerChannel = null
   if (_roomServerHeartbeatTimer) clearInterval(_roomServerHeartbeatTimer)
   _roomServerHeartbeatTimer = null
+}
+
+function stopProfilesRealtimeSync() {
+  try {
+    const sb = getSupabaseClient()
+    if (sb && _profilesRealtimeChannel) sb.removeChannel(_profilesRealtimeChannel)
+  } catch {}
+  _profilesRealtimeChannel = null
+}
+
+function startProfilesRealtimeSync() {
+  stopProfilesRealtimeSync()
+  if (!_profile?.username) return
+  const sb = getSupabaseClient()
+  if (!sb) return
+  _profilesRealtimeChannel = sb.channel(`flow-profiles-live:${_profile.username}`)
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'flow_profiles',
+    }, ({ new: row }) => {
+      const username = String(row?.username || '').trim().toLowerCase()
+      if (!username) return
+      const self = String(_profile?.username || '').trim().toLowerCase()
+      const friends = (peerSocial.getFriends && self) ? (peerSocial.getFriends(self) || []) : []
+      const watchSet = new Set([self, ...friends.map((x) => String(x || '').trim().toLowerCase()).filter(Boolean)])
+      if (!watchSet.has(username)) return
+      const cloudProfile = {
+        username,
+        avatarData: row?.avatar_data || null,
+        bannerData: row?.banner_data || null,
+        bio: row?.bio || '',
+        pinnedTracks: Array.isArray(row?.pinned_tracks) ? row.pinned_tracks.slice(0, 5) : [],
+        pinnedPlaylists: Array.isArray(row?.pinned_playlists) ? row.pinned_playlists.slice(0, 5) : [],
+        stats: {
+          totalTracks: Number(row?.total_tracks || 0),
+          totalSeconds: Number(row?.total_seconds || 0),
+        },
+      }
+      const peerId = `flow-${username}`
+      const merged = mergeProfileData(
+        _peerProfiles.get(peerId) || getCachedPeerProfile(username),
+        Object.assign({}, cloudProfile, { peerId }),
+        peerId
+      )
+      _peerProfiles.set(peerId, merged)
+      cachePeerProfile(merged, peerId)
+      if (_profile?.username && username === String(_profile.username).trim().toLowerCase()) {
+        syncProfileUi()
+      }
+      renderFriends().catch(() => {})
+      if (_roomState?.roomId) renderRoomMembers()
+    })
+    .subscribe(() => {})
 }
 
 async function upsertRoomMemberPresence() {
@@ -3147,6 +3220,7 @@ function ensureFriendInteractionUI() {
       <button class="friend-context-item" onclick="friendMenuJoinRoom()">Присоединиться к руме</button>
       <button class="friend-context-item" onclick="friendMenuInviteRoom()">Пригласить в комнату</button>
       <button class="friend-context-item" onclick="friendMenuRefresh()">Обновить</button>
+      <button class="friend-context-item danger" onclick="friendMenuRemoveFriend()">Удалить из друзей</button>
     `
     document.body.appendChild(menu)
     document.addEventListener('click', () => closeFriendContextMenu())
@@ -3257,6 +3331,26 @@ async function friendMenuRefresh() {
     openPeerProfile(username, _friendContext.peerId || '').catch(() => {})
   }
   showToast('Профиль обновлён')
+}
+
+function friendMenuRemoveFriend() {
+  closeFriendContextMenu()
+  if (!_profile?.username || !_friendContext?.username || typeof peerSocial.removeFriend !== 'function') return
+  const friend = String(_friendContext.username || '').trim().toLowerCase()
+  if (!friend) return
+  const ok = confirm(`Удалить ${friend} из друзей?`)
+  if (!ok) return
+  const result = peerSocial.removeFriend(_profile.username, friend)
+  if (!result?.ok) return showToast(result?.error || 'Не удалось удалить друга', true)
+  _friendPresence.delete(friend)
+  const pid = String(_friendContext.peerId || `flow-${friend}`).trim()
+  if (pid) {
+    _peerProfiles.delete(pid)
+    _roomMembers.delete(pid)
+  }
+  renderFriends().catch(() => {})
+  renderRoomMembers()
+  showToast(`${friend} удалён из друзей`)
 }
 
 function sendRoomInviteToFriend(username, peerId = '') {
@@ -3607,6 +3701,7 @@ async function scrobbleLastFm(track) {
 
 function initPeerSocial() {
   if (!_profile?.username || !peerSocial.FlowPeerSocial) return
+  startProfilesRealtimeSync()
   if (_socialPeer) _socialPeer.destroy()
   _socialPeer = new peerSocial.FlowPeerSocial(_profile.username, {
     maxPeers: 3,
@@ -3792,16 +3887,26 @@ function initPeerSocial() {
   updateRoomUi()
 }
 
-function submitAuth() {
+async function submitAuth() {
   const input = document.getElementById('auth-login')
+  const passInput = document.getElementById('auth-password')
   const username = String(input?.value || '').trim()
+  const password = String(passInput?.value || '')
   if (!username) return setAuthError('Введите Username')
+  if (!password) return setAuthError('Введите пароль')
   const fn = _authMode === 'register' ? peerSocial.createProfile : peerSocial.loginProfile
   if (typeof fn !== 'function') return setAuthError('Social модуль не загружен')
-  const result = fn(username)
+  let result = await fn(username, password)
+  if (!result?.ok && _authMode === 'login' && result?.legacy && typeof peerSocial.migrateLegacyAccount === 'function') {
+    const ok = confirm('Найден старый аккаунт без пароля. Мигрировать его на текущий пароль?')
+    if (!ok) return setAuthError('Миграция отменена')
+    result = await peerSocial.migrateLegacyAccount(username, password)
+    if (result?.ok) showToast('Аккаунт мигрирован. Теперь вход работает через пароль.')
+  }
   if (!result?.ok) return setAuthError(result?.error || 'Ошибка входа')
   _profile = result.profile
   setAuthError('')
+  if (passInput) passInput.value = ''
   document.getElementById('screen-auth')?.classList.add('hidden')
   document.getElementById('screen-main')?.classList.remove('hidden')
   syncProfileUi()
@@ -3817,6 +3922,7 @@ function submitAuth() {
 function logout() {
   removeRoomMemberPresence(_roomState?.roomId).catch(() => {})
   stopRoomServerSync()
+  stopProfilesRealtimeSync()
   try { _socialPeer?.destroy() } catch {}
   _socialPeer = null
   _roomState = { roomId: null, host: false, hostPeerId: null }
@@ -4136,6 +4242,7 @@ async function pollFriendsPresence(force = false) {
         }
       }
     }
+    await refreshFriendProfileFromCloud(uname, force).catch(() => null)
     return [uname, state]
   }))
   _friendPresence = new Map(entries)
