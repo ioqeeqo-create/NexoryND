@@ -276,6 +276,123 @@ function extractRowsFromHtml(html, max = 260) {
   }
 }
 
+function parseVkJsonPayload(input) {
+  const raw = String(input || '').replace(/^<!--/, '').trim()
+  if (!raw) return null
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
+
+function collectTracksDeep(value, rows = [], max = 260) {
+  if (rows.length >= max || value == null) return rows
+  if (typeof value === 'string') {
+    const parsed = extractRowsFromHtml(value, max - rows.length)
+    rows.push(...(parsed.tracks || []))
+    return rows
+  }
+  if (Array.isArray(value)) {
+    if (
+      value.length >= 5
+      && Number.isFinite(Number(value[0]))
+      && Number.isFinite(Number(value[1]))
+      && typeof value[3] === 'string'
+      && typeof value[4] === 'string'
+    ) {
+      rows.push({
+        title: value[3],
+        artist: value[4],
+        duration: Number(value[5] || 0),
+        original_id: `${value[1]}_${value[0]}`,
+      })
+    }
+    for (const item of value) {
+      if (rows.length >= max) break
+      collectTracksDeep(item, rows, max)
+    }
+    return rows
+  }
+  if (typeof value === 'object') {
+    if (value.title && (value.artist || value.performer || value.subtitle)) {
+      rows.push({
+        title: value.title,
+        artist: value.artist || value.performer || value.subtitle,
+        duration: value.duration || value.durationSec || 0,
+        original_id: value.owner_id && value.id ? `${value.owner_id}_${value.id}` : (value.id || ''),
+      })
+    }
+    for (const item of Object.values(value)) {
+      if (rows.length >= max) break
+      collectTracksDeep(item, rows, max)
+    }
+  }
+  return rows
+}
+
+async function fetchViaVkAjax(ref) {
+  const cookie = getVkCookie()
+  if (!ref?.ownerId || !ref?.albumId || !cookie) return null
+  const attempts = [
+    {
+      url: 'https://vk.com/al_audio.php?act=load_section',
+      data: {
+        al: '1',
+        owner_id: String(ref.ownerId),
+        playlist_id: String(ref.albumId),
+        type: 'playlist',
+        offset: '0',
+        is_loading_all: '1',
+        ...(ref.accessKey ? { access_hash: String(ref.accessKey), access_key: String(ref.accessKey) } : {}),
+      },
+    },
+    {
+      url: 'https://vk.com/al_audio.php?act=load_section',
+      data: {
+        al: '1',
+        owner_id: String(ref.ownerId),
+        section: `playlist_${ref.ownerId}_${ref.albumId}${ref.accessKey ? `_${ref.accessKey}` : ''}`,
+        type: 'playlist',
+        offset: '0',
+      },
+    },
+  ]
+  const errors = []
+  for (const attempt of attempts) {
+    try {
+      const rsp = await axios.post(attempt.url, new URLSearchParams(attempt.data).toString(), {
+        headers: {
+          'User-Agent': BROWSER_UA,
+          'Accept': '*/*',
+          'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Origin': 'https://vk.com',
+          'Referer': `https://vk.com/audios${ref.ownerId}?section=all`,
+          'X-Requested-With': 'XMLHttpRequest',
+          'Cookie': cookie,
+        },
+        responseType: 'text',
+        timeout: 17000,
+        maxRedirects: 3,
+        validateStatus: () => true,
+      })
+      if (rsp.status >= 400) {
+        errors.push(`VK AJAX HTTP ${rsp.status}`)
+        continue
+      }
+      const raw = String(rsp?.data || '')
+      const parsed = parseVkJsonPayload(raw)
+      const tracks = uniqueTracks(collectTracksDeep(parsed || raw))
+      if (tracks.length) return { name: 'VK Playlist', tracks }
+      errors.push(`VK AJAX empty response ${raw.slice(0, 80).replace(/\s+/g, ' ')}`)
+    } catch (err) {
+      errors.push(err?.message || String(err))
+    }
+  }
+  return { name: 'VK Playlist', tracks: [], error: errors.slice(0, 3).join(' | ') }
+}
+
 async function fetchViaHtml(link, ref) {
   const candidates = [String(link || '').trim()]
   if (ref?.ownerId && ref?.albumId) {
@@ -331,11 +448,14 @@ async function resolveVkPlaylist(link, token = '') {
   })
   if (api?.tracks?.length) return api
 
+  const ajax = await fetchViaVkAjax(ref).catch((err) => ({ error: err?.message || String(err), tracks: [] }))
+  if (ajax?.tracks?.length) return ajax
+
   const html = await fetchViaHtml(safeLink, ref).catch((err) => ({ error: err?.message || String(err), tracks: [] }))
   if (html?.tracks?.length) return html
 
   if (!hasToken) throw new Error('auth_required')
-  const details = [apiError, html?.error].filter(Boolean).join(' | ')
+  const details = [apiError, ajax?.error, html?.error].filter(Boolean).join(' | ')
   throw new Error(`playlist parse failed${details ? `: ${details}` : ''}`)
 }
 
