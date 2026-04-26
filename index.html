@@ -616,7 +616,11 @@
           <div class="vs-section-title" style="margin-bottom:8px;">Прокси для стримов</div>
           <input id="proxy-base-url" class="token-field flow-input" placeholder="http://127.0.0.1:порт (опционально)" />
           <div class="integration-hint">Если провайдер режет источники без VPN, укажи локальный/внешний прокси. Пусто = авто-режим Flow.</div>
-          <button class="btn-small" onclick="saveProxySettings()" style="margin-top:10px">Сохранить прокси</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+            <button class="btn-small" onclick="saveProxySettings()">Сохранить прокси</button>
+            <button class="btn-small" onclick="checkProxyConnection()">Проверить соединение прокси</button>
+          </div>
+          <div id="proxy-check-status" class="integration-hint" style="margin-top:8px">Статус: не проверено</div>
         </div>
         <div class="glass-card" style="padding:18px;border-radius:18px;margin-top:12px;max-width:760px;">
           <div class="vs-section-title" style="margin-bottom:8px;">Last.fm интеграция</div>

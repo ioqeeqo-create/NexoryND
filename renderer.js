@@ -3472,6 +3472,50 @@ function saveProxySettings() {
   showToast(proxyBaseUrl ? 'Прокси режим сохранен' : 'Прокси: авто-режим Flow')
 }
 
+async function checkProxyConnection() {
+  const statusEl = document.getElementById('proxy-check-status')
+  const setStatus = (text, ok = null) => {
+    if (!statusEl) return
+    statusEl.textContent = text
+    if (ok === true) statusEl.style.color = '#7ee787'
+    else if (ok === false) statusEl.style.color = '#ff9b9b'
+    else statusEl.style.color = ''
+  }
+  if (!window.api?.proxySetUrl) {
+    setStatus('Статус: проверка доступна только в Electron', false)
+    return
+  }
+  setStatus('Статус: проверяю прокси и источники...')
+  const checks = [
+    { name: 'SoundCloud CDN', url: 'https://cf-media.sndcdn.com/' },
+    { name: 'Audius API', url: 'https://discoveryprovider.audius.co/v1/health_check' },
+    { name: 'Googlevideo (YouTube stream)', url: 'https://r1---sn-4g5e6n7s.googlevideo.com/' },
+  ]
+  const probe = async (url) => {
+    try {
+      const proxyUrl = await window.api.proxySetUrl(url)
+      const ctrl = new AbortController()
+      const timer = setTimeout(() => ctrl.abort(), 6000)
+      const res = await fetch(proxyUrl, { method: 'GET', headers: { Range: 'bytes=0-0' }, signal: ctrl.signal })
+      clearTimeout(timer)
+      return res.ok || res.status === 206
+    } catch {
+      return false
+    }
+  }
+  let okCount = 0
+  const lines = []
+  for (const item of checks) {
+    const ok = await probe(item.url)
+    if (ok) okCount++
+    lines.push(`${ok ? 'OK' : 'FAIL'} ${item.name}`)
+  }
+  const allOk = okCount === checks.length
+  const msg = `Статус: ${okCount}/${checks.length} прошло | ${lines.join(' | ')}`
+  setStatus(msg, allOk ? true : (okCount > 0 ? null : false))
+  showToast(allOk ? 'Прокси проверен: все источники отвечают' : `Прокси проверка: прошло ${okCount}/${checks.length}`, !allOk)
+}
+
 async function connectDiscordRpc() {
   const input = document.getElementById('discord-client-id')
   const clientId = String(input?.value || '').trim()
