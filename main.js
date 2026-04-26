@@ -1456,7 +1456,12 @@ async function fetchVkPlaylistFromFlowServer(serverBaseUrl, link, token = '') {
   const body = rsp?.data || {}
   if (!body?.ok) throw new Error(body?.error || `server status ${rsp?.status || 0}`)
   const tracks = Array.isArray(body.tracks)
-    ? body.tracks.map((t) => ({ title: t?.title || null, artist: t?.artist || '—' })).filter((t) => t.title)
+    ? body.tracks.map((t) => ({
+      title: t?.title || null,
+      artist: t?.artist || '—',
+      duration: Number(t?.duration || 0) || null,
+      original_id: t?.original_id || t?.originalId || null,
+    })).filter((t) => t.title)
     : []
   if (!tracks.length) throw new Error('server returned empty VK playlist')
   return {
@@ -1507,7 +1512,9 @@ ipcMain.handle('import-playlist-link', async (e, { url, tokens = {} }) => {
             : (Array.isArray(r0?.list) ? r0.list : (Array.isArray(r0?.items) ? r0.items : []))
           const outById = rawRows.map((t) => ({
             title: t?.title || null,
-            artist: t?.artist || (Array.isArray(t?.main_artists) ? t.main_artists.map((a) => a?.name).filter(Boolean).join(', ') : '—')
+            artist: t?.artist || (Array.isArray(t?.main_artists) ? t.main_artists.map((a) => a?.name).filter(Boolean).join(', ') : '—'),
+            duration: Number(t?.duration || 0) || null,
+            original_id: t?.owner_id && t?.id ? `${t.owner_id}_${t.id}` : (t?.id || null),
           })).filter((t) => t.title)
           if (outById.length) {
             const plName = String(r0?.title || 'VK Playlist')
@@ -1529,7 +1536,9 @@ ipcMain.handle('import-playlist-link', async (e, { url, tokens = {} }) => {
         const items = Array.isArray(r?.body?.response?.items) ? r.body.response.items : []
         const out = items.map((t) => ({
           title: t?.title || null,
-          artist: t?.artist || '—'
+          artist: t?.artist || '—',
+          duration: Number(t?.duration || 0) || null,
+          original_id: t?.owner_id && t?.id ? `${t.owner_id}_${t.id}` : (t?.id || null),
         })).filter((t) => t.title)
         if (out.length) return { ok: true, service: 'vk', name: 'VK Playlist', tracks: out }
       }

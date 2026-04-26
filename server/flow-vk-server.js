@@ -110,8 +110,13 @@ function uniqueTracks(rows, limit = 260) {
     const key = `${artist.toLowerCase()}::${title.toLowerCase()}`
     if (seen.has(key)) continue
     seen.add(key)
-    out.push({ title, artist })
+    const item = { title, artist }
+    const duration = Number(row?.duration || row?.durationSec || 0)
+    if (Number.isFinite(duration) && duration > 0) item.duration = duration
+    const originalId = row?.original_id || row?.originalId || row?.id || row?.audioId || ''
+    if (originalId) item.original_id = String(originalId)
     if (out.length >= limit) break
+    out.push(item)
   }
   return out
 }
@@ -146,6 +151,8 @@ async function fetchViaVkApi(ref, token) {
     const tracks = uniqueTracks(rawRows.map((t) => ({
       title: t?.title,
       artist: t?.artist || (Array.isArray(t?.main_artists) ? t.main_artists.map((a) => a?.name).filter(Boolean).join(', ') : ''),
+      duration: t?.duration,
+      original_id: t?.owner_id && t?.id ? `${t.owner_id}_${t.id}` : (t?.id || ''),
     })))
     if (tracks.length) return { name: String(row?.title || 'VK Playlist'), tracks }
   } catch {}
@@ -155,7 +162,12 @@ async function fetchViaVkApi(ref, token) {
     count: '600',
   }))
   const items = Array.isArray(list?.items) ? list.items : []
-  const tracks = uniqueTracks(items.map((t) => ({ title: t?.title, artist: t?.artist })))
+  const tracks = uniqueTracks(items.map((t) => ({
+    title: t?.title,
+    artist: t?.artist,
+    duration: t?.duration,
+    original_id: t?.owner_id && t?.id ? `${t.owner_id}_${t.id}` : (t?.id || ''),
+  })))
   return tracks.length ? { name: 'VK Playlist', tracks } : null
 }
 
@@ -242,6 +254,7 @@ async function resolveVkPlaylist(link, token = '') {
   if (!/^https?:\/\/(m\.)?vk\.com\//i.test(safeLink)) throw new Error('bad VK url')
   const ref = parseVkPlaylistRef(safeLink)
   if (!ref) throw new Error('cannot parse VK playlist id')
+  const hasToken = Boolean(String(token || '').trim())
 
   const api = await fetchViaVkApi(ref, String(token || '').trim()).catch(() => null)
   if (api?.tracks?.length) return api
@@ -249,6 +262,7 @@ async function resolveVkPlaylist(link, token = '') {
   const html = await fetchViaHtml(safeLink, ref).catch((err) => ({ error: err?.message || String(err), tracks: [] }))
   if (html?.tracks?.length) return html
 
+  if (!hasToken) throw new Error('auth_required')
   throw new Error(`playlist parse failed${html?.error ? `: ${html.error}` : ''}`)
 }
 

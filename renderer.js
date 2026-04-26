@@ -1663,20 +1663,32 @@ async function getVkToken() {
 
 async function startVkBrowserAuth() {
   const msg = document.getElementById('vk-msg')
-  if (!window.api?.openExternal) {
+  if (!window.api?.vkBrowserAuth) {
     if (msg) {
       msg.textContent = 'Браузерная авторизация доступна только в Electron'
       msg.className = 'token-msg token-msg-err'
     }
     return
   }
-  const clientId = '2685278'
-  const authUrl = `https://oauth.vk.com/authorize?client_id=${encodeURIComponent(clientId)}&display=page&redirect_uri=${encodeURIComponent('https://oauth.vk.com/blank.html')}&scope=${encodeURIComponent('audio,offline')}&response_type=token&v=5.131`
   try {
-    window.api.openExternal(authUrl)
     if (msg) {
-      msg.textContent = 'Открыл VK в системном браузере. После входа скопируй URL из адресной строки (с access_token) и вставь в поле токена ниже.'
+      msg.textContent = 'Открыл окно VK. Войди и разреши доступ к аудио для импорта плейлистов.'
       msg.className = 'token-msg'
+    }
+    const result = await window.api.vkBrowserAuth()
+    if (result?.ok && result?.token) {
+      const tokenField = document.getElementById('vk-token-val')
+      if (tokenField) tokenField.value = result.token
+      applyVkToken(result.token)
+      if (msg) {
+        msg.textContent = 'VK токен получен и сохранён. Теперь можно импортировать плейлист.'
+        msg.className = 'token-msg token-msg-ok'
+      }
+      return
+    }
+    if (msg) {
+      msg.textContent = result?.error || 'VK авторизация отменена'
+      msg.className = 'token-msg token-msg-err'
     }
   } catch (e) {
     if (msg) {
@@ -6302,9 +6314,23 @@ async function importPlaylistFromLink(urlFromUi = '') {
   setImportProgressIndeterminate(false)
 
   if (!imported?.ok) {
-    updateImportProgress(0, 0, `Ошибка: ${sanitizeDisplayText(imported?.error || 'ошибка')}`)
+    const errorText = sanitizeDisplayText(imported?.error || 'ошибка')
+    const needsVkAuth = isVkLink && /auth_required|access_token|user authorization|authorization/i.test(errorText)
+    if (needsVkAuth) {
+      updateImportProgress(0, 0, 'VK не отдал плейлист без авторизации. Открой Настройки -> Источники -> VK и войди в VK для импорта.')
+      await closeImportProgressSafe(1800)
+      showToast('Для этого VK плейлиста нужен вход в VK / токен', true)
+      openPage('settings')
+      switchSettingsTab('sources')
+      setTimeout(() => {
+        switchSrcTab('vk')
+        document.getElementById('vk-token-val')?.focus()
+      }, 120)
+      return
+    }
+    updateImportProgress(0, 0, `Ошибка: ${errorText}`)
     await closeImportProgressSafe(1200)
-    showToast('Импорт: ' + sanitizeDisplayText(imported?.error || 'ошибка'), true)
+    showToast('Импорт: ' + errorText, true)
     return
   }
 
