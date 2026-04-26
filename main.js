@@ -1439,8 +1439,11 @@ ipcMain.handle('yandex-search', async (e, { q, token }) => {
 })
 
 async function fetchVkPlaylistFromFlowServer(serverBaseUrl, link, token = '') {
-  const base = String(serverBaseUrl || '').trim().replace(/\/+$/, '')
-  if (!/^https?:\/\//i.test(base)) return null
+  let base = String(serverBaseUrl || '').trim()
+  if (!base) return null
+  if (!/^https?:\/\//i.test(base)) base = `http://${base}`
+  base = base.replace(/\/+$/, '').replace(/\/health$/i, '')
+  if (/^https:\/\/85\.239\.34\.229(?::8787)?$/i.test(base)) base = base.replace(/^https:/i, 'http:')
   const rsp = await axios.post(`${base}/vk/playlist`, {
     url: String(link || '').trim(),
     token: String(token || '').trim(),
@@ -1483,6 +1486,7 @@ ipcMain.handle('import-playlist-link', async (e, { url, tokens = {} }) => {
       } catch (err) {
         serverErr = err
       }
+      return { ok: false, error: 'VK import server: ' + (serverErr?.message || 'server returned empty VK playlist') }
     }
     try {
       if (vkToken) {
