@@ -1102,8 +1102,10 @@ input:not([type])::placeholder {
 .vsb { padding:5px 14px; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.05); color:var(--muted); border-radius:8px; cursor:pointer; font-size:12px; transition:all 0.2s; }
 .vsb:hover { background:rgba(255,255,255,0.1); color:var(--text); }
 .vsb.active { background:rgba(124,58,237,0.25); border-color:rgba(124,58,237,0.5); color:var(--text); }
-.density-compact .track-card { min-height:58px; padding:8px; gap:9px; }
+.density-compact .track-card { grid-template-columns:42px minmax(0, 1fr) repeat(4, 30px); min-height:58px; padding:8px; gap:9px; }
 .density-compact .track-cover { width:42px; height:42px; border-radius:12px; }
+.density-compact .track-like,
+.density-compact .track-play { width:30px; height:30px; }
 .density-compact .playlist-card,
 .density-compact .social-friend-card,
 .density-compact .profile-row { padding:9px 10px; gap:9px; }
@@ -1937,7 +1939,7 @@ body.lyrics-effect-contrast .lyrics-line.active { color:#fff; }
 /* ── PREMIUM TRACK CARD ── */
 .track-card {
   display: grid;
-  grid-template-columns: 52px 1fr auto auto auto;
+  grid-template-columns: 52px minmax(0, 1fr) repeat(4, 32px);
   align-items: center;
   gap: 0 14px;
   padding: 8px 14px;
@@ -2025,8 +2027,13 @@ body.lyrics-effect-contrast .lyrics-line.active { color:#fff; }
   background: none; border: none;
   color: var(--muted);
   cursor: pointer;
+  width: 32px;
+  height: 32px;
   padding: 6px;
   border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: all 0.2s;
   flex-shrink: 0;
   opacity: 0;

@@ -1565,13 +1565,23 @@ const providers = {
 }
 
 // в”Ђв”Ђв”Ђ SETTINGS в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+function normalizeFlowServerUrl(value = '') {
+  let raw = String(value || '').trim()
+  if (!raw) raw = FLOW_SERVER_DEFAULT_URL
+  if (!/^https?:\/\//i.test(raw)) raw = `http://${raw}`
+  raw = raw.replace(/\/+$/, '')
+  raw = raw.replace(/\/health$/i, '')
+  if (/^https:\/\/85\.239\.34\.229(?::8787)?$/i.test(raw)) raw = raw.replace(/^https:/i, 'http:')
+  return raw || FLOW_SERVER_DEFAULT_URL
+}
+
 function getSettings() {
   const raw = JSON.parse(localStorage.getItem('flow_settings')) || {
     soundcloudClientId: '', vkToken: '', spotifyToken: '', yandexToken: '', activeSource: 'youtube',
     discordClientId: '', discordRpcEnabled: false, lastfmApiKey: '', lastfmSharedSecret: '', lastfmSessionKey: '',
     proxyBaseUrl: FLOW_SERVER_DEFAULT_URL
   }
-  if (!String(raw.proxyBaseUrl || '').trim()) raw.proxyBaseUrl = FLOW_SERVER_DEFAULT_URL
+  raw.proxyBaseUrl = normalizeFlowServerUrl(raw.proxyBaseUrl)
   if (!providers[raw.activeSource]) raw.activeSource = 'youtube'
   return raw
 }
@@ -3870,7 +3880,7 @@ function syncIntegrationsUI() {
   const ss = document.getElementById('lastfm-shared-secret')
   const sk = document.getElementById('lastfm-session-key')
   if (d) d.value = s.discordClientId || ''
-  if (p) p.value = s.proxyBaseUrl || ''
+  if (p) p.value = normalizeFlowServerUrl(s.proxyBaseUrl || FLOW_SERVER_DEFAULT_URL)
   if (k) k.value = s.lastfmApiKey || ''
   if (ss) ss.value = s.lastfmSharedSecret || ''
   if (sk) sk.value = s.lastfmSessionKey || ''
@@ -3878,7 +3888,7 @@ function syncIntegrationsUI() {
 
 function saveProxySettings() {
   const input = document.getElementById('proxy-base-url')
-  const proxyBaseUrl = String(input?.value || '').trim() || FLOW_SERVER_DEFAULT_URL
+  const proxyBaseUrl = normalizeFlowServerUrl(input?.value || FLOW_SERVER_DEFAULT_URL)
   saveSettingsRaw({ proxyBaseUrl })
   if (input) input.value = proxyBaseUrl
   showToast('Flow сервер сохранён')
@@ -3894,7 +3904,10 @@ async function checkFlowServerStatus() {
     else if (ok === false) statusEl.style.color = '#ff9b9b'
     else statusEl.style.color = ''
   }
-  const base = String(getSettings().proxyBaseUrl || FLOW_SERVER_DEFAULT_URL).trim().replace(/\/+$/, '')
+  const input = document.getElementById('proxy-base-url')
+  const base = normalizeFlowServerUrl(input?.value || getSettings().proxyBaseUrl || FLOW_SERVER_DEFAULT_URL)
+  saveSettingsRaw({ proxyBaseUrl: base })
+  if (input) input.value = base
   if (!/^https?:\/\//i.test(base)) {
     setStatus('Сервер: неверный адрес', false)
     return { ok: false, ping: null }
