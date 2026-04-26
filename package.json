@@ -4,6 +4,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "start:edge": "node server/flow-edge-server.js",
     "build": "electron-builder",
     "build:win": "electron-builder --win"
   },

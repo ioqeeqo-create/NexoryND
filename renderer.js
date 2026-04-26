@@ -679,9 +679,30 @@ async function getAndCacheCover(url, trackId = '') {
     return objectUrl
   }
 
+  const buildEdgeCoverUrl = (sourceUrl) => {
+    const proxyBase = String(getSettings()?.proxyBaseUrl || '').trim()
+    if (!proxyBase || !/^https?:\/\//i.test(proxyBase)) return String(sourceUrl || '')
+    const clean = proxyBase.replace(/\/+$/, '')
+    return `${clean}/cover?u=${encodeURIComponent(String(sourceUrl || ''))}`
+  }
+
+  const fetchWithTimeout = async (targetUrl, timeoutMs = 9000) => {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), Math.max(1000, Number(timeoutMs || 0)))
+    try {
+      return await fetch(targetUrl, { signal: ctrl.signal })
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
   try {
-    const resp = await fetch(raw)
-    if (!resp.ok) return raw
+    const primaryUrl = buildEdgeCoverUrl(raw) || raw
+    let resp = await fetchWithTimeout(primaryUrl, 9000).catch(() => null)
+    if ((!resp || !resp.ok) && primaryUrl !== raw) {
+      resp = await fetchWithTimeout(raw, 9000).catch(() => null)
+    }
+    if (!resp || !resp.ok) return raw
     const blob = await resp.blob()
     await coverCacheTx(db, 'readwrite', (store, done) => {
       try {
