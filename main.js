@@ -12,10 +12,34 @@ const {
   parseVkPlaylistRef,
 } = require('./src/modules/utils/parsers')
 
+const SAFE_GPU_FLAG = '--flow-safe-gpu'
+const _isSafeGpuMode = process.argv.includes(SAFE_GPU_FLAG)
+let _safeGpuRestartRequested = false
+
 // Reduce noisy Chromium cache/GPU logs in terminal.
 app.commandLine.appendSwitch('disable-gpu-shader-disk-cache')
 app.commandLine.appendSwitch('disable-logging')
 app.commandLine.appendSwitch('log-level', '3')
+if (_isSafeGpuMode) {
+  app.disableHardwareAcceleration()
+  app.commandLine.appendSwitch('disable-gpu')
+  app.commandLine.appendSwitch('in-process-gpu')
+  console.log('[safe-gpu] enabled')
+}
+
+function relaunchInSafeGpuMode(reason = 'unknown') {
+  if (_isSafeGpuMode || _safeGpuRestartRequested) return
+  _safeGpuRestartRequested = true
+  try {
+    console.warn('[safe-gpu] relaunch requested:', reason)
+    const args = process.argv.filter((a) => a !== SAFE_GPU_FLAG)
+    args.push(SAFE_GPU_FLAG)
+    app.relaunch({ args })
+  } catch (e) {
+    console.warn('[safe-gpu] relaunch failed:', e?.message || e)
+  }
+  setTimeout(() => app.exit(0), 120)
+}
 
 // в”Ђв”Ђв”Ђ Р›РћРљРђР›Р¬РќР«Р™ РџР РћРљРЎР Р”Р›РЇ РђРЈР”РРћ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 // Electron РЅРµ РјРѕР¶РµС‚ РІРѕСЃРїСЂРѕРёР·РІРµСЃС‚Рё СЃС‚СЂРёРјС‹ РЅР°РїСЂСЏРјСѓСЋ СЃ Invidious/Piped
@@ -805,6 +829,17 @@ function createWindow() {
   })
   win.loadFile('index.html')
   _mainWindow = win
+  win.webContents.once('did-finish-load', () => { _safeGpuRestartRequested = false })
+  win.on('unresponsive', () => relaunchInSafeGpuMode('window-unresponsive'))
+  win.webContents.on('render-process-gone', (event, details) => {
+    const reason = String(details?.reason || 'render-process-gone')
+    if (reason !== 'clean-exit') relaunchInSafeGpuMode(reason)
+  })
+  win.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (!isMainFrame) return
+    if (Number(errorCode) === -3) return // aborted navigation
+    relaunchInSafeGpuMode(`did-fail-load:${errorCode}:${errorDescription || validatedURL || ''}`)
+  })
   win.on('closed', () => {
     if (_mainWindow === win) _mainWindow = null
   })
