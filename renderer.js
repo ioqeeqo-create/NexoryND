@@ -1707,6 +1707,18 @@ function applyVkToken(token) {
   showToast('VK токен сохранен')
 }
 
+function getCurrentVkTokenForImport() {
+  const fieldToken = String(document.getElementById('vk-token-val')?.value || '').trim()
+  let token = fieldToken || String(getSettings().vkToken || '').trim()
+  const m = token.match(/access_token=([^&]+)/)
+  if (m) token = m[1]
+  if (token && token !== getSettings().vkToken) {
+    saveSettingsRaw({ vkToken: token })
+    updateVkStatus(token)
+  }
+  return token
+}
+
 function updateVkStatus(token) {
   const el = document.getElementById('vk-status'); if (!el) return
   const display = document.getElementById('vk-active-display')
@@ -6308,7 +6320,7 @@ async function importPlaylistFromLink(urlFromUi = '') {
   const imported = await window.api.importPlaylistLink(url.trim(), {
     spotify: settings.spotifyToken || '',
     yandex: settings.yandexToken || '',
-    vk: settings.vkToken || '',
+    vk: isVkLink ? getCurrentVkTokenForImport() : (settings.vkToken || ''),
     serverBaseUrl: settings.proxyBaseUrl || '',
   }).catch((e) => ({ ok: false, error: e?.message || String(e) }))
   setImportProgressIndeterminate(false)

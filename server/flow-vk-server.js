@@ -1,9 +1,31 @@
 const http = require('http')
 const https = require('https')
+const fs = require('fs')
+const path = require('path')
 const axios = require('axios')
+
+function loadDotEnv() {
+  const file = [path.join(process.cwd(), '.env'), path.join(__dirname, '..', '.env')]
+    .find((candidate) => fs.existsSync(candidate))
+  if (!file) return
+  const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/)
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+    const idx = trimmed.indexOf('=')
+    if (idx <= 0) continue
+    const key = trimmed.slice(0, idx).trim()
+    let value = trimmed.slice(idx + 1).trim()
+    value = value.replace(/^['"]|['"]$/g, '')
+    if (key && process.env[key] == null) process.env[key] = value
+  }
+}
+
+loadDotEnv()
 
 const PORT = Number(process.env.PORT || 8787)
 const HOST = String(process.env.HOST || '0.0.0.0')
+const DEFAULT_VK_TOKEN = String(process.env.VK_ACCESS_TOKEN || '').trim()
 const VK_UA = 'VKAndroidApp/5.52-4543 (Android 5.1.1; SDK 22; x86_64; unknown Android SDK built for x86_64; en; 320x480)'
 const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 
@@ -65,6 +87,16 @@ function cleanupVkText(input) {
     .replace(/<[^>]*>/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+function normalizeToken(token) {
+  const raw = String(token || '').trim()
+  const m = raw.match(/access_token=([^&]+)/)
+  return m ? decodeURIComponent(m[1]) : raw
+}
+
+function getVkToken(token) {
+  return normalizeToken(token) || normalizeToken(DEFAULT_VK_TOKEN)
 }
 
 function parseVkPlaylistRef(link) {
@@ -254,9 +286,10 @@ async function resolveVkPlaylist(link, token = '') {
   if (!/^https?:\/\/(m\.)?vk\.com\//i.test(safeLink)) throw new Error('bad VK url')
   const ref = parseVkPlaylistRef(safeLink)
   if (!ref) throw new Error('cannot parse VK playlist id')
-  const hasToken = Boolean(String(token || '').trim())
+  const vkToken = getVkToken(token)
+  const hasToken = Boolean(vkToken)
 
-  const api = await fetchViaVkApi(ref, String(token || '').trim()).catch(() => null)
+  const api = await fetchViaVkApi(ref, vkToken).catch(() => null)
   if (api?.tracks?.length) return api
 
   const html = await fetchViaHtml(safeLink, ref).catch((err) => ({ error: err?.message || String(err), tracks: [] }))
@@ -271,7 +304,12 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
 
   if (req.method === 'GET' && url.pathname === '/health') {
-    return writeJson(res, 200, { ok: true, service: 'flow-vk-server', uptimeSec: Math.round(process.uptime()) })
+    return writeJson(res, 200, {
+      ok: true,
+      service: 'flow-vk-server',
+      uptimeSec: Math.round(process.uptime()),
+      vkServerToken: Boolean(DEFAULT_VK_TOKEN),
+    })
   }
 
   if (req.method === 'GET' && url.pathname === '/vk/playlist') {
