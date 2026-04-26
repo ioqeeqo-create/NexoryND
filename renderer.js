@@ -2952,8 +2952,10 @@ function syncProfileEditModal() {
   const avatar = document.getElementById('profile-edit-avatar-preview')
   const banner = document.getElementById('profile-edit-banner-preview')
   const bio = document.getElementById('profile-edit-bio')
-  const color = document.getElementById('profile-edit-color')
+  const colorPreview = document.getElementById('profile-edit-color-preview')
   const colorText = document.getElementById('profile-edit-color-text')
+  const safeColor = normalizeProfileColor(draft.profileColor || '') || '#9ca3af'
+  modal.style.setProperty('--profile-edit-accent', safeColor)
   if (avatar) {
     avatar.textContent = draft.avatarData ? '' : String(_profile?.username || '?').slice(0, 1).toUpperCase()
     avatar.style.backgroundImage = draft.avatarData ? `url(${draft.avatarData})` : ''
@@ -2964,9 +2966,11 @@ function syncProfileEditModal() {
       : 'linear-gradient(135deg, rgba(59,130,246,.24), rgba(139,92,246,.22))'
   }
   if (bio && document.activeElement !== bio) bio.value = draft.bio || ''
-  const safeColor = normalizeProfileColor(draft.profileColor || '') || '#9ca3af'
-  if (color && document.activeElement !== color) color.value = safeColor
+  if (colorPreview) colorPreview.style.setProperty('--profile-edit-accent', safeColor)
   if (colorText && document.activeElement !== colorText) colorText.value = normalizeProfileColor(draft.profileColor || '')
+  document.querySelectorAll('.profile-color-swatch').forEach((btn) => {
+    btn.classList.toggle('active', String(btn.dataset.color || '').toLowerCase() === safeColor)
+  })
 }
 
 function openProfileEditModal() {
@@ -3009,7 +3013,9 @@ function clearProfileEditImage(kind) {
 }
 
 function setProfileEditColor(value) {
-  setProfileEditDraft({ profileColor: normalizeProfileColor(value) })
+  const raw = String(value || '').trim()
+  const normalized = normalizeProfileColor(raw)
+  setProfileEditDraft({ profileColor: normalized })
 }
 
 async function submitProfileEditModal() {

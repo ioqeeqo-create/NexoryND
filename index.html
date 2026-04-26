@@ -222,8 +222,8 @@
 
     <div id="page-profile" class="page">
       <div class="content-header"><h2>Профиль</h2><p class="content-sub">Твой Flow профиль</p></div>
-      <div class="profile-shell">
-        <div class="profile-hero glass-card">
+      <div class="profile-shell profile-unified glass-card">
+        <div class="profile-hero">
           <div class="profile-banner" id="profile-banner"></div>
           <div class="profile-avatar-wrap">
             <div class="profile-avatar" id="profile-avatar-large">?</div>
@@ -235,19 +235,19 @@
           </div>
         </div>
         <div class="profile-grid">
-          <div class="glass-card profile-card">
+          <div class="profile-card">
             <div class="profile-card-head">
               <strong>Любимые треки</strong>
             </div>
             <div id="profile-pinned-tracks"></div>
           </div>
-          <div class="glass-card profile-card">
+          <div class="profile-card">
             <div class="profile-card-head">
               <strong>Отслеживание</strong>
             </div>
             <div id="profile-stats"></div>
           </div>
-          <div class="glass-card profile-card">
+          <div class="profile-card">
             <div class="profile-card-head"><strong>Друзья</strong></div>
             <div id="profile-friends-list"></div>
           </div>
@@ -814,10 +814,18 @@
       </div>
       <div class="profile-edit-section">
         <strong>Цвет профиля</strong>
-        <span>Цвет карточек и свечения профиля</span>
+        <span>Цвет общего блока профиля и свечения</span>
+        <div class="profile-edit-color-palette">
+          <button type="button" class="profile-color-swatch" data-color="#9ca3af" style="--swatch:#9ca3af" onclick="setProfileEditColor('#9ca3af')"></button>
+          <button type="button" class="profile-color-swatch" data-color="#ec4899" style="--swatch:#ec4899" onclick="setProfileEditColor('#ec4899')"></button>
+          <button type="button" class="profile-color-swatch" data-color="#a855f7" style="--swatch:#a855f7" onclick="setProfileEditColor('#a855f7')"></button>
+          <button type="button" class="profile-color-swatch" data-color="#3b82f6" style="--swatch:#3b82f6" onclick="setProfileEditColor('#3b82f6')"></button>
+          <button type="button" class="profile-color-swatch" data-color="#14b8a6" style="--swatch:#14b8a6" onclick="setProfileEditColor('#14b8a6')"></button>
+          <button type="button" class="profile-color-swatch" data-color="#f97316" style="--swatch:#f97316" onclick="setProfileEditColor('#f97316')"></button>
+        </div>
         <div class="profile-edit-color-row">
-          <input id="profile-edit-color" type="color" value="#9ca3af" oninput="setProfileEditColor(this.value)" />
-          <input id="profile-edit-color-text" class="flow-input" placeholder="#9ca3af" oninput="setProfileEditColor(this.value)" />
+          <span id="profile-edit-color-preview" class="profile-edit-color-preview"></span>
+          <input id="profile-edit-color-text" class="flow-input" placeholder="#9ca3af" maxlength="7" oninput="setProfileEditColor(this.value)" />
         </div>
       </div>
       <div class="profile-edit-section">
