@@ -183,6 +183,7 @@
         <span>Плейлисты</span>
         <div id="library-actions" style="display:flex;gap:8px;align-items:center">
           <button class="btn-small" id="btn-import-playlist" onclick="importPlaylistFromLink()">Импорт по ссылке</button>
+          <button class="btn-small" id="btn-import-text-playlist" onclick="openTextPlaylistImportModal()">Импорт текстом</button>
           <button class="btn-small" onclick="exportPlaylistsFile()">Экспорт JSON</button>
           <input type="file" id="playlist-import-file" accept=".json,application/json" onchange="importPlaylistsFile(this)" style="display:none" />
           <button class="btn-small" onclick="pickPlaylistImportFile()">Импорт JSON</button>
@@ -875,6 +876,19 @@
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
       <button class="btn-small" onclick="closeLibraryActionModal()">Отмена</button>
       <button class="btn-small" onclick="submitLibraryActionModal()">ОК</button>
+    </div>
+  </div>
+</div>
+<div id="text-import-modal" class="flow-modal hidden">
+  <div class="flow-modal-backdrop" onclick="closeTextPlaylistImportModal()"></div>
+  <div class="flow-modal-card glass-card">
+    <h3>Импорт треков текстом</h3>
+    <p style="font-size:12px;opacity:.8;margin-top:6px">Вставь строки вида artist - title. Можно вставить JSON-ответ VK reload_audios, Flow сам достанет названия.</p>
+    <textarea id="text-import-input" class="token-field flow-input flow-textarea" placeholder="Элджей, Feduk - Розовое вино&#10;SEREBRO - Между нами любовь&#10;ssshhhiiittt! - Танцы" style="margin-top:10px;min-height:180px;resize:vertical;width:100%"></textarea>
+    <input id="text-import-name" class="token-field flow-input" placeholder="Название плейлиста (необязательно)" style="margin-top:10px" />
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+      <button class="btn-small" onclick="closeTextPlaylistImportModal()">Отмена</button>
+      <button class="btn-small" onclick="submitTextPlaylistImportModal()">Импортировать</button>
     </div>
   </div>
 </div>

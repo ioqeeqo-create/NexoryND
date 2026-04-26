@@ -851,6 +851,10 @@ input[type="email"]::placeholder,
 input:not([type])::placeholder {
   color: var(--muted);
 }
+.flow-textarea {
+  line-height: 1.35;
+  white-space: pre-wrap;
+}
 
 /* ═══════════════════════════════
    TRACK CARDS

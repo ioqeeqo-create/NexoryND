@@ -6219,6 +6219,16 @@ function buildImportQueries(title, artist) {
   return [...new Set(variants)]
 }
 
+function cleanImportText(value) {
+  return String(value || '')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 function importDelay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -6301,6 +6311,137 @@ async function processPlaylistImport(trackList, imported = {}) {
   }
   return { added: collected.length, missed: notFound.length, total: maxTracks }
 }
+
+function collectImportTracksDeep(value, out = [], limit = 500) {
+  if (out.length >= limit || value == null) return out
+  if (Array.isArray(value)) {
+    if (
+      value.length >= 5
+      && Number.isFinite(Number(value[0]))
+      && Number.isFinite(Number(value[1]))
+      && typeof value[3] === 'string'
+      && typeof value[4] === 'string'
+    ) {
+      out.push({
+        title: cleanImportText(value[3]),
+        artist: cleanImportText(value[4]),
+        duration: Number(value[5] || 0) || null,
+        original_id: `${value[1]}_${value[0]}`,
+      })
+    }
+    for (const item of value) {
+      if (out.length >= limit) break
+      collectImportTracksDeep(item, out, limit)
+    }
+    return out
+  }
+  if (typeof value === 'object') {
+    const title = value.title || value.name
+    const artist = value.artist || value.performer || value.author || value.subtitle
+    if (title && artist) {
+      out.push({
+        title: cleanImportText(title),
+        artist: cleanImportText(artist),
+        duration: Number(value.duration || value.durationSec || 0) || null,
+        original_id: value.original_id || value.originalId || value.id || '',
+      })
+    }
+    for (const item of Object.values(value)) {
+      if (out.length >= limit) break
+      collectImportTracksDeep(item, out, limit)
+    }
+  }
+  return out
+}
+
+function parseTrackRowsFromText(text) {
+  const raw = String(text || '').trim()
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw.replace(/^<!--/, '').trim())
+    const jsonTracks = collectImportTracksDeep(parsed)
+    if (jsonTracks.length) return jsonTracks
+  } catch {}
+
+  const rows = []
+  const lines = raw.split(/\r?\n/)
+  for (const line of lines) {
+    let value = line
+      .replace(/^\s*\d+[\).:-]\s*/, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+    if (!value) continue
+    value = value.replace(/^["'`]+|["'`]+$/g, '').trim()
+    const parts = value.split(/\s+(?:-|–|—|\||•)\s+/)
+    let artist = ''
+    let title = ''
+    if (parts.length >= 2) {
+      artist = parts.shift().trim()
+      title = parts.join(' - ').trim()
+    } else {
+      const comma = value.split(/\s*,\s*/)
+      if (comma.length >= 2 && comma[0].length <= 80) {
+        artist = comma.shift().trim()
+        title = comma.join(', ').trim()
+      } else {
+        title = value
+      }
+    }
+    if (!title) continue
+    rows.push({ artist: artist || '', title })
+  }
+  const seen = new Set()
+  return rows.filter((item) => {
+    const key = `${String(item.artist || '').toLowerCase()}::${String(item.title || '').toLowerCase()}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+function openTextPlaylistImportModal() {
+  const modal = document.getElementById('text-import-modal')
+  const input = document.getElementById('text-import-input')
+  const name = document.getElementById('text-import-name')
+  if (!modal || !input) return showToast('Окно импорта текстом не найдено', true)
+  input.value = ''
+  if (name) name.value = ''
+  modal.classList.remove('hidden')
+  requestAnimationFrame(() => input.focus())
+}
+window.openTextPlaylistImportModal = openTextPlaylistImportModal
+
+function closeTextPlaylistImportModal() {
+  document.getElementById('text-import-modal')?.classList.add('hidden')
+}
+window.closeTextPlaylistImportModal = closeTextPlaylistImportModal
+
+async function importPlaylistFromText(text, name = '') {
+  const tracks = parseTrackRowsFromText(text)
+  if (!tracks.length) {
+    showToast('Не нашёл строк с artist/title', true)
+    return
+  }
+  showToast(`Нашёл строк: ${tracks.length}. Запускаю поиск Flow...`)
+  const stats = await processPlaylistImport(tracks, {
+    name: name || 'VK Artist Title',
+    service: 'text',
+  })
+  showToast(`Импорт текстом завершен. Добавлено ${stats.added}, не найдено ${stats.missed}`)
+}
+window.importPlaylistFromText = importPlaylistFromText
+
+async function submitTextPlaylistImportModal() {
+  const input = document.getElementById('text-import-input')
+  const name = document.getElementById('text-import-name')
+  const text = String(input?.value || '').trim()
+  if (!text) return showToast('Вставь список треков', true)
+  closeTextPlaylistImportModal()
+  await importPlaylistFromText(text, String(name?.value || '').trim()).catch((err) => {
+    showToast(`Импорт текстом: ${sanitizeDisplayText(err?.message || String(err))}`, true)
+  })
+}
+window.submitTextPlaylistImportModal = submitTextPlaylistImportModal
 
 async function importPlaylistFromLink(urlFromUi = '') {
   showToast('Открываю импорт плейлиста...')
@@ -7001,6 +7142,8 @@ window.addEventListener('DOMContentLoaded', () => {
   if (createBtn) createBtn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); createPlaylist() })
   const importBtn = document.getElementById('btn-import-playlist')
   if (importBtn) importBtn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); importPlaylistFromLink() })
+  const importTextBtn = document.getElementById('btn-import-text-playlist')
+  if (importTextBtn) importTextBtn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); openTextPlaylistImportModal() })
   const importVkBtn = document.getElementById('btn-import-vk-to-flow')
   if (importVkBtn) importVkBtn.addEventListener('click', (e) => {
     e.preventDefault()
@@ -7116,6 +7259,12 @@ window.addEventListener('DOMContentLoaded', () => {
       if (libraryModal && !libraryModal.classList.contains('hidden')) {
         e.preventDefault()
         closeLibraryActionModal()
+        return
+      }
+      const textImportModal = document.getElementById('text-import-modal')
+      if (textImportModal && !textImportModal.classList.contains('hidden')) {
+        e.preventDefault()
+        closeTextPlaylistImportModal()
         return
       }
       const peerModal = document.getElementById('peer-profile-modal')
