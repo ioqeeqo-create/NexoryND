@@ -27,6 +27,7 @@ const PORT = Number(process.env.PORT || 8787)
 const HOST = String(process.env.HOST || '0.0.0.0')
 const DEFAULT_VK_TOKEN = String(process.env.VK_ACCESS_TOKEN || '').trim()
 const DEFAULT_VK_COOKIE = String(process.env.VK_COOKIE || '').trim()
+const DEFAULT_VK_SECTION_ID = String(process.env.VK_SECTION_ID || '').trim()
 const VK_UA = 'VKAndroidApp/5.52-4543 (Android 5.1.1; SDK 22; x86_64; unknown Android SDK built for x86_64; en; 320x480)'
 const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 
@@ -102,6 +103,10 @@ function getVkToken(token) {
 
 function getVkCookie() {
   return DEFAULT_VK_COOKIE
+}
+
+function getVkSectionId() {
+  return DEFAULT_VK_SECTION_ID
 }
 
 function parseVkPlaylistRef(link) {
@@ -396,6 +401,43 @@ async function reloadVkAudios(audioIds, ref) {
   return tracks.length ? { name: 'VK Playlist', tracks } : null
 }
 
+async function fetchViaCatalogSection(ref) {
+  const cookie = getVkCookie()
+  const sectionId = getVkSectionId()
+  if (!cookie || !sectionId) return null
+  const rsp = await axios.post('https://vk.com/audio?act=load_catalog_section', new URLSearchParams({
+    al: '1',
+    section_id: sectionId,
+  }).toString(), {
+    headers: {
+      'User-Agent': BROWSER_UA,
+      'Accept': '*/*',
+      'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Origin': 'https://vk.com',
+      'Referer': `https://vk.com/audios${ref.ownerId}?section=all`,
+      'X-Requested-With': 'XMLHttpRequest',
+      'Cookie': cookie,
+    },
+    responseType: 'text',
+    timeout: 17000,
+    maxRedirects: 3,
+    validateStatus: () => true,
+  })
+  if (rsp.status >= 400) throw new Error(`VK catalog section HTTP ${rsp.status}`)
+  const raw = String(rsp?.data || '')
+  const parsed = parseVkJsonPayload(raw)
+  const directTracks = uniqueTracks(collectTracksDeep(parsed || raw))
+  if (directTracks.length) return { name: 'VK Playlist', tracks: directTracks }
+  const audioIds = collectAudioIdsDeep(parsed || raw, ref)
+  const reloaded = await reloadVkAudios(audioIds, ref)
+  return reloaded?.tracks?.length ? reloaded : {
+    name: 'VK Playlist',
+    tracks: [],
+    error: `VK catalog empty response ${raw.slice(0, 80).replace(/\s+/g, ' ')}`,
+  }
+}
+
 async function fetchViaVkAjax(ref) {
   const cookie = getVkCookie()
   if (!ref?.ownerId || !ref?.albumId || !cookie) return null
@@ -543,6 +585,9 @@ async function resolveVkPlaylist(link, token = '') {
   })
   if (api?.tracks?.length) return api
 
+  const catalog = await fetchViaCatalogSection(ref).catch((err) => ({ error: err?.message || String(err), tracks: [] }))
+  if (catalog?.tracks?.length) return catalog
+
   const ajax = await fetchViaVkAjax(ref).catch((err) => ({ error: err?.message || String(err), tracks: [] }))
   if (ajax?.tracks?.length) return ajax
 
@@ -550,7 +595,7 @@ async function resolveVkPlaylist(link, token = '') {
   if (html?.tracks?.length) return html
 
   if (!hasToken) throw new Error('auth_required')
-  const details = [apiError, ajax?.error, html?.error].filter(Boolean).join(' | ')
+  const details = [apiError, catalog?.error, ajax?.error, html?.error].filter(Boolean).join(' | ')
   throw new Error(`playlist parse failed${details ? `: ${details}` : ''}`)
 }
 
@@ -565,6 +610,7 @@ const server = http.createServer(async (req, res) => {
       uptimeSec: Math.round(process.uptime()),
       vkServerToken: Boolean(DEFAULT_VK_TOKEN),
       vkServerCookie: Boolean(DEFAULT_VK_COOKIE),
+      vkSectionId: Boolean(DEFAULT_VK_SECTION_ID),
     })
   }
 
