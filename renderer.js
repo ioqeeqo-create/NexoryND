@@ -70,6 +70,11 @@ let _lastUiSyncAt = 0
 let _roomHeartbeatTimer = null
 let _friendContext = null
 let _pendingRoomInvite = null
+let _myWaveRenderedTracks = []
+const FRIEND_POLL_INTERVAL_MS = 3500
+const FRIEND_FRESH_ONLINE_MS = 18000
+const MY_WAVE_MIN_TRACKS = 10
+const MY_WAVE_MAX_TRACKS = 30
 
 function getPeerProfileCache() {
   try { return JSON.parse(localStorage.getItem('flow_peer_public_profiles') || '{}') || {} } catch { return {} }
@@ -2053,6 +2058,31 @@ async function fetchCloudPublicProfile(username) {
   }
 }
 
+async function fetchCloudFriendsForUser(username) {
+  const safe = String(username || '').trim().toLowerCase()
+  if (!safe) return []
+  try {
+    const sb = getSupabaseClient()
+    if (!sb) return []
+    const { data } = await sb
+      .from('flow_friends')
+      .select('user_a,user_b')
+      .or(`user_a.eq.${safe},user_b.eq.${safe}`)
+      .limit(200)
+    if (!Array.isArray(data)) return []
+    const out = []
+    for (const row of data) {
+      const a = String(row?.user_a || '').trim().toLowerCase()
+      const b = String(row?.user_b || '').trim().toLowerCase()
+      if (a === safe && b) out.push(b)
+      else if (b === safe && a) out.push(a)
+    }
+    return Array.from(new Set(out)).slice(0, 50)
+  } catch {
+    return []
+  }
+}
+
 function scheduleProfileCloudSync() {
   if (!ensureActiveProfile()?.username) return
   if (_supabaseProfileSyncTimer) clearTimeout(_supabaseProfileSyncTimer)
@@ -2144,7 +2174,7 @@ async function loadRoomStateFromServer(force = false) {
     if (!sb) return
     const nowIso = new Date(Date.now() - 20000).toISOString()
     const [{ data: room }, { data: members }] = await Promise.all([
-      sb.from('flow_rooms').select('room_id,host_peer_id,shared_queue,now_playing,playback_ts').eq('room_id', _roomState.roomId).maybeSingle(),
+      sb.from('flow_rooms').select('room_id,host_peer_id,shared_queue,now_playing,playback_state,playback_ts').eq('room_id', _roomState.roomId).maybeSingle(),
       sb.from('flow_room_members').select('peer_id,username,profile,last_seen').eq('room_id', _roomState.roomId).gte('last_seen', nowIso)
     ])
     if (room?.host_peer_id) _roomState.hostPeerId = String(room.host_peer_id)
@@ -2498,8 +2528,10 @@ async function openPeerProfile(username, peerId = '') {
   const byName = Array.from(_peerProfiles.values()).find((p) => p?.username === username)
   const byPeer = peerId ? _peerProfiles.get(peerId) : null
   let data = byPeer || byName || { username }
+  let profileFriends = []
   const cached = getCachedPeerProfile(username)
   if (cached) data = Object.assign({}, cached, data)
+  data._friends = Array.isArray(data?._friends) ? data._friends : []
   const renderModal = (profileData) => {
     const avatar = profileData.avatarData
       ? `<div class="profile-avatar" style="background-image:url(${profileData.avatarData});background-size:cover;background-position:center"></div>`
@@ -2508,7 +2540,7 @@ async function openPeerProfile(username, peerId = '') {
       ? `linear-gradient(0deg, rgba(8,10,16,.35), rgba(8,10,16,.35)), url(${profileData.bannerData})`
       : 'linear-gradient(135deg,#1f2937,#111827)'
     const pinnedTracks = Array.isArray(profileData.pinnedTracks) ? profileData.pinnedTracks : []
-    const friends = Array.from(_friendPresence.entries()).map(([name]) => name).slice(0, 24)
+    const friends = Array.isArray(profileData._friends) ? profileData._friends.slice(0, 24) : []
     body.innerHTML = `
       <div class="profile-shell peer-profile-shell" style="padding:0">
         <div class="profile-hero glass-card">
@@ -2541,8 +2573,11 @@ async function openPeerProfile(username, peerId = '') {
   renderModal(data)
   const targetPeerId = String(peerId || data?.peerId || `flow-${username}` || '').trim()
   const cloud = await fetchCloudPublicProfile(username).catch(() => null)
+  const cloudFriends = await fetchCloudFriendsForUser(username).catch(() => [])
+  if (Array.isArray(cloudFriends) && cloudFriends.length) profileFriends = cloudFriends
   if (cloud) {
     data = mergeProfileData(data, cloud, targetPeerId || data.peerId || '')
+    data._friends = profileFriends.slice()
     if (data.peerId) _peerProfiles.set(data.peerId, data)
     cachePeerProfile(data, data.peerId)
     renderModal(data)
@@ -2552,6 +2587,7 @@ async function openPeerProfile(username, peerId = '') {
     const remoteProfile = rsp?.ok ? rsp?.data?.profile : null
     if (remoteProfile) {
       data = mergeProfileData(data, remoteProfile, rsp?.data?.peerId || targetPeerId || '')
+      if (!Array.isArray(data._friends)) data._friends = profileFriends.slice()
       _peerProfiles.set(data.peerId, data)
       cachePeerProfile(data, data.peerId)
       renderModal(data)
@@ -2568,6 +2604,86 @@ function getListenStats() {
   if (!_profile?.username) return { totalTracks: 0, totalSeconds: 0, lastTrackKey: null }
   const key = `flow_listen_stats_${_profile.username}`
   try { return Object.assign({ totalTracks: 0, totalSeconds: 0, lastTrackKey: null }, JSON.parse(localStorage.getItem(key) || '{}')) } catch { return { totalTracks: 0, totalSeconds: 0, lastTrackKey: null } }
+}
+
+function getListenHistory() {
+  if (!_profile?.username) return []
+  const key = `flow_listen_history_${_profile.username}`
+  try {
+    const list = JSON.parse(localStorage.getItem(key) || '[]')
+    return Array.isArray(list) ? list : []
+  } catch {
+    return []
+  }
+}
+
+function saveListenHistory(list = []) {
+  if (!_profile?.username) return
+  const key = `flow_listen_history_${_profile.username}`
+  try { localStorage.setItem(key, JSON.stringify(Array.isArray(list) ? list.slice(0, MY_WAVE_MAX_TRACKS) : [])) } catch {}
+}
+
+function pushListenHistory(track) {
+  const safe = sanitizeTrack(track)
+  if (!safe?.id || !_profile?.username) return
+  const key = `${safe.source || 'unknown'}:${safe.id}`
+  const next = [{ key, playedAt: Date.now(), track: safe }]
+  const seen = new Set([key])
+  for (const item of getListenHistory()) {
+    const itemKey = String(item?.key || '')
+    if (!itemKey || seen.has(itemKey) || !item?.track?.id) continue
+    seen.add(itemKey)
+    next.push(item)
+    if (next.length >= MY_WAVE_MAX_TRACKS) break
+  }
+  saveListenHistory(next)
+}
+
+function getMyWaveTracks(min = MY_WAVE_MIN_TRACKS) {
+  const history = getListenHistory()
+  const out = []
+  for (const item of history) {
+    const t = sanitizeTrack(item?.track)
+    if (!t?.id) continue
+    out.push(t)
+    if (out.length >= Math.max(MY_WAVE_MIN_TRACKS, Number(min) || MY_WAVE_MIN_TRACKS)) break
+  }
+  return out
+}
+
+function renderMyWave() {
+  const listEl = document.getElementById('my-wave-list')
+  const hintEl = document.getElementById('my-wave-hint')
+  if (!listEl || !hintEl) return
+  const tracks = getMyWaveTracks(MY_WAVE_MIN_TRACKS)
+  _myWaveRenderedTracks = tracks.slice()
+  if (tracks.length < MY_WAVE_MIN_TRACKS) {
+    hintEl.textContent = `Прослушай еще ${MY_WAVE_MIN_TRACKS - tracks.length} трек(ов), чтобы собрать Мою волну`
+  } else {
+    hintEl.textContent = `Твоя персональная волна: ${tracks.length} треков`
+  }
+  listEl.innerHTML = tracks.map((track, idx) => {
+    const cover = getListCoverUrl(track)
+    const coverHtml = cover
+      ? `<div class="my-wave-cover" style="background-image:url(${cover})"></div>`
+      : `<div class="my-wave-cover">${String(track.title || '?').slice(0, 1).toUpperCase()}</div>`
+    return `
+      <button class="my-wave-track glass-card" onclick='playTrackFromMyWave(${idx})'>
+        ${coverHtml}
+        <div class="my-wave-meta">
+          <strong>${track.title || 'Без названия'}</strong>
+          <span>${track.artist || '—'}</span>
+        </div>
+      </button>
+    `
+  }).join('')
+}
+
+function playTrackFromMyWave(index) {
+  const i = Number(index)
+  const track = Number.isInteger(i) ? _myWaveRenderedTracks[i] : null
+  if (!track) return
+  playTrackObj(track).catch(() => {})
 }
 
 function saveListenStats(patch = {}) {
@@ -3027,13 +3143,15 @@ function friendMenuOpenProfile() {
 async function friendMenuRefresh() {
   closeFriendContextMenu()
   if (!_friendContext?.username) return
-  const username = _friendContext.username
+  const username = String(_friendContext.username || '').trim().toLowerCase()
+  if (!username) return
   const cloud = await fetchCloudPublicProfile(username).catch(() => null)
   if (cloud) {
     const pid = _friendContext.peerId || `flow-${username}`
     const merged = mergeProfileData(_peerProfiles.get(pid) || getCachedPeerProfile(username), Object.assign({}, cloud, { peerId: pid }), pid)
     cachePeerProfile(merged, pid)
     _peerProfiles.set(pid, merged)
+    if (_roomMembers.has(pid)) _roomMembers.set(pid, merged)
   }
   if (_socialPeer?.requestPeerData && _friendContext.peerId) {
     const rsp = await _socialPeer.requestPeerData(_friendContext.peerId, { type: 'presence-request' }, 1300).catch(() => null)
@@ -3043,9 +3161,22 @@ async function friendMenuRefresh() {
       const merged = mergeProfileData(_peerProfiles.get(pid) || getCachedPeerProfile(username), Object.assign({}, profile, { peerId: pid }), pid)
       cachePeerProfile(merged, pid)
       _peerProfiles.set(pid, merged)
+      if (_roomMembers.has(pid)) _roomMembers.set(pid, merged)
+    }
+    if (rsp?.ok) {
+      const prev = _friendPresence.get(username) || {}
+      _friendPresence.set(username, Object.assign({}, prev, {
+        online: true,
+        peerId: rsp?.data?.peerId || rsp?.data?._peerId || prev.peerId || _friendContext.peerId || `flow-${username}`,
+        roomId: rsp?.data?.roomId || prev.roomId || null,
+        host: Boolean(rsp?.data?.host),
+        updatedAt: Date.now(),
+      }))
     }
   }
+  renderRoomMembers()
   renderFriends().catch(() => {})
+  pollFriendsPresence(true).catch(() => {})
   showToast('Профиль обновлён')
 }
 
@@ -3195,7 +3326,8 @@ async function renderFriends() {
   const online = []
   const offline = []
   list.forEach((name) => {
-    const state = _friendPresence.get(name) || { online: false }
+    const safe = String(name || '').trim().toLowerCase()
+    const state = _friendPresence.get(safe) || { online: false }
     if (state.online) online.push({ name, state })
     else offline.push({ name, state })
   })
@@ -3407,9 +3539,10 @@ function initPeerSocial() {
     },
     onMessage: (msg, fromPeerId) => {
       if (!msg || typeof msg !== 'object') return
-      const hostPeerId = _roomState.hostPeerId || _roomState.roomId
-      const hostMsg = Boolean(msg._peerId && hostPeerId && msg._peerId === hostPeerId)
-      if (msg.type === 'playback-sync' && msg.roomId === _roomState.roomId && !_roomState.host && (hostMsg || msg.roomId === _roomState.roomId)) {
+      if (msg.type === 'playback-sync' && msg.roomId === _roomState.roomId && !_roomState.host) {
+        const expectedHostId = String(_roomState.hostPeerId || _roomState.roomId || '').trim()
+        const senderId = String(msg._peerId || fromPeerId || '').trim()
+        if (expectedHostId && senderId && senderId !== expectedHostId) return
         const ts = Number(msg.playbackTs || msg._ts || 0)
         if (ts && ts <= _lastAppliedServerPlaybackTs) return
         if (ts) _lastAppliedServerPlaybackTs = ts
@@ -3445,8 +3578,8 @@ function initPeerSocial() {
         else _socialPeer.send(payload)
       }
       if (msg.type === 'presence-state' && msg.toPeerId && _socialPeer?.peer?.id && msg.toPeerId === _socialPeer.peer.id && msg._from) {
-        const key = String(msg._from)
-        _friendPresence.set(key.replace(/^flow-/, ''), {
+        const key = String(msg._from).replace(/^flow-/, '').trim().toLowerCase()
+        _friendPresence.set(key, {
           online: true,
           roomId: msg.roomId || null,
           track: msg.track || null,
@@ -3554,7 +3687,7 @@ function submitAuth() {
   initPeerSocial()
   pollFriendsPresence().catch(() => {})
   if (_friendsPollTimer) clearInterval(_friendsPollTimer)
-  _friendsPollTimer = setInterval(() => { pollFriendsPresence().catch(() => {}) }, 12000)
+  _friendsPollTimer = setInterval(() => { pollFriendsPresence().catch(() => {}) }, FRIEND_POLL_INTERVAL_MS)
 }
 
 function logout() {
@@ -3846,26 +3979,28 @@ function promptInviteJoin() {
   openInviteModal()
 }
 
-async function pollFriendsPresence() {
+async function pollFriendsPresence(force = false) {
   if (!_socialPeer || !_profile?.username || !peerSocial.getFriends) return
   const friends = peerSocial.getFriends(_profile.username) || []
   const entries = await Promise.all(friends.map(async (friend) => {
-    const prev = _friendPresence.get(friend) || {}
-    const isOnline = await _socialPeer.probeUser(friend, 1800).catch(() => false)
+    const uname = String(friend || '').trim().toLowerCase()
+    const prev = _friendPresence.get(uname) || {}
+    const freshOnline = !force && prev.online && (Date.now() - Number(prev.updatedAt || 0) < FRIEND_FRESH_ONLINE_MS)
+    const isOnline = freshOnline ? true : await _socialPeer.probeUser(uname, 900).catch(() => false)
     if (!isOnline) {
-      return [friend, { online: false, track: null, roomId: null, peerId: prev.peerId || null, updatedAt: Date.now() }]
+      return [uname, { online: false, track: null, roomId: null, peerId: prev.peerId || null, updatedAt: Date.now() }]
     }
-    let state = { online: true, track: prev.track || null, roomId: prev.roomId || `flow-${friend}`, peerId: prev.peerId || `flow-${friend}`, updatedAt: Date.now() }
-    const peerId = `flow-${friend}`
+    let state = { online: true, track: prev.track || null, roomId: prev.roomId || `flow-${uname}`, peerId: prev.peerId || `flow-${uname}`, updatedAt: Date.now() }
+    const peerId = `flow-${uname}`
     if (typeof _socialPeer.requestPeerData === 'function') {
-      const response = await _socialPeer.requestPeerData(peerId, { type: 'presence-request' }, 2200).catch(() => null)
+      const response = await _socialPeer.requestPeerData(peerId, { type: 'presence-request' }, 1100).catch(() => null)
       if (response?.ok && response?.data?.type === 'presence-state') {
         const p = response.data
         state = {
           online: true,
           track: p.track || null,
-          roomId: p.roomId || `flow-${friend}`,
-          peerId: p.peerId || p._peerId || `flow-${friend}`,
+          roomId: p.roomId || `flow-${uname}`,
+          peerId: p.peerId || p._peerId || `flow-${uname}`,
           host: Boolean(p.host),
           updatedAt: Date.now(),
         }
@@ -3877,7 +4012,7 @@ async function pollFriendsPresence() {
         }
       }
     }
-    return [friend, state]
+    return [uname, state]
   }))
   _friendPresence = new Map(entries)
   renderFriends()
@@ -3921,7 +4056,7 @@ function startApp() {
     syncIntegrationsUI()
     pollFriendsPresence().catch(() => {})
     if (_friendsPollTimer) clearInterval(_friendsPollTimer)
-    _friendsPollTimer = setInterval(() => { pollFriendsPresence().catch(() => {}) }, 12000)
+    _friendsPollTimer = setInterval(() => { pollFriendsPresence().catch(() => {}) }, FRIEND_POLL_INTERVAL_MS)
     const s = getSettings()
     if (s.discordRpcEnabled && s.discordClientId) {
       window.api?.discordRpcConnect?.(s.discordClientId).catch(() => {})
@@ -3954,6 +4089,7 @@ function startApp() {
   // Repair previously injected custom covers in collections on each launch.
   restoreSourceCoversInCollections()
   renderLiked(); renderPlaylists(); updateSourceBadge(); syncSearchSourcePills()
+  renderMyWave()
   initVisualSettings()
   syncPlaybackModeUI()
   syncTrackCoverStatus()
@@ -4222,6 +4358,7 @@ let _activePageId = 'home'
 let _deferredPageRenderRaf = 0
 
 function runDeferredPageRender(id) {
+  if (id === 'home') return renderMyWave()
   if (id === 'liked') return renderLiked()
   if (id === 'library') return renderPlaylists()
   if (id === 'social') return renderFriends()
@@ -4325,6 +4462,8 @@ async function playTrackObj(track, opts = {}) {
   const newTrackKey = `${track.source}:${track.id}`
   const st = getListenStats()
   if (st.lastTrackKey !== newTrackKey) saveListenStats({ totalTracks: Number(st.totalTracks || 0) + 1, lastTrackKey: newTrackKey })
+  pushListenHistory(track)
+  if (_activePageId === 'home') renderMyWave()
   let streamUrl = track.url
   let streamEngine = null
   const nameEl = document.getElementById('player-name')
