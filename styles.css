@@ -581,7 +581,14 @@ body.layout-top-nav .player-bar {
 /* Profile page */
 .profile-shell { display:flex; flex-direction:column; gap:12px; }
 .profile-hero { padding:0; overflow:hidden; }
-.profile-banner { min-height:150px; position:relative; border-bottom:1px solid rgba(255,255,255,0.08); }
+.profile-banner {
+  min-height:150px;
+  position:relative;
+  border-bottom:1px solid rgba(255,255,255,0.08);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
 .profile-upload-btn { position:absolute; right:12px; top:12px; }
 .profile-avatar-wrap { display:flex; align-items:center; gap:10px; padding:12px 16px 0; }
 .profile-avatar {

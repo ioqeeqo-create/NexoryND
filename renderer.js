@@ -88,12 +88,15 @@ function savePeerProfileCache(map) {
 function mergeProfileData(base, incoming, peerId = '') {
   const prev = (base && typeof base === 'object') ? base : {}
   const next = (incoming && typeof incoming === 'object') ? incoming : {}
+  const prevUsername = String(prev.username || '').trim().toLowerCase()
+  const nextUsername = String(next.username || '').trim().toLowerCase()
+  const sameUser = !nextUsername || !prevUsername || nextUsername === prevUsername
   const resolvedPeerId = String(peerId || next.peerId || prev.peerId || '').trim() || null
   const merged = Object.assign({}, prev, next)
-  merged.username = String(next.username || prev.username || '').trim().toLowerCase()
+  merged.username = String(nextUsername || prevUsername || '').trim().toLowerCase()
   merged.peerId = resolvedPeerId
-  merged.avatarData = next.avatarData || prev.avatarData || null
-  merged.bannerData = next.bannerData || prev.bannerData || null
+  merged.avatarData = next.avatarData || (sameUser ? (prev.avatarData || null) : null)
+  merged.bannerData = next.bannerData || (sameUser ? (prev.bannerData || null) : null)
   merged.bio = typeof next.bio === 'string' ? next.bio : (prev.bio || '')
   if (Array.isArray(next.pinnedTracks)) merged.pinnedTracks = next.pinnedTracks
   else if (Array.isArray(prev.pinnedTracks)) merged.pinnedTracks = prev.pinnedTracks
@@ -106,6 +109,13 @@ function mergeProfileData(base, incoming, peerId = '') {
     totalSeconds: Number.isFinite(Number(nextStats.totalSeconds)) ? Number(nextStats.totalSeconds) : Number(prevStats.totalSeconds || 0),
   }
   return merged
+}
+
+function withImageCacheBust(url) {
+  const src = String(url || '').trim()
+  if (!src || /^data:/i.test(src) || /^blob:/i.test(src)) return src
+  const sep = src.includes('?') ? '&' : '?'
+  return `${src}${sep}t=${Date.now()}`
 }
 
 function cachePeerProfile(profile, peerId = '') {
@@ -2528,19 +2538,23 @@ async function openPeerProfile(username, peerId = '') {
   const modal = document.getElementById('peer-profile-modal')
   const body = document.getElementById('peer-profile-body')
   if (!modal || !body) return
-  const byName = Array.from(_peerProfiles.values()).find((p) => p?.username === username)
-  const byPeer = peerId ? _peerProfiles.get(peerId) : null
+  const targetUsername = String(username || '').trim().toLowerCase()
+  const byName = Array.from(_peerProfiles.values()).find((p) => String(p?.username || '').trim().toLowerCase() === targetUsername)
+  const byPeerRaw = peerId ? _peerProfiles.get(peerId) : null
+  const byPeer = byPeerRaw && String(byPeerRaw?.username || '').trim().toLowerCase() === targetUsername ? byPeerRaw : null
   let data = byPeer || byName || { username }
   let profileFriends = []
   const cached = getCachedPeerProfile(username)
   if (cached) data = Object.assign({}, cached, data)
   data._friends = Array.isArray(data?._friends) ? data._friends : []
   const renderModal = (profileData) => {
-    const avatar = profileData.avatarData
-      ? `<div class="profile-avatar" style="background-image:url(${profileData.avatarData});background-size:cover;background-position:center"></div>`
+    const avatarSrc = withImageCacheBust(profileData.avatarData)
+    const bannerSrc = withImageCacheBust(profileData.bannerData)
+    const avatar = avatarSrc
+      ? `<div class="profile-avatar" style="background-image:url(${avatarSrc});background-size:cover;background-position:center;background-repeat:no-repeat"></div>`
       : `<div class="profile-avatar">${String(profileData.username || '?').slice(0,1).toUpperCase()}</div>`
-    const banner = profileData.bannerData
-      ? `linear-gradient(0deg, rgba(8,10,16,.35), rgba(8,10,16,.35)), url(${profileData.bannerData})`
+    const banner = bannerSrc
+      ? `linear-gradient(0deg, rgba(8,10,16,.35), rgba(8,10,16,.35)), url(${bannerSrc})`
       : 'linear-gradient(135deg,#1f2937,#111827)'
     const pinnedTracks = Array.isArray(profileData.pinnedTracks) ? profileData.pinnedTracks : []
     const friends = Array.isArray(profileData._friends) ? profileData._friends.slice(0, 24) : []
@@ -2574,7 +2588,7 @@ async function openPeerProfile(username, peerId = '') {
     modal.classList.remove('hidden')
   }
   renderModal(data)
-  const targetPeerId = String(peerId || data?.peerId || `flow-${username}` || '').trim()
+  const targetPeerId = String(peerId || data?.peerId || `flow-${targetUsername}` || '').trim()
   const cloud = await fetchCloudPublicProfile(username).catch(() => null)
   const cloudFriends = await fetchCloudFriendsForUser(username).catch(() => [])
   if (Array.isArray(cloudFriends) && cloudFriends.length) profileFriends = cloudFriends
@@ -3238,6 +3252,10 @@ async function friendMenuRefresh() {
   renderRoomMembers()
   renderFriends().catch(() => {})
   pollFriendsPresence(true).catch(() => {})
+  const modal = document.getElementById('peer-profile-modal')
+  if (modal && !modal.classList.contains('hidden')) {
+    openPeerProfile(username, _friendContext.peerId || '').catch(() => {})
+  }
   showToast('Профиль обновлён')
 }
 
