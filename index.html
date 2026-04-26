@@ -206,6 +206,7 @@
                 <button class="btn-small" onclick="playOpenPlaylist()">▶ Слушать</button>
                 <button class="btn-small" onclick="shuffleOpenPlaylist()">⇄</button>
                 <button class="btn-small" onclick="editOpenPlaylist()">✎ Редактировать</button>
+                <button class="btn-small" onclick="removeOpenPlaylistDuplicates()">Убрать дубли</button>
                 <button class="btn-small playlist-close-x" onclick="closePlaylist()" title="Ко всем плейлистам">✕</button>
               </div>
             </div>
@@ -295,6 +296,13 @@
               <div class="vs-btn-group">
                 <button class="vsb" id="layout-left" onclick="setSidebarPosition('left')">Слева</button>
                 <button class="vsb" id="layout-top" onclick="setSidebarPosition('top')">Сверху</button>
+              </div>
+            </div>
+            <div class="vs-row">
+              <label class="vs-label">Плотность карточек</label>
+              <div class="vs-btn-group">
+                <button class="vsb" id="density-comfort" onclick="setCardDensity('comfort')">Комфортно</button>
+                <button class="vsb" id="density-compact" onclick="setCardDensity('compact')">Компактно</button>
               </div>
             </div>
           </div>
@@ -607,14 +615,16 @@
           </div>
         </div>
         <div class="glass-card" style="padding:18px;border-radius:18px;margin-top:12px;max-width:760px;">
-          <div class="vs-section-title" style="margin-bottom:8px;">Прокси для стримов</div>
+          <div class="vs-section-title" style="margin-bottom:8px;">Flow сервер</div>
           <input id="proxy-base-url" class="token-field flow-input" placeholder="http://127.0.0.1:порт (опционально)" />
-          <div class="integration-hint">Если провайдер режет источники без VPN, укажи локальный/внешний прокси. Пусто = авто-режим Flow.</div>
+          <div class="integration-hint">Используется для VK-импорта, статуса сервера и серверных функций Flow. По умолчанию: http://85.239.34.229:8787</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-            <button class="btn-small" onclick="saveProxySettings()">Сохранить прокси</button>
-            <button class="btn-small" onclick="checkProxyConnection()">Проверить соединение прокси</button>
+            <button class="btn-small" onclick="saveProxySettings()">Сохранить сервер</button>
+            <button class="btn-small" onclick="checkFlowServerStatus()">Проверить сервер</button>
+            <button class="btn-small" onclick="checkProxyConnection()">Проверить аудио-прокси</button>
           </div>
-          <div id="proxy-check-status" class="integration-hint" style="margin-top:8px">Статус: не проверено</div>
+          <div id="flow-server-status" class="integration-hint" style="margin-top:8px">Сервер: не проверено</div>
+          <div id="proxy-check-status" class="integration-hint" style="margin-top:4px">Аудио-прокси: не проверено</div>
         </div>
         <div class="glass-card" style="padding:18px;border-radius:18px;margin-top:12px;max-width:760px;">
           <div class="vs-section-title" style="margin-bottom:8px;">Last.fm интеграция</div>
@@ -648,6 +658,7 @@
       </div>
       <div class="player-track-btns">
         <button class="player-like-btn" id="player-like-btn" onclick="likeCurrentTrack()" title="Лайк"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.35-9.5-8A5.5 5.5 0 0 1 12 5.1 5.5 5.5 0 0 1 21.5 13c-2.5 3.65-9.5 8-9.5 8Z"/></svg></button>
+        <button class="player-like-btn" onclick="findSimilarTracks()" title="Найти похожие">≈</button>
         <button class="player-like-btn" id="lyrics-btn" onclick="toggleLyrics()" title="Текст"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg></button>
         <button class="player-like-btn" onclick="enterPlayerMode()" title="Режим плеера"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M21 21h-5v-5"/></svg></button>
       </div>

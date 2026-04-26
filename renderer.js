@@ -74,12 +74,19 @@ let _friendContext = null
 let _pendingRoomInvite = null
 let _myWaveRenderedTracks = []
 let _profileEditDraft = null
+let _roomContext = null
+let _roomServerSaveTimer = null
+let _lastServerStatusCheckAt = 0
 const FRIEND_POLL_INTERVAL_MS = 3500
 const FRIEND_FRESH_ONLINE_MS = 18000
 const FRIEND_PROFILE_REFRESH_MS = 15000
+const FLOW_SERVER_DEFAULT_URL = 'http://85.239.34.229:8787'
+const FRIEND_NOTIFY_COOLDOWN_MS = 90 * 1000
+const PROFILE_CACHE_TTL_MS = 5 * 60 * 1000
 const MY_WAVE_MIN_TRACKS = 10
 const MY_WAVE_MAX_TRACKS = 30
 const _friendProfileRefreshAt = new Map()
+const _friendNotifyAt = new Map()
 
 function getPeerProfileCache() {
   try { return JSON.parse(localStorage.getItem('flow_peer_public_profiles') || '{}') || {} } catch { return {} }
@@ -258,6 +265,32 @@ function readFileAsDataUrl(file) {
   })
 }
 
+function prepareProfileImageData(file, dataUrl, kind = 'avatar') {
+  return new Promise((resolve) => {
+    const raw = String(dataUrl || '')
+    if (!raw) return resolve('')
+    const isGif = /image\/gif/i.test(file?.type || raw.slice(0, 40))
+    const maxBytes = kind === 'banner' ? 1200 * 1024 : 520 * 1024
+    if (isGif || raw.length <= maxBytes * 1.35 || typeof Image === 'undefined') return resolve(raw)
+    const img = new Image()
+    img.onload = () => {
+      try {
+        const maxSide = kind === 'banner' ? 1200 : 420
+        const ratio = Math.min(1, maxSide / Math.max(img.width || 1, img.height || 1))
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.max(1, Math.round((img.width || 1) * ratio))
+        canvas.height = Math.max(1, Math.round((img.height || 1) * ratio))
+        canvas.getContext('2d')?.drawImage(img, 0, 0, canvas.width, canvas.height)
+        resolve(canvas.toDataURL('image/jpeg', kind === 'banner' ? 0.78 : 0.82))
+      } catch {
+        resolve(raw)
+      }
+    }
+    img.onerror = () => resolve(raw)
+    img.src = raw
+  })
+}
+
 const ICONS = {
   play: '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5v14l11-7Z"/></svg>',
   pause: '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6v12"/><path d="M15 6v12"/></svg>',
@@ -286,6 +319,7 @@ const defaultVisual = {
   effects: { orbs: false, glow: true, dyncolor: false, accentFromCover: false },
   navActiveHighlight: false,
   sidebarPosition: 'left',
+  cardDensity: 'comfort',
   gifMode: { bg: true, track: true, playlist: true },
   lyrics: { scrollMode: 'smooth', align: 'left', size: 16, blur: 4 }
 }
@@ -415,6 +449,23 @@ function setVisualMode(mode) {
   saveVisual({ visualMode: safe })
   applyVisualMode(safe)
   showToast(safe === 'premium' ? 'Режим: Премиум (старый)' : 'Режим: Минимализм')
+}
+
+function applyCardDensity(density = 'comfort') {
+  const safe = density === 'compact' ? 'compact' : 'comfort'
+  document.body.classList.toggle('density-compact', safe === 'compact')
+  document.body.classList.toggle('density-comfort', safe !== 'compact')
+  const comfortBtn = document.getElementById('density-comfort')
+  const compactBtn = document.getElementById('density-compact')
+  if (comfortBtn) comfortBtn.classList.toggle('active', safe !== 'compact')
+  if (compactBtn) compactBtn.classList.toggle('active', safe === 'compact')
+}
+
+function setCardDensity(density) {
+  const safe = density === 'compact' ? 'compact' : 'comfort'
+  saveVisual({ cardDensity: safe })
+  applyCardDensity(safe)
+  showToast(safe === 'compact' ? 'Плотность: компактно' : 'Плотность: комфортно')
 }
 
 function savePlaybackMode() {
@@ -1099,6 +1150,7 @@ function initVisualSettings() {
   applyHomeSliderStyle()
   syncHomeWidgetUI()
   document.body.classList.toggle('nav-active-highlight', Boolean(v.navActiveHighlight))
+  applyCardDensity(v.cardDensity || 'comfort')
   const navToggle = document.getElementById('toggle-nav-active')
   if (navToggle) navToggle.classList.toggle('active', Boolean(v.navActiveHighlight))
   applySidebarPosition(v.sidebarPosition || 'left')
@@ -1493,6 +1545,18 @@ function cacheSet(key, val) {
   searchCache.set(key, { ts: Date.now(), val })
 }
 
+function getSearchCacheKey(query, settings = getSettings()) {
+  const q = String(query || '').trim().toLowerCase()
+  const src = String(settings?.activeSource || currentSource || 'hybrid').toLowerCase()
+  const tokenSig = [
+    settings?.spotifyToken ? 'sp1' : 'sp0',
+    settings?.vkToken ? 'vk1' : 'vk0',
+    settings?.soundcloudClientId ? 'sc1' : 'sc0',
+    settings?.proxyBaseUrl ? `srv:${String(settings.proxyBaseUrl).trim().toLowerCase()}` : 'srv0',
+  ].join(':')
+  return `${src}:${q}:${tokenSig}`
+}
+
 // в”Ђв”Ђв”Ђ PROVIDERS в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 const providers = {
   youtube:    (q)    => searchYouTube(q),
@@ -1505,8 +1569,9 @@ function getSettings() {
   const raw = JSON.parse(localStorage.getItem('flow_settings')) || {
     soundcloudClientId: '', vkToken: '', spotifyToken: '', yandexToken: '', activeSource: 'youtube',
     discordClientId: '', discordRpcEnabled: false, lastfmApiKey: '', lastfmSharedSecret: '', lastfmSessionKey: '',
-    proxyBaseUrl: ''
+    proxyBaseUrl: FLOW_SERVER_DEFAULT_URL
   }
+  if (!String(raw.proxyBaseUrl || '').trim()) raw.proxyBaseUrl = FLOW_SERVER_DEFAULT_URL
   if (!providers[raw.activeSource]) raw.activeSource = 'youtube'
   return raw
 }
@@ -1514,7 +1579,7 @@ function getSettings() {
 function shouldUseProxyStream() {
   const s = getSettings()
   const mode = String(s.proxyBaseUrl || '').trim().toLowerCase()
-  return mode !== 'off'
+  return mode !== 'off' && mode !== FLOW_SERVER_DEFAULT_URL.toLowerCase()
 }
 
 function saveSettingsRaw(patch) {
@@ -2112,6 +2177,8 @@ async function refreshFriendProfileFromCloud(username, force = false) {
   const safe = String(username || '').trim().toLowerCase()
   if (!safe) return null
   const now = Date.now()
+  const cached = getCachedPeerProfile(safe)
+  if (!force && cached?.updatedAt && (now - Number(cached.updatedAt || 0)) < PROFILE_CACHE_TTL_MS) return cached
   const lastPullAt = Number(_friendProfileRefreshAt.get(safe) || 0)
   if (!force && (now - lastPullAt) < FRIEND_PROFILE_REFRESH_MS) return null
   _friendProfileRefreshAt.set(safe, now)
@@ -2277,6 +2344,15 @@ async function saveRoomStateToServer(patch = {}) {
   } catch {}
 }
 
+function scheduleRoomStateSave(patch = {}, delay = 450) {
+  if (_roomServerSaveTimer) clearTimeout(_roomServerSaveTimer)
+  const payload = Object.assign({}, patch || {})
+  _roomServerSaveTimer = setTimeout(() => {
+    _roomServerSaveTimer = null
+    saveRoomStateToServer(payload).catch(() => {})
+  }, Math.max(120, Number(delay || 450)))
+}
+
 async function loadRoomStateFromServer(force = false) {
   try {
     if (!_roomState?.roomId) return
@@ -2353,7 +2429,7 @@ function renderRoomMembers() {
   const el = document.getElementById('room-members-list')
   if (!el) return
   if (!_roomState?.roomId) {
-    el.innerHTML = '<div class="social-empty">Рума не активна</div>'
+    el.innerHTML = '<div class="flow-empty-state compact"><strong>Рума не активна</strong><span>Создай комнату или вставь invite друга.</span></div>'
     return
   }
   const members = Array.from(_roomMembers.values()).map((m) => {
@@ -2385,8 +2461,8 @@ function renderRoomMembers() {
     const avatar = m.avatarData
       ? `<div class="social-friend-avatar social-friend-avatar-active" style="background-image:url(${m.avatarData})"></div>`
       : `<div class="social-friend-avatar social-friend-avatar-active">${String(m.username || '?').slice(0,1).toUpperCase()}</div>`
-    return `<div class="social-friend-card online">${avatar}<div class="social-friend-meta"><strong>${m.username || 'user'} ${(isHost || isSelfHost) ? '👑' : ''}</strong><span>${m.username === _profile?.username ? 'это вы' : 'в комнате'}</span></div></div>`
-  }).join('') || '<div class="social-empty">Нет участников</div>'
+    return `<div class="social-friend-card online" oncontextmenu="openRoomMemberContextMenu(event, '${m.peerId || ''}', '${m.username || ''}')">${avatar}<div class="social-friend-meta"><strong>${m.username || 'user'} ${(isHost || isSelfHost) ? 'HOST' : ''}</strong><span>${m.username === _profile?.username ? 'это вы' : 'в комнате'}</span></div></div>`
+  }).join('') || '<div class="flow-empty-state compact"><strong>Нет участников</strong><span>Подключение появится здесь.</span></div>'
 }
 
 function broadcastRoomMembersState() {
@@ -2428,7 +2504,7 @@ function renderRoomQueue() {
   const el = document.getElementById('room-queue-list')
   if (!el) return
   if (!_roomState?.roomId || !Array.isArray(sharedQueue) || !sharedQueue.length) {
-    el.innerHTML = '<div class="social-empty">Очередь пуста</div>'
+    el.innerHTML = '<div class="flow-empty-state compact"><strong>Очередь пуста</strong><span>Добавь трек через поиск или из своих треков.</span></div>'
     return
   }
   const canEdit = Boolean(_roomState?.host)
@@ -2509,7 +2585,7 @@ function broadcastQueueUpdate() {
     roomId: _roomState.roomId,
     sharedQueue,
   })
-  saveRoomStateToServer({ shared_queue: sharedQueue }).catch(() => {})
+  scheduleRoomStateSave({ shared_queue: sharedQueue })
 }
 
 function enqueueSharedTrack(track) {
@@ -2548,7 +2624,7 @@ function removeSharedQueueTrack(index) {
   sharedQueue.splice(idx, 1)
   renderRoomQueue()
   broadcastQueueUpdate()
-  saveRoomStateToServer({ shared_queue: sharedQueue }).catch(() => {})
+  scheduleRoomStateSave({ shared_queue: sharedQueue })
 }
 
 function moveSharedQueueTrack(index, dir) {
@@ -2562,7 +2638,7 @@ function moveSharedQueueTrack(index, dir) {
   sharedQueue[j] = tmp
   renderRoomQueue()
   broadcastQueueUpdate()
-  saveRoomStateToServer({ shared_queue: sharedQueue }).catch(() => {})
+  scheduleRoomStateSave({ shared_queue: sharedQueue })
 }
 
 function reorderSharedQueueTrack(fromIndex, toIndex) {
@@ -2574,7 +2650,7 @@ function reorderSharedQueueTrack(fromIndex, toIndex) {
   sharedQueue.splice(to, 0, moved)
   renderRoomQueue()
   broadcastQueueUpdate()
-  saveRoomStateToServer({ shared_queue: sharedQueue }).catch(() => {})
+  scheduleRoomStateSave({ shared_queue: sharedQueue })
 }
 
 async function searchRoomQueueTracks() {
@@ -2584,10 +2660,10 @@ async function searchRoomQueueTracks() {
   const q = String(input.value || '').trim()
   if (!q) {
     _roomSearchResults = []
-    list.innerHTML = ''
+    list.innerHTML = '<div class="flow-empty-state compact"><strong>Начни поиск</strong><span>Введи название трека, чтобы добавить его в очередь.</span></div>'
     return
   }
-  list.innerHTML = '<div class="social-empty">Ищу треки...</div>'
+  list.innerHTML = '<div class="flow-empty-state compact"><strong>Ищу треки...</strong><span>Проверяю доступные источники Flow.</span></div>'
   clearTimeout(_roomSearchDebounceTimer)
   _roomSearchDebounceTimer = setTimeout(async () => {
     try {
@@ -2595,7 +2671,7 @@ async function searchRoomQueueTracks() {
       const hybrid = await searchHybridTracks(q, s)
       _roomSearchResults = sanitizeTrackList(hybrid?.tracks || []).slice(0, 4)
       if (!_roomSearchResults.length) {
-        list.innerHTML = '<div class="social-empty">Ничего не найдено</div>'
+        list.innerHTML = '<div class="flow-empty-state compact"><strong>Ничего не найдено</strong><span>Попробуй другой запрос или источник.</span></div>'
         return
       }
       list.innerHTML = _roomSearchResults.map((t, i) => {
@@ -2606,7 +2682,7 @@ async function searchRoomQueueTracks() {
         return `<button class="profile-picker-item" onclick="addRoomSearchTrack(${i})" style="display:flex;align-items:center;gap:8px">${cover}<span>${t.title} — ${t.artist || '—'}</span></button>`
       }).join('')
     } catch {
-      list.innerHTML = '<div class="social-empty">Ошибка поиска</div>'
+      list.innerHTML = '<div class="flow-empty-state compact"><strong>Ошибка поиска</strong><span>Источник не ответил, попробуй позже.</span></div>'
     }
   }, 260)
 }
@@ -3002,8 +3078,9 @@ async function pickProfileEditImage(kind) {
     const file = input.files?.[0]
     if (!file) return
     const dataUrl = await readFileAsDataUrl(file).catch(() => '')
-    if (!dataUrl) return showToast(kind === 'avatar' ? 'Не удалось загрузить аватар' : 'Не удалось загрузить баннер', true)
-    setProfileEditDraft(kind === 'avatar' ? { avatarData: dataUrl } : { bannerData: dataUrl })
+    const prepared = await prepareProfileImageData(file, dataUrl, kind).catch(() => dataUrl)
+    if (!prepared) return showToast(kind === 'avatar' ? 'Не удалось загрузить аватар' : 'Не удалось загрузить баннер', true)
+    setProfileEditDraft(kind === 'avatar' ? { avatarData: prepared } : { bannerData: prepared })
   }
   input.click()
 }
@@ -3301,7 +3378,7 @@ function renderPinnedTracks() {
   if (!el) return
   const custom = getProfileCustom()
   if (!custom.pinnedTracks?.length) {
-    el.innerHTML = '<span style="opacity:.75">Добавь треки в профиль</span>'
+    el.innerHTML = '<div class="flow-empty-state compact"><strong>Любимых треков нет</strong><span>Добавь треки в профиль из меню редактирования.</span></div>'
     return
   }
   el.innerHTML = ''
@@ -3331,7 +3408,7 @@ function renderPinnedPlaylists() {
   const playlists = getPlaylists().map(normalizePlaylist)
   const pinned = (custom.pinnedPlaylists || []).map((idx) => ({ idx, pl: playlists[idx] })).filter((x) => x.pl)
   if (!pinned.length) {
-    el.innerHTML = '<span style="opacity:.75">Добавь плейлисты в профиль</span>'
+    el.innerHTML = '<div class="flow-empty-state compact"><strong>Плейлисты не закреплены</strong><span>Закрепи плейлист, чтобы он появился в профиле.</span></div>'
     return
   }
   el.innerHTML = ''
@@ -3365,6 +3442,16 @@ function ensureFriendInteractionUI() {
     document.body.appendChild(menu)
     document.addEventListener('click', () => closeFriendContextMenu())
   }
+  if (!document.getElementById('room-member-context-menu')) {
+    const menu = document.createElement('div')
+    menu.id = 'room-member-context-menu'
+    menu.className = 'friend-context-menu hidden glass-card'
+    menu.innerHTML = `
+      <button class="friend-context-item" onclick="transferRoomHostFromMenu()">Передать хоста</button>
+    `
+    document.body.appendChild(menu)
+    document.addEventListener('click', () => closeRoomMemberContextMenu())
+  }
   if (!document.getElementById('room-invite-popup')) {
     const modal = document.createElement('div')
     modal.id = 'room-invite-popup'
@@ -3386,6 +3473,41 @@ function ensureFriendInteractionUI() {
     `
     document.body.appendChild(modal)
   }
+}
+
+function openRoomMemberContextMenu(event, peerId = '', username = '') {
+  event?.preventDefault?.()
+  event?.stopPropagation?.()
+  ensureFriendInteractionUI()
+  const menu = document.getElementById('room-member-context-menu')
+  if (!menu) return
+  _roomContext = { peerId: String(peerId || '').trim(), username: String(username || '').trim() }
+  menu.style.left = `${Math.max(8, Number(event?.clientX || 0))}px`
+  menu.style.top = `${Math.max(8, Number(event?.clientY || 0))}px`
+  menu.classList.remove('hidden')
+}
+
+function closeRoomMemberContextMenu() {
+  document.getElementById('room-member-context-menu')?.classList.add('hidden')
+}
+
+function transferRoomHostFromMenu() {
+  const ctx = _roomContext || {}
+  closeRoomMemberContextMenu()
+  transferRoomHost(ctx.peerId, ctx.username)
+}
+
+async function transferRoomHost(peerId = '', username = '') {
+  const targetPeerId = String(peerId || '').trim()
+  if (!_roomState?.roomId || !_roomState.host) return showToast('Передавать хоста может только текущий хост', true)
+  if (!targetPeerId || targetPeerId === _socialPeer?.peer?.id) return showToast('Выбери другого участника', true)
+  _roomState.host = false
+  _roomState.hostPeerId = targetPeerId
+  _socialPeer?.sendToPeer?.(targetPeerId, { type: 'room-host-transfer', roomId: _roomState.roomId, hostPeerId: targetPeerId, sharedQueue })
+  _socialPeer?.send?.({ type: 'room-host-changed', roomId: _roomState.roomId, hostPeerId: targetPeerId, username })
+  await saveRoomStateToServer({ host_peer_id: targetPeerId, shared_queue: sharedQueue }).catch(() => {})
+  updateRoomUi()
+  showToast(`Хост передан: ${username || targetPeerId.replace(/^flow-/, '')}`)
 }
 
 function openFriendContextMenu(event, username, peerId = '', roomId = '', online = false) {
@@ -3549,6 +3671,43 @@ function declineRoomInvite(withMuteChoice = true) {
   _pendingRoomInvite = null
 }
 
+function showOnboardingIfNeeded() {
+  if (localStorage.getItem('flow_onboarding_done')) return
+  const modal = document.createElement('div')
+  modal.id = 'flow-onboarding-modal'
+  modal.className = 'flow-modal flow-onboarding-modal'
+  modal.innerHTML = `
+    <div class="flow-modal-backdrop" onclick="finishOnboarding()"></div>
+    <div class="flow-modal-card glass-card onboarding-card">
+      <div class="onboarding-badge">Flow старт</div>
+      <h3>Добро пожаловать в Flow</h3>
+      <p>Пару важных вещей, чтобы у тебя и друзей всё работало без ручной настройки.</p>
+      <div class="onboarding-grid">
+        <div class="onboarding-item"><strong>Аккаунт</strong><span>Логин и пароль сохраняют профиль на сервере, поэтому очистка кэша больше не убивает аккаунт.</span></div>
+        <div class="onboarding-item"><strong>Сервер</strong><span>Адрес уже стоит по умолчанию. Его можно поменять в Настройки → Интеграции.</span></div>
+        <div class="onboarding-item"><strong>Комнаты</strong><span>Создавай руму, кидай invite другу и управляй очередью вместе.</span></div>
+        <div class="onboarding-item"><strong>VK-импорт</strong><span>Flow сервер читает плейлист VK, а приложение ищет эти треки в твоих источниках.</span></div>
+      </div>
+      <div class="onboarding-actions">
+        <button class="btn-small" onclick="openSettingsFromOnboarding()">Открыть настройки</button>
+        <button class="btn-main" onclick="finishOnboarding()">Погнали</button>
+      </div>
+    </div>
+  `
+  document.body.appendChild(modal)
+}
+
+function finishOnboarding() {
+  localStorage.setItem('flow_onboarding_done', '1')
+  document.getElementById('flow-onboarding-modal')?.remove()
+}
+
+function openSettingsFromOnboarding() {
+  finishOnboarding()
+  showPage('settings')
+  switchSettingsTab?.('integrations')
+}
+
 function ensureSocialUI() {
   ensureFriendInteractionUI()
   if (document.getElementById('social-hub')) return
@@ -3570,7 +3729,7 @@ function ensureSocialUI() {
     </div>
     <div class="social-friends-box">
       <div class="social-section-title">Входящие заявки</div>
-      <div id="friend-requests-list"><div class="social-empty">Нет входящих заявок</div></div>
+      <div id="friend-requests-list"><div class="flow-empty-state compact"><strong>Заявок нет</strong><span>Когда кто-то добавит тебя, запрос появится здесь.</span></div></div>
     </div>
     <div class="social-friends-box">
       <div class="social-section-title">Друзья</div>
@@ -3610,13 +3769,13 @@ function ensureRoomsUI() {
     </div>
     <div class="social-room-box">
       <div class="social-section-title">В комнате</div>
-      <div id="room-members-list" class="social-friends-grid"></div>
+      <div id="room-members-list" class="social-friends-grid"><div class="flow-empty-state compact"><strong>Комната пустая</strong><span>Создай руму или присоединись по invite.</span></div></div>
     </div>
     <div class="social-room-box">
       <div class="social-section-title">Поиск в очередь</div>
       <input id="room-queue-search" class="token-field flow-input" placeholder="Найти трек и добавить в очередь..." oninput="searchRoomQueueTracks()" />
       <div style="margin-top:8px"><button class="btn-small" onclick="openRoomOwnTracksPicker()">Свои треки</button></div>
-      <div id="room-search-results" class="profile-picker-list" style="margin-top:8px"></div>
+      <div id="room-search-results" class="profile-picker-list" style="margin-top:8px"><div class="flow-empty-state compact"><strong>Начни поиск</strong><span>Введи название трека, чтобы добавить его в очередь.</span></div></div>
     </div>
     <div class="social-room-box">
       <div class="social-section-title">Очередь прослушивания</div>
@@ -3633,7 +3792,7 @@ async function renderFriends() {
   renderFriendRequests().catch(() => {})
   const list = peerSocial.getFriends(_profile.username)
   if (!list.length) {
-    el.innerHTML = '<div class="social-empty">Пока нет друзей</div>'
+    el.innerHTML = '<div class="flow-empty-state"><strong>Пока нет друзей</strong><span>Добавь друга по username, чтобы видеть онлайн, профиль и комнаты.</span></div>'
     return
   }
   const online = []
@@ -3661,7 +3820,7 @@ async function renderFriends() {
     const avatar = resolveAvatar(item.name)
     const roomId = item.state.roomId || ''
     const nowPlaying = onlineMode && item.state.track?.title
-      ? `${item.state.track.title}${item.state.track.artist ? ` — ${item.state.track.artist}` : ''}`
+      ? `слушает: ${item.state.track.title}${item.state.track.artist ? ` — ${item.state.track.artist}` : ''}`
       : (onlineMode ? 'в сети' : 'не в сети')
     const avatarHtml = avatar
       ? `<div class="social-friend-avatar" style="background-image:url(${avatar})"></div>`
@@ -3678,9 +3837,9 @@ async function renderFriends() {
   }
   el.innerHTML = `
     <div class="social-friends-section-title">В сети</div>
-    <div class="social-friends-grid">${online.length ? online.map((item) => fmtFriendCard(item, true)).join('') : '<div class="social-empty">Никого онлайн</div>'}</div>
+    <div class="social-friends-grid">${online.length ? online.map((item) => fmtFriendCard(item, true)).join('') : '<div class="flow-empty-state compact"><strong>Никого онлайн</strong><span>Flow покажет друга сразу, как он появится в сети.</span></div>'}</div>
     <div class="social-friends-section-title">Не в сети</div>
-    <div class="social-friends-grid">${offline.length ? offline.map((item) => fmtFriendCard(item, false)).join('') : '<div class="social-empty">Пусто</div>'}</div>
+    <div class="social-friends-grid">${offline.length ? offline.map((item) => fmtFriendCard(item, false)).join('') : '<div class="flow-empty-state compact"><strong>Пусто</strong><span>Все друзья сейчас онлайн.</span></div>'}</div>
   `
 }
 
@@ -3719,9 +3878,46 @@ function syncIntegrationsUI() {
 
 function saveProxySettings() {
   const input = document.getElementById('proxy-base-url')
-  const proxyBaseUrl = String(input?.value || '').trim()
+  const proxyBaseUrl = String(input?.value || '').trim() || FLOW_SERVER_DEFAULT_URL
   saveSettingsRaw({ proxyBaseUrl })
-  showToast(proxyBaseUrl ? 'Прокси режим сохранен' : 'Прокси: авто-режим Flow')
+  if (input) input.value = proxyBaseUrl
+  showToast('Flow сервер сохранён')
+  checkFlowServerStatus().catch(() => {})
+}
+
+async function checkFlowServerStatus() {
+  const statusEl = document.getElementById('flow-server-status')
+  const setStatus = (text, ok = null) => {
+    if (!statusEl) return
+    statusEl.textContent = text
+    if (ok === true) statusEl.style.color = '#7ee787'
+    else if (ok === false) statusEl.style.color = '#ff9b9b'
+    else statusEl.style.color = ''
+  }
+  const base = String(getSettings().proxyBaseUrl || FLOW_SERVER_DEFAULT_URL).trim().replace(/\/+$/, '')
+  if (!/^https?:\/\//i.test(base)) {
+    setStatus('Сервер: неверный адрес', false)
+    return { ok: false, ping: null }
+  }
+  _lastServerStatusCheckAt = Date.now()
+  setStatus('Сервер: проверяю...')
+  const started = performance.now()
+  try {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 5500)
+    const rsp = await fetch(`${base}/health`, { method: 'GET', cache: 'no-store', signal: ctrl.signal })
+    clearTimeout(timer)
+    const ping = Math.max(1, Math.round(performance.now() - started))
+    if (!rsp.ok) {
+      setStatus(`Сервер: оффлайн (${rsp.status})`, false)
+      return { ok: false, ping }
+    }
+    setStatus(`Сервер: онлайн, ping ${ping} ms`, true)
+    return { ok: true, ping }
+  } catch {
+    setStatus('Сервер: оффлайн', false)
+    return { ok: false, ping: null }
+  }
 }
 
 async function checkProxyConnection() {
@@ -3938,14 +4134,17 @@ function initPeerSocial() {
       }
       if (msg.type === 'presence-state' && msg.toPeerId && _socialPeer?.peer?.id && msg.toPeerId === _socialPeer.peer.id && msg._from) {
         const key = String(msg._from).replace(/^flow-/, '').trim().toLowerCase()
-        _friendPresence.set(key, {
+        const prevPresence = _friendPresence.get(key) || {}
+        const nextPresence = {
           online: true,
           roomId: msg.roomId || null,
           track: msg.track || null,
           host: Boolean(msg.host),
           peerId: msg.peerId || msg._peerId || null,
           updatedAt: Date.now(),
-        })
+        }
+        notifyFriendPresenceChange(key, prevPresence, nextPresence)
+        _friendPresence.set(key, nextPresence)
         if (msg.profile && (msg.peerId || msg._peerId)) {
           const pid = msg.peerId || msg._peerId
           const merged = mergeProfileData(_peerProfiles.get(pid) || getCachedPeerProfile(msg.profile.username), Object.assign({}, msg.profile, { peerId: pid }), pid)
@@ -3960,6 +4159,26 @@ function initPeerSocial() {
         const roomId = String(msg.roomId || '').trim()
         if (!roomId) return
         showRoomInvitePrompt({ roomId, fromUsername })
+      }
+      if (msg.type === 'room-host-transfer' && msg.roomId === _roomState.roomId) {
+        const myPeerId = String(_socialPeer?.peer?.id || '')
+        if (myPeerId && msg.hostPeerId === myPeerId) {
+          _roomState.host = true
+          _roomState.hostPeerId = myPeerId
+          if (Array.isArray(msg.sharedQueue)) sharedQueue = msg.sharedQueue.map((t) => sanitizeTrack(t)).filter(Boolean)
+          saveRoomStateToServer({ host_peer_id: myPeerId, shared_queue: sharedQueue }).catch(() => {})
+          broadcastRoomMembersState()
+          broadcastQueueUpdate()
+          updateRoomUi()
+          showToast('Теперь ты хост комнаты')
+        }
+      }
+      if (msg.type === 'room-host-changed' && msg.roomId === _roomState.roomId && msg.hostPeerId) {
+        const myPeerId = String(_socialPeer?.peer?.id || '')
+        _roomState.hostPeerId = String(msg.hostPeerId || '')
+        _roomState.host = myPeerId && _roomState.hostPeerId === myPeerId
+        updateRoomUi()
+        if (!_roomState.host) showToast(`Новый хост: ${String(msg.username || msg.hostPeerId).replace(/^flow-/, '')}`)
       }
       if (msg.type === 'room-profile-state' && msg.roomId === _roomState.roomId && msg.profile && msg._peerId) {
         const profileWithPeer = mergeProfileData(_peerProfiles.get(msg._peerId) || getCachedPeerProfile(msg.profile.username), Object.assign({}, msg.profile, { peerId: msg._peerId }), msg._peerId)
@@ -4054,6 +4273,7 @@ async function submitAuth() {
   ensureRoomsUI()
   renderFriends()
   initPeerSocial()
+  showOnboardingIfNeeded()
   pollFriendsPresence().catch(() => {})
   if (_friendsPollTimer) clearInterval(_friendsPollTimer)
   _friendsPollTimer = setInterval(() => { pollFriendsPresence().catch(() => {}) }, FRIEND_POLL_INTERVAL_MS)
@@ -4098,7 +4318,7 @@ async function renderFriendRequests() {
   if (!el || !_profile?.username || typeof peerSocial.getIncomingFriendRequests !== 'function') return
   const reqs = await peerSocial.getIncomingFriendRequests(_profile.username).catch(() => [])
   if (!Array.isArray(reqs) || !reqs.length) {
-    el.innerHTML = '<div class="social-empty">Нет входящих заявок</div>'
+    el.innerHTML = '<div class="flow-empty-state compact"><strong>Заявок нет</strong><span>Новые запросы в друзья появятся отдельными карточками.</span></div>'
     return
   }
   el.innerHTML = reqs.map((req) => {
@@ -4385,8 +4605,31 @@ async function pollFriendsPresence(force = false) {
     await refreshFriendProfileFromCloud(uname, force).catch(() => null)
     return [uname, state]
   }))
+  const prevPresence = _friendPresence
+  entries.forEach(([uname, state]) => notifyFriendPresenceChange(uname, prevPresence.get(uname) || {}, state || {}))
   _friendPresence = new Map(entries)
   renderFriends()
+}
+
+function notifyFriendPresenceChange(username, prev = {}, next = {}) {
+  const name = String(username || '').trim()
+  if (!name) return
+  const now = Date.now()
+  const canNotify = (kind) => {
+    const key = `${name}:${kind}`
+    const last = Number(_friendNotifyAt.get(key) || 0)
+    if (now - last < FRIEND_NOTIFY_COOLDOWN_MS) return false
+    _friendNotifyAt.set(key, now)
+    return true
+  }
+  if (!prev.online && next.online && canNotify('online')) {
+    showToast(`${name} теперь онлайн`)
+  }
+  const prevTrack = prev.track ? `${prev.track.artist || ''}:${prev.track.title || ''}` : ''
+  const nextTrack = next.track ? `${next.track.artist || ''}:${next.track.title || ''}` : ''
+  if (next.online && nextTrack && nextTrack !== prevTrack && canNotify(`track:${nextTrack}`)) {
+    showToast(`${name} слушает: ${next.track.title || 'трек'}${next.track.artist ? ` — ${next.track.artist}` : ''}`)
+  }
 }
 
 function broadcastPlaybackSync(force = false) {
@@ -4425,6 +4668,7 @@ function startApp() {
     renderFriends()
     initPeerSocial()
     syncIntegrationsUI()
+    showOnboardingIfNeeded()
     pollFriendsPresence().catch(() => {})
     if (_friendsPollTimer) clearInterval(_friendsPollTimer)
     _friendsPollTimer = setInterval(() => { pollFriendsPresence().catch(() => {}) }, FRIEND_POLL_INTERVAL_MS)
@@ -5322,7 +5566,7 @@ function searchTracks(queryOverride = '') {
 
   searchDebounceTimer = setTimeout(async () => {
     const s = getSettings()
-    const key = `hybrid:${q}:${Boolean(s.spotifyToken)}`
+    const key = getSearchCacheKey(q, s)
     const cached = cacheGet(key)
     if (cached) {
       _lastSearchMode = cached.mode || 'hybrid'
@@ -5746,6 +5990,40 @@ function deletePlaylist(idx) {
   const pls = getPlaylists(); pls.splice(idx,1); savePlaylists(pls); renderPlaylists()
 }
 
+function getTrackDedupeKey(track = {}) {
+  const source = String(track.source || '').trim().toLowerCase()
+  const id = String(track.id || track.ytId || track.url || '').trim().toLowerCase()
+  if (source && id) return `${source}:${id}`
+  const artist = String(track.artist || '').trim().toLowerCase()
+  const title = String(track.title || '').trim().toLowerCase()
+  return `${artist}:${title}`.replace(/\s+/g, ' ')
+}
+
+function removeOpenPlaylistDuplicates() {
+  const idx = Number(openPlaylistIndex)
+  const pls = getPlaylists().map(normalizePlaylist)
+  const pl = pls[idx]
+  if (!pl) return
+  const seen = new Set()
+  const nextTracks = []
+  let removed = 0
+  ;(pl.tracks || []).forEach((track) => {
+    const key = getTrackDedupeKey(track)
+    if (key && seen.has(key)) {
+      removed++
+      return
+    }
+    if (key) seen.add(key)
+    nextTracks.push(track)
+  })
+  if (!removed) return showToast('Дублей в плейлисте нет')
+  pls[idx].tracks = nextTracks
+  savePlaylists(pls)
+  openPlaylist(idx)
+  renderPlaylists()
+  showToast(`Удалено дублей: ${removed}`)
+}
+
 function openPlaylist(idx) {
   openPlaylistIndex = idx
   const pl = normalizePlaylist(getPlaylists()[idx])
@@ -5770,6 +6048,51 @@ function openPlaylist(idx) {
   const container = document.getElementById('playlist-tracks')
   if (!pl.tracks.length) { container.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div><p>Плейлист пуст</p></div>`; return }
   container.innerHTML=''
+  if (pl.tracks.length > 250) {
+    const token = ++_openPlaylistTrackRenderToken
+    let cursor = 0
+    const renderChunk = () => {
+      if (token !== _openPlaylistTrackRenderToken) return
+      const fragment = document.createDocumentFragment()
+      for (let n = 0; n < 28 && cursor < pl.tracks.length; n++, cursor++) {
+        const trackIndex = cursor
+        const track = pl.tracks[trackIndex]
+        const row = document.createElement('div')
+        row.className = 'playlist-track-row'
+        const el = makeTrackEl(track, false, false)
+        el.classList.add('playlist-track-card')
+        el.addEventListener('click', () => {
+          queue = pl.tracks.slice()
+          queueIndex = trackIndex
+          queueScope = 'playlist'
+          playTrackObj(track)
+        })
+        const actions = document.createElement('div')
+        actions.className = 'playlist-track-actions'
+        actions.innerHTML = `
+          <button class="playlist-track-action" title="Редактировать трек">✎</button>
+          <button class="playlist-track-action danger" title="Удалить из плейлиста">✕</button>
+        `
+        actions.children[0].addEventListener('click', (event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          editPlaylistTrack(openPlaylistIndex, trackIndex)
+        })
+        actions.children[1].addEventListener('click', (event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          removeTrackFromPlaylist(openPlaylistIndex, trackIndex)
+        })
+        row.appendChild(el)
+        row.appendChild(actions)
+        fragment.appendChild(row)
+      }
+      container.appendChild(fragment)
+      if (cursor < pl.tracks.length) setTimeout(renderChunk, 0)
+    }
+    renderChunk()
+    return
+  }
   pl.tracks.forEach((track, i) => {
     const row = document.createElement('div')
     row.className = 'playlist-track-row'
@@ -5881,7 +6204,7 @@ async function processPlaylistImport(trackList, imported = {}) {
       const it = srcTracks[i] || {}
       const queries = buildImportQueries(it.title, it.artist)
       const query = queries[0] || ''
-      updateImportProgress(i, maxTracks, `Импорт: ${i} из ${maxTracks} треков...`)
+      updateImportProgress(i, maxTracks, `Ищу: ${it.artist || '—'} - ${it.title || '—'}${notFound.length ? ` | не найдено: ${notFound.slice(-3).join('; ')}` : ''}`)
       if (!query) {
         notFound.push(`Track ${i + 1}`)
         continue
@@ -5922,7 +6245,7 @@ async function processPlaylistImport(trackList, imported = {}) {
         notFound.push(row)
         console.warn('Ошибка поиска, пропуск:', row, trackErr?.message || trackErr)
       }
-      updateImportProgress(i + 1, maxTracks, `Импорт: ${i + 1} из ${maxTracks} треков...`)
+      updateImportProgress(i + 1, maxTracks, `Импорт: ${i + 1} из ${maxTracks}${notFound.length ? ` | не найдено: ${notFound.slice(-3).join('; ')}` : ''}`)
       await importDelay(300 + Math.floor(Math.random() * 201))
     }
     const pls = getPlaylists()
@@ -5931,6 +6254,11 @@ async function processPlaylistImport(trackList, imported = {}) {
     savePlaylists(pls)
     renderPlaylists()
     openPage('library')
+    if (notFound.length) {
+      const report = notFound.slice(0, 12).join('; ')
+      updateImportProgress(maxTracks, maxTracks, `Готово. Не найдено ${notFound.length}: ${report}${notFound.length > 12 ? '...' : ''}`)
+      await importDelay(1600)
+    }
   } finally {
     closeImportProgress()
   }
@@ -6012,6 +6340,7 @@ function addToPlaylist(track) {
 }
 
 let _playlistRenderToken = 0
+let _openPlaylistTrackRenderToken = 0
 function renderPlaylists() {
   const token = ++_playlistRenderToken
   const pls = getPlaylists().map(normalizePlaylist)
@@ -6223,6 +6552,7 @@ function makeTrackEl(track, showPlaylist=false, bindDefaultPlay=true) {
       <span class="track-artist">${track.artist||'вЂ”'} ${badge}</span>
     </div>
     <button class="track-like ${liked?'liked':''}" data-track-json="${trackJson}" onclick="event.stopPropagation();likeTrack(${trackJson})">${liked ? HEART_FILLED : HEART_OUTLINE}</button>
+    <button class="track-like" onclick="event.stopPropagation();findSimilarTracks(${trackJson})" title="Найти похожие">≈</button>
     ${showPlaylist?`<button class="track-like" onclick="event.stopPropagation();addToPlaylist(${trackJson})" title="Р’ РїР»РµР№Р»РёСЃС‚">${ICONS.plus}</button>`:''}
     <button class="track-play"><svg viewBox="0 0 24 24" width="10" height="10" style="fill:currentColor;margin-left:1px"><polygon points="5 3 19 12 5 21 5 3"/></svg></button>`
   if (trackCover) {
@@ -6238,6 +6568,17 @@ function makeTrackEl(track, showPlaylist=false, bindDefaultPlay=true) {
     })
   }
   return el
+}
+
+function findSimilarTracks(track = null) {
+  const t = sanitizeTrack(track || currentTrack || {})
+  const query = [t.artist, t.title].filter(Boolean).join(' ').trim()
+  if (!query) return showToast('Сначала выбери трек', true)
+  openPage('search')
+  const input = document.getElementById('search-input')
+  if (input) input.value = query
+  showToast('Ищу похожие треки')
+  searchTracks()
 }
 
 // в”Ђв”Ђв”Ђ LYRICS в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
