@@ -26,6 +26,7 @@ loadDotEnv()
 const PORT = Number(process.env.PORT || 8787)
 const HOST = String(process.env.HOST || '0.0.0.0')
 const DEFAULT_VK_TOKEN = String(process.env.VK_ACCESS_TOKEN || '').trim()
+const DEFAULT_VK_COOKIE = String(process.env.VK_COOKIE || '').trim()
 const VK_UA = 'VKAndroidApp/5.52-4543 (Android 5.1.1; SDK 22; x86_64; unknown Android SDK built for x86_64; en; 320x480)'
 const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 
@@ -97,6 +98,10 @@ function normalizeToken(token) {
 
 function getVkToken(token) {
   return normalizeToken(token) || normalizeToken(DEFAULT_VK_TOKEN)
+}
+
+function getVkCookie() {
+  return DEFAULT_VK_COOKIE
 }
 
 function parseVkPlaylistRef(link) {
@@ -275,12 +280,14 @@ async function fetchViaHtml(link, ref) {
   const candidates = [String(link || '').trim()]
   if (ref?.ownerId && ref?.albumId) {
     candidates.push(`https://vk.com/music/playlist/${ref.ownerId}_${ref.albumId}${ref.accessKey ? `_${ref.accessKey}` : ''}`)
+    candidates.push(`https://vk.com/audio?act=audio_playlist${ref.ownerId}_${ref.albumId}${ref.accessKey ? `&access_key=${encodeURIComponent(ref.accessKey)}` : ''}`)
     candidates.push(`https://vk.com/audios${ref.ownerId}?section=playlist_${ref.ownerId}_${ref.albumId}${ref.accessKey ? `_${ref.accessKey}` : ''}`)
     candidates.push(`https://m.vk.com/audio?act=audio_playlist${ref.ownerId}_${ref.albumId}${ref.accessKey ? `&access_key=${encodeURIComponent(ref.accessKey)}` : ''}`)
   }
   let name = 'VK Playlist'
   let tracks = []
   const errors = []
+  const cookie = getVkCookie()
   for (const url of candidates) {
     if (!url) continue
     try {
@@ -290,6 +297,7 @@ async function fetchViaHtml(link, ref) {
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
           'Referer': 'https://vk.com/',
+          ...(cookie ? { 'Cookie': cookie } : {}),
         },
         timeout: 17000,
         maxRedirects: 6,
@@ -341,6 +349,7 @@ const server = http.createServer(async (req, res) => {
       service: 'flow-vk-server',
       uptimeSec: Math.round(process.uptime()),
       vkServerToken: Boolean(DEFAULT_VK_TOKEN),
+      vkServerCookie: Boolean(DEFAULT_VK_COOKIE),
     })
   }
 
