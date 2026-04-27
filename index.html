@@ -516,11 +516,11 @@
             <div class="vs-row" style="align-items:flex-start;flex-direction:column;gap:8px">
               <label class="vs-label">Экспорт/импорт настроек для друзей</label>
               <div class="vs-btn-group">
-                <button class="vsb" onclick="exportFlowConfig()">Экспортировать конфиг</button>
-                <input type="file" id="flow-config-input" accept=".json,application/json" onchange="importFlowConfigFile(this)" style="display:none">
-                <button class="vsb" onclick="pickFlowConfigFile()">Импортировать конфиг</button>
+                <button class="vsb" onclick="exportFlowConfig()">Экспортировать Flow preset</button>
+                <input type="file" id="flow-config-input" accept=".flowpreset,.dotifypreset,.json,application/json" onchange="importFlowConfigFile(this)" style="display:none">
+                <button class="vsb" onclick="pickFlowConfigFile()">Импортировать preset</button>
               </div>
-              <div class="token-msg" id="flow-config-status" style="display:block">Экспорт создаёт JSON с визуалом, профилем, плейлистами и настройками.</div>
+              <div class="token-msg" id="flow-config-status" style="display:block">Экспорт создаёт .flowpreset. Импорт принимает .flowpreset, старые .dotifypreset и JSON.</div>
             </div>
           </div>
 

@@ -74,6 +74,7 @@ let _friendContext = null
 let _pendingRoomInvite = null
 let _myWaveRenderedTracks = []
 let _myWaveBuilding = false
+let _myWavePreloading = false
 let _myWaveMode = (() => {
   try { return localStorage.getItem('flow_my_wave_mode') || 'default' } catch { return 'default' }
 })()
@@ -2041,7 +2042,8 @@ function collectFlowConfigPayload() {
     storage[key] = localStorage.getItem(key)
   }
   return {
-    format: 'flow-config-v1',
+    format: 'flow-preset-v1',
+    app: 'Flow',
     exportedAt: new Date().toISOString(),
     storage,
   }
@@ -2054,16 +2056,16 @@ function exportFlowConfig() {
     const stamp = new Date().toISOString().slice(0, 10)
     const link = document.createElement('a')
     link.href = URL.createObjectURL(blob)
-    link.download = `flow-config-${stamp}.json`
+    link.download = `flow-preset-${stamp}.flowpreset`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(link.href)
-    setFlowConfigStatus('Конфиг экспортирован. Можешь отправить JSON другу.', false)
-    showToast('Конфиг экспортирован')
+    setFlowConfigStatus('Flow preset экспортирован. Можно отправлять .flowpreset другу.', false)
+    showToast('Flow preset экспортирован')
   } catch (err) {
     setFlowConfigStatus(`Ошибка экспорта: ${err?.message || err}`, true)
-    showToast('Не удалось экспортировать конфиг', true)
+    showToast('Не удалось экспортировать preset', true)
   }
 }
 
@@ -2080,30 +2082,81 @@ function importFlowConfigFile(input) {
   reader.onload = () => {
     try {
       const parsed = JSON.parse(String(reader.result || '{}'))
-      if (parsed?.format !== 'flow-config-v1' || !parsed?.storage || typeof parsed.storage !== 'object') {
+      const preset = normalizeImportedFlowPreset(parsed)
+      const storage = preset?.storage
+      if (!storage || typeof storage !== 'object') {
         throw new Error('Неверный формат файла')
       }
-      const toDelete = []
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i)
-        if (key && key.startsWith('flow_')) toDelete.push(key)
+      if (preset.replaceAll) {
+        const toDelete = []
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i)
+          if (key && key.startsWith('flow_')) toDelete.push(key)
+        }
+        toDelete.forEach((key) => localStorage.removeItem(key))
       }
-      toDelete.forEach((key) => localStorage.removeItem(key))
-      Object.entries(parsed.storage).forEach(([key, value]) => {
+      Object.entries(storage).forEach(([key, value]) => {
         if (!key.startsWith('flow_')) return
         localStorage.setItem(key, String(value ?? ''))
       })
-      setFlowConfigStatus('Конфиг импортирован. Перезагружаю приложение...', false)
-      showToast('Конфиг импортирован')
+      setFlowConfigStatus('Flow preset импортирован. Перезагружаю приложение...', false)
+      showToast('Flow preset импортирован')
       setTimeout(() => window.location.reload(), 250)
     } catch (err) {
       setFlowConfigStatus(`Ошибка импорта: ${err?.message || err}`, true)
-      showToast('Не удалось импортировать конфиг', true)
+      showToast('Не удалось импортировать preset', true)
     } finally {
       input.value = ''
     }
   }
   reader.readAsText(file)
+}
+
+function normalizeImportedFlowPreset(parsed) {
+  if ((parsed?.format === 'flow-preset-v1' || parsed?.format === 'flow-config-v1') && parsed?.storage && typeof parsed.storage === 'object') {
+    return { storage: parsed.storage, replaceAll: true }
+  }
+  if (parsed?.data && typeof parsed.data === 'object') {
+    return { storage: convertDotifyPresetToFlowStorage(parsed), replaceAll: false }
+  }
+  return null
+}
+
+function convertDotifyPresetToFlowStorage(preset) {
+  const data = preset?.data || {}
+  const ui = data.ui || {}
+  const gifs = data.gifs || {}
+  const visual = Object.assign({}, getVisual())
+  if (gifs.background) {
+    visual.bgType = 'custom'
+    visual.customBg = String(gifs.background)
+  }
+  if (gifs.visualizer) {
+    visual.homeWidget = Object.assign({ enabled: true, mode: 'image', image: null }, visual.homeWidget || {}, {
+      enabled: true,
+      mode: 'image',
+      image: String(gifs.visualizer),
+    })
+  } else if (ui.visualization?.style === 'wave') {
+    visual.homeWidget = Object.assign({ enabled: true, mode: 'bars', image: null }, visual.homeWidget || {}, {
+      enabled: true,
+      mode: 'wave',
+    })
+  }
+  const transparency = ui.transparency || {}
+  if (transparency.glass && typeof transparency.glass === 'object') {
+    const blur = Number(transparency.glass.blur)
+    const strength = Number(transparency.glass.strength)
+    if (Number.isFinite(blur)) visual.panelBlur = Math.max(0, Math.min(40, blur))
+    if (Number.isFinite(strength)) visual.glass = Math.max(0, Math.min(40, strength))
+  }
+  const scale = Array.isArray(ui.scale?.default) ? Number(ui.scale.default[0]) : Number(ui.scale?.default)
+  if (Number.isFinite(scale)) visual.uiScale = Math.max(80, Math.min(130, scale))
+  if (ui.tabs?.position === 'top') visual.sidebarPosition = 'top'
+  if (ui.customfont?.family) visual.customFontName = String(ui.customfont.family)
+  const storage = { flow_visual: JSON.stringify(visual) }
+  if (gifs.cover) storage.flow_track_covers = JSON.stringify({ __global__: String(gifs.cover) })
+  return storage
 }
 
 function updateSourceBadge() {
@@ -3138,6 +3191,41 @@ async function findMyWaveRecommendations(min = MY_WAVE_MIN_TRACKS, mode = getMyW
   return found.slice(0, target)
 }
 
+async function maybePreloadMyWave(force = false) {
+  if (queueScope !== 'myWave' || _myWaveBuilding || _myWavePreloading) return
+  const remaining = queue.length - queueIndex - 1
+  if (!force && remaining > 3) return
+  if (getMyWaveSeedTracks().length < 3) return
+  const startLength = queue.length
+  _myWavePreloading = true
+  renderMyWave()
+  try {
+    const additions = await findMyWaveRecommendations(10, getMyWaveMode())
+    const existing = new Set(queue.map((track) => normalizeTrackSignature(track)).filter(Boolean))
+    const fresh = additions.filter((track) => {
+      const sig = normalizeTrackSignature(track)
+      if (!sig || existing.has(sig)) return false
+      existing.add(sig)
+      return true
+    })
+    if (fresh.length) {
+      queue.push(...fresh)
+      _myWaveRenderedTracks = queue.slice()
+      renderQueue()
+      showToast(`Моя волна дозагрузила ${fresh.length} треков`)
+      if (force && queueIndex >= startLength - 1 && queue[queueIndex + 1]) {
+        queueIndex++
+        await playTrackObj(queue[queueIndex])
+      }
+    }
+  } catch (err) {
+    console.warn('my wave preload failed', err)
+  } finally {
+    _myWavePreloading = false
+    renderMyWave()
+  }
+}
+
 async function startMyWave() {
   if (_myWaveBuilding) return
   const seedTracks = getMyWaveSeedTracks()
@@ -3179,14 +3267,16 @@ function renderMyWave() {
     hintEl.textContent = `Послушай или лайкни еще ${3 - seedCount} трек(ов), чтобы волна поняла твой вкус`
   } else if (_myWaveBuilding) {
     hintEl.textContent = `${modeCfg.label}: ищу новые треки по твоему вкусу...`
+  } else if (_myWavePreloading) {
+    hintEl.textContent = `${modeCfg.label}: дозагружаю новые треки, чтобы волна не кончалась...`
   } else {
     hintEl.textContent = `${modeCfg.label}: ${modeCfg.hint}. Нажми запуск, и волна сама соберет новую очередь`
   }
   listEl.innerHTML = `
-    <div class="my-wave-orb ${_myWaveBuilding ? 'is-loading' : ''}">
+    <div class="my-wave-orb ${_myWaveBuilding || _myWavePreloading ? 'is-loading' : ''}">
       <div class="my-wave-orb-ring"></div>
       <div class="my-wave-orb-core"></div>
-      <span>${_myWaveBuilding ? 'Подбираю волну' : 'Волна без списка'}</span>
+      <span>${_myWaveBuilding ? 'Подбираю волну' : (_myWavePreloading ? 'Дозагружаю волну' : 'Волна без списка')}</span>
     </div>
   `
 }
@@ -5788,6 +5878,12 @@ function nextTrack(autoEnded = false) {
   if (queueIndex < queue.length - 1) {
     queueIndex++
     playTrackObj(queue[queueIndex])
+    maybePreloadMyWave(false)
+    return
+  }
+  if (queueScope === 'myWave') {
+    maybePreloadMyWave(true)
+    showToast('Волна ищет продолжение...')
     return
   }
   if (playbackMode.repeat === 'all') {
@@ -5820,6 +5916,7 @@ audio.ontimeupdate = () => {
 
     syncHomeCloneUI()
   }
+  if (queueScope === 'myWave' && !audio.paused && queue.length - queueIndex - 1 <= 3) maybePreloadMyWave(false)
   broadcastPlaybackSync(false)
   if (!_profile?.username || audio.paused || !audio.duration) return
   const now = Date.now()
@@ -7564,6 +7661,11 @@ window.addEventListener('DOMContentLoaded', () => {
       if (peerModal && !peerModal.classList.contains('hidden')) {
         e.preventDefault()
         closePeerProfile()
+        return
+      }
+      if (_playerModeActive) {
+        e.preventDefault()
+        exitPlayerMode()
         return
       }
     }
