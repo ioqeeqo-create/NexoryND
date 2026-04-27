@@ -94,38 +94,38 @@ const MY_WAVE_MODES = {
   default: {
     label: 'Обычная',
     hint: 'глубокая очередь по общему вкусу, жанрам и похожим артистам',
-    keywords: ['official','audio','music','mix','single','album','remix','feat','prod'],
-    queryTerms: ['fresh mix', 'new music', 'similar artists', 'radio mix', 'playlist'],
+    keywords: ['official','audio','music','mix','single','album','remix','feat','prod','viral','trend','trending','hit','popular','vibe','tiktok'],
+    queryTerms: ['viral hits', 'tiktok vibe', 'trending music', 'popular mix', 'fresh hits', 'vibe playlist'],
   },
   sad: {
     label: 'Грустная',
     hint: 'мягкая и меланхоличная очередь из твоих предпочтений',
     keywords: ['sad','slow','lofi','lo-fi','melancholy','melancholic','alone','lonely','cry','tears','rain','night','dark','blue','broken','heartbreak','empty','pain','груст','печаль','слез','один','одна','одиноч','дожд','ноч','боль','разбит','тоска','пуст','плак','забыть'],
-    queryTerms: ['sad rap', 'melancholic pop', 'rainy night', 'slow emotional', 'sad playlist', 'dark melodic'],
+    queryTerms: ['sad viral', 'sad tiktok', 'melancholic pop', 'rainy night', 'slow emotional', 'dark melodic'],
   },
   happy: {
     label: 'Веселая',
     hint: 'более светлая и позитивная очередь по твоему вкусу',
     keywords: ['happy','smile','summer','sun','sunny','party','dance','fun','joy','love','good','vibe','vibes','club','bright','feel good','весел','улыб','лето','солн','танц','кайф','радост','любов','позитив','движ','туса','вечерин'],
-    queryTerms: ['happy pop', 'feel good', 'summer vibe', 'dance playlist', 'party mix', 'positive rap'],
+    queryTerms: ['happy viral', 'tiktok happy', 'feel good', 'summer vibe', 'dance playlist', 'party mix'],
   },
   energetic: {
     label: 'Энергичная',
     hint: 'треклист поживее, чтобы разогнаться',
     keywords: ['energy','energetic','speed','fast','power','rock','metal','drum','bass','dnb','phonk','rave','club','hard','workout','rage','trap','banger','энерг','быстр','мощ','рок','метал','рейв','клуб','фонк','драм','бас','разнос','жестк'],
-    queryTerms: ['energetic rap', 'club banger', 'trap workout', 'rave mix', 'phonk drive', 'high energy'],
+    queryTerms: ['energetic viral', 'tiktok hype', 'club banger', 'trap workout', 'rave mix', 'high energy'],
   },
   calm: {
     label: 'Спокойная',
     hint: 'ровная очередь без резких прыжков',
     keywords: ['calm','chill','relax','ambient','acoustic','piano','sleep','dream','soft','quiet','slow','lofi','lo-fi','спокой','чил','расслаб','акуст','пианино','сон','мечт','тих','медлен','мягк'],
-    queryTerms: ['chill rap', 'calm pop', 'soft night', 'lofi vibe', 'ambient playlist', 'relax mix'],
+    queryTerms: ['chill viral', 'calm tiktok', 'soft night', 'lofi vibe', 'ambient playlist', 'relax mix'],
   },
   romantic: {
     label: 'Романтика',
     hint: 'больше треков про любовь и мягкий вайб',
     keywords: ['love','heart','kiss','romance','romantic','baby','darling','sweet','relationship','miss you','любов','сердц','роман','поцел','мила','милый','нежн','скуч','твоя','твой','влюб'],
-    queryTerms: ['romantic pop', 'love rap', 'soft love', 'heartbreak love', 'night romance', 'relationship songs'],
+    queryTerms: ['romantic viral', 'love tiktok', 'soft love', 'heartbreak love', 'night romance', 'relationship songs'],
   },
 }
 const MY_WAVE_TOKEN_STOPWORDS = new Set(['official','audio','video','music','feat','ft','prod','remix','mix','single','album','lyrics','lyric','clip','track','version','radio','edit','the','and','for','with','для','при','это','как','или','feat.'])
@@ -3105,13 +3105,40 @@ function getMyWaveMoodScore(track, mode) {
   return hits * (mode === 'default' ? 1.5 : 7)
 }
 
+function getMyWaveTrendScore(track, resultIndex = 0) {
+  const metricKeys = [
+    'popularity',
+    'playback_count',
+    'play_count',
+    'plays',
+    'stream_count',
+    'favorite_count',
+    'likes_count',
+    'likes',
+    'reposts_count',
+    'reposts',
+    'score',
+  ]
+  let score = 0
+  for (const key of metricKeys) {
+    const raw = Number(track?.[key])
+    if (!Number.isFinite(raw) || raw <= 0) continue
+    score += raw <= 100 ? Math.min(raw / 100, 1) * 10 : Math.min(Math.log10(raw + 1), 7) * 1.8
+  }
+  const text = `${track?.artist || ''} ${track?.title || ''}`.toLowerCase()
+  const vibeWords = ['viral', 'trend', 'trending', 'tiktok', 'tik tok', 'hit', 'popular', 'vibe', 'slay', 'speed', 'sped up', 'phonk', 'вайб', 'тренд', 'хит']
+  score += vibeWords.reduce((sum, word) => sum + (text.includes(word) ? 3 : 0), 0)
+  score += Math.max(0, 8 - Math.min(8, Number(resultIndex) || 0))
+  return Math.min(score, 28)
+}
+
 function getMyWaveQualityPenalty(track) {
   const text = `${track?.artist || ''} ${track?.title || ''}`.toLowerCase()
-  const noisy = ['sped up', 'speed up', 'nightcore', 'tik tok', 'tiktok', 'slowed + reverb', '1 hour', '8d audio', 'bass boosted']
+  const noisy = ['nightcore', 'slowed + reverb', '1 hour', '8d audio', 'bass boosted', 'karaoke', 'instrumental remake']
   return noisy.some((word) => text.includes(word)) ? 16 : 0
 }
 
-function scoreMyWaveTrack(track, profile, mode) {
+function scoreMyWaveTrack(track, profile, mode, resultIndex = 0) {
   const source = String(track.source || '').trim().toLowerCase()
   const artists = getMyWaveArtistNames(track)
   let score = 0
@@ -3120,6 +3147,7 @@ function scoreMyWaveTrack(track, profile, mode) {
   score += (profile.sources.get(source) || 0) * 0.8
   getMyWaveTokens(track).forEach((token) => { score += Math.min(profile.tokens.get(token) || 0, 12) })
   score += getMyWaveMoodScore(track, mode)
+  score += getMyWaveTrendScore(track, resultIndex)
   score -= getMyWaveQualityPenalty(track)
   return score
 }
@@ -3162,10 +3190,14 @@ function buildMyWaveQueries(seedTracks, mode = getMyWaveMode(), profile = buildM
   const seeds = seedTracks.slice(0, 10)
   const prefTerms = getMyWavePreferenceTerms(profile, 8)
   const moodTerms = (cfg.queryTerms || MY_WAVE_MODES.default.queryTerms || []).slice(0, 6)
+  const trendTerms = mode === 'default'
+    ? ['viral hits', 'tiktok vibe', 'trending now', 'popular songs']
+    : [`${cfg.label} tiktok`, `${cfg.label} viral`, `${cfg.label} vibe`, `${cfg.label} hits`]
   const queries = []
   artists.forEach((artist, idx) => {
     const term = moodTerms[idx % moodTerms.length] || 'similar'
     queries.push(`${artist} ${term}`)
+    queries.push(`${artist} ${trendTerms[idx % trendTerms.length]}`)
     queries.push(`${artist} similar artists`)
   })
   seeds.forEach((track, idx) => {
@@ -3180,7 +3212,8 @@ function buildMyWaveQueries(seedTracks, mode = getMyWaveMode(), profile = buildM
     queries.push(`${token} ${term}`)
   })
   moodTerms.forEach((term) => queries.push(`${term} music`))
-  return Array.from(new Set(queries.map((q) => q.trim()).filter(Boolean))).slice(0, 24)
+  trendTerms.forEach((term) => queries.push(term))
+  return Array.from(new Set(queries.map((q) => q.trim()).filter(Boolean))).slice(0, 28)
 }
 
 async function findMyWaveRecommendations(min = MY_WAVE_MIN_TRACKS, mode = getMyWaveMode()) {
@@ -3201,17 +3234,11 @@ async function findMyWaveRecommendations(min = MY_WAVE_MIN_TRACKS, mode = getMyW
       const hybrid = await searchHybridTracks(query, settings)
       results = sanitizeTrackList(hybrid?.tracks || [])
     } catch {}
-    if (!results.length && window.api?.youtubeSearch) {
-      try {
-        const yt = await window.api.youtubeSearch(query)
-        const list = Array.isArray(yt) ? yt : (Array.isArray(yt?.tracks) ? yt.tracks : [])
-        results = sanitizeTrackList(list)
-      } catch {}
-    }
     const ranked = results
       .map((track) => sanitizeTrack(track))
-      .filter((track) => isMyWaveRecommendationAllowed(track, excluded, selected))
-      .map((track) => ({ track, score: scoreMyWaveTrack(track, profile, mode) }))
+      .map((track, idx) => ({ track, idx }))
+      .filter(({ track }) => isMyWaveRecommendationAllowed(track, excluded, selected))
+      .map(({ track, idx }) => ({ track, score: scoreMyWaveTrack(track, profile, mode, idx) }))
       .sort((a, b) => b.score - a.score)
     let pickedFromQuery = 0
     for (const { track } of ranked) {
@@ -6879,12 +6906,20 @@ async function importPlaylistFromLink(urlFromUi = '') {
     return
   }
   const settings = getSettings()
+  const isYandexLink = /(^|\/\/)(music\.)?yandex\.[^/]+\/users\/[^/]+\/playlists\/[^/?#]+/i.test(url)
+  if (isYandexLink && !settings.yandexToken) {
+    showToast('Для импорта Яндекс Музыки нужен активный OAuth token', true)
+    openPage('settings')
+    switchSettingsTab('sources')
+    setTimeout(() => document.getElementById('ym-token-val')?.focus(), 120)
+    return
+  }
   showToast('Импортирую плейлист...')
   openImportProgress(0)
   _importProgressOpenedAt = Date.now()
   setImportProgressIndeterminate(true)
   const isVkLink = /(^|\/\/)(m\.)?vk\.com\//i.test(url)
-  updateImportProgress(0, 0, isVkLink ? 'Отправляю VK плейлист на РФ сервер и получаю список треков...' : 'Разбираю ссылку и получаю список треков...')
+  updateImportProgress(0, 0, isVkLink ? 'Отправляю VK плейлист на РФ сервер и получаю список треков...' : (isYandexLink ? 'Читаю плейлист Яндекс Музыки по OAuth token...' : 'Разбираю ссылку и получаю список треков...'))
   const imported = await window.api.importPlaylistLink(url.trim(), {
     spotify: settings.spotifyToken || '',
     yandex: settings.yandexToken || '',
@@ -6906,6 +6941,15 @@ async function importPlaylistFromLink(urlFromUi = '') {
         switchSrcTab('vk')
         document.getElementById('vk-token-val')?.focus()
       }, 120)
+      return
+    }
+    if (isYandexLink && /yandex token required|oauth|token/i.test(errorText)) {
+      updateImportProgress(0, 0, 'Яндекс Музыка требует активный OAuth token. Открой Источники и сохрани токен.')
+      await closeImportProgressSafe(1800)
+      showToast('Для Яндекс Музыки нужен OAuth token', true)
+      openPage('settings')
+      switchSettingsTab('sources')
+      setTimeout(() => document.getElementById('ym-token-val')?.focus(), 120)
       return
     }
     updateImportProgress(0, 0, `Ошибка: ${errorText}`)

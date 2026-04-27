@@ -10,9 +10,19 @@ function parseSpotifyPlaylistId(input) {
 
 function parseYandexPlaylistRef(input) {
   const raw = String(input || '').trim()
-  const m = raw.match(/music\.yandex\.[^/]+\/users\/([^/]+)\/playlists\/(\d+)/i)
-  if (!m) return null
-  return { user: decodeURIComponent(m[1]), kind: m[2] }
+  if (!raw) return null
+  const fromPath = (path = '') => {
+    const m = String(path || '').match(/\/users\/([^/?#]+)\/playlists\/([^/?#]+)/i)
+    if (!m) return null
+    return { user: decodeURIComponent(m[1]), kind: decodeURIComponent(m[2]) }
+  }
+  try {
+    const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`
+    const u = new URL(withScheme)
+    if (!/(^|\.)music\.yandex\./i.test(u.hostname)) return null
+    return fromPath(u.pathname)
+  } catch {}
+  return fromPath(raw)
 }
 
 function parseVkPlaylistRef(input) {
