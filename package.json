@@ -1,6 +1,6 @@
 {
   "name": "flow",
-  "version": "1.9.11",
+  "version": "1.9.12",
   "main": "main.js",
   "scripts": {
     "start": "electron .",

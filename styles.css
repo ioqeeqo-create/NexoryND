@@ -529,6 +529,46 @@ body.layout-top-nav .player-bar {
 }
 .my-wave-hero h3 { margin: 4px 0; font-size: 18px; letter-spacing: -0.01em; }
 .my-wave-hero p { margin: 0; color: var(--muted); font-size: 12px; }
+.my-wave-actions {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.my-wave-start,
+.my-wave-mode {
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 999px;
+  color: var(--text);
+  cursor: pointer;
+  transition: transform .16s ease, border-color .16s ease, background .16s ease;
+}
+.my-wave-start {
+  padding: 8px 12px;
+  background: linear-gradient(90deg, rgba(236,72,153,0.34), rgba(139,92,246,0.34));
+  font-weight: 700;
+}
+.my-wave-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.my-wave-mode {
+  padding: 7px 10px;
+  background: rgba(255,255,255,0.06);
+  font-size: 12px;
+}
+.my-wave-start:hover,
+.my-wave-mode:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255,255,255,0.24);
+  background: rgba(255,255,255,0.1);
+}
+.my-wave-mode.active {
+  background: rgba(255,255,255,0.16);
+  border-color: rgba(255,255,255,0.3);
+}
 .my-wave-badge {
   display: inline-flex;
   align-items: center;

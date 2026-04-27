@@ -21,7 +21,7 @@ const audio = (audioPlayer.createPlayerAudio || ((onErr) => {
 let currentTrack = null
 let queue = []
 let queueIndex = 0
-let queueScope = 'generic' // generic | search | liked | playlist
+let queueScope = 'generic' // generic | search | liked | playlist | myWave
 let openPlaylistIndex = null
 let searchDebounceTimer = null
 let currentSource = 'youtube'
@@ -73,6 +73,9 @@ let _roomHeartbeatTimer = null
 let _friendContext = null
 let _pendingRoomInvite = null
 let _myWaveRenderedTracks = []
+let _myWaveMode = (() => {
+  try { return localStorage.getItem('flow_my_wave_mode') || 'default' } catch { return 'default' }
+})()
 let _profileEditDraft = null
 let _roomContext = null
 let _roomServerSaveTimer = null
@@ -85,6 +88,38 @@ const FRIEND_NOTIFY_COOLDOWN_MS = 90 * 1000
 const PROFILE_CACHE_TTL_MS = 5 * 60 * 1000
 const MY_WAVE_MIN_TRACKS = 10
 const MY_WAVE_MAX_TRACKS = 30
+const MY_WAVE_MODES = {
+  default: {
+    label: 'Обычная',
+    hint: 'персональная очередь по твоим артистам, лайкам и последним прослушиваниям',
+    keywords: [],
+  },
+  sad: {
+    label: 'Грустная',
+    hint: 'мягкая и меланхоличная очередь из твоих предпочтений',
+    keywords: ['sad','slow','lofi','lo-fi','melancholy','melancholic','alone','lonely','cry','tears','rain','night','dark','blue','broken','heartbreak','груст','печаль','слез','один','одна','дожд','ноч','боль','разбит','тоска'],
+  },
+  happy: {
+    label: 'Веселая',
+    hint: 'более светлая и позитивная очередь по твоему вкусу',
+    keywords: ['happy','smile','summer','sun','sunny','party','dance','fun','joy','love','good','vibe','vibes','весел','улыб','лето','солн','танц','кайф','радост','любов','позитив'],
+  },
+  energetic: {
+    label: 'Энергичная',
+    hint: 'треклист поживее, чтобы разогнаться',
+    keywords: ['energy','energetic','speed','fast','power','rock','metal','drum','bass','dnb','phonk','rave','club','hard','workout','энерг','быстр','мощ','рок','метал','рейв','клуб','фонк','драм','бас'],
+  },
+  calm: {
+    label: 'Спокойная',
+    hint: 'ровная очередь без резких прыжков',
+    keywords: ['calm','chill','relax','ambient','acoustic','piano','sleep','dream','soft','quiet','спокой','чил','расслаб','акуст','пианино','сон','мечт','тих','медлен'],
+  },
+  romantic: {
+    label: 'Романтика',
+    hint: 'больше треков про любовь и мягкий вайб',
+    keywords: ['love','heart','kiss','romance','romantic','baby','darling','sweet','любов','сердц','роман','поцел','мила','милый','нежн'],
+  },
+}
 const _friendProfileRefreshAt = new Map()
 const _friendNotifyAt = new Map()
 
@@ -2861,28 +2896,135 @@ function pushListenHistory(track) {
   saveListenHistory(next)
 }
 
-function getMyWaveTracks(min = MY_WAVE_MIN_TRACKS) {
-  const history = getListenHistory()
-  const out = []
-  for (const item of history) {
-    const t = sanitizeTrack(item?.track)
-    if (!t?.id) continue
-    out.push(t)
-    if (out.length >= Math.max(MY_WAVE_MIN_TRACKS, Number(min) || MY_WAVE_MIN_TRACKS)) break
+function getMyWaveMode() {
+  return MY_WAVE_MODES[_myWaveMode] ? _myWaveMode : 'default'
+}
+
+function setMyWaveMode(mode) {
+  _myWaveMode = MY_WAVE_MODES[mode] ? mode : 'default'
+  try { localStorage.setItem('flow_my_wave_mode', _myWaveMode) } catch {}
+  renderMyWave()
+}
+
+function getMyWaveTrackKey(track) {
+  const safe = sanitizeTrack(track)
+  if (!safe?.id) return ''
+  return `${safe.source || 'unknown'}:${safe.id}`
+}
+
+function addMyWaveCandidate(map, track, weight = 1, playedAt = 0) {
+  const safe = sanitizeTrack(track)
+  const key = getMyWaveTrackKey(safe)
+  if (!key) return
+  const prev = map.get(key)
+  const score = Number(weight) || 0
+  if (prev) {
+    prev.weight += score
+    prev.playedAt = Math.max(Number(prev.playedAt || 0), Number(playedAt || 0))
+  } else {
+    map.set(key, { key, track: safe, weight: score, playedAt: Number(playedAt || 0) })
   }
-  return out
+}
+
+function getMyWaveCandidates() {
+  const map = new Map()
+  const history = getListenHistory()
+  history.forEach((item, idx) => {
+    addMyWaveCandidate(map, item?.track, 6 + Math.max(0, MY_WAVE_MAX_TRACKS - idx) / 8, item?.playedAt)
+  })
+  getLiked().forEach((track) => addMyWaveCandidate(map, track, 4, 0))
+  getPlaylists().map(normalizePlaylist).forEach((pl) => {
+    ;(pl.tracks || []).forEach((track) => addMyWaveCandidate(map, track, 2, 0))
+  })
+  return Array.from(map.values())
+}
+
+function getMyWaveTokens(track) {
+  return `${track?.artist || ''} ${track?.title || ''}`
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s-]+/gu, ' ')
+    .split(/\s+/)
+    .map((x) => x.trim())
+    .filter((x) => x.length >= 3)
+}
+
+function buildMyWavePreferenceProfile(candidates) {
+  const profile = { artists: new Map(), sources: new Map(), tokens: new Map() }
+  const bump = (map, key, score) => {
+    const safeKey = String(key || '').trim().toLowerCase()
+    if (!safeKey || safeKey === '—') return
+    map.set(safeKey, (map.get(safeKey) || 0) + score)
+  }
+  candidates.forEach((item) => {
+    const track = item.track || {}
+    const score = Math.max(1, Number(item.weight || 1))
+    bump(profile.artists, track.artist, score * 1.5)
+    bump(profile.sources, track.source, score * 0.6)
+    getMyWaveTokens(track).forEach((token) => bump(profile.tokens, token, score * 0.35))
+  })
+  return profile
+}
+
+function getMyWaveMoodScore(track, mode) {
+  if (mode === 'default') return 0
+  const cfg = MY_WAVE_MODES[mode] || MY_WAVE_MODES.default
+  const text = `${track?.artist || ''} ${track?.title || ''}`.toLowerCase()
+  return cfg.keywords.reduce((sum, keyword) => sum + (text.includes(keyword) ? 8 : 0), 0)
+}
+
+function scoreMyWaveTrack(item, profile, mode) {
+  const track = item.track || {}
+  const artist = String(track.artist || '').trim().toLowerCase()
+  const source = String(track.source || '').trim().toLowerCase()
+  const recentBoost = item.playedAt ? Math.max(0, 5 - ((Date.now() - Number(item.playedAt)) / (1000 * 60 * 60 * 24 * 7))) : 0
+  let score = Number(item.weight || 0) + recentBoost
+  score += (profile.artists.get(artist) || 0) * 1.8
+  score += (profile.sources.get(source) || 0) * 0.8
+  getMyWaveTokens(track).forEach((token) => { score += profile.tokens.get(token) || 0 })
+  score += getMyWaveMoodScore(track, mode)
+  return score
+}
+
+function getMyWaveTracks(min = MY_WAVE_MIN_TRACKS, mode = getMyWaveMode()) {
+  const candidates = getMyWaveCandidates()
+  const profile = buildMyWavePreferenceProfile(candidates)
+  const target = Math.min(MY_WAVE_MAX_TRACKS, Math.max(MY_WAVE_MIN_TRACKS, Number(min) || MY_WAVE_MIN_TRACKS))
+  const scored = candidates
+    .map((item) => ({ item, mood: getMyWaveMoodScore(item.track, mode), score: scoreMyWaveTrack(item, profile, mode) }))
+    .sort((a, b) => b.score - a.score)
+  const primary = mode === 'default' ? scored : scored.filter((x) => x.mood > 0)
+  const backup = mode === 'default' ? [] : scored.filter((x) => x.mood <= 0)
+  return primary.concat(backup).slice(0, target).map((x) => x.item.track)
+}
+
+function startMyWave() {
+  const tracks = getMyWaveTracks(MY_WAVE_MIN_TRACKS, getMyWaveMode())
+  if (!tracks.length) return showToast('Сначала послушай или лайкни несколько треков', true)
+  _myWaveRenderedTracks = tracks.slice()
+  queue = tracks.slice()
+  queueIndex = 0
+  queueScope = 'myWave'
+  playTrackObj(queue[0]).catch(() => {})
 }
 
 function renderMyWave() {
   const listEl = document.getElementById('my-wave-list')
   const hintEl = document.getElementById('my-wave-hint')
+  const modesEl = document.getElementById('my-wave-modes')
   if (!listEl || !hintEl) return
-  const tracks = getMyWaveTracks(MY_WAVE_MIN_TRACKS)
+  const mode = getMyWaveMode()
+  const modeCfg = MY_WAVE_MODES[mode] || MY_WAVE_MODES.default
+  const tracks = getMyWaveTracks(MY_WAVE_MIN_TRACKS, mode)
   _myWaveRenderedTracks = tracks.slice()
+  if (modesEl) {
+    modesEl.innerHTML = Object.entries(MY_WAVE_MODES).map(([id, cfg]) => (
+      `<button class="my-wave-mode ${id === mode ? 'active' : ''}" onclick="setMyWaveMode('${id}')">${cfg.label}</button>`
+    )).join('')
+  }
   if (tracks.length < MY_WAVE_MIN_TRACKS) {
     hintEl.textContent = `Прослушай еще ${MY_WAVE_MIN_TRACKS - tracks.length} трек(ов), чтобы собрать Мою волну`
   } else {
-    hintEl.textContent = `Твоя персональная волна: ${tracks.length} треков`
+    hintEl.textContent = `${modeCfg.label}: ${modeCfg.hint}. В очереди ${tracks.length} треков`
   }
   listEl.innerHTML = tracks.map((track, idx) => {
     const cover = getListCoverUrl(track)
@@ -2905,6 +3047,9 @@ function playTrackFromMyWave(index) {
   const i = Number(index)
   const track = Number.isInteger(i) ? _myWaveRenderedTracks[i] : null
   if (!track) return
+  queue = _myWaveRenderedTracks.slice()
+  queueIndex = i
+  queueScope = 'myWave'
   playTrackObj(track).catch(() => {})
 }
 

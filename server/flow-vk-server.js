@@ -281,21 +281,40 @@ function extractRowsFromHtml(html, max = 260) {
 
 async function fetchViaWidget(ref) {
   if (!ref?.ownerId || !ref?.albumId || !ref?.accessKey) return null
-  const params = {
+  const baseParams = {
     owner_id: String(ref.ownerId),
     playlist_id: String(ref.albumId),
     hash: String(ref.accessKey),
   }
-  const candidates = [
-    `https://vk.com/widget_playlist.php?${new URLSearchParams(params).toString()}`,
-    `https://vk.com/widget_playlist.php?${new URLSearchParams(Object.assign({ app: '0', _ver: '1', width: '100%' }, params)).toString()}`,
-    `https://vk.com/widget_playlist.php?${new URLSearchParams({
+  const widgetVariants = [
+    {
       oid: String(ref.ownerId),
       pid: String(ref.albumId),
       hash: String(ref.accessKey),
-    }).toString()}`,
+    },
+    {
+      oid: String(ref.ownerId),
+      pid: String(ref.albumId),
+      hash: String(ref.accessKey),
+      app: '0',
+      width: '100%',
+      _ver: '169',
+    },
+    Object.assign({ rows: '260', limit: '260' }, baseParams),
+    Object.assign({ rows: '100', limit: '100' }, baseParams),
+    Object.assign({ app: '0', _ver: '1', width: '100%', rows: '260', limit: '260' }, baseParams),
+    baseParams,
+    {
+      oid: String(ref.ownerId),
+      pid: String(ref.albumId),
+      hash: String(ref.accessKey),
+      rows: '260',
+      limit: '260',
+    },
   ]
+  const candidates = widgetVariants.map((params) => `https://vk.com/widget_playlist.php?${new URLSearchParams(params).toString()}`)
   const errors = []
+  let best = null
   for (const url of candidates) {
     try {
       const rsp = await axios.get(url, {
@@ -315,13 +334,18 @@ async function fetchViaWidget(ref) {
       }
       const parsed = extractRowsFromHtml(String(rsp?.data || ''))
       if (parsed?.tracks?.length) {
-        return { name: parsed.name || 'VK Playlist', tracks: parsed.tracks }
+        if (!best || parsed.tracks.length > best.tracks.length) {
+          best = { name: parsed.name || 'VK Playlist', tracks: parsed.tracks, via: 'public-widget' }
+        }
+        if (parsed.tracks.length >= 100) break
+        continue
       }
       errors.push(`VK widget empty response ${String(rsp?.data || '').slice(0, 80).replace(/\s+/g, ' ')}`)
     } catch (err) {
       errors.push(err?.message || String(err))
     }
   }
+  if (best?.tracks?.length) return best
   return { name: 'VK Playlist', tracks: [], error: errors.slice(0, 3).join(' | ') }
 }
 
@@ -405,7 +429,7 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && url.pathname === '/vk/playlist') {
     try {
       const data = await resolveVkPlaylist(url.searchParams.get('url'), url.searchParams.get('token') || '')
-      return writeJson(res, 200, { ok: true, service: 'vk', name: data.name || 'VK Playlist', tracks: data.tracks || [] })
+      return writeJson(res, 200, { ok: true, service: 'vk', via: data.via || 'vk-server', name: data.name || 'VK Playlist', count: (data.tracks || []).length, tracks: data.tracks || [] })
     } catch (err) {
       return writeJson(res, 400, { ok: false, error: err?.message || String(err) })
     }
@@ -415,7 +439,7 @@ const server = http.createServer(async (req, res) => {
     try {
       const body = await readBody(req)
       const data = await resolveVkPlaylist(body?.url, body?.token || '')
-      return writeJson(res, 200, { ok: true, service: 'vk', name: data.name || 'VK Playlist', tracks: data.tracks || [] })
+      return writeJson(res, 200, { ok: true, service: 'vk', via: data.via || 'vk-server', name: data.name || 'VK Playlist', count: (data.tracks || []).length, tracks: data.tracks || [] })
     } catch (err) {
       return writeJson(res, 400, { ok: false, error: err?.message || String(err) })
     }
