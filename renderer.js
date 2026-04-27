@@ -24,7 +24,7 @@ let queueIndex = 0
 let queueScope = 'generic' // generic | search | liked | playlist | myWave
 let openPlaylistIndex = null
 let searchDebounceTimer = null
-let currentSource = 'youtube'
+let currentSource = 'hybrid'
 let _playerModeActive = false
 let _lastSearchMode = 'hybrid'
 let _playRequestSeq = 0
@@ -1664,6 +1664,19 @@ const providers = {
   audius:     (q)    => searchAudius(q),
 }
 
+/** Активный источник в настройках: гибрид отдельно от одиночных провайдеров в `providers`. */
+const ALLOWED_ACTIVE_SOURCES = new Set(['hybrid', 'spotify', 'soundcloud', 'audius', 'hitmo'])
+
+function normalizeStoredActiveSource(rawSrc) {
+  const raw = String(rawSrc || 'hybrid').toLowerCase()
+  // Основной рабочий поиск — серверный Spotify → SoundCloud → Audius; YouTube как activeSource не используем.
+  if (raw === 'yt' || raw === 'youtube') return 'hybrid'
+  if (raw === 'sc') return 'soundcloud'
+  if (raw === 'hm') return 'hitmo'
+  if (ALLOWED_ACTIVE_SOURCES.has(raw)) return raw
+  return 'hybrid'
+}
+
 // в”Ђв”Ђв”Ђ SETTINGS в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 function normalizeFlowServerUrl(value = '') {
   let raw = String(value || '').trim()
@@ -1677,12 +1690,17 @@ function normalizeFlowServerUrl(value = '') {
 
 function getSettings() {
   const raw = JSON.parse(localStorage.getItem('flow_settings')) || {
-    soundcloudClientId: '', vkToken: '', spotifyToken: '', yandexToken: '', activeSource: 'youtube',
+    soundcloudClientId: '', vkToken: '', spotifyToken: '', yandexToken: '', activeSource: 'hybrid',
     discordClientId: '', discordRpcEnabled: false, lastfmApiKey: '', lastfmSharedSecret: '', lastfmSessionKey: '',
     proxyBaseUrl: FLOW_SERVER_DEFAULT_URL
   }
   raw.proxyBaseUrl = normalizeFlowServerUrl(raw.proxyBaseUrl)
-  if (!providers[raw.activeSource]) raw.activeSource = 'youtube'
+  const prevActive = raw.activeSource
+  raw.activeSource = normalizeStoredActiveSource(raw.activeSource)
+  if (!ALLOWED_ACTIVE_SOURCES.has(raw.activeSource)) raw.activeSource = 'hybrid'
+  if (prevActive !== raw.activeSource) {
+    try { localStorage.setItem('flow_settings', JSON.stringify(raw)) } catch {}
+  }
   return raw
 }
 
@@ -1696,7 +1714,7 @@ function saveSettingsRaw(patch) {
   const s = getSettings()
   const updated = Object.assign(s, patch)
   localStorage.setItem('flow_settings', JSON.stringify(updated))
-  currentSource = updated.activeSource || 'youtube'
+  currentSource = updated.activeSource || 'hybrid'
   updateSourceBadge()
 }
 
@@ -1908,14 +1926,14 @@ function updateSpotifyStatus(token) {
 }
 
 function setActiveSource(src) {
-  const allowed = new Set(['youtube', 'yt', 'spotify', 'soundcloud', 'sc', 'audius', 'hitmo', 'hm'])
+  const allowed = new Set(['hybrid', 'spotify', 'soundcloud', 'sc', 'audius', 'hitmo', 'hm'])
   const raw = String(src || '').toLowerCase()
   const normalized =
-    raw === 'yt' ? 'youtube' :
+    raw === 'yt' || raw === 'youtube' ? 'hybrid' :
     raw === 'sc' ? 'soundcloud' :
     raw === 'hm' ? 'hitmo' :
     raw
-  const safe = allowed.has(normalized) ? normalized : 'youtube'
+  const safe = allowed.has(normalized) ? normalized : 'hybrid'
   saveSettingsRaw({ activeSource: safe })
   searchCache.clear()
 }
@@ -5571,6 +5589,16 @@ function openPage(id, opts = {}) {
 }
 
 // в”Ђв”Ђв”Ђ PLAYER в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+/** Ключ для локального кэша потока (Spotify / SoundCloud / Audius). */
+function getStreamCacheKey(track) {
+  if (!track || typeof track !== 'object') return ''
+  const src = String(track.source || '').toLowerCase()
+  if (src !== 'soundcloud' && src !== 'audius' && src !== 'spotify') return ''
+  const id = String(track.spotifyId || track.id || '').trim()
+  if (!id) return ''
+  return `${src}:${id}`
+}
+
 async function playTrackObj(track, opts = {}) {
   if (_roomState?.roomId && !_roomState?.host && !opts?.remoteSync) {
     enqueueSharedTrack(track)
@@ -5731,50 +5759,76 @@ async function playTrackObj(track, opts = {}) {
     return
   }
 
-  // External streams are played via local proxy for CORS/Range compatibility.
+  let usedStreamCache = false
+  const streamCacheKey = getStreamCacheKey(track)
+  let remoteUrlForCache = streamUrl
   let finalUrl = streamUrl
-  // For yt-dlp direct googlevideo links, direct playback is often more stable than proxy.
-  if (window.api?.proxySetUrl && shouldUseProxyStream() && /^https?:\/\//i.test(streamUrl) && streamEngine !== 'yt-dlp') {
-    setStage('Прокси: подготовка…')
-    try {
-      finalUrl = await window.api.proxySetUrl(streamUrl)
-    } catch (e) {
-      console.warn('proxySetUrl failed, fallback to direct stream:', e?.message || e)
-      finalUrl = streamUrl
+
+  if (
+    streamCacheKey &&
+    window.api?.streamCacheLookup &&
+    track.source !== 'youtube' &&
+    /^https?:\/\//i.test(streamUrl) &&
+    !/127\.0\.0\.1|localhost/i.test(streamUrl)
+  ) {
+    setStage('Кэш: проверка…')
+    const hit = await window.api.streamCacheLookup({ cacheKey: streamCacheKey }).catch(() => ({ hit: false }))
+    if (isStale()) return
+    if (hit?.hit && hit.url) {
+      finalUrl = hit.url
+      usedStreamCache = true
+      setStage('Кэш: воспроизведение')
     }
   }
-  console.log('PLAY URL:', finalUrl)
 
-  // Quick probe: helps decide if URL is dead/403 before we even try audio.
-  if (window.api?.probeStreamUrl && /^https?:\/\//i.test(streamUrl) && streamEngine !== 'yt-dlp') {
-    try {
-      setStage('Проверка потока…')
-      const p = await withTimeout(window.api.probeStreamUrl(streamUrl), 9000, 'probe timeout').catch(() => null)
-      if (isStale()) return
-      if (p && p.ok) {
-        console.log('STREAM PROBE:', p.status, p.headers)
-        // Common failure in 2026: 403 from googlevideo. Force fresh URL immediately.
-        if (p.status === 403 && track.source === 'youtube' && track.ytId && window.api?.youtubeStream) {
-          _ytInstanceCache = null
-          const fresh = await withTimeout(
-            window.api.youtubeStream(track.ytId, _ytInstanceCache, { forceFresh: true }),
-            12000,
-            'fresh youtube stream timeout'
-          ).catch(err => ({ ok: false, error: err.message }))
-          if (isStale()) return
-          if (fresh.ok && fresh.url) {
-            streamUrl = fresh.url
-            if (fresh.inst) _ytInstanceCache = fresh.inst
-            finalUrl = (window.api?.proxySetUrl && shouldUseProxyStream() && /^https?:\/\//i.test(streamUrl)) ? await window.api.proxySetUrl(streamUrl) : streamUrl
-            console.log('FRESH URL AFTER 403 PROBE:', streamUrl, 'engine:', fresh.inst || 'unknown')
-            setStage('YouTube: обновил поток, запускаю…')
-          } else {
-            showToast('YouTube 403: обнови yt-dlp (Настройки → Источники) или попробуй другой трек', true)
-            setStage('YouTube: 403')
+  // External streams are played via local proxy for CORS/Range compatibility.
+  if (!usedStreamCache) {
+    // For yt-dlp direct googlevideo links, direct playback is often more stable than proxy.
+    if (window.api?.proxySetUrl && shouldUseProxyStream() && /^https?:\/\//i.test(streamUrl) && streamEngine !== 'yt-dlp') {
+      setStage('Прокси: подготовка…')
+      try {
+        finalUrl = await window.api.proxySetUrl(streamUrl)
+      } catch (e) {
+        console.warn('proxySetUrl failed, fallback to direct stream:', e?.message || e)
+        finalUrl = streamUrl
+      }
+    }
+    console.log('PLAY URL:', finalUrl)
+
+    // Quick probe: helps decide if URL is dead/403 before we even try audio.
+    if (window.api?.probeStreamUrl && /^https?:\/\//i.test(streamUrl) && streamEngine !== 'yt-dlp') {
+      try {
+        setStage('Проверка потока…')
+        const p = await withTimeout(window.api.probeStreamUrl(streamUrl), 9000, 'probe timeout').catch(() => null)
+        if (isStale()) return
+        if (p && p.ok) {
+          console.log('STREAM PROBE:', p.status, p.headers)
+          // Common failure in 2026: 403 from googlevideo. Force fresh URL immediately.
+          if (p.status === 403 && track.source === 'youtube' && track.ytId && window.api?.youtubeStream) {
+            _ytInstanceCache = null
+            const fresh = await withTimeout(
+              window.api.youtubeStream(track.ytId, _ytInstanceCache, { forceFresh: true }),
+              12000,
+              'fresh youtube stream timeout'
+            ).catch(err => ({ ok: false, error: err.message }))
+            if (isStale()) return
+            if (fresh.ok && fresh.url) {
+              streamUrl = fresh.url
+              remoteUrlForCache = streamUrl
+              if (fresh.inst) _ytInstanceCache = fresh.inst
+              finalUrl = (window.api?.proxySetUrl && shouldUseProxyStream() && /^https?:\/\//i.test(streamUrl)) ? await window.api.proxySetUrl(streamUrl) : streamUrl
+              console.log('FRESH URL AFTER 403 PROBE:', streamUrl, 'engine:', fresh.inst || 'unknown')
+              setStage('YouTube: обновил поток, запускаю…')
+            } else {
+              showToast('YouTube 403: обнови yt-dlp (Настройки → Источники) или попробуй другой трек', true)
+              setStage('YouTube: 403')
+            }
           }
         }
-      }
-    } catch {}
+      } catch {}
+    }
+  } else {
+    console.log('PLAY URL (offline cache):', finalUrl)
   }
 
   const waitForPlaybackProgress = (ms = 10000) => new Promise((resolve) => {
@@ -5867,6 +5921,18 @@ async function playTrackObj(track, opts = {}) {
       if (playBtn) playBtn.innerHTML = ICONS.play
       return
     }
+  }
+
+  if (
+    streamCacheKey &&
+    !usedStreamCache &&
+    started &&
+    remoteUrlForCache &&
+    /^https?:\/\//i.test(remoteUrlForCache) &&
+    !/127\.0\.0\.1|localhost/i.test(remoteUrlForCache) &&
+    window.api?.streamCacheStore
+  ) {
+    window.api.streamCacheStore({ cacheKey: streamCacheKey, url: remoteUrlForCache }).catch(() => {})
   }
 
   if (nameEl) nameEl.textContent = track.title || 'Без названия'
@@ -6166,7 +6232,7 @@ function searchTracks(queryOverride = '') {
 async function searchTracksDirect(query, settings = getSettings()) {
   const q = String(query || '').trim()
   if (!q) return []
-  const src = String(settings?.activeSource || currentSource || 'youtube').toLowerCase()
+  const src = String(settings?.activeSource || currentSource || 'hybrid').toLowerCase()
   if (src === 'hitmo' || src === 'hm') return sanitizeTrackList(await searchHitmo(q))
   if (src === 'youtube' || src === 'yt') {
     if (!window.api?.youtubeSearch) throw new Error('YouTube поиск доступен только в Electron')
@@ -7031,19 +7097,19 @@ async function importPlaylistFromLink(urlFromUi = '') {
 }
 window.importPlaylistFromLink = importPlaylistFromLink
 
-async function importVkPlaylistToFlow() {
-  const input = document.getElementById('vk-playlist-link-input')
-  if (!input) return showToast('Поле ссылки VK не найдено', true)
+async function importPlaylistLinkFromBar() {
+  const input = document.getElementById('playlist-link-import-input')
+  if (!input) return showToast('Поле ссылки не найдено', true)
   const url = String(input?.value || '').trim()
-  if (!url) return showToast('Вставь ссылку на плейлист VK', true)
-  showToast('Запускаю импорт VK...')
+  if (!url) return showToast('Вставь ссылку на плейлист VK или Яндекс Музыки', true)
   try {
     await importPlaylistFromLink(url)
   } catch (err) {
-    showToast(`Импорт VK: ${sanitizeDisplayText(err?.message || String(err))}`, true)
+    showToast(`Импорт: ${sanitizeDisplayText(err?.message || String(err))}`, true)
   }
 }
-window.importVkPlaylistToFlow = importVkPlaylistToFlow
+window.importPlaylistLinkFromBar = importPlaylistLinkFromBar
+window.importVkPlaylistToFlow = importPlaylistLinkFromBar
 
 function addToPlaylist(track) {
   const pls = getPlaylists().map(normalizePlaylist)
@@ -7665,22 +7731,20 @@ window.addEventListener('DOMContentLoaded', () => {
   refreshYtDlpStatus().catch(() => {})
   const createBtn = document.getElementById('btn-create-playlist')
   if (createBtn) createBtn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); createPlaylist() })
-  const importBtn = document.getElementById('btn-import-playlist')
-  if (importBtn) importBtn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); importPlaylistFromLink() })
   const importTextBtn = document.getElementById('btn-import-text-playlist')
   if (importTextBtn) importTextBtn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); openTextPlaylistImportModal() })
-  const importVkBtn = document.getElementById('btn-import-vk-to-flow')
-  if (importVkBtn) importVkBtn.addEventListener('click', (e) => {
+  const importLinkBtn = document.getElementById('btn-import-playlist-link')
+  if (importLinkBtn) importLinkBtn.addEventListener('click', (e) => {
     e.preventDefault()
     e.stopPropagation()
-    importVkPlaylistToFlow()
+    importPlaylistLinkFromBar()
   })
-  const vkPlaylistInput = document.getElementById('vk-playlist-link-input')
-  if (vkPlaylistInput) {
-    vkPlaylistInput.addEventListener('keydown', (e) => {
+  const playlistLinkInput = document.getElementById('playlist-link-import-input')
+  if (playlistLinkInput) {
+    playlistLinkInput.addEventListener('keydown', (e) => {
       if (e.key !== 'Enter') return
       e.preventDefault()
-      importVkPlaylistToFlow()
+      importPlaylistLinkFromBar()
     })
   }
   const inviteInput = document.getElementById('invite-input')

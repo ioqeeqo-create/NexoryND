@@ -186,8 +186,7 @@
       <div class="content-header"><h2>Библиотека</h2><p class="content-sub">Твои плейлисты</p></div>
       <div class="section-header">
         <span>Плейлисты</span>
-        <div id="library-actions" style="display:flex;gap:8px;align-items:center">
-          <button class="btn-small" id="btn-import-playlist" onclick="importPlaylistFromLink()">Импорт по ссылке</button>
+        <div id="library-actions" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <button class="btn-small" id="btn-import-text-playlist" onclick="openTextPlaylistImportModal()">Импорт текстом</button>
           <button class="btn-small" onclick="exportPlaylistsFile()">Экспорт JSON</button>
           <input type="file" id="playlist-import-file" accept=".json,application/json" onchange="importPlaylistsFile(this)" style="display:none" />
@@ -196,9 +195,9 @@
           <button class="library-plus-btn" id="btn-create-playlist-fab" onclick="createPlaylist()" title="Создать плейлист">+</button>
         </div>
       </div>
-      <div style="display:flex;gap:8px;align-items:center;margin:10px 0 12px;max-width:720px">
-        <input id="vk-playlist-link-input" class="token-field flow-input" placeholder="Вставьте ссылку на плейлист VK" style="flex:1" />
-        <button class="btn-small" id="btn-import-vk-to-flow" onclick="importVkPlaylistToFlow()">Импортировать во Flow</button>
+      <div class="library-inline-import">
+        <input id="playlist-link-import-input" type="url" autocomplete="off" class="token-field flow-input" placeholder="Ссылка на плейлист VK или Яндекс Музыки" />
+        <button type="button" class="btn-small" id="btn-import-playlist-link" onclick="importPlaylistLinkFromBar()">Импорт</button>
       </div>
       <div id="playlists-list" class="playlists-grid"></div>
       <div id="playlist-view" class="hidden">

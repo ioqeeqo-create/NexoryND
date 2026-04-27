@@ -19,6 +19,8 @@ contextBridge.exposeInMainWorld('api', {
   ytdlpInfo: () => ipcRenderer.invoke('ytdlp-info'),
   probeStreamUrl: (url) => ipcRenderer.invoke('probe-stream-url', { url }),
   saveCustomMedia: (payload) => ipcRenderer.invoke('save-custom-media', payload),
+  streamCacheLookup: (payload) => ipcRenderer.invoke('stream-cache-lookup', payload),
+  streamCacheStore: (payload) => ipcRenderer.invoke('stream-cache-store', payload),
   appVersion: () => ipcRenderer.invoke('app-version'),
   scFetchClientId: () => ipcRenderer.invoke('sc-fetch-client-id'),
   scSearch: (q, clientId) => ipcRenderer.invoke('sc-search', { q, clientId }),

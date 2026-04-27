@@ -121,6 +121,188 @@ ipcMain.handle('save-custom-media', async (event, payload = {}) => {
   return { ok: true, url: pathToFileURL(filePath).toString(), path: filePath, name: fileName }
 })
 
+// --- Offline stream cache (SoundCloud / Audius / Spotify direct URLs) ---
+const STREAM_CACHE_DIR = 'stream-cache'
+const STREAM_CACHE_MAX_FILE_BYTES = 80 * 1024 * 1024
+const STREAM_CACHE_MAX_TOTAL_BYTES = 512 * 1024 * 1024
+const _streamCacheStoreInflight = new Map()
+
+function getStreamCacheDir() {
+  const dir = path.join(app.getPath('userData'), STREAM_CACHE_DIR)
+  fs.mkdirSync(dir, { recursive: true })
+  return dir
+}
+
+function streamCacheKeyHash(cacheKey) {
+  return crypto.createHash('sha256').update(String(cacheKey || ''), 'utf8').digest('hex')
+}
+
+function extFromAudioMime(mime = '') {
+  const m = String(mime || '').toLowerCase().split(';')[0].trim()
+  if (m.includes('mpeg') || m === 'audio/mp3') return '.mp3'
+  if (m.includes('mp4') || m.includes('m4a') || m.includes('x-m4a')) return '.m4a'
+  if (m.includes('webm')) return '.webm'
+  if (m.includes('ogg')) return '.ogg'
+  if (m.includes('opus')) return '.opus'
+  if (m.includes('aac')) return '.aac'
+  if (m.includes('flac')) return '.flac'
+  if (m.includes('wav')) return '.wav'
+  return '.bin'
+}
+
+function listStreamCacheFilesWithStats(dir) {
+  let names = []
+  try {
+    names = fs.readdirSync(dir)
+  } catch {
+    return []
+  }
+  const out = []
+  for (const name of names) {
+    if (name.endsWith('.part')) continue
+    const full = path.join(dir, name)
+    try {
+      const st = fs.statSync(full)
+      if (!st.isFile()) continue
+      out.push({ full, size: st.size, mtime: st.mtimeMs })
+    } catch {}
+  }
+  return out
+}
+
+function enforceStreamCacheBudget() {
+  const dir = getStreamCacheDir()
+  let entries = listStreamCacheFilesWithStats(dir)
+  let total = entries.reduce((s, e) => s + e.size, 0)
+  if (total <= STREAM_CACHE_MAX_TOTAL_BYTES) return
+  entries.sort((a, b) => a.mtime - b.mtime)
+  for (const e of entries) {
+    if (total <= STREAM_CACHE_MAX_TOTAL_BYTES * 0.82) break
+    try {
+      fs.unlinkSync(e.full)
+      total -= e.size
+    } catch {}
+  }
+}
+
+function findStreamCachedPath(cacheKey) {
+  const dir = getStreamCacheDir()
+  const h = streamCacheKeyHash(cacheKey)
+  let names = []
+  try {
+    names = fs.readdirSync(dir)
+  } catch {
+    return null
+  }
+  const hit = names.find((n) => n.startsWith(`${h}.`) && !n.endsWith('.part'))
+  if (!hit) return null
+  const full = path.join(dir, hit)
+  try {
+    const st = fs.statSync(full)
+    if (st.size < 2048) return null
+    const now = new Date()
+    try {
+      fs.utimesSync(full, now, now)
+    } catch {}
+    return full
+  } catch {
+    return null
+  }
+}
+
+async function downloadStreamToCacheFile(remoteUrl, destPart, maxBytes) {
+  const response = await axios.get(String(remoteUrl), {
+    responseType: 'stream',
+    maxContentLength: maxBytes,
+    maxBodyLength: maxBytes,
+    timeout: 180000,
+    maxRedirects: 12,
+    validateStatus: (s) => s >= 200 && s < 300,
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Flow/1.0',
+      Accept: '*/*',
+    },
+  })
+  const ws = fs.createWriteStream(destPart)
+  let len = 0
+  return await new Promise((resolve, reject) => {
+    response.data.on('data', (chunk) => {
+      len += chunk.length
+      if (len > maxBytes) {
+        try {
+          response.data.destroy()
+        } catch {}
+        try {
+          ws.destroy()
+        } catch {}
+        try {
+          fs.unlinkSync(destPart)
+        } catch {}
+        reject(new Error('stream too large'))
+      }
+    })
+    response.data.pipe(ws)
+    ws.on('finish', () => {
+      resolve({ len, contentType: String(response.headers['content-type'] || '') })
+    })
+    ws.on('error', reject)
+    response.data.on('error', reject)
+  })
+}
+
+ipcMain.handle('stream-cache-lookup', async (e, { cacheKey } = {}) => {
+  try {
+    const key = String(cacheKey || '').trim()
+    if (!key) return { hit: false }
+    const full = findStreamCachedPath(key)
+    if (!full) return { hit: false }
+    return { hit: true, url: pathToFileURL(full).toString(), path: full }
+  } catch (err) {
+    return { hit: false, error: err?.message || String(err) }
+  }
+})
+
+ipcMain.handle('stream-cache-store', async (e, { cacheKey, url } = {}) => {
+  const key = String(cacheKey || '').trim()
+  const remoteUrl = String(url || '').trim()
+  if (!key || !remoteUrl || !/^https?:\/\//i.test(remoteUrl)) return { ok: false, error: 'bad args' }
+  if (/127\.0\.0\.1|localhost/i.test(remoteUrl)) return { ok: false, error: 'skip local' }
+  if (findStreamCachedPath(key)) return { ok: true, skipped: true }
+  if (_streamCacheStoreInflight.has(key)) return _streamCacheStoreInflight.get(key)
+  const dir = getStreamCacheDir()
+  const h = streamCacheKeyHash(key)
+  const partPath = path.join(dir, `${h}.part`)
+  const run = (async () => {
+    try {
+      if (fs.existsSync(partPath)) {
+        try {
+          fs.unlinkSync(partPath)
+        } catch {}
+      }
+      const { contentType } = await downloadStreamToCacheFile(remoteUrl, partPath, STREAM_CACHE_MAX_FILE_BYTES)
+      const ext = extFromAudioMime(contentType)
+      const finalPath = path.join(dir, `${h}${ext}`)
+      if (fs.existsSync(finalPath)) {
+        try {
+          fs.unlinkSync(finalPath)
+        } catch {}
+      }
+      fs.renameSync(partPath, finalPath)
+      enforceStreamCacheBudget()
+      return { ok: true, path: finalPath }
+    } catch (err) {
+      try {
+        if (fs.existsSync(partPath)) fs.unlinkSync(partPath)
+      } catch {}
+      return { ok: false, error: err?.message || String(err) }
+    } finally {
+      _streamCacheStoreInflight.delete(key)
+    }
+  })()
+  _streamCacheStoreInflight.set(key, run)
+  return run
+})
+
 function httpsGetJsonUrl(url, headers = {}, timeout = 12000) {
   return new Promise((resolve, reject) => {
     try {

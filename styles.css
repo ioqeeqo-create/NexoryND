@@ -1044,6 +1044,25 @@ input:not([type])::placeholder {
 .section-header * { pointer-events:auto; }
 #library-actions { position:relative; z-index:130; -webkit-app-region:no-drag; }
 #library-actions .btn-small { position:relative; z-index:131; -webkit-app-region:no-drag; }
+.library-inline-import {
+  display:flex;
+  gap:10px;
+  align-items:stretch;
+  max-width:640px;
+  margin:0 0 14px;
+}
+.library-inline-import .flow-input {
+  flex:1;
+  min-width:0;
+  margin:0;
+  padding:8px 12px;
+  font-size:13px;
+}
+.library-inline-import .btn-small {
+  flex:0 0 auto;
+  align-self:center;
+  white-space:nowrap;
+}
 .library-plus-btn {
   width:34px;
   height:34px;
