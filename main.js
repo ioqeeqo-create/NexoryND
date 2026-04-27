@@ -6,6 +6,7 @@ const https = require('https')
 const http = require('http')
 const crypto = require('crypto')
 const axios = require('axios')
+const { pathToFileURL } = require('url')
 const {
   parseSpotifyPlaylistId,
   parseYandexPlaylistRef,
@@ -88,6 +89,37 @@ function writeTextSafe(filePath, text) {
     fs.writeFileSync(filePath, String(text || ''), 'utf8')
   } catch {}
 }
+
+function getCustomMediaDir() {
+  const dir = path.join(app.getPath('userData'), 'custom-media')
+  fs.mkdirSync(dir, { recursive: true })
+  return dir
+}
+
+function getSafeMediaExt(name = '', mime = '') {
+  const fromName = String(path.extname(String(name || '')).replace(/[^.\w-]/g, '').toLowerCase() || '')
+  if (fromName && fromName.length <= 8) return fromName
+  const m = String(mime || '').toLowerCase()
+  if (m.includes('gif')) return '.gif'
+  if (m.includes('png')) return '.png'
+  if (m.includes('webp')) return '.webp'
+  if (m.includes('jpeg') || m.includes('jpg')) return '.jpg'
+  return '.bin'
+}
+
+ipcMain.handle('save-custom-media', async (event, payload = {}) => {
+  const bytes = payload?.bytes
+  const size = Number(bytes?.byteLength || bytes?.length || 0)
+  if (!bytes || !size) return { ok: false, error: 'empty media' }
+  if (size > 80 * 1024 * 1024) return { ok: false, error: 'media too large' }
+  const ext = getSafeMediaExt(payload?.name, payload?.mime)
+  const purpose = String(payload?.purpose || 'media').replace(/[^\w-]+/g, '-').slice(0, 32) || 'media'
+  const hash = crypto.createHash('sha1').update(Buffer.from(bytes)).digest('hex').slice(0, 16)
+  const fileName = `${purpose}-${Date.now()}-${hash}${ext}`
+  const filePath = path.join(getCustomMediaDir(), fileName)
+  fs.writeFileSync(filePath, Buffer.from(bytes))
+  return { ok: true, url: pathToFileURL(filePath).toString(), path: filePath, name: fileName }
+})
 
 function httpsGetJsonUrl(url, headers = {}, timeout = 12000) {
   return new Promise((resolve, reject) => {

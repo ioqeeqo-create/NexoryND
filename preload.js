@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('api', {
   ytdlpUpdate: () => ipcRenderer.invoke('ytdlp-update'),
   ytdlpInfo: () => ipcRenderer.invoke('ytdlp-info'),
   probeStreamUrl: (url) => ipcRenderer.invoke('probe-stream-url', { url }),
+  saveCustomMedia: (payload) => ipcRenderer.invoke('save-custom-media', payload),
   appVersion: () => ipcRenderer.invoke('app-version'),
   scFetchClientId: () => ipcRenderer.invoke('sc-fetch-client-id'),
   scSearch: (q, clientId) => ipcRenderer.invoke('sc-search', { q, clientId }),

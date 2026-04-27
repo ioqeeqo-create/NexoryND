@@ -309,6 +309,22 @@ function readFileAsDataUrl(file) {
   })
 }
 
+async function saveCustomMediaFile(file, purpose = 'media') {
+  if (!file) return ''
+  if (window.api?.saveCustomMedia && typeof file.arrayBuffer === 'function') {
+    const bytes = await file.arrayBuffer()
+    const saved = await window.api.saveCustomMedia({
+      name: file.name || '',
+      mime: file.type || '',
+      purpose,
+      bytes,
+    })
+    if (saved?.ok && saved.url) return String(saved.url)
+    throw new Error(saved?.error || 'media save failed')
+  }
+  return readFileAsDataUrl(file)
+}
+
 function prepareProfileImageData(file, dataUrl, kind = 'avatar') {
   return new Promise((resolve) => {
     const raw = String(dataUrl || '')
@@ -930,17 +946,20 @@ function updateBackground() {
   }
 }
 
-function loadCustomBg(input) {
+async function loadCustomBg(input) {
   const file = input.files[0]
   if (!file) return
-  const reader = new FileReader()
-  reader.onload = e => {
-    saveVisual({ customBg: e.target.result })
+  try {
+    const mediaUrl = await saveCustomMediaFile(file, 'background')
+    saveVisual({ customBg: mediaUrl })
     refreshCustomBgPreview(file.name)
     updateBackground()
     showToast('Фон установлен')
+  } catch (err) {
+    showToast(`Не удалось сохранить фон: ${sanitizeDisplayText(err?.message || err)}`, true)
+  } finally {
+    input.value = ''
   }
-  reader.readAsDataURL(file)
 }
 
 function pickCustomBgMedia(kind = 'image') {
@@ -1009,20 +1028,23 @@ function setHomeWidgetMode(mode) {
   syncHomeWidgetUI()
 }
 
-function setHomeWidgetImage(input) {
+async function setHomeWidgetImage(input) {
   const file = input?.files?.[0]
   if (!file) return
-  const reader = new FileReader()
-  reader.onload = (e) => {
+  try {
+    const mediaUrl = await saveCustomMediaFile(file, 'home-widget')
     const v = getVisual()
     const homeWidget = Object.assign({ enabled: true, mode: 'image', image: null }, v.homeWidget || {})
-    homeWidget.image = e.target?.result || null
+    homeWidget.image = mediaUrl
     homeWidget.mode = 'image'
     saveVisual({ homeWidget })
     syncHomeWidgetUI()
+    showToast('Виджет сохранён')
+  } catch (err) {
+    showToast(`Не удалось сохранить виджет: ${sanitizeDisplayText(err?.message || err)}`, true)
+  } finally {
     input.value = ''
   }
-  reader.readAsDataURL(file)
 }
 
 function clearHomeWidgetImage() {
@@ -1948,7 +1970,7 @@ function syncTrackCoverStatus() {
   refreshTrackCoverPreview()
 }
 
-function setCustomTrackCover(input) {
+async function setCustomTrackCover(input) {
   const file = input?.files?.[0]
   if (!file) return
   if (!currentTrack) {
@@ -1956,11 +1978,10 @@ function setCustomTrackCover(input) {
     input.value = ''
     return
   }
-  const reader = new FileReader()
-  reader.onload = (e) => {
+  try {
     const keys = getTrackCoverKeys(currentTrack)
     const map = getCustomCoverMap()
-    const value = e.target?.result || ''
+    const value = await saveCustomMediaFile(file, 'track-cover')
     map.__global__ = value
     keys.forEach((key) => { map[key] = value })
     saveCustomCoverMap(map)
@@ -1973,9 +1994,11 @@ function setCustomTrackCover(input) {
     syncTrackCoverStatus()
     refreshTrackCoverPreview(file.name)
     showToast('Кастомная обложка сохранена для плеера')
+  } catch (err) {
+    showToast(`Не удалось сохранить обложку: ${sanitizeDisplayText(err?.message || err)}`, true)
+  } finally {
     input.value = ''
   }
-  reader.readAsDataURL(file)
 }
 
 function pickCustomTrackCover(kind = 'image') {
@@ -7577,14 +7600,15 @@ function setupAppDragAndDrop() {
       playTrackObj(localTrack).catch((err) => showToast(`Файл не проигран: ${err?.message || err}`, true))
       showToast(`Локальный трек: ${meta.title}`)
     },
-    onGif: (file) => {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        saveVisual({ customBg: e.target?.result || null, bgType: 'custom' })
+    onGif: async (file) => {
+      try {
+        const mediaUrl = await saveCustomMediaFile(file, 'background')
+        saveVisual({ customBg: mediaUrl, bgType: 'custom' })
         setBgType('custom')
         showToast('GIF установлен как фон')
+      } catch (err) {
+        showToast(`GIF не сохранён: ${sanitizeDisplayText(err?.message || err)}`, true)
       }
-      reader.readAsDataURL(file)
     },
     onInvalid: () => showToast('Поддерживаются только .mp3 и .gif', true),
   })
