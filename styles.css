@@ -520,7 +520,9 @@ body.layout-top-nav .player-bar {
 .home-card-sub { font-size:12px; color:var(--muted); }
 .my-wave {
   margin-top: 14px;
-  padding: 14px;
+  padding: 16px;
+  --wave-c1: #ec4899;
+  --wave-c2: #8b5cf6;
   border: 1px solid rgba(255,255,255,0.14);
   background:
     radial-gradient(120% 90% at 12% -8%, rgba(236,72,153,0.18), transparent 52%),
@@ -559,6 +561,12 @@ body.layout-top-nav .player-bar {
   background: rgba(255,255,255,0.06);
   font-size: 12px;
 }
+.my-wave-mode[data-wave-mode="default"] { --wave-mode-c1:#ec4899; --wave-mode-c2:#8b5cf6; }
+.my-wave-mode[data-wave-mode="sad"] { --wave-mode-c1:#60a5fa; --wave-mode-c2:#a78bfa; }
+.my-wave-mode[data-wave-mode="happy"] { --wave-mode-c1:#facc15; --wave-mode-c2:#fb7185; }
+.my-wave-mode[data-wave-mode="energetic"] { --wave-mode-c1:#fb7185; --wave-mode-c2:#f97316; }
+.my-wave-mode[data-wave-mode="calm"] { --wave-mode-c1:#22d3ee; --wave-mode-c2:#34d399; }
+.my-wave-mode[data-wave-mode="romantic"] { --wave-mode-c1:#f472b6; --wave-mode-c2:#fb7185; }
 .my-wave-start:hover,
 .my-wave-mode:hover {
   transform: translateY(-1px);
@@ -566,8 +574,11 @@ body.layout-top-nav .player-bar {
   background: rgba(255,255,255,0.1);
 }
 .my-wave-mode.active {
-  background: rgba(255,255,255,0.16);
-  border-color: rgba(255,255,255,0.3);
+  color: #fff;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--wave-mode-c1) 48%, transparent), color-mix(in srgb, var(--wave-mode-c2) 48%, transparent));
+  border-color: color-mix(in srgb, var(--wave-mode-c2) 62%, rgba(255,255,255,0.24));
+  box-shadow: 0 0 18px color-mix(in srgb, var(--wave-mode-c1) 28%, transparent);
 }
 .my-wave-badge {
   display: inline-flex;
@@ -580,34 +591,35 @@ body.layout-top-nav .player-bar {
   font-size: 11px;
 }
 .my-wave-list {
-  margin-top: 12px;
-  min-height: 118px;
+  margin-top: 14px;
+  min-height: 132px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .my-wave-orb {
   position: relative;
-  width: min(100%, 360px);
-  min-height: 106px;
+  width: 100%;
+  min-height: 126px;
   border-radius: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
   background:
-    radial-gradient(circle at 28% 34%, rgba(236,72,153,0.34), transparent 34%),
-    radial-gradient(circle at 72% 45%, rgba(139,92,246,0.34), transparent 38%),
+    radial-gradient(circle at 18% 30%, color-mix(in srgb, var(--wave-c1) 40%, transparent), transparent 34%),
+    radial-gradient(circle at 78% 45%, color-mix(in srgb, var(--wave-c2) 42%, transparent), transparent 40%),
+    linear-gradient(90deg, color-mix(in srgb, var(--wave-c1) 14%, transparent), color-mix(in srgb, var(--wave-c2) 14%, transparent)),
     rgba(255,255,255,0.07);
-  border: 1px solid rgba(255,255,255,0.13);
+  border: 1px solid color-mix(in srgb, var(--wave-c2) 36%, rgba(255,255,255,0.13));
+  box-shadow: inset 0 0 60px rgba(255,255,255,0.04), 0 12px 34px rgba(0,0,0,0.14);
 }
-.my-wave-orb span {
-  position: relative;
-  z-index: 2;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: .01em;
-}
+.my-wave-orb.mode-default { --wave-c1:#ec4899; --wave-c2:#8b5cf6; }
+.my-wave-orb.mode-sad { --wave-c1:#60a5fa; --wave-c2:#a78bfa; }
+.my-wave-orb.mode-happy { --wave-c1:#facc15; --wave-c2:#fb7185; }
+.my-wave-orb.mode-energetic { --wave-c1:#fb7185; --wave-c2:#f97316; }
+.my-wave-orb.mode-calm { --wave-c1:#22d3ee; --wave-c2:#34d399; }
+.my-wave-orb.mode-romantic { --wave-c1:#f472b6; --wave-c2:#fb7185; }
 .my-wave-orb-ring,
 .my-wave-orb-core {
   position: absolute;
@@ -615,17 +627,17 @@ body.layout-top-nav .player-bar {
   pointer-events: none;
 }
 .my-wave-orb-ring {
-  width: 180px;
-  height: 180px;
+  width: min(58vw, 520px);
+  height: min(58vw, 520px);
   border: 1px solid rgba(255,255,255,0.18);
-  box-shadow: 0 0 34px rgba(236,72,153,0.18);
+  box-shadow: 0 0 44px color-mix(in srgb, var(--wave-c1) 26%, transparent);
 }
 .my-wave-orb-core {
-  width: 86px;
-  height: 86px;
-  background: linear-gradient(135deg, rgba(236,72,153,0.48), rgba(139,92,246,0.48));
-  filter: blur(2px);
-  opacity: .75;
+  width: min(40vw, 360px);
+  height: 74px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--wave-c1) 62%, transparent), color-mix(in srgb, var(--wave-c2) 62%, transparent));
+  filter: blur(12px);
+  opacity: .72;
 }
 .my-wave-orb.is-loading .my-wave-orb-ring {
   animation: myWavePulse 1.25s ease-in-out infinite;

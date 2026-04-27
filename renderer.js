@@ -93,40 +93,42 @@ const MY_WAVE_MAX_TRACKS = 30
 const MY_WAVE_MODES = {
   default: {
     label: 'Обычная',
-    hint: 'персональная очередь по твоим артистам, лайкам и последним прослушиваниям',
-    keywords: [],
+    hint: 'глубокая очередь по общему вкусу, жанрам и похожим артистам',
+    keywords: ['official','audio','music','mix','single','album','remix','feat','prod'],
+    queryTerms: ['fresh mix', 'new music', 'similar artists', 'radio mix', 'playlist'],
   },
   sad: {
     label: 'Грустная',
     hint: 'мягкая и меланхоличная очередь из твоих предпочтений',
-    keywords: ['sad','slow','lofi','lo-fi','melancholy','melancholic','alone','lonely','cry','tears','rain','night','dark','blue','broken','heartbreak','груст','печаль','слез','один','одна','дожд','ноч','боль','разбит','тоска'],
-    queryTerms: ['sad', 'melancholic', 'acoustic', 'rain', 'slow'],
+    keywords: ['sad','slow','lofi','lo-fi','melancholy','melancholic','alone','lonely','cry','tears','rain','night','dark','blue','broken','heartbreak','empty','pain','груст','печаль','слез','один','одна','одиноч','дожд','ноч','боль','разбит','тоска','пуст','плак','забыть'],
+    queryTerms: ['sad rap', 'melancholic pop', 'rainy night', 'slow emotional', 'sad playlist', 'dark melodic'],
   },
   happy: {
     label: 'Веселая',
     hint: 'более светлая и позитивная очередь по твоему вкусу',
-    keywords: ['happy','smile','summer','sun','sunny','party','dance','fun','joy','love','good','vibe','vibes','весел','улыб','лето','солн','танц','кайф','радост','любов','позитив'],
-    queryTerms: ['happy', 'summer', 'dance', 'party', 'good vibes'],
+    keywords: ['happy','smile','summer','sun','sunny','party','dance','fun','joy','love','good','vibe','vibes','club','bright','feel good','весел','улыб','лето','солн','танц','кайф','радост','любов','позитив','движ','туса','вечерин'],
+    queryTerms: ['happy pop', 'feel good', 'summer vibe', 'dance playlist', 'party mix', 'positive rap'],
   },
   energetic: {
     label: 'Энергичная',
     hint: 'треклист поживее, чтобы разогнаться',
-    keywords: ['energy','energetic','speed','fast','power','rock','metal','drum','bass','dnb','phonk','rave','club','hard','workout','энерг','быстр','мощ','рок','метал','рейв','клуб','фонк','драм','бас'],
-    queryTerms: ['energetic', 'dance', 'club', 'workout', 'rock'],
+    keywords: ['energy','energetic','speed','fast','power','rock','metal','drum','bass','dnb','phonk','rave','club','hard','workout','rage','trap','banger','энерг','быстр','мощ','рок','метал','рейв','клуб','фонк','драм','бас','разнос','жестк'],
+    queryTerms: ['energetic rap', 'club banger', 'trap workout', 'rave mix', 'phonk drive', 'high energy'],
   },
   calm: {
     label: 'Спокойная',
     hint: 'ровная очередь без резких прыжков',
-    keywords: ['calm','chill','relax','ambient','acoustic','piano','sleep','dream','soft','quiet','спокой','чил','расслаб','акуст','пианино','сон','мечт','тих','медлен'],
-    queryTerms: ['chill', 'calm', 'lofi', 'ambient', 'acoustic'],
+    keywords: ['calm','chill','relax','ambient','acoustic','piano','sleep','dream','soft','quiet','slow','lofi','lo-fi','спокой','чил','расслаб','акуст','пианино','сон','мечт','тих','медлен','мягк'],
+    queryTerms: ['chill rap', 'calm pop', 'soft night', 'lofi vibe', 'ambient playlist', 'relax mix'],
   },
   romantic: {
     label: 'Романтика',
     hint: 'больше треков про любовь и мягкий вайб',
-    keywords: ['love','heart','kiss','romance','romantic','baby','darling','sweet','любов','сердц','роман','поцел','мила','милый','нежн'],
-    queryTerms: ['love', 'romantic', 'heart', 'slow', 'soft'],
+    keywords: ['love','heart','kiss','romance','romantic','baby','darling','sweet','relationship','miss you','любов','сердц','роман','поцел','мила','милый','нежн','скуч','твоя','твой','влюб'],
+    queryTerms: ['romantic pop', 'love rap', 'soft love', 'heartbreak love', 'night romance', 'relationship songs'],
   },
 }
+const MY_WAVE_TOKEN_STOPWORDS = new Set(['official','audio','video','music','feat','ft','prod','remix','mix','single','album','lyrics','lyric','clip','track','version','radio','edit','the','and','for','with','для','при','это','как','или','feat.'])
 const _friendProfileRefreshAt = new Map()
 const _friendNotifyAt = new Map()
 
@@ -3051,11 +3053,27 @@ function getMyWaveTokens(track) {
     .replace(/[^\p{L}\p{N}\s-]+/gu, ' ')
     .split(/\s+/)
     .map((x) => x.trim())
-    .filter((x) => x.length >= 3)
+    .filter((x) => x.length >= 3 && !MY_WAVE_TOKEN_STOPWORDS.has(x) && !/^\d+$/.test(x))
+}
+
+function normalizeMyWaveArtistName(value) {
+  return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+function getMyWaveArtistNames(track) {
+  return String(track?.artist || '')
+    .split(/\s*(?:,|&|\+| x | feat\.? | ft\.? | при участии | и )\s*/i)
+    .map(normalizeMyWaveArtistName)
+    .filter((name) => name && name !== '—' && name.length >= 2)
+    .slice(0, 4)
+}
+
+function getMyWavePrimaryArtist(track) {
+  return getMyWaveArtistNames(track)[0] || normalizeMyWaveArtistName(track?.artist || '')
 }
 
 function buildMyWavePreferenceProfile(candidates) {
-  const profile = { artists: new Map(), sources: new Map(), tokens: new Map() }
+  const profile = { artists: new Map(), sources: new Map(), tokens: new Map(), totalWeight: 0 }
   const bump = (map, key, score) => {
     const safeKey = String(key || '').trim().toLowerCase()
     if (!safeKey || safeKey === '—') return
@@ -3064,18 +3082,27 @@ function buildMyWavePreferenceProfile(candidates) {
   candidates.forEach((item) => {
     const track = item.track || {}
     const score = Math.max(1, Number(item.weight || 1))
-    bump(profile.artists, track.artist, score * 1.5)
+    profile.totalWeight += score
+    getMyWaveArtistNames(track).forEach((artist, idx) => bump(profile.artists, artist, score * (idx === 0 ? 0.9 : 0.45)))
     bump(profile.sources, track.source, score * 0.6)
-    getMyWaveTokens(track).forEach((token) => bump(profile.tokens, token, score * 0.35))
+    getMyWaveTokens(track).forEach((token) => bump(profile.tokens, token, score * 0.65))
   })
   return profile
 }
 
+function getMyWavePreferenceTerms(profile, limit = 8) {
+  return Array.from(profile.tokens.entries())
+    .filter(([token]) => token && !MY_WAVE_TOKEN_STOPWORDS.has(token))
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([token]) => token)
+}
+
 function getMyWaveMoodScore(track, mode) {
-  if (mode === 'default') return 0
   const cfg = MY_WAVE_MODES[mode] || MY_WAVE_MODES.default
   const text = `${track?.artist || ''} ${track?.title || ''}`.toLowerCase()
-  return cfg.keywords.reduce((sum, keyword) => sum + (text.includes(keyword) ? 8 : 0), 0)
+  const hits = (cfg.keywords || []).reduce((sum, keyword) => sum + (text.includes(keyword) ? 1 : 0), 0)
+  return hits * (mode === 'default' ? 1.5 : 7)
 }
 
 function getMyWaveQualityPenalty(track) {
@@ -3085,12 +3112,13 @@ function getMyWaveQualityPenalty(track) {
 }
 
 function scoreMyWaveTrack(track, profile, mode) {
-  const artist = String(track.artist || '').trim().toLowerCase()
   const source = String(track.source || '').trim().toLowerCase()
+  const artists = getMyWaveArtistNames(track)
   let score = 0
-  score += (profile.artists.get(artist) || 0) * 1.8
+  const artistMatch = Math.max(0, ...artists.map((artist) => profile.artists.get(artist) || 0))
+  score += Math.min(artistMatch, 18) * 0.75
   score += (profile.sources.get(source) || 0) * 0.8
-  getMyWaveTokens(track).forEach((token) => { score += profile.tokens.get(token) || 0 })
+  getMyWaveTokens(track).forEach((token) => { score += Math.min(profile.tokens.get(token) || 0, 12) })
   score += getMyWaveMoodScore(track, mode)
   score -= getMyWaveQualityPenalty(track)
   return score
@@ -3118,38 +3146,41 @@ function isMyWaveRecommendationAllowed(track, excluded, selected) {
   return true
 }
 
-function getMyWaveTopArtists(seedTracks, limit = 5) {
+function getMyWaveTopArtists(seedTracks, limit = 8) {
   const counts = new Map()
   seedTracks.forEach((track, idx) => {
-    const artist = String(track?.artist || '').trim()
-    if (!artist || artist === '—') return
-    counts.set(artist, (counts.get(artist) || 0) + Math.max(1, 12 - idx))
+    getMyWaveArtistNames(track).forEach((artist, artistIdx) => {
+      counts.set(artist, (counts.get(artist) || 0) + Math.max(1, 10 - idx) * (artistIdx === 0 ? 1 : 0.55))
+    })
   })
   return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, limit).map(([artist]) => artist)
 }
 
-function buildMyWaveQueries(seedTracks, mode = getMyWaveMode()) {
+function buildMyWaveQueries(seedTracks, mode = getMyWaveMode(), profile = buildMyWavePreferenceProfile(getMyWaveCandidates())) {
   const cfg = MY_WAVE_MODES[mode] || MY_WAVE_MODES.default
-  const artists = getMyWaveTopArtists(seedTracks, 5)
-  const seeds = seedTracks.slice(0, 6)
-  const moodTerms = mode === 'default' ? ['similar', 'radio', 'mix'] : (cfg.queryTerms || []).slice(0, 5)
+  const artists = getMyWaveTopArtists(seedTracks, 8)
+  const seeds = seedTracks.slice(0, 10)
+  const prefTerms = getMyWavePreferenceTerms(profile, 8)
+  const moodTerms = (cfg.queryTerms || MY_WAVE_MODES.default.queryTerms || []).slice(0, 6)
   const queries = []
   artists.forEach((artist, idx) => {
     const term = moodTerms[idx % moodTerms.length] || 'similar'
     queries.push(`${artist} ${term}`)
-    if (mode !== 'default') queries.push(`${artist} ${cfg.label}`)
+    queries.push(`${artist} similar artists`)
   })
   seeds.forEach((track, idx) => {
     const artist = String(track?.artist || '').trim()
-    const title = String(track?.title || '').trim()
     const term = moodTerms[idx % moodTerms.length] || 'similar'
-    if (artist && title) queries.push(`${artist} ${title} ${term}`)
+    const token = prefTerms[idx % Math.max(1, prefTerms.length)] || ''
+    if (artist && token) queries.push(`${artist} ${token} ${term}`)
     else if (artist) queries.push(`${artist} ${term}`)
   })
-  if (mode !== 'default') {
-    moodTerms.forEach((term) => queries.push(`${term} music`))
-  }
-  return Array.from(new Set(queries.map((q) => q.trim()).filter(Boolean))).slice(0, 14)
+  prefTerms.forEach((token, idx) => {
+    const term = moodTerms[idx % moodTerms.length] || 'playlist'
+    queries.push(`${token} ${term}`)
+  })
+  moodTerms.forEach((term) => queries.push(`${term} music`))
+  return Array.from(new Set(queries.map((q) => q.trim()).filter(Boolean))).slice(0, 24)
 }
 
 async function findMyWaveRecommendations(min = MY_WAVE_MIN_TRACKS, mode = getMyWaveMode()) {
@@ -3157,9 +3188,10 @@ async function findMyWaveRecommendations(min = MY_WAVE_MIN_TRACKS, mode = getMyW
   const profile = buildMyWavePreferenceProfile(candidates)
   const target = Math.min(MY_WAVE_MAX_TRACKS, Math.max(MY_WAVE_MIN_TRACKS, Number(min) || MY_WAVE_MIN_TRACKS))
   const seedTracks = getMyWaveSeedTracks()
-  const queries = buildMyWaveQueries(seedTracks, mode)
+  const queries = buildMyWaveQueries(seedTracks, mode, profile)
   const excluded = getMyWaveExcludedSignatures()
   const selected = new Set()
+  const selectedArtists = new Map()
   const found = []
   const settings = getSettings()
   for (const query of queries) {
@@ -3176,17 +3208,23 @@ async function findMyWaveRecommendations(min = MY_WAVE_MIN_TRACKS, mode = getMyW
         results = sanitizeTrackList(list)
       } catch {}
     }
-    results
+    const ranked = results
       .map((track) => sanitizeTrack(track))
       .filter((track) => isMyWaveRecommendationAllowed(track, excluded, selected))
       .map((track) => ({ track, score: scoreMyWaveTrack(track, profile, mode) }))
       .sort((a, b) => b.score - a.score)
-      .slice(0, 3)
-      .forEach(({ track }) => {
-        const sig = normalizeTrackSignature(track)
-        selected.add(sig)
-        found.push(track)
-      })
+    let pickedFromQuery = 0
+    for (const { track } of ranked) {
+      const artist = getMyWavePrimaryArtist(track)
+      const artistCount = selectedArtists.get(artist) || 0
+      if (artist && artistCount >= 2 && found.length < target - 4) continue
+      const sig = normalizeTrackSignature(track)
+      selected.add(sig)
+      if (artist) selectedArtists.set(artist, artistCount + 1)
+      found.push(track)
+      pickedFromQuery += 1
+      if (pickedFromQuery >= 3 || found.length >= target) break
+    }
   }
   return found.slice(0, target)
 }
@@ -3260,7 +3298,7 @@ function renderMyWave() {
   const seedCount = getMyWaveSeedTracks().length
   if (modesEl) {
     modesEl.innerHTML = Object.entries(MY_WAVE_MODES).map(([id, cfg]) => (
-      `<button class="my-wave-mode ${id === mode ? 'active' : ''}" onclick="setMyWaveMode('${id}')">${cfg.label}</button>`
+      `<button class="my-wave-mode ${id === mode ? 'active' : ''}" data-wave-mode="${id}" onclick="setMyWaveMode('${id}')">${cfg.label}</button>`
     )).join('')
   }
   if (seedCount < 3) {
@@ -3273,10 +3311,9 @@ function renderMyWave() {
     hintEl.textContent = `${modeCfg.label}: ${modeCfg.hint}. Нажми запуск, и волна сама соберет новую очередь`
   }
   listEl.innerHTML = `
-    <div class="my-wave-orb ${_myWaveBuilding || _myWavePreloading ? 'is-loading' : ''}">
+    <div class="my-wave-orb mode-${mode} ${_myWaveBuilding || _myWavePreloading ? 'is-loading' : ''}" aria-label="${modeCfg.label}">
       <div class="my-wave-orb-ring"></div>
       <div class="my-wave-orb-core"></div>
-      <span>${_myWaveBuilding ? 'Подбираю волну' : (_myWavePreloading ? 'Дозагружаю волну' : 'Волна без списка')}</span>
     </div>
   `
 }
