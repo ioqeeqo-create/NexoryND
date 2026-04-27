@@ -94,38 +94,38 @@ const MY_WAVE_MODES = {
   default: {
     label: 'Обычная',
     hint: 'глубокая очередь по общему вкусу, жанрам и похожим артистам',
-    keywords: ['official','audio','music','mix','single','album','remix','feat','prod','viral','trend','trending','hit','popular','vibe','tiktok'],
-    queryTerms: ['viral hits', 'tiktok vibe', 'trending music', 'popular mix', 'fresh hits', 'vibe playlist'],
+    keywords: ['official','audio','music','mix','single','album','remix','feat','prod','viral','trend','trending','hit','popular','vibe','tiktok','hyperpop','phonk','dreamcore'],
+    queryTerms: ['viral hits', 'tiktok vibe', 'trending music', 'popular mix', 'hyperpop viral', 'phonk viral', 'slowed reverb popular'],
   },
   sad: {
     label: 'Грустная',
     hint: 'мягкая и меланхоличная очередь из твоих предпочтений',
-    keywords: ['sad','slow','lofi','lo-fi','melancholy','melancholic','alone','lonely','cry','tears','rain','night','dark','blue','broken','heartbreak','empty','pain','груст','печаль','слез','один','одна','одиноч','дожд','ноч','боль','разбит','тоска','пуст','плак','забыть'],
-    queryTerms: ['sad viral', 'sad tiktok', 'melancholic pop', 'rainy night', 'slow emotional', 'dark melodic'],
+    keywords: ['sad','slow','slowed','reverb','dreamcore','doll','mirrors','lofi','lo-fi','melancholy','melancholic','alone','lonely','cry','tears','rain','night','dark','blue','broken','heartbreak','empty','pain','груст','печаль','слез','один','одна','одиноч','дожд','ноч','боль','разбит','тоска','пуст','плак','забыть'],
+    queryTerms: ['sad viral', 'sad tiktok', 'slowed reverb popular', 'dreamcore music', 'sad aesthetic tiktok', 'depression cherry vibe', 'melancholic pop'],
   },
   happy: {
     label: 'Веселая',
     hint: 'более светлая и позитивная очередь по твоему вкусу',
-    keywords: ['happy','smile','summer','sun','sunny','party','dance','fun','joy','love','good','vibe','vibes','club','bright','feel good','весел','улыб','лето','солн','танц','кайф','радост','любов','позитив','движ','туса','вечерин'],
-    queryTerms: ['happy viral', 'tiktok happy', 'feel good', 'summer vibe', 'dance playlist', 'party mix'],
+    keywords: ['happy','smile','summer','sun','sunny','party','dance','fun','joy','love','good','vibe','vibes','club','bright','feel good','hyperpop','glitchcore','весел','улыб','лето','солн','танц','кайф','радост','любов','позитив','движ','туса','вечерин'],
+    queryTerms: ['happy viral', 'tiktok happy', 'feel good', 'hyperpop happy', 'glitchcore pop', 'summer vibe', 'party mix'],
   },
   energetic: {
     label: 'Энергичная',
     hint: 'треклист поживее, чтобы разогнаться',
-    keywords: ['energy','energetic','speed','fast','power','rock','metal','drum','bass','dnb','phonk','rave','club','hard','workout','rage','trap','banger','энерг','быстр','мощ','рок','метал','рейв','клуб','фонк','драм','бас','разнос','жестк'],
-    queryTerms: ['energetic viral', 'tiktok hype', 'club banger', 'trap workout', 'rave mix', 'high energy'],
+    keywords: ['energy','energetic','speed','fast','power','rock','metal','drum','bass','dnb','phonk','rave','club','hard','workout','rage','trap','banger','aggressive','brazilian','drift','gym','фонк','энерг','быстр','мощ','рок','метал','рейв','клуб','фонк','драм','бас','разнос','жестк'],
+    queryTerms: ['phonk viral', 'aggressive phonk', 'brazilian funk popular', 'gym phonk', 'tiktok hype', 'energetic viral', 'club banger'],
   },
   calm: {
     label: 'Спокойная',
     hint: 'ровная очередь без резких прыжков',
-    keywords: ['calm','chill','relax','ambient','acoustic','piano','sleep','dream','soft','quiet','slow','lofi','lo-fi','спокой','чил','расслаб','акуст','пианино','сон','мечт','тих','медлен','мягк'],
-    queryTerms: ['chill viral', 'calm tiktok', 'soft night', 'lofi vibe', 'ambient playlist', 'relax mix'],
+    keywords: ['calm','chill','relax','ambient','acoustic','piano','sleep','dream','soft','quiet','slow','lofi','lo-fi','dreamcore','softcore','спокой','чил','расслаб','акуст','пианино','сон','мечт','тих','медлен','мягк'],
+    queryTerms: ['chill viral', 'calm tiktok', 'soft night', 'lofi vibe', 'dreamcore chill', 'ambient playlist', 'relax mix'],
   },
   romantic: {
     label: 'Романтика',
     hint: 'больше треков про любовь и мягкий вайб',
-    keywords: ['love','heart','kiss','romance','romantic','baby','darling','sweet','relationship','miss you','любов','сердц','роман','поцел','мила','милый','нежн','скуч','твоя','твой','влюб'],
-    queryTerms: ['romantic viral', 'love tiktok', 'soft love', 'heartbreak love', 'night romance', 'relationship songs'],
+    keywords: ['love','heart','kiss','romance','romantic','baby','darling','sweet','relationship','miss you','slowed','soft','любов','сердц','роман','поцел','мила','милый','нежн','скуч','твоя','твой','влюб'],
+    queryTerms: ['romantic viral', 'love tiktok', 'soft love', 'heartbreak love', 'slowed love songs', 'night romance', 'relationship songs'],
   },
 }
 const MY_WAVE_TOKEN_STOPWORDS = new Set(['official','audio','video','music','feat','ft','prod','remix','mix','single','album','lyrics','lyric','clip','track','version','radio','edit','the','and','for','with','для','при','это','как','или','feat.'])
@@ -832,6 +832,40 @@ function applyCachedCoverBackground(el, coverUrl, fallbackBg, trackId = '') {
     el.style.backgroundPosition = 'center'
     if (el.innerHTML === COVER_ICON) el.innerHTML = ''
   }).catch(() => {})
+}
+
+let _lazyCoverObserver = null
+function observeLazyCoverBackground(el, coverUrl, fallbackBg = '', trackId = '') {
+  if (!el) return
+  const url = String(coverUrl || '').trim()
+  if (!url) {
+    applyCachedCoverBackground(el, '', fallbackBg, trackId)
+    return
+  }
+  if (!('IntersectionObserver' in window)) {
+    applyCachedCoverBackground(el, url, fallbackBg, trackId)
+    return
+  }
+  if (!_lazyCoverObserver) {
+    _lazyCoverObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return
+        const target = entry.target
+        _lazyCoverObserver?.unobserve(target)
+        const lazyUrl = target.dataset.lazyCoverUrl || ''
+        const lazyFallback = target.dataset.lazyCoverFallback || ''
+        const lazyId = target.dataset.lazyCoverId || ''
+        delete target.dataset.lazyCoverUrl
+        delete target.dataset.lazyCoverFallback
+        delete target.dataset.lazyCoverId
+        applyCachedCoverBackground(target, lazyUrl, lazyFallback, lazyId)
+      })
+    }, { rootMargin: '260px 0px', threshold: 0.01 })
+  }
+  el.dataset.lazyCoverUrl = url
+  el.dataset.lazyCoverFallback = fallbackBg || ''
+  el.dataset.lazyCoverId = trackId || ''
+  _lazyCoverObserver.observe(el)
 }
 
 function applyCoverArt(el, coverUrl, fallbackBg) {
@@ -3155,9 +3189,24 @@ function getMyWaveTrendScore(track, resultIndex = 0) {
   return Math.min(score, 28)
 }
 
-function getMyWaveQualityPenalty(track) {
+function getMyWaveVibeScore(track, mode = getMyWaveMode()) {
   const text = `${track?.artist || ''} ${track?.title || ''}`.toLowerCase()
-  const noisy = ['nightcore', 'slowed + reverb', '1 hour', '8d audio', 'bass boosted', 'karaoke', 'instrumental remake']
+  const vibeSets = {
+    default: ['viral', 'tiktok', 'tik tok', 'hyperpop', 'phonk', 'dreamcore', 'slowed', 'reverb', 'hit', 'vibe'],
+    sad: ['miss you', 'broken', 'lonely', 'mirrors', 'doll', 'babydoll', 'slowed', 'reverb', 'dreamcore', 'aesthetic', 'empty', 'pain'],
+    happy: ['hyperpop', 'glitchcore', 'dance', 'party', 'summer', 'feel good', 'cute', 'bubblegum', 'vibe'],
+    energetic: ['phonk', 'sigma', 'dxrk', 'murder', 'brazilian', 'drift', 'tmsts', 'gym', 'aggressive', 'rage', 'hype'],
+    calm: ['lofi', 'lo-fi', 'dreamcore', 'ambient', 'soft', 'night', 'rain', 'sleep', 'chill'],
+    romantic: ['love', 'miss you', 'heart', 'romantic', 'relationship', 'slowed', 'soft', 'kiss'],
+  }
+  const words = vibeSets[mode] || vibeSets.default
+  return Math.min(words.reduce((sum, word) => sum + (text.includes(word) ? (mode === 'energetic' ? 7 : 5) : 0), 0), 24)
+}
+
+function getMyWaveQualityPenalty(track, mode = getMyWaveMode()) {
+  const text = `${track?.artist || ''} ${track?.title || ''}`.toLowerCase()
+  if (mode === 'sad' && ['slowed', 'reverb', 'acoustic', 'dreamcore'].some((word) => text.includes(word))) return 0
+  const noisy = ['nightcore', '1 hour', '8d audio', 'bass boosted', 'karaoke', 'instrumental remake']
   return noisy.some((word) => text.includes(word)) ? 16 : 0
 }
 
@@ -3171,7 +3220,8 @@ function scoreMyWaveTrack(track, profile, mode, resultIndex = 0) {
   getMyWaveTokens(track).forEach((token) => { score += Math.min(profile.tokens.get(token) || 0, 12) })
   score += getMyWaveMoodScore(track, mode)
   score += getMyWaveTrendScore(track, resultIndex)
-  score -= getMyWaveQualityPenalty(track)
+  score += getMyWaveVibeScore(track, mode)
+  score -= getMyWaveQualityPenalty(track, mode)
   return score
 }
 
@@ -3213,14 +3263,22 @@ function buildMyWaveQueries(seedTracks, mode = getMyWaveMode(), profile = buildM
   const seeds = seedTracks.slice(0, 10)
   const prefTerms = getMyWavePreferenceTerms(profile, 8)
   const moodTerms = (cfg.queryTerms || MY_WAVE_MODES.default.queryTerms || []).slice(0, 6)
-  const trendTerms = mode === 'default'
-    ? ['viral hits', 'tiktok vibe', 'trending now', 'popular songs']
-    : [`${cfg.label} tiktok`, `${cfg.label} viral`, `${cfg.label} vibe`, `${cfg.label} hits`]
+  const trendTermsByMode = {
+    default: ['viral hits', 'tiktok vibe', 'trending now', 'popular songs', 'hyperpop viral', 'phonk viral'],
+    sad: ['slowed reverb popular', 'sad tiktok', 'dreamcore music', 'sad aesthetic tiktok'],
+    happy: ['happy tiktok', 'hyperpop viral', 'feel good hits', 'party tiktok'],
+    energetic: ['phonk viral', 'aggressive phonk', 'brazilian funk popular', 'gym phonk', 'tiktok hype'],
+    calm: ['chill tiktok', 'lofi vibe', 'dreamcore chill', 'soft night'],
+    romantic: ['love tiktok', 'romantic viral', 'slowed love songs', 'heartbreak love'],
+  }
+  const trendTerms = trendTermsByMode[mode] || trendTermsByMode.default
   const queries = []
   artists.forEach((artist, idx) => {
     const term = moodTerms[idx % moodTerms.length] || 'similar'
     queries.push(`${artist} ${term}`)
     queries.push(`${artist} ${trendTerms[idx % trendTerms.length]}`)
+    if (mode === 'energetic') queries.push(`${artist} phonk viral`)
+    if (mode === 'sad') queries.push(`${artist} slowed reverb popular`)
     queries.push(`${artist} similar artists`)
   })
   seeds.forEach((track, idx) => {
@@ -5458,8 +5516,12 @@ function drawHomeVisualizerFrame() {
 
 function startHomeVisualizerLoop() {
   const tick = () => {
-    drawHomeVisualizerFrame()
-    requestAnimationFrame(tick)
+    if (_activePageId === 'home') {
+      drawHomeVisualizerFrame()
+      requestAnimationFrame(tick)
+    } else {
+      setTimeout(() => requestAnimationFrame(tick), 250)
+    }
   }
   requestAnimationFrame(tick)
 }
@@ -6562,111 +6624,79 @@ function openPlaylist(idx) {
   const container = document.getElementById('playlist-tracks')
   if (!pl.tracks.length) { container.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div><p>Плейлист пуст</p></div>`; return }
   container.innerHTML=''
-  if (pl.tracks.length > 250) {
-    const token = ++_openPlaylistTrackRenderToken
-    let cursor = 0
-    const renderChunk = () => {
-      if (token !== _openPlaylistTrackRenderToken) return
-      const fragment = document.createDocumentFragment()
-      for (let n = 0; n < 28 && cursor < pl.tracks.length; n++, cursor++) {
-        const trackIndex = cursor
-        const track = pl.tracks[trackIndex]
-        const row = document.createElement('div')
-        row.className = 'playlist-track-row'
-        const el = makeTrackEl(track, false, false)
-        el.classList.add('playlist-track-card')
-        el.addEventListener('click', () => {
-          queue = pl.tracks.slice()
-          queueIndex = trackIndex
-          queueScope = 'playlist'
-          playTrackObj(track)
-        })
-        const actions = document.createElement('div')
-        actions.className = 'playlist-track-actions'
-        actions.innerHTML = `
-          <button class="playlist-track-action" title="Редактировать трек">✎</button>
-          <button class="playlist-track-action danger" title="Удалить из плейлиста">✕</button>
-        `
-        actions.children[0].addEventListener('click', (event) => {
-          event.preventDefault()
-          event.stopPropagation()
-          editPlaylistTrack(openPlaylistIndex, trackIndex)
-        })
-        actions.children[1].addEventListener('click', (event) => {
-          event.preventDefault()
-          event.stopPropagation()
-          removeTrackFromPlaylist(openPlaylistIndex, trackIndex)
-        })
-        row.appendChild(el)
-        row.appendChild(actions)
-        fragment.appendChild(row)
-      }
-      container.appendChild(fragment)
-      if (cursor < pl.tracks.length) setTimeout(renderChunk, 0)
+  const token = ++_openPlaylistTrackRenderToken
+  let cursor = 0
+  const chunkSize = pl.tracks.length > 250 ? 28 : 18
+  const renderChunk = () => {
+    if (token !== _openPlaylistTrackRenderToken) return
+    const fragment = document.createDocumentFragment()
+    for (let n = 0; n < chunkSize && cursor < pl.tracks.length; n++, cursor++) {
+      const trackIndex = cursor
+      const track = pl.tracks[trackIndex]
+      const row = document.createElement('div')
+      row.className = 'playlist-track-row'
+      row.dataset.idx = String(trackIndex)
+      row.draggable = true
+      row.addEventListener('dragover', (e) => { e.preventDefault(); row.classList.add('drag-over') })
+      row.addEventListener('dragleave', () => row.classList.remove('drag-over'))
+      row.addEventListener('drop', (e) => {
+        e.preventDefault()
+        row.classList.remove('drag-over')
+        const toIndex = Number(row.dataset.idx)
+        reorderPlaylistTrack(openPlaylistIndex, _playlistDragIndex, toIndex)
+      })
+      row.addEventListener('dragend', () => {
+        _playlistDragIndex = -1
+        row.classList.remove('drag-over')
+        row.classList.remove('dragging')
+      })
+      const handle = document.createElement('button')
+      handle.className = 'playlist-track-handle'
+      handle.title = 'Перетащить'
+      handle.innerHTML = '<span>⋮⋮</span>'
+      handle.addEventListener('dragstart', (e) => {
+        _playlistDragIndex = trackIndex
+        row.classList.add('dragging')
+        if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
+      })
+      const el = makeTrackEl(track, false, false)
+      el.classList.add('playlist-track-card')
+      el.addEventListener('click', () => {
+        queue = pl.tracks.slice()
+        queueIndex = trackIndex
+        queueScope = 'playlist'
+        playTrackObj(track)
+      })
+      const actions = document.createElement('div')
+      actions.className = 'playlist-track-actions'
+      actions.innerHTML = `
+        <button class="playlist-track-action" title="Редактировать трек">✎</button>
+        <button class="playlist-track-action danger" title="Удалить из плейлиста">✕</button>
+      `
+      actions.children[0].addEventListener('click', (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        editPlaylistTrack(openPlaylistIndex, trackIndex)
+      })
+      actions.children[1].addEventListener('click', (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        removeTrackFromPlaylist(openPlaylistIndex, trackIndex)
+      })
+      row.appendChild(handle)
+      row.appendChild(el)
+      row.appendChild(actions)
+      fragment.appendChild(row)
     }
-    renderChunk()
-    return
+    container.appendChild(fragment)
+    if (cursor < pl.tracks.length) setTimeout(renderChunk, 0)
   }
-  pl.tracks.forEach((track, i) => {
-    const row = document.createElement('div')
-    row.className = 'playlist-track-row'
-    row.dataset.idx = String(i)
-    row.draggable = true
-    row.addEventListener('dragover', (e) => { e.preventDefault(); row.classList.add('drag-over') })
-    row.addEventListener('dragleave', () => row.classList.remove('drag-over'))
-    row.addEventListener('drop', (e) => {
-      e.preventDefault()
-      row.classList.remove('drag-over')
-      const toIndex = Number(row.dataset.idx)
-      reorderPlaylistTrack(openPlaylistIndex, _playlistDragIndex, toIndex)
-    })
-    row.addEventListener('dragend', () => {
-      _playlistDragIndex = -1
-      row.classList.remove('drag-over')
-      row.classList.remove('dragging')
-    })
-    const handle = document.createElement('button')
-    handle.className = 'playlist-track-handle'
-    handle.title = 'Перетащить'
-    handle.innerHTML = '<span>⋮⋮</span>'
-    handle.addEventListener('dragstart', (e) => {
-      _playlistDragIndex = i
-      row.classList.add('dragging')
-      if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
-    })
-    const el = makeTrackEl(track, false, false)
-    el.classList.add('playlist-track-card')
-    el.addEventListener('click', () => {
-      queue = pl.tracks.slice()
-      queueIndex = i
-      queueScope = 'playlist'
-      playTrackObj(track)
-    })
-    const actions = document.createElement('div')
-    actions.className = 'playlist-track-actions'
-    actions.innerHTML = `
-      <button class="playlist-track-action" title="Редактировать трек">✎</button>
-      <button class="playlist-track-action danger" title="Удалить из плейлиста">✕</button>
-    `
-    actions.children[0].addEventListener('click', (event) => {
-      event.preventDefault()
-      event.stopPropagation()
-      editPlaylistTrack(openPlaylistIndex, i)
-    })
-    actions.children[1].addEventListener('click', (event) => {
-      event.preventDefault()
-      event.stopPropagation()
-      removeTrackFromPlaylist(openPlaylistIndex, i)
-    })
-    row.appendChild(handle)
-    row.appendChild(el)
-    row.appendChild(actions)
-    container.appendChild(row)
-  })
+  requestAnimationFrame(renderChunk)
 }
 
 function closePlaylist() {
   openPlaylistIndex=null
+  _openPlaylistTrackRenderToken++
   const viewEl = document.getElementById('playlist-view')
   if (viewEl) {
     viewEl.classList.add('hidden')
@@ -7034,7 +7064,7 @@ function renderPlaylists() {
   if (!pls.length) { container.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg></div><p>Нет плейлистов — создай первый!</p></div>`; return }
   container.innerHTML=''
   let idx = 0
-  const chunkSize = 20
+  const chunkSize = 12
   const renderChunk = () => {
     if (token !== _playlistRenderToken) return
     const fragment = document.createDocumentFragment()
@@ -7056,7 +7086,7 @@ function renderPlaylists() {
         </div>`
       if (playlistCover) {
         const icon = el.querySelector('.playlist-icon')
-        applyCachedCoverBackground(icon, playlistCover, '', `playlist:${currentIdx}`)
+        observeLazyCoverBackground(icon, playlistCover, '', `playlist:${currentIdx}`)
       }
       el.addEventListener('click', () => openPlaylist(currentIdx))
       fragment.appendChild(el)
@@ -7064,7 +7094,7 @@ function renderPlaylists() {
     container.appendChild(fragment)
     if (idx < pls.length) setTimeout(renderChunk, 0)
   }
-  renderChunk()
+  requestAnimationFrame(renderChunk)
 }
 
 function playOpenPlaylist() {
@@ -7243,7 +7273,7 @@ function makeTrackEl(track, showPlaylist=false, bindDefaultPlay=true) {
     <button class="track-play"><svg viewBox="0 0 24 24" width="10" height="10" style="fill:currentColor;margin-left:1px"><polygon points="5 3 19 12 5 21 5 3"/></svg></button>`
   if (trackCover) {
     const coverEl = el.querySelector('.track-cover')
-    applyCachedCoverBackground(coverEl, trackCover, fallbackBg, getTrackKey(track))
+    observeLazyCoverBackground(coverEl, trackCover, fallbackBg, getTrackKey(track))
   }
   if (bindDefaultPlay) {
     el.addEventListener('click', () => {
