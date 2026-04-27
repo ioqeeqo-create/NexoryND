@@ -41,6 +41,7 @@ button,
 .stab,
 .vsb,
 .src-tab,
+.settings-cat,
 .tab {
   transition:
     transform var(--anim-smooth) var(--anim-ease),
@@ -1217,6 +1218,118 @@ input:not([type])::placeholder {
 /* ═══════════════════════════════
    SETTINGS
 ═══════════════════════════════ */
+.settings-shell {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  max-width: 1080px;
+}
+/* Как боковая колонка Flow: тот же стекло и ритм, что у .sidebar */
+.settings-category-rail {
+  flex: 0 0 min(228px, 32vw);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  position: sticky;
+  top: calc(var(--titlebar-h) + 8px);
+  align-self: flex-start;
+  max-height: calc(100vh - var(--titlebar-h) - 24px);
+  overflow-y: auto;
+  background: rgba(10, 10, 20, 0.6);
+  backdrop-filter: blur(var(--glass-blur)) saturate(200%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 16px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.22);
+}
+.settings-category-rail::-webkit-scrollbar {
+  width: 5px;
+}
+.settings-category-rail::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 99px;
+}
+/* Поведение как у .nav-item + nav-active-highlight */
+.settings-cat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 400;
+  text-align: left;
+}
+.settings-cat:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+}
+.settings-cat.active {
+  background: transparent;
+  color: var(--text);
+  font-weight: 500;
+  border-color: transparent;
+}
+body.nav-active-highlight .settings-cat.active {
+  background: rgba(124, 58, 237, 0.18);
+  border: 1px solid rgba(124, 58, 237, 0.24);
+  box-shadow: 0 0 0 1px rgba(124, 58, 237, 0.16) inset;
+}
+.settings-cat-title {
+  font-size: 13px;
+  font-weight: inherit;
+  letter-spacing: 0.01em;
+}
+.settings-cat-hint {
+  font-size: 11px;
+  line-height: 1.38;
+  color: var(--muted);
+  font-weight: 400;
+  opacity: 0.92;
+}
+.settings-cat.active .settings-cat-hint {
+  opacity: 0.88;
+}
+.settings-panels-wrap {
+  flex: 1;
+  min-width: 0;
+}
+.settings-category-panel {
+  display: none;
+}
+.settings-category-panel.active {
+  display: block;
+}
+
+@media (max-width: 900px) {
+  .settings-shell {
+    flex-direction: column;
+  }
+  .settings-category-rail {
+    flex: none;
+    width: 100%;
+    max-height: none;
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px;
+  }
+  .settings-cat {
+    flex: 1 1 148px;
+  }
+}
+
+/* legacy tab row (если остались в разметке) */
 .settings-tabs { display:flex; gap:8px; margin-bottom:20px; }
 .settings-tabs {
   position:sticky;
@@ -1228,7 +1341,8 @@ input:not([type])::placeholder {
   backdrop-filter:blur(10px);
 }
 .stab { padding:8px 18px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.04); color:var(--muted); border-radius:10px; cursor:pointer; font-size:13px; font-family:var(--font-ui); transition:all 0.2s; }
-.stab.active { background:rgba(124,58,237,0.2); border-color:rgba(124,58,237,0.4); color:var(--text); }
+.stab.active { background:rgba(255,255,255,0.08); border-color:rgba(255,255,255,0.16); color:var(--text); font-weight:500; }
+body.nav-active-highlight .stab.active { background:rgba(124,58,237,0.18); border-color:rgba(124,58,237,0.24); box-shadow:0 0 0 1px rgba(124,58,237,0.16) inset; }
 .stab-panel { display:none; }
 .stab-panel.active { display:block; }
 
@@ -1244,7 +1358,8 @@ input:not([type])::placeholder {
 .vs-btn-group { display:flex; gap:6px; flex-wrap:wrap; }
 .vsb { padding:5px 14px; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.05); color:var(--muted); border-radius:8px; cursor:pointer; font-size:12px; transition:all 0.2s; }
 .vsb:hover { background:rgba(255,255,255,0.1); color:var(--text); }
-.vsb.active { background:rgba(124,58,237,0.25); border-color:rgba(124,58,237,0.5); color:var(--text); }
+.vsb.active { background:rgba(255,255,255,0.08); border-color:rgba(255,255,255,0.16); color:var(--text); font-weight:500; }
+body.nav-active-highlight .vsb.active { background:rgba(124,58,237,0.18); border-color:rgba(124,58,237,0.24); box-shadow:0 0 0 1px rgba(124,58,237,0.16) inset; }
 .density-compact .track-card { grid-template-columns:42px minmax(0, 1fr) repeat(4, 30px); min-height:58px; padding:8px; gap:9px; }
 .density-compact .track-cover { width:42px; height:42px; border-radius:12px; }
 .density-compact .track-like,
@@ -1315,7 +1430,8 @@ input:not([type])::placeholder {
 .src-tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px; }
 .src-tab { display:flex; align-items:center; gap:6px; padding:7px 14px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.04); color:var(--muted); border-radius:10px; cursor:pointer; font-size:12px; transition:all 0.2s; }
 .src-tab:hover { background:rgba(255,255,255,0.08); color:var(--text); }
-.src-tab.active { background:rgba(124,58,237,0.2); border-color:rgba(124,58,237,0.4); color:var(--text); }
+.src-tab.active { background:rgba(255,255,255,0.08); border-color:rgba(255,255,255,0.16); color:var(--text); font-weight:500; }
+body.nav-active-highlight .src-tab.active { background:rgba(124,58,237,0.18); border-color:rgba(124,58,237,0.24); box-shadow:0 0 0 1px rgba(124,58,237,0.16) inset; }
 .src-tab-icon { font-size:12px; }
 .src-panel { display:none; max-width:560px; }
 .src-panel.active { display:block; }

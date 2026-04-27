@@ -271,16 +271,33 @@
     </div>
 
     <div id="page-settings" class="page">
-      <div class="content-header"><h2>Настройки</h2></div>
-
-      <div class="settings-tabs">
-        <button class="stab active" onclick="switchSettingsTab('visual')" id="stab-visual"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 0 18h1a3 3 0 0 0 0-6h-1a3 3 0 0 1 0-6h1a3 3 0 0 0 0-6h-1Z"/><circle cx="7.5" cy="10.5" r="1"/><circle cx="10.5" cy="7.5" r="1"/><circle cx="13.5" cy="7.5" r="1"/><circle cx="16.5" cy="10.5" r="1"/></svg> Внешний вид</button>
-        <button class="stab" onclick="switchSettingsTab('sources')" id="stab-sources"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg> Источники</button>
-        <button class="stab" onclick="switchSettingsTab('integrations')" id="stab-integrations"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M8 12h8"/><path d="M12 8v8"/><rect x="3" y="3" width="18" height="18" rx="4"/></svg> Интеграции</button>
+      <div class="content-header">
+        <h2>Настройки</h2>
+        <p class="content-sub">Выбери раздел слева — настройки сгруппированы по смыслу.</p>
       </div>
 
-      <!-- VISUAL SETTINGS -->
-      <div id="stab-panel-visual" class="stab-panel active">
+      <div class="settings-shell">
+        <nav class="settings-category-rail" aria-label="Разделы настроек">
+          <button type="button" class="settings-cat active" data-settings-cat="appearance" onclick="switchSettingsCategory('appearance')">
+            <span class="settings-cat-title">Оформление</span>
+            <span class="settings-cat-hint">Тема, фон, цвета, шрифт</span>
+          </button>
+          <button type="button" class="settings-cat" data-settings-cat="playback" onclick="switchSettingsCategory('playback')">
+            <span class="settings-cat-title">Плеер</span>
+            <span class="settings-cat-hint">Режимы и пресеты Flow</span>
+          </button>
+          <button type="button" class="settings-cat" data-settings-cat="accounts" onclick="switchSettingsCategory('accounts')">
+            <span class="settings-cat-title">Аккаунты</span>
+            <span class="settings-cat-hint">Токены и источники</span>
+          </button>
+          <button type="button" class="settings-cat" data-settings-cat="services" onclick="switchSettingsCategory('services')">
+            <span class="settings-cat-title">Сервисы</span>
+            <span class="settings-cat-hint">Discord, сервер, Last.fm</span>
+          </button>
+        </nav>
+        <div class="settings-panels-wrap">
+
+      <div id="settings-panel-appearance" class="settings-category-panel active">
         <div class="visual-settings">
 
           <div class="vs-section glass-card">
@@ -469,6 +486,11 @@
             </div>
           </div>
 
+        </div>
+      </div>
+
+      <div id="settings-panel-playback" class="settings-category-panel">
+        <div class="visual-settings">
           <div class="vs-section glass-card">
             <div class="vs-section-title">Плеер</div>
             <div class="vs-row">
@@ -527,8 +549,7 @@
         </div>
       </div>
 
-      <!-- SOURCES -->
-      <div id="stab-panel-sources" class="stab-panel hidden">
+      <div id="settings-panel-accounts" class="settings-category-panel">
         <div class="glass-card" style="padding:18px;border-radius:18px;margin-top:8px;max-width:760px;">
           <div class="vs-section-title" style="margin-bottom:8px;">Источники</div>
           <div style="color:var(--muted);font-size:14px;line-height:1.55;margin-bottom:14px;">Режим Spotify → SoundCloud → Audius включен. YouTube можно вернуть позже.</div>
@@ -631,7 +652,7 @@
         </div>
       </div>
 
-      <div id="stab-panel-integrations" class="stab-panel hidden">
+      <div id="settings-panel-services" class="settings-category-panel">
         <div class="glass-card" style="padding:18px;border-radius:18px;margin-top:8px;max-width:760px;">
           <div class="vs-section-title" style="margin-bottom:8px;">Discord интеграция</div>
           <input id="discord-client-id" class="token-field flow-input" placeholder="Discord Client ID" />
@@ -661,6 +682,10 @@
           <button class="btn-small" onclick="saveLastFmCredentials()" style="margin-top:10px">Сохранить Last.fm</button>
         </div>
       </div>
+
+        </div><!-- .settings-panels-wrap -->
+      </div><!-- .settings-shell -->
+    </div><!-- #page-settings -->
 
   </div><!-- /content -->
 

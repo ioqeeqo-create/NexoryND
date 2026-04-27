@@ -1272,14 +1272,7 @@ function initVisualSettings() {
 }
 
 function reorderVisualSettingsSections() {
-  const root = document.querySelector('#stab-panel-visual .visual-settings')
-  if (!root) return
-  const sections = Array.from(root.querySelectorAll('.vs-section'))
-  const byTitle = (title) => sections.find((s) => (s.querySelector('.vs-section-title')?.textContent || '').trim() === title)
-  const bg = byTitle('Фон')
-  const player = byTitle('Плеер')
-  if (!bg || !player || bg.nextElementSibling === player) return
-  root.insertBefore(player, bg.nextElementSibling)
+  /* Плеер вынесен в отдельную категорию настроек; порядок секций задаётся в HTML. */
 }
 
 function toggleNavActiveHighlight() {
@@ -1306,14 +1299,34 @@ function setSidebarPosition(position) {
   showToast(safe === 'top' ? 'Меню перемещено наверх' : 'Меню возвращено влево')
 }
 
-function switchSettingsTab(tab) {
-  document.querySelectorAll('.stab').forEach(b => b.classList.remove('active'))
-  document.querySelectorAll('.stab-panel').forEach(p => { p.classList.remove('active'); p.classList.add('hidden') })
-  document.getElementById('stab-' + tab)?.classList.add('active')
-  const panel = document.getElementById('stab-panel-' + tab)
-  if (panel) { panel.classList.remove('hidden'); panel.classList.add('active') }
+let _settingsCategory = 'appearance'
+
+const SETTINGS_TAB_TO_CATEGORY = {
+  visual: 'appearance',
+  sources: 'accounts',
+  integrations: 'services',
+}
+
+function switchSettingsCategory(cat) {
+  const allowed = new Set(['appearance', 'playback', 'accounts', 'services'])
+  const c = allowed.has(cat) ? cat : 'appearance'
+  _settingsCategory = c
+  document.querySelectorAll('.settings-cat').forEach((btn) => {
+    btn.classList.toggle('active', btn.getAttribute('data-settings-cat') === c)
+  })
+  document.querySelectorAll('.settings-category-panel').forEach((panel) => {
+    const on = panel.id === `settings-panel-${c}`
+    panel.classList.toggle('active', on)
+  })
   applyUiTextOverrides()
 }
+
+/** Совместимость со старыми вызовами switchSettingsTab('visual'|'sources'|'integrations'). */
+function switchSettingsTab(tab) {
+  const mapped = SETTINGS_TAB_TO_CATEGORY[tab] || tab
+  switchSettingsCategory(mapped)
+}
+window.switchSettingsCategory = switchSettingsCategory
 
 // в”Ђв”Ђв”Ђ FULLSCREEN PLAYER MODE в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 function enterPlayerMode() {
@@ -1954,6 +1967,7 @@ function loadSettingsPage() {
     syncFontControls()
     syncHomeWidgetUI()
     applyHomeSliderStyle()
+    switchSettingsCategory(_settingsCategory)
   })
 }
 
@@ -5321,6 +5335,7 @@ function applyUiTextOverrides() {
     if (el) el.textContent = value
   }
   setText('#page-settings .content-header h2', 'Настройки')
+  setText('#page-settings .content-header .content-sub', 'Выбери раздел слева — настройки сгруппированы по смыслу.')
   setText('#page-library .content-header h2', 'Библиотека')
   setText('#page-liked .content-header h2', 'Любимые')
   setText('#page-profile .content-header h2', 'Профиль')
@@ -5332,7 +5347,7 @@ function applyUiTextOverrides() {
   setText('#page-library .content-sub', 'Твои плейлисты')
   setText('#page-liked .content-sub', 'Треки, которые ты лайкнул')
 
-  const labels = Array.from(document.querySelectorAll('#stab-panel-visual .vs-label'))
+  const labels = Array.from(document.querySelectorAll('#settings-panel-appearance .vs-label, #settings-panel-playback .vs-label'))
   labels.forEach((el) => {
     const t = (el.textContent || '').trim()
     if (t.includes('Blur') && t.includes('фона')) el.innerHTML = 'Blur фона <span class="vs-val" id="vs-blur-val">40px</span>'
