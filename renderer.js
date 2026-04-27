@@ -73,6 +73,7 @@ let _roomHeartbeatTimer = null
 let _friendContext = null
 let _pendingRoomInvite = null
 let _myWaveRenderedTracks = []
+let _myWaveBuilding = false
 let _myWaveMode = (() => {
   try { return localStorage.getItem('flow_my_wave_mode') || 'default' } catch { return 'default' }
 })()
@@ -98,26 +99,31 @@ const MY_WAVE_MODES = {
     label: 'Грустная',
     hint: 'мягкая и меланхоличная очередь из твоих предпочтений',
     keywords: ['sad','slow','lofi','lo-fi','melancholy','melancholic','alone','lonely','cry','tears','rain','night','dark','blue','broken','heartbreak','груст','печаль','слез','один','одна','дожд','ноч','боль','разбит','тоска'],
+    queryTerms: ['sad', 'melancholic', 'acoustic', 'rain', 'slow'],
   },
   happy: {
     label: 'Веселая',
     hint: 'более светлая и позитивная очередь по твоему вкусу',
     keywords: ['happy','smile','summer','sun','sunny','party','dance','fun','joy','love','good','vibe','vibes','весел','улыб','лето','солн','танц','кайф','радост','любов','позитив'],
+    queryTerms: ['happy', 'summer', 'dance', 'party', 'good vibes'],
   },
   energetic: {
     label: 'Энергичная',
     hint: 'треклист поживее, чтобы разогнаться',
     keywords: ['energy','energetic','speed','fast','power','rock','metal','drum','bass','dnb','phonk','rave','club','hard','workout','энерг','быстр','мощ','рок','метал','рейв','клуб','фонк','драм','бас'],
+    queryTerms: ['energetic', 'dance', 'club', 'workout', 'rock'],
   },
   calm: {
     label: 'Спокойная',
     hint: 'ровная очередь без резких прыжков',
     keywords: ['calm','chill','relax','ambient','acoustic','piano','sleep','dream','soft','quiet','спокой','чил','расслаб','акуст','пианино','сон','мечт','тих','медлен'],
+    queryTerms: ['chill', 'calm', 'lofi', 'ambient', 'acoustic'],
   },
   romantic: {
     label: 'Романтика',
     hint: 'больше треков про любовь и мягкий вайб',
     keywords: ['love','heart','kiss','romance','romantic','baby','darling','sweet','любов','сердц','роман','поцел','мила','милый','нежн'],
+    queryTerms: ['love', 'romantic', 'heart', 'slow', 'soft'],
   },
 }
 const _friendProfileRefreshAt = new Map()
@@ -1640,6 +1646,9 @@ function openUrl(url) {
   else window.open(url, '_blank')
 }
 
+const YANDEX_MUSIC_TOKEN_GUIDE_URL = 'https://yandex-music.readthedocs.io/en/main/token.html'
+const YANDEX_MUSIC_OAUTH_URL = 'https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41195d'
+
 function toggleToken(id) {
   const inp = document.getElementById(id)
   if (inp) inp.type = inp.type === 'password' ? 'text' : 'password'
@@ -1781,10 +1790,46 @@ function applySpotifyToken() {
 }
 
 function applyYandexToken() {
-  const token = document.getElementById('ym-token-val')?.value.trim()
-  if (!token) { showToast('Введи токен Яндекс Музыки', true); return }
+  let token = document.getElementById('ym-token-val')?.value.trim()
+  const msg = document.getElementById('ym-msg')
+  const m = token.match(/access_token=([^&#]+)/)
+  if (m) token = decodeURIComponent(m[1])
+  if (!token) {
+    if (msg) { msg.textContent = 'Вставь access_token или полный redirect URL после OAuth-входа'; msg.className = 'token-msg token-msg-err' }
+    showToast('Введи токен Яндекс Музыки', true)
+    return
+  }
   saveSettingsRaw({ yandexToken: token })
+  updateYandexStatus(token)
+  if (msg) { msg.textContent = 'Токен сохранен. Теперь можно импортировать плейлисты Яндекс Музыки по ссылке.'; msg.className = 'token-msg token-msg-ok' }
   showToast('Токен Яндекс Музыки сохранен')
+}
+
+function openYandexTokenGuide() {
+  openUrl(YANDEX_MUSIC_TOKEN_GUIDE_URL)
+}
+
+function openYandexOAuthTokenPage() {
+  openUrl(YANDEX_MUSIC_OAUTH_URL)
+}
+
+function updateYandexStatus(token) {
+  const el = document.getElementById('ym-status')
+  if (!el) return
+  const display = document.getElementById('ym-active-display')
+  const text = document.getElementById('ym-status-text')
+  const sub = document.getElementById('ym-status-sub')
+  if (token) {
+    el.className = 'token-status token-ok'
+    if (text) text.textContent = 'Настроен'
+    if (sub) sub.textContent = 'OAuth token сохранен, импорт Яндекс плейлистов доступен'
+    if (display) { display.textContent = token.slice(0, 6) + '****' + token.slice(-4); display.style.display = 'block' }
+  } else {
+    el.className = 'token-status'
+    if (text) text.textContent = 'Не настроен'
+    if (sub) sub.textContent = 'Нужен OAuth token для чтения плейлистов'
+    if (display) display.style.display = 'none'
+  }
 }
 
 function updateSpotifyStatus(token) {
@@ -1823,6 +1868,7 @@ function loadSettingsPage() {
   updateScStatus(s.soundcloudClientId)
   updateVkStatus(s.vkToken)
   updateSpotifyStatus(s.spotifyToken)
+  updateYandexStatus(s.yandexToken)
   // Keep settings opening snappy; run heavier sync in next frame.
   requestAnimationFrame(() => {
     syncPlaybackModeUI()
@@ -2939,6 +2985,13 @@ function getMyWaveCandidates() {
   return Array.from(map.values())
 }
 
+function getMyWaveSeedTracks() {
+  return getMyWaveCandidates()
+    .sort((a, b) => (Number(b.weight || 0) + Number(b.playedAt || 0) / 1e13) - (Number(a.weight || 0) + Number(a.playedAt || 0) / 1e13))
+    .map((item) => item.track)
+    .filter(Boolean)
+}
+
 function getMyWaveTokens(track) {
   return `${track?.artist || ''} ${track?.title || ''}`
     .toLowerCase()
@@ -2972,39 +3025,141 @@ function getMyWaveMoodScore(track, mode) {
   return cfg.keywords.reduce((sum, keyword) => sum + (text.includes(keyword) ? 8 : 0), 0)
 }
 
-function scoreMyWaveTrack(item, profile, mode) {
-  const track = item.track || {}
+function getMyWaveQualityPenalty(track) {
+  const text = `${track?.artist || ''} ${track?.title || ''}`.toLowerCase()
+  const noisy = ['sped up', 'speed up', 'nightcore', 'tik tok', 'tiktok', 'slowed + reverb', '1 hour', '8d audio', 'bass boosted']
+  return noisy.some((word) => text.includes(word)) ? 16 : 0
+}
+
+function scoreMyWaveTrack(track, profile, mode) {
   const artist = String(track.artist || '').trim().toLowerCase()
   const source = String(track.source || '').trim().toLowerCase()
-  const recentBoost = item.playedAt ? Math.max(0, 5 - ((Date.now() - Number(item.playedAt)) / (1000 * 60 * 60 * 24 * 7))) : 0
-  let score = Number(item.weight || 0) + recentBoost
+  let score = 0
   score += (profile.artists.get(artist) || 0) * 1.8
   score += (profile.sources.get(source) || 0) * 0.8
   getMyWaveTokens(track).forEach((token) => { score += profile.tokens.get(token) || 0 })
   score += getMyWaveMoodScore(track, mode)
+  score -= getMyWaveQualityPenalty(track)
   return score
 }
 
-function getMyWaveTracks(min = MY_WAVE_MIN_TRACKS, mode = getMyWaveMode()) {
+function getMyWaveExcludedSignatures() {
+  const set = new Set()
+  const add = (track) => {
+    const sig = normalizeTrackSignature(track)
+    if (sig) set.add(sig)
+  }
+  getMyWaveCandidates().forEach((item) => add(item.track))
+  queue.forEach(add)
+  if (currentTrack) add(currentTrack)
+  return set
+}
+
+function isMyWaveRecommendationAllowed(track, excluded, selected) {
+  const safe = sanitizeTrack(track)
+  if (!safe?.id && !safe?.title) return false
+  const sig = normalizeTrackSignature(safe)
+  if (!sig || excluded.has(sig) || selected.has(sig)) return false
+  const text = `${safe.artist || ''} ${safe.title || ''}`.toLowerCase()
+  if (!text.trim() || text.includes('karaoke') || text.includes('instrumental remake')) return false
+  return true
+}
+
+function getMyWaveTopArtists(seedTracks, limit = 5) {
+  const counts = new Map()
+  seedTracks.forEach((track, idx) => {
+    const artist = String(track?.artist || '').trim()
+    if (!artist || artist === '—') return
+    counts.set(artist, (counts.get(artist) || 0) + Math.max(1, 12 - idx))
+  })
+  return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, limit).map(([artist]) => artist)
+}
+
+function buildMyWaveQueries(seedTracks, mode = getMyWaveMode()) {
+  const cfg = MY_WAVE_MODES[mode] || MY_WAVE_MODES.default
+  const artists = getMyWaveTopArtists(seedTracks, 5)
+  const seeds = seedTracks.slice(0, 6)
+  const moodTerms = mode === 'default' ? ['similar', 'radio', 'mix'] : (cfg.queryTerms || []).slice(0, 5)
+  const queries = []
+  artists.forEach((artist, idx) => {
+    const term = moodTerms[idx % moodTerms.length] || 'similar'
+    queries.push(`${artist} ${term}`)
+    if (mode !== 'default') queries.push(`${artist} ${cfg.label}`)
+  })
+  seeds.forEach((track, idx) => {
+    const artist = String(track?.artist || '').trim()
+    const title = String(track?.title || '').trim()
+    const term = moodTerms[idx % moodTerms.length] || 'similar'
+    if (artist && title) queries.push(`${artist} ${title} ${term}`)
+    else if (artist) queries.push(`${artist} ${term}`)
+  })
+  if (mode !== 'default') {
+    moodTerms.forEach((term) => queries.push(`${term} music`))
+  }
+  return Array.from(new Set(queries.map((q) => q.trim()).filter(Boolean))).slice(0, 14)
+}
+
+async function findMyWaveRecommendations(min = MY_WAVE_MIN_TRACKS, mode = getMyWaveMode()) {
   const candidates = getMyWaveCandidates()
   const profile = buildMyWavePreferenceProfile(candidates)
   const target = Math.min(MY_WAVE_MAX_TRACKS, Math.max(MY_WAVE_MIN_TRACKS, Number(min) || MY_WAVE_MIN_TRACKS))
-  const scored = candidates
-    .map((item) => ({ item, mood: getMyWaveMoodScore(item.track, mode), score: scoreMyWaveTrack(item, profile, mode) }))
-    .sort((a, b) => b.score - a.score)
-  const primary = mode === 'default' ? scored : scored.filter((x) => x.mood > 0)
-  const backup = mode === 'default' ? [] : scored.filter((x) => x.mood <= 0)
-  return primary.concat(backup).slice(0, target).map((x) => x.item.track)
+  const seedTracks = getMyWaveSeedTracks()
+  const queries = buildMyWaveQueries(seedTracks, mode)
+  const excluded = getMyWaveExcludedSignatures()
+  const selected = new Set()
+  const found = []
+  const settings = getSettings()
+  for (const query of queries) {
+    if (found.length >= target) break
+    let results = []
+    try {
+      const hybrid = await searchHybridTracks(query, settings)
+      results = sanitizeTrackList(hybrid?.tracks || [])
+    } catch {}
+    if (!results.length && window.api?.youtubeSearch) {
+      try {
+        const yt = await window.api.youtubeSearch(query)
+        const list = Array.isArray(yt) ? yt : (Array.isArray(yt?.tracks) ? yt.tracks : [])
+        results = sanitizeTrackList(list)
+      } catch {}
+    }
+    results
+      .map((track) => sanitizeTrack(track))
+      .filter((track) => isMyWaveRecommendationAllowed(track, excluded, selected))
+      .map((track) => ({ track, score: scoreMyWaveTrack(track, profile, mode) }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3)
+      .forEach(({ track }) => {
+        const sig = normalizeTrackSignature(track)
+        selected.add(sig)
+        found.push(track)
+      })
+  }
+  return found.slice(0, target)
 }
 
-function startMyWave() {
-  const tracks = getMyWaveTracks(MY_WAVE_MIN_TRACKS, getMyWaveMode())
-  if (!tracks.length) return showToast('Сначала послушай или лайкни несколько треков', true)
-  _myWaveRenderedTracks = tracks.slice()
-  queue = tracks.slice()
-  queueIndex = 0
-  queueScope = 'myWave'
-  playTrackObj(queue[0]).catch(() => {})
+async function startMyWave() {
+  if (_myWaveBuilding) return
+  const seedTracks = getMyWaveSeedTracks()
+  if (seedTracks.length < 3) return showToast('Послушай или лайкни еще несколько треков, чтобы волна поняла вкус', true)
+  _myWaveBuilding = true
+  renderMyWave()
+  showToast('Моя волна подбирает новые треки...')
+  try {
+    const tracks = await findMyWaveRecommendations(MY_WAVE_MIN_TRACKS, getMyWaveMode())
+    if (!tracks.length) return showToast('Волна пока не нашла новые треки. Попробуй другой режим или послушай еще музыку', true)
+    _myWaveRenderedTracks = tracks.slice()
+    queue = tracks.slice()
+    queueIndex = 0
+    queueScope = 'myWave'
+    showToast(`Моя волна собрала ${tracks.length} новых треков`)
+    await playTrackObj(queue[0])
+  } catch (err) {
+    showToast(`Моя волна не запустилась: ${sanitizeDisplayText(err?.message || err)}`, true)
+  } finally {
+    _myWaveBuilding = false
+    renderMyWave()
+  }
 }
 
 function renderMyWave() {
@@ -3014,33 +3169,26 @@ function renderMyWave() {
   if (!listEl || !hintEl) return
   const mode = getMyWaveMode()
   const modeCfg = MY_WAVE_MODES[mode] || MY_WAVE_MODES.default
-  const tracks = getMyWaveTracks(MY_WAVE_MIN_TRACKS, mode)
-  _myWaveRenderedTracks = tracks.slice()
+  const seedCount = getMyWaveSeedTracks().length
   if (modesEl) {
     modesEl.innerHTML = Object.entries(MY_WAVE_MODES).map(([id, cfg]) => (
       `<button class="my-wave-mode ${id === mode ? 'active' : ''}" onclick="setMyWaveMode('${id}')">${cfg.label}</button>`
     )).join('')
   }
-  if (tracks.length < MY_WAVE_MIN_TRACKS) {
-    hintEl.textContent = `Прослушай еще ${MY_WAVE_MIN_TRACKS - tracks.length} трек(ов), чтобы собрать Мою волну`
+  if (seedCount < 3) {
+    hintEl.textContent = `Послушай или лайкни еще ${3 - seedCount} трек(ов), чтобы волна поняла твой вкус`
+  } else if (_myWaveBuilding) {
+    hintEl.textContent = `${modeCfg.label}: ищу новые треки по твоему вкусу...`
   } else {
-    hintEl.textContent = `${modeCfg.label}: ${modeCfg.hint}. В очереди ${tracks.length} треков`
+    hintEl.textContent = `${modeCfg.label}: ${modeCfg.hint}. Нажми запуск, и волна сама соберет новую очередь`
   }
-  listEl.innerHTML = tracks.map((track, idx) => {
-    const cover = getListCoverUrl(track)
-    const coverHtml = cover
-      ? `<div class="my-wave-cover" style="background-image:url(${cover})"></div>`
-      : `<div class="my-wave-cover">${String(track.title || '?').slice(0, 1).toUpperCase()}</div>`
-    return `
-      <button class="my-wave-track glass-card" onclick='playTrackFromMyWave(${idx})'>
-        ${coverHtml}
-        <div class="my-wave-meta">
-          <strong>${track.title || 'Без названия'}</strong>
-          <span>${track.artist || '—'}</span>
-        </div>
-      </button>
-    `
-  }).join('')
+  listEl.innerHTML = `
+    <div class="my-wave-orb ${_myWaveBuilding ? 'is-loading' : ''}">
+      <div class="my-wave-orb-ring"></div>
+      <div class="my-wave-orb-core"></div>
+      <span>${_myWaveBuilding ? 'Подбираю волну' : 'Волна без списка'}</span>
+    </div>
+  `
 }
 
 function playTrackFromMyWave(index) {

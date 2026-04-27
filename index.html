@@ -585,15 +585,37 @@
             </div>
           </div>
 
-          <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Яндекс Музыка токен (для будущего импорта)</div>
-          <div class="token-field-wrap" style="margin-bottom:12px;">
-            <input id="ym-token-val" type="password" class="token-field" placeholder="Вставь токен Яндекс Музыки...">
-            <button class="token-field-eye" onclick="toggleToken('ym-token-val')" title="Показать/скрыть">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-            </button>
-            <button class="token-field-apply" onclick="applyYandexToken()" title="Сохранить">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-            </button>
+          <div class="yandex-token-card">
+            <div class="vs-section-title" style="margin-bottom:8px;">Яндекс Музыка импорт</div>
+            <div id="ym-status" style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);margin-bottom:10px;">
+              <div>
+                <div id="ym-status-text" style="font-size:13px;color:rgba(255,255,255,0.92)">Не настроен</div>
+                <div id="ym-status-sub" style="font-size:12px;color:var(--muted);margin-top:2px;">Нужен OAuth token для чтения плейлистов</div>
+              </div>
+              <div id="ym-active-display" style="font-size:11px;color:var(--accent2);opacity:.9"></div>
+            </div>
+            <div class="yandex-token-guide">
+              <strong>Актуально: OAuth Device Flow</strong>
+              <span>1. Установи Python-библиотеку: <code>pip install -U yandex-music</code></span>
+              <span>2. Запусти короткий скрипт из документации, открой ссылку и введи код.</span>
+              <span>3. Скопируй <code>access_token</code> сюда. Flow берет из Яндекса только названия и артистов, потом ищет треки обычным поиском.</span>
+              <span>Запасной вариант: браузерная OAuth-ссылка ниже. После входа скопируй <code>access_token</code> из URL.</span>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0;">
+              <button class="btn-small" onclick="openYandexTokenGuide()">Открыть гайд</button>
+              <button class="btn-small" onclick="openYandexOAuthTokenPage()">Открыть OAuth-ссылку</button>
+            </div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">OAuth token Яндекс Музыки</div>
+            <div class="token-field-wrap" style="margin-bottom:8px;">
+              <input id="ym-token-val" type="password" class="token-field" placeholder="Вставь access_token или полный redirect URL...">
+              <button class="token-field-eye" onclick="toggleToken('ym-token-val')" title="Показать/скрыть">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+              <button class="token-field-apply" onclick="applyYandexToken()" title="Сохранить">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              </button>
+            </div>
+            <div id="ym-msg" class="token-msg" style="display:block"></div>
           </div>
 
           <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">SoundCloud Client ID (для будущего импорта)</div>
