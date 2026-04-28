@@ -969,29 +969,33 @@ body.layout-top-nav .player-bar {
   background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08);
 }
 .room-queue-row {
-  min-height: 82px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  justify-content: flex-start;
+  min-height: 92px;
+  padding: 11px 12px;
+  border-radius: 14px;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) 32px;
+  column-gap: 12px;
+  align-items: center;
 }
 .room-queue-row span {
-  flex: 1;
-  margin: 0 12px 0 2px;
+  margin: 0;
+  min-width: 0;
   font-size: 16px;
   font-weight: 600;
-  line-height: 1.25;
+  line-height: 1.28;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.room-queue-cover {
-  width: 64px;
-  height: 64px;
-  border-radius: 14px;
-  margin-right: 12px;
+.room-queue-row .profile-row-cover.room-queue-cover {
+  width: 72px;
+  height: 72px;
+  border-radius: 16px;
+  margin: 0;
 }
 .room-queue-row .playlist-track-action {
-  margin-left: auto;
+  margin: 0;
+  justify-self: end;
 }
 .profile-row.drag-over {
   border-color: rgba(124,58,237,0.65);
@@ -2443,6 +2447,9 @@ body.lyrics-effect-contrast .lyrics-line.active { color:#fff; }
   border: 1px solid rgba(255,255,255,0.08);
   font-size: 12px;
   color: rgba(240,245,255,0.92);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .friend-context-menu {
   position: fixed;
