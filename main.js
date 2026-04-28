@@ -23,8 +23,6 @@ app.commandLine.appendSwitch('disable-logging')
 app.commandLine.appendSwitch('log-level', '3')
 if (_isSafeGpuMode) {
   app.disableHardwareAcceleration()
-  app.commandLine.appendSwitch('disable-gpu')
-  app.commandLine.appendSwitch('in-process-gpu')
   console.log('[safe-gpu] enabled')
 }
 
@@ -33,7 +31,7 @@ function relaunchInSafeGpuMode(reason = 'unknown') {
   _safeGpuRestartRequested = true
   try {
     console.warn('[safe-gpu] relaunch requested:', reason)
-    const args = process.argv.filter((a) => a !== SAFE_GPU_FLAG)
+    const args = process.argv.slice(1).filter((a) => a !== SAFE_GPU_FLAG)
     args.push(SAFE_GPU_FLAG)
     app.relaunch({ args })
   } catch (e) {
@@ -1041,10 +1039,14 @@ function createWindow() {
     },
     icon: path.join(__dirname, 'assets/icon.ico')
   })
-  win.loadFile('index.html')
+  win.loadFile('index.html', _isSafeGpuMode ? { query: { safeGpu: '1' } } : undefined)
   _mainWindow = win
-  win.webContents.once('did-finish-load', () => { _safeGpuRestartRequested = false })
-  win.on('unresponsive', () => relaunchInSafeGpuMode('window-unresponsive'))
+  win.webContents.once('did-finish-load', () => {
+    _safeGpuRestartRequested = false
+  })
+  win.on('unresponsive', () => {
+    relaunchInSafeGpuMode('window-unresponsive')
+  })
   win.webContents.on('render-process-gone', (event, details) => {
     const reason = String(details?.reason || 'render-process-gone')
     if (reason !== 'clean-exit') relaunchInSafeGpuMode(reason)

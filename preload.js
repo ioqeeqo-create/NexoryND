@@ -1,6 +1,17 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
+const isSafeGpuMode = process.argv.includes('--flow-safe-gpu')
+if (isSafeGpuMode) {
+  try {
+    document.documentElement.classList.add('safe-gpu-mode')
+    document.addEventListener('DOMContentLoaded', () => {
+      try { document.body?.classList.add('safe-gpu-mode') } catch {}
+    }, { once: true })
+  } catch {}
+}
+
 contextBridge.exposeInMainWorld('api', {
+  isSafeGpuMode: () => isSafeGpuMode,
   minimize: () => ipcRenderer.send('window-minimize'),
   close: () => ipcRenderer.send('window-close'),
   openExternal: (url) => ipcRenderer.send('open-external', url),

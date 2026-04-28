@@ -63,6 +63,40 @@ html, body {
 }
 body { zoom: var(--ui-scale); }
 
+html.safe-gpu-mode *,
+html.safe-gpu-mode *::before,
+html.safe-gpu-mode *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
+html.safe-gpu-mode .glass,
+html.safe-gpu-mode .glass-sidebar,
+html.safe-gpu-mode .glass-bar,
+html.safe-gpu-mode .titlebar,
+html.safe-gpu-mode .flow-modal-backdrop,
+html.safe-gpu-mode .track-card,
+html.safe-gpu-mode .home-card,
+html.safe-gpu-mode .playlist-card,
+html.safe-gpu-mode .lyrics-panel,
+html.safe-gpu-mode .stab,
+html.safe-gpu-mode .vsb {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html.safe-gpu-mode .bg-cover-blur,
+html.safe-gpu-mode .bg-active-tint,
+html.safe-gpu-mode .gorb,
+html.safe-gpu-mode .auth-logo-glow,
+html.safe-gpu-mode .pm-bg,
+html.safe-gpu-mode .pm-cover-glow,
+html.safe-gpu-mode .my-wave-orb-ring {
+  filter: none !important;
+  mix-blend-mode: normal !important;
+  transform: none !important;
+}
+
 /* ═══════════════════════════════
    DYNAMIC BACKGROUND
 ═══════════════════════════════ */
