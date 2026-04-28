@@ -5,6 +5,7 @@
     friendsPrefix: 'flow_friends_',
     supabaseUrl: 'flow_supabase_url',
     supabaseKey: 'flow_supabase_key',
+    localAuth: 'flow_local_auth',
   }
 
   function normalizeAuthError(err, fallback = 'Ошибка авторизации') {
@@ -63,6 +64,35 @@
     localStorage.setItem(STORAGE_KEYS.profiles, JSON.stringify(list || []))
   }
 
+  function getLocalAuthMap() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.localAuth) || '{}') || {} } catch { return {} }
+  }
+
+  function saveLocalAuthMap(map) {
+    try { localStorage.setItem(STORAGE_KEYS.localAuth, JSON.stringify(map || {})) } catch {}
+  }
+
+  function upsertLocalAuth(username, password) {
+    const safe = normalizeUsername(username)
+    if (!safe) return
+    const pass = String(password || '')
+    if (pass.length < 4) return
+    const map = getLocalAuthMap()
+    const salt = randomSalt(24)
+    const hash = btoa(unescape(encodeURIComponent(`${pass}::${salt}`))).slice(0, 120)
+    map[safe] = { salt, hash, updatedAt: Date.now() }
+    saveLocalAuthMap(map)
+  }
+
+  function verifyLocalAuth(username, password) {
+    const safe = normalizeUsername(username)
+    const map = getLocalAuthMap()
+    const row = map[safe]
+    if (!row?.salt || !row?.hash) return false
+    const actual = btoa(unescape(encodeURIComponent(`${String(password || '')}::${String(row.salt || '')}`))).slice(0, 120)
+    return actual === String(row.hash || '')
+  }
+
   function normalizeUsername(value) {
     return String(value || '').trim().toLowerCase().replace(/[^a-z0-9_\-.]/g, '').slice(0, 32)
   }
@@ -109,7 +139,16 @@
       return { ok: true, profile: { username, createdAt: Number(profile?.createdAt || Date.now()) } }
     }
     const sb = getSupabase()
-    if (!sb) return { ok: false, error: viaFlowServer?.error || 'Сервер недоступен' }
+    if (!sb) {
+      const profiles = getProfiles()
+      if (profiles.some((p) => p.username === username)) return { ok: false, error: 'Такой Username уже занят' }
+      const profile = { username, createdAt: Date.now() }
+      profiles.push(profile)
+      saveProfiles(profiles)
+      upsertLocalAuth(username, password)
+      localStorage.setItem(STORAGE_KEYS.current, username)
+      return { ok: true, profile }
+    }
     try {
       const { data: existing } = await sb
         .from(DB_PROFILES)
@@ -135,6 +174,7 @@
     const profile = { username, createdAt: Date.now() }
     profiles.push(profile)
     saveProfiles(profiles)
+    upsertLocalAuth(username, password)
     localStorage.setItem(STORAGE_KEYS.current, username)
     return { ok: true, profile }
   }
@@ -160,7 +200,13 @@
       return { ok: true, profile }
     }
     const sb = getSupabase()
-    if (!sb) return { ok: false, error: viaFlowServer?.error || 'Сервер недоступен' }
+    if (!sb) {
+      const profile = getProfiles().find((p) => p.username === username) || null
+      if (!profile) return { ok: false, error: 'Профиль не найден, зарегистрируйся' }
+      if (!verifyLocalAuth(username, password)) return { ok: false, error: 'Неверный пароль' }
+      localStorage.setItem(STORAGE_KEYS.current, username)
+      return { ok: true, profile }
+    }
     let row = null
     try {
       const { data, error } = await sb
@@ -211,7 +257,16 @@
       return { ok: true, profile: { username } }
     }
     const sb = getSupabase()
-    if (!sb) return { ok: false, error: viaFlowServer?.error || 'Сервер недоступен' }
+    if (!sb) {
+      upsertLocalAuth(username, password)
+      const profiles = getProfiles()
+      if (!profiles.some((p) => p.username === username)) {
+        profiles.push({ username, createdAt: Date.now() })
+        saveProfiles(profiles)
+      }
+      localStorage.setItem(STORAGE_KEYS.current, username)
+      return { ok: true, profile: { username } }
+    }
     try {
       const { data, error } = await sb
         .from(DB_PROFILES)
@@ -241,6 +296,7 @@
         saveProfiles(profiles)
       }
       localStorage.setItem(STORAGE_KEYS.current, username)
+      upsertLocalAuth(username, password)
       return { ok: true, profile: { username } }
     } catch (e) {
       return { ok: false, error: normalizeAuthError(e, 'Ошибка миграции') }
