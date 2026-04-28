@@ -1042,10 +1042,25 @@ function applyHomeSliderStyle() {
   const style = v.homeSliderStyle === 'wave' ? 'wave' : 'line'
   const p = document.getElementById('home-clone-progress')
   if (p) p.classList.toggle('home-slider-wave', style === 'wave')
+  const mainProgress = document.getElementById('progress')
+  const pmProgress = document.getElementById('pm-progress')
+  ;[mainProgress, pmProgress].forEach((el) => {
+    if (!el) return
+    el.classList.toggle('flow-slider-wave', style === 'wave')
+    updateWaveSliderFill(el)
+  })
   const b1 = document.getElementById('slider-style-line')
   const b2 = document.getElementById('slider-style-wave')
   if (b1) b1.classList.toggle('active', style === 'line')
   if (b2) b2.classList.toggle('active', style === 'wave')
+}
+
+function updateWaveSliderFill(el) {
+  if (!el) return
+  const value = Number(el.value || 0)
+  const max = Number(el.max || 1) || 1
+  const fill = Math.max(0, Math.min(100, (value / max) * 100))
+  el.style.setProperty('--progress-fill', `${fill}%`)
 }
 
 function toggleHomeWidgetEnabled() {
@@ -6183,10 +6198,16 @@ audio.ontimeupdate = () => {
   if (shouldSyncUi) {
     _lastUiSyncAt = performance.now()
     const p = document.getElementById('progress')
-    if (p && audio.duration) p.value = audio.currentTime / audio.duration
+    if (p && audio.duration) {
+      p.value = audio.currentTime / audio.duration
+      updateWaveSliderFill(p)
+    }
 
     const pmp = document.getElementById('pm-progress')
-    if (pmp && audio.duration) pmp.value = audio.currentTime / audio.duration
+    if (pmp && audio.duration) {
+      pmp.value = audio.currentTime / audio.duration
+      updateWaveSliderFill(pmp)
+    }
 
     const cur = fmtTime(audio.currentTime)
     const tot = fmtTime(audio.duration)

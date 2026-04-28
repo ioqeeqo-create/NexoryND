@@ -2068,6 +2068,30 @@ body.nav-active-highlight .src-tab.active { background:rgba(124,58,237,0.18); bo
 .progress-bar { flex:1; height:3px; accent-color:var(--accent2); cursor:pointer; }
 .player-right { display:flex; align-items:center; gap:8px; width:160px; flex-shrink:0; justify-content:flex-end; }
 .volume-bar { width:90px; height:3px; accent-color:var(--accent2); cursor:pointer; }
+.flow-slider-wave {
+  height: 16px !important;
+  appearance: none;
+  -webkit-appearance: none;
+  background:
+    radial-gradient(circle at 7px 50%, rgba(255,255,255,.22) 0 1.6px, transparent 2px) 0 0 / 14px 100% repeat-x,
+    linear-gradient(90deg, color-mix(in srgb, var(--accent2) 72%, white 8%) var(--progress-fill,0%), rgba(255,255,255,.2) var(--progress-fill,0%));
+  border-radius: 999px;
+}
+.flow-slider-wave::-webkit-slider-thumb {
+  appearance:none;
+  width:12px; height:12px;
+  border-radius:50%;
+  background:#f6f3ff;
+  border:none;
+  box-shadow:0 0 0 2px rgba(16,18,30,.72), 0 0 14px color-mix(in srgb, var(--accent2) 42%, transparent);
+}
+.flow-slider-wave::-moz-range-thumb {
+  width:12px; height:12px;
+  border-radius:50%;
+  background:#f6f3ff;
+  border:none;
+  box-shadow:0 0 0 2px rgba(16,18,30,.72), 0 0 14px color-mix(in srgb, var(--accent2) 42%, transparent);
+}
 
 /* ═══════════════════════════════
    LYRICS PANEL
