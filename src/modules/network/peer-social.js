@@ -488,7 +488,7 @@
   class FlowPeerSocial {
     constructor(username, opts = {}) {
       this.username = normalizeUsername(username)
-      this.maxPeers = Number(opts.maxPeers || 3)
+      this.maxPeers = Number(opts.maxPeers || 5)
       this.peer = null
       this.connections = new Map()
       this.roomId = null

@@ -270,9 +270,9 @@ function updateRoomUi() {
   const roleBadgeEl = document.getElementById('room-role-badge')
   if (countEl) {
     if (_roomState?.roomId && _socialPeer) {
-      countEl.textContent = `Участники: ${_socialPeer.peersCount()}/3`
+      countEl.textContent = `Участники: ${_socialPeer.peersCount()}/5`
     } else {
-      countEl.textContent = 'Участники: —/3'
+      countEl.textContent = 'Участники: —/5'
     }
   }
   if (roleBadgeEl) {
@@ -4506,7 +4506,7 @@ function ensureRoomsUI() {
       <div id="room-status" style="margin-top:8px;font-size:12px;opacity:.85">Рума: не активна</div>
       <div style="margin-top:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <span id="room-role-badge" class="room-role-badge room-role-solo">SOLO</span>
-        <span id="room-members-count" style="font-size:12px;opacity:.8">Участники: —/3</span>
+        <span id="room-members-count" style="font-size:12px;opacity:.8">Участники: —/5</span>
       </div>
       <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn-small" onclick="copyInviteLink()">Copy Invite Link/ID</button>
@@ -4877,11 +4877,11 @@ function initPeerSocial() {
   startProfilesRealtimeSync()
   if (_socialPeer) _socialPeer.destroy()
   _socialPeer = new peerSocial.FlowPeerSocial(_profile.username, {
-    maxPeers: 3,
+    maxPeers: 5,
     onStatus: (evt) => {
       if (evt.type === 'ready') setSocialStatus(`online: ${evt.id}`)
       if (evt.type === 'peer-joined') {
-        setRoomStatus(`Рума ${_roomState.roomId || '—'}: участников ${_socialPeer.peersCount()}/3`)
+        setRoomStatus(`Рума ${_roomState.roomId || '—'}: участников ${_socialPeer.peersCount()}/5`)
         const me = getPublicProfilePayload(_profile?.username)
         if (me && _socialPeer?.peer?.id) _roomMembers.set(_socialPeer.peer.id, me)
         if (evt.peerId && !_roomMembers.has(evt.peerId)) {
@@ -4907,7 +4907,7 @@ function initPeerSocial() {
         if (evt.peerId) showToast(`${String(evt.peerId).replace(/^flow-/, '')}: вошёл в руму`)
       }
       if (evt.type === 'peer-left') {
-        setRoomStatus(`Рума ${_roomState.roomId || '—'}: участников ${_socialPeer.peersCount()}/3`)
+        setRoomStatus(`Рума ${_roomState.roomId || '—'}: участников ${_socialPeer.peersCount()}/5`)
         if (evt.peerId) {
           _roomMembers.delete(evt.peerId)
           _peerProfiles.delete(evt.peerId)
@@ -5051,10 +5051,12 @@ function initPeerSocial() {
       }
       if (msg.type === 'room-control-toggle' && msg.roomId === _roomState.roomId && msg._peerId && msg._peerId !== _socialPeer?.peer?.id) {
         const shouldPause = Boolean(msg.paused)
+        const wasPaused = Boolean(audio.paused)
         if (shouldPause && !audio.paused) audio.pause()
         if (!shouldPause && audio.paused) audio.play().catch(() => {})
+        // Keep room playback state in sync even when action came from non-host participant.
+        if (_roomState?.host && wasPaused !== Boolean(audio.paused)) broadcastPlaybackSync(true)
         if (_roomState?.host) {
-          broadcastPlaybackSync(true)
           saveRoomStateToServer({
             playback_state: { paused: Boolean(audio.paused), currentTime: Number(audio.currentTime || 0) },
             playback_ts: Date.now(),
@@ -5222,7 +5224,7 @@ function createRoom() {
   _roomMembers.clear()
   sharedQueue = []
   if (_socialPeer?.peer?.id) _roomMembers.set(_socialPeer.peer.id, getPublicProfilePayload(_profile?.username))
-  setRoomStatus(`Рума ${r.roomId}: участников 1/3`)
+  setRoomStatus(`Рума ${r.roomId}: участников 1/5`)
   resetRoomHeartbeat()
   startRoomServerSync()
   saveRoomStateToServer({ shared_queue: [], now_playing: null, playback_ts: Date.now() }).catch(() => {})
@@ -5496,7 +5498,11 @@ function notifyFriendPresenceChange(username, prev = {}, next = {}) {
   const prevTrack = prev.track ? `${prev.track.artist || ''}:${prev.track.title || ''}` : ''
   const nextTrack = next.track ? `${next.track.artist || ''}:${next.track.title || ''}` : ''
   if (next.online && nextTrack && nextTrack !== prevTrack && canNotify(`track:${nextTrack}`)) {
-    showToast(`${name} слушает: ${next.track.title || 'трек'}${next.track.artist ? ` — ${next.track.artist}` : ''}`)
+    const hostProfile = _roomMembers.get(String(_roomState?.hostPeerId || ''))
+    const hostName = String(hostProfile?.username || '').trim().toLowerCase()
+    const isHostTrack = Boolean(_roomState?.roomId && !_roomState?.host && hostName && name.toLowerCase() === hostName)
+    if (isHostTrack) showToast(`host (${name}) поставил трек: ${next.track.title || 'трек'}${next.track.artist ? ` — ${next.track.artist}` : ''}`)
+    else showToast(`${name} слушает: ${next.track.title || 'трек'}${next.track.artist ? ` — ${next.track.artist}` : ''}`)
   }
 }
 
