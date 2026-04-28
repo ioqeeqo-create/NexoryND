@@ -2070,7 +2070,7 @@ async function setCustomTrackCover(input) {
     saveCustomCoverMap(map)
     _coverLoadState.clear()
     syncPlayerUIFromTrack()
-    renderQueue()
+    // Legacy queue renderer was removed; refresh visible collections only.
     renderPlaylists()
     renderLiked()
     renderRoomQueue()
@@ -2108,7 +2108,7 @@ function clearCustomTrackCover() {
   restoreSourceCoversInCollections()
   _coverLoadState.clear()
   syncPlayerUIFromTrack()
-  renderQueue()
+  // Legacy queue renderer was removed; refresh visible collections only.
   renderPlaylists()
   renderLiked()
   renderRoomQueue()
@@ -3409,7 +3409,7 @@ async function maybePreloadMyWave(force = false) {
     if (fresh.length) {
       queue.push(...fresh)
       _myWaveRenderedTracks = queue.slice()
-      renderQueue()
+      // Legacy queue renderer was removed; my-wave queue is reflected via player and room renders.
       showToast(`Моя волна дозагрузила ${fresh.length} треков`)
       if (force && queueIndex >= startLength - 1 && queue[queueIndex + 1]) {
         queueIndex++
