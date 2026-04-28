@@ -352,13 +352,17 @@ function prepareProfileImageData(file, dataUrl, kind = 'avatar') {
 }
 
 const ICONS = {
-  play: '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5v14l11-7Z"/></svg>',
-  pause: '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6v12"/><path d="M15 6v12"/></svg>',
-  plus: '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>',
-  close: '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>'
+  play: '<svg class="ui-icon ctrl-play-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9.5 7.75v8.5l7.25-4.25-7.25-4.25z"/></svg>',
+  pause: '<svg class="ui-icon ctrl-play-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="8" y="6.5" width="3.25" height="11" rx="1"/><rect x="12.75" y="6.5" width="3.25" height="11" rx="1"/></svg>',
+  plus: '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>',
+  close: '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>'
 }
-const HEART_OUTLINE = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.35-9.5-8A5.5 5.5 0 0 1 12 5.1 5.5 5.5 0 0 1 21.5 13c-2.5 3.65-9.5 8-9.5 8Z"/></svg>'
-const HEART_FILLED = '<svg class="ui-icon" viewBox="0 0 24 24" fill="currentColor" fill-opacity="0.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.35-9.5-8A5.5 5.5 0 0 1 12 5.1 5.5 5.5 0 0 1 21.5 13c-2.5 3.65-9.5 8-9.5 8Z"/></svg>'
+/** Внутренности <svg id="pm-play-icon"> (fullscreen): только фигуры, без обёртки */
+const PM_PLAY_SHAPE = '<path fill="currentColor" d="M9.5 7.75v8.5l7.25-4.25-7.25-4.25z"/>'
+const PM_PAUSE_SHAPE = '<g fill="currentColor"><rect x="7" y="6.5" width="3.5" height="11" rx="1"/><rect x="13.5" y="6.5" width="3.5" height="11" rx="1"/></g>'
+const HEART_OUTLINE = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.2s-6.1-3.95-8.35-7.1a4.1 4.1 0 0 1 6.55-4.9l1.8 1.75 1.8-1.75a4.1 4.1 0 0 1 6.55 4.9c-2.25 3.15-8.35 7.1-8.35 7.1Z"/></svg>'
+const HEART_FILLED = '<svg class="ui-icon" viewBox="0 0 24 24" fill="currentColor" fill-opacity="0.22" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.2s-6.1-3.95-8.35-7.1a4.1 4.1 0 0 1 6.55-4.9l1.8 1.75 1.8-1.75a4.1 4.1 0 0 1 6.55 4.9c-2.25 3.15-8.35 7.1-8.35 7.1Z"/></svg>'
+const SIMILAR_ICON = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 14c1.7-4.2 5.5-7 9.8-7 .6 0 1.2 0 1.8.1"/><path d="M8 21c1.1-2.8 3.4-5 6.3-6"/><path d="M4 10c0-1.1.2-2.1.6-3"/><path d="M15 21h6"/><path d="M18 18v6"/></svg>'
 
 // в”Ђв”Ђв”Ђ VISUAL SETTINGS в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 const defaultVisual = {
@@ -1411,9 +1415,7 @@ function syncPlayerModeUI() {
   }
   // play/pause icon sync
   const icon = document.getElementById('pm-play-icon')
-  if (icon) icon.innerHTML = audio.paused
-    ? '<polygon points="5 3 19 12 5 21 5 3"/>'
-    : '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>'
+  if (icon) icon.innerHTML = audio.paused ? PM_PLAY_SHAPE : PM_PAUSE_SHAPE
   // volume sync
   const pmVol = document.getElementById('pm-volume')
   if (pmVol) pmVol.value = audio.volume
@@ -3094,6 +3096,7 @@ function setMyWaveMode(mode) {
   _myWaveMode = MY_WAVE_MODES[mode] ? mode : 'default'
   try { localStorage.setItem('flow_my_wave_mode', _myWaveMode) } catch {}
   renderMyWave()
+  renderRoomsWaveModes()
 }
 
 function getMyWaveTrackKey(track) {
@@ -3456,6 +3459,15 @@ function renderMyWave() {
       <div class="my-wave-orb-core"></div>
     </div>
   `
+}
+
+function renderRoomsWaveModes() {
+  const modesEl = document.getElementById('rooms-wave-modes')
+  if (!modesEl) return
+  const active = getMyWaveMode()
+  modesEl.innerHTML = Object.entries(MY_WAVE_MODES).map(([id, cfg]) => (
+    `<button class="rooms-wave-mode ${id === active ? 'active' : ''}" onclick="setMyWaveMode('${id}')">${cfg.label}</button>`
+  )).join('')
 }
 
 function playTrackFromMyWave(index) {
@@ -4342,6 +4354,20 @@ function ensureRoomsUI() {
   box.className = 'glass-card social-hub'
   box.style.padding = '14px'
   box.innerHTML = `
+    <div class="social-room-box rooms-wave-box">
+      <div class="rooms-wave-header">
+        <div class="rooms-wave-title">
+          <strong>Flow Wave в комнатах</strong>
+          <span>Выбери режим, найди треки и запускай волну прямо из комнаты</span>
+        </div>
+        <div class="rooms-wave-actions">
+          <button class="btn-small" onclick="openPage('search')">Найти треки</button>
+          <button class="btn-small" onclick="openPage('library')">Выбрать из библиотеки</button>
+          <button class="btn-small" onclick="startMyWave()">Запустить волну</button>
+        </div>
+      </div>
+      <div id="rooms-wave-modes" class="rooms-wave-modes"></div>
+    </div>
     <div class="social-room-box">
       <div class="social-section-title">Подключение</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -4378,6 +4404,7 @@ function ensureRoomsUI() {
     </div>
   `
   root.appendChild(box)
+  renderRoomsWaveModes()
 }
 
 async function renderFriends() {
@@ -5957,7 +5984,7 @@ async function playTrackObj(track, opts = {}) {
   applyCoverArt(cover, effectiveCover, track.bg || 'linear-gradient(135deg,#7c3aed,#a855f7)')
   if (playBtn) playBtn.innerHTML = ICONS.pause
   const pmIcon = document.getElementById('pm-play-icon')
-  if (pmIcon) pmIcon.innerHTML = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>'
+  if (pmIcon) pmIcon.innerHTML = PM_PAUSE_SHAPE
   updatePlayerLikeBtn()
   // РћР±РЅРѕРІР»СЏРµРј titlebar
   const tinfo = document.getElementById('titlebar-track-info')
@@ -6010,12 +6037,12 @@ function togglePlay() {
     if (_audioCtx?.state === 'suspended') _audioCtx.resume().catch(() => {})
     if (playBtn) playBtn.innerHTML = ICONS.pause
     const icon = document.getElementById('pm-play-icon')
-    if (icon) icon.innerHTML = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>'
+    if (icon) icon.innerHTML = PM_PAUSE_SHAPE
   } else {
     audio.pause()
     if (playBtn) playBtn.innerHTML = ICONS.play
     const icon = document.getElementById('pm-play-icon')
-    if (icon) icon.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"/>'
+    if (icon) icon.innerHTML = PM_PLAY_SHAPE
   }
   if (isRoomParticipant) {
     _socialPeer?.send?.({
@@ -7342,16 +7369,16 @@ function makeTrackEl(track, showPlaylist=false, bindDefaultPlay=true) {
   const badge = srcLbl ? `<span class="track-source track-source-${track.source}">${srcLbl}</span>` : ''
   el.innerHTML=`
     <div class="track-cover" style="${coverStyle}">${trackCover?'':'<svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'}
-      <div class="cover-overlay"><div class="cover-play-icon"><svg viewBox="0 0 24 24" width="10" height="10" style="fill:#111;margin-left:1px"><polygon points="5 3 19 12 5 21 5 3"/></svg></div></div>
+      <div class="cover-overlay"><div class="cover-play-icon"><svg class="track-play-glyph" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9.5 7.75v8.5l7.25-4.25-7.25-4.25z"/></svg></div></div>
     </div>
     <div class="track-info">
       <span class="track-name">${track.title}</span>
       <span class="track-artist">${track.artist||'вЂ”'} ${badge}</span>
     </div>
     <button class="track-like ${liked?'liked':''}" data-track-json="${trackJson}" onclick="event.stopPropagation();likeTrack(${trackJson})">${liked ? HEART_FILLED : HEART_OUTLINE}</button>
-    <button class="track-like" onclick="event.stopPropagation();findSimilarTracks(${trackJson})" title="Найти похожие">≈</button>
+    <button class="track-like" onclick="event.stopPropagation();findSimilarTracks(${trackJson})" title="Найти похожие">${SIMILAR_ICON}</button>
     ${showPlaylist?`<button class="track-like" onclick="event.stopPropagation();addToPlaylist(${trackJson})" title="Р’ РїР»РµР№Р»РёСЃС‚">${ICONS.plus}</button>`:''}
-    <button class="track-play"><svg viewBox="0 0 24 24" width="10" height="10" style="fill:currentColor;margin-left:1px"><polygon points="5 3 19 12 5 21 5 3"/></svg></button>`
+    <button class="track-play"><svg class="track-play-glyph" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9.5 7.75v8.5l7.25-4.25-7.25-4.25z"/></svg></button>`
   if (trackCover) {
     const coverEl = el.querySelector('.track-cover')
     observeLazyCoverBackground(coverEl, trackCover, fallbackBg, getTrackKey(track))
