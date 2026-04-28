@@ -4376,7 +4376,7 @@ function ensureRoomsUI() {
   box.className = 'glass-card social-hub'
   box.style.padding = '14px'
   box.innerHTML = `
-    <div class="social-room-box">
+    <div class="social-room-box rooms-connect-tile">
       <div class="social-section-title">Подключение</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <input id="join-room-input" class="token-field flow-input" placeholder="ID или ник хоста" style="flex:1;min-width:180px" />
@@ -4395,11 +4395,11 @@ function ensureRoomsUI() {
         <button class="btn-small" onclick="openRoomInvitePicker()">Пригласить друга</button>
       </div>
     </div>
-    <div class="social-room-box rooms-main-tile">
+    <div class="social-room-box rooms-main-tile rooms-members-tile">
       <div class="social-section-title">В комнате</div>
       <div id="room-members-list" class="social-friends-grid"><div class="flow-empty-state compact"><strong>Комната пустая</strong><span>Создай руму или присоединись по invite.</span></div></div>
     </div>
-    <div class="social-room-box rooms-main-tile">
+    <div class="social-room-box rooms-main-tile rooms-search-tile">
       <div class="social-section-title">Поиск в очередь</div>
       <input id="room-queue-search" class="token-field flow-input" placeholder="Найти трек и добавить в очередь..." oninput="searchRoomQueueTracks()" />
       <div style="margin-top:8px"><button class="btn-small" onclick="openRoomOwnTracksPicker()">Свои треки</button></div>
@@ -7091,7 +7091,7 @@ async function importPlaylistFromLink(urlFromUi = '') {
     return
   }
   const settings = getSettings()
-  const isYandexLink = /(^|\/\/)(music\.)?yandex\.[^/]+\/users\/[^/]+\/playlists\/[^/?#]+/i.test(url)
+  const isYandexLink = /(^|\/\/)(music\.)?yandex\.[^/]+\/(?:users\/[^/]+\/playlists\/[^/?#]+|playlists\/[^/?#]+)/i.test(url)
   if (isYandexLink && !settings.yandexToken) {
     showToast('Для импорта Яндекс Музыки нужен активный OAuth token', true)
     openPage('settings')

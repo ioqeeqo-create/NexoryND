@@ -969,18 +969,29 @@ body.layout-top-nav .player-bar {
   background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08);
 }
 .room-queue-row {
-  min-height: 64px;
-  padding: 9px 10px;
+  min-height: 82px;
+  padding: 10px 12px;
   border-radius: 12px;
+  justify-content: flex-start;
 }
 .room-queue-row span {
-  font-size: 14px;
+  flex: 1;
+  margin: 0 12px 0 2px;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .room-queue-cover {
-  width: 48px;
-  height: 48px;
-  border-radius: 11px;
-  margin-right: 10px;
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  margin-right: 12px;
+}
+.room-queue-row .playlist-track-action {
+  margin-left: auto;
 }
 .profile-row.drag-over {
   border-color: rgba(124,58,237,0.65);
@@ -1140,21 +1151,25 @@ body.layout-top-nav .player-bar {
 #page-rooms-content .social-hub {
   display:grid;
   gap:12px;
-  grid-template-columns: minmax(220px, 0.85fr) minmax(320px, 1.2fr) minmax(320px, 1.2fr);
+  grid-template-columns: repeat(3, minmax(280px, 1fr));
+  align-items: stretch;
 }
-#page-rooms-content .social-room-box:last-child { grid-column: 1 / -1; }
+#page-rooms-content .rooms-connect-tile { grid-column: 1; grid-row: 1; }
+#page-rooms-content .rooms-members-tile { grid-column: 2; grid-row: 1; }
+#page-rooms-content .rooms-search-tile { grid-column: 3; grid-row: 1; }
 #page-rooms-content .rooms-main-tile {
-  min-height: 198px;
+  min-height: 214px;
 }
 #page-rooms-content .rooms-wave-inline {
   grid-column: 3;
+  grid-row: 2;
   padding: 0;
   border: none;
   background: transparent;
 }
 #page-rooms-content .rooms-wave-my-wave {
   margin-top: 0;
-  min-height: 100%;
+  min-height: 214px;
 }
 #page-rooms-content .rooms-wave-my-wave .my-wave-hero h3 {
   font-size: 16px;
@@ -1164,24 +1179,43 @@ body.layout-top-nav .player-bar {
   gap: 8px;
 }
 #page-rooms-content .rooms-wave-my-wave .my-wave-list {
-  min-height: 112px;
+  min-height: 72px;
+}
+#page-rooms-content .rooms-wave-my-wave .my-wave-orb {
+  min-height: 72px;
+  border-radius: 16px;
+}
+#page-rooms-content .rooms-wave-my-wave .my-wave-orb-ring {
+  width: min(44vw, 300px);
+  height: min(44vw, 300px);
+}
+#page-rooms-content .rooms-wave-my-wave .my-wave-orb-core {
+  width: min(34vw, 220px);
+  height: 52px;
+}
+#page-rooms-content .social-room-box:last-child {
+  grid-column: 1 / -1;
+  grid-row: 3;
 }
 @media (max-width: 1240px) {
   #page-rooms-content .social-hub {
     grid-template-columns: repeat(2, minmax(280px, 1fr));
   }
-  #page-rooms-content .rooms-wave-inline {
-    grid-column: 2;
-  }
+  #page-rooms-content .rooms-connect-tile { grid-column: 1; grid-row: 1; }
+  #page-rooms-content .rooms-members-tile { grid-column: 2; grid-row: 1; }
+  #page-rooms-content .rooms-search-tile { grid-column: 1; grid-row: 2; }
+  #page-rooms-content .rooms-wave-inline { grid-column: 2; grid-row: 2; }
+  #page-rooms-content .social-room-box:last-child { grid-column: 1 / -1; grid-row: 3; }
 }
 @media (max-width: 900px) {
   #page-rooms-content .social-hub {
     grid-template-columns: 1fr;
   }
+  #page-rooms-content .rooms-connect-tile,
+  #page-rooms-content .rooms-members-tile,
+  #page-rooms-content .rooms-search-tile,
   #page-rooms-content .rooms-wave-inline,
-  #page-rooms-content .social-room-box:last-child {
-    grid-column: auto;
-  }
+  #page-rooms-content .social-room-box:last-child { grid-column: auto; grid-row: auto; }
 }
 
 /* ═══════════════════════════════

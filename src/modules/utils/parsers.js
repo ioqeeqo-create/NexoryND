@@ -12,9 +12,18 @@ function parseYandexPlaylistRef(input) {
   const raw = String(input || '').trim()
   if (!raw) return null
   const fromPath = (path = '') => {
-    const m = String(path || '').match(/\/users\/([^/?#]+)\/playlists\/([^/?#]+)/i)
-    if (!m) return null
-    return { user: decodeURIComponent(m[1]), kind: decodeURIComponent(m[2]) }
+    const s = String(path || '')
+    const mUsers = s.match(/\/users\/([^/?#]+)\/playlists\/([^/?#]+)/i)
+    if (mUsers) {
+      return { user: decodeURIComponent(mUsers[1]), kind: decodeURIComponent(mUsers[2]) }
+    }
+    // Copy-link format from Yandex Music share button:
+    // /playlists/lk.<uuid> (no explicit username in URL)
+    const mShort = s.match(/\/playlists\/([^/?#]+)/i)
+    if (mShort) {
+      return { user: 'me', kind: decodeURIComponent(mShort[1]) }
+    }
+    return null
   }
   try {
     const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`
