@@ -2463,6 +2463,8 @@ async function syncProfileCloudNow() {
   if (!sb) return { ok: false, error: 'no supabase' }
   const custom = getProfileCustom()
   const stats = getListenStats()
+  const safeTotalTracks = Math.max(0, Math.floor(Number(stats.totalTracks || 0) || 0))
+  const safeTotalSeconds = Math.max(0, Math.floor(Number(stats.totalSeconds || 0) || 0))
   const payload = {
     username: me.username,
     online: true,
@@ -2473,8 +2475,8 @@ async function syncProfileCloudNow() {
     bio: custom.bio || '',
     pinned_tracks: Array.isArray(custom.pinnedTracks) ? custom.pinnedTracks.slice(0, 5) : [],
     pinned_playlists: Array.isArray(custom.pinnedPlaylists) ? custom.pinnedPlaylists.slice(0, 5) : [],
-    total_tracks: Number(stats.totalTracks || 0),
-    total_seconds: Number(stats.totalSeconds || 0),
+    total_tracks: safeTotalTracks,
+    total_seconds: safeTotalSeconds,
   }
   let { error } = await sb.from('flow_profiles').upsert(payload, { onConflict: 'username' })
   if (error && String(error.message || '').toLowerCase().includes('profile_color')) {
@@ -2772,7 +2774,7 @@ function renderRoomQueue() {
   el.innerHTML = ''
   sharedQueue.forEach((t, i) => {
     const row = document.createElement('div')
-    row.className = 'profile-row'
+    row.className = 'profile-row room-queue-row'
     row.dataset.idx = String(i)
     if (canEdit) {
       row.draggable = true
@@ -2797,8 +2799,8 @@ function renderRoomQueue() {
     }
     const coverUrl = getListCoverUrl(t)
     const cover = coverUrl
-      ? `<div class="profile-row-cover" style="background-image:url(${coverUrl})"></div>`
-      : `<div class="profile-row-cover profile-row-cover-fallback">♪</div>`
+      ? `<div class="profile-row-cover room-queue-cover" style="background-image:url(${coverUrl})"></div>`
+      : `<div class="profile-row-cover profile-row-cover-fallback room-queue-cover">♪</div>`
     const controls = canEdit
       ? `<button class="playlist-track-action danger">✕</button>`
       : ''
@@ -3096,7 +3098,7 @@ function setMyWaveMode(mode) {
   _myWaveMode = MY_WAVE_MODES[mode] ? mode : 'default'
   try { localStorage.setItem('flow_my_wave_mode', _myWaveMode) } catch {}
   renderMyWave()
-  renderRoomsWaveModes()
+  renderRoomsMyWave()
 }
 
 function getMyWaveTrackKey(track) {
@@ -3459,15 +3461,35 @@ function renderMyWave() {
       <div class="my-wave-orb-core"></div>
     </div>
   `
+  renderRoomsMyWave()
 }
 
-function renderRoomsWaveModes() {
+function renderRoomsMyWave() {
+  const hintEl = document.getElementById('rooms-wave-hint')
   const modesEl = document.getElementById('rooms-wave-modes')
-  if (!modesEl) return
+  const listEl = document.getElementById('rooms-wave-list')
+  if (!hintEl || !modesEl || !listEl) return
   const active = getMyWaveMode()
+  const modeCfg = MY_WAVE_MODES[active] || MY_WAVE_MODES.default
+  const seedCount = getMyWaveSeedTracks().length
   modesEl.innerHTML = Object.entries(MY_WAVE_MODES).map(([id, cfg]) => (
-    `<button class="rooms-wave-mode ${id === active ? 'active' : ''}" onclick="setMyWaveMode('${id}')">${cfg.label}</button>`
+    `<button class="my-wave-mode ${id === active ? 'active' : ''}" data-wave-mode="${id}" onclick="setMyWaveMode('${id}')">${cfg.label}</button>`
   )).join('')
+  if (seedCount < 3) {
+    hintEl.textContent = `Послушай или лайкни еще ${3 - seedCount} трек(ов), чтобы волна поняла твой вкус`
+  } else if (_myWaveBuilding) {
+    hintEl.textContent = `${modeCfg.label}: ищу новые треки по твоему вкусу...`
+  } else if (_myWavePreloading) {
+    hintEl.textContent = `${modeCfg.label}: дозагружаю новые треки, чтобы волна не кончалась...`
+  } else {
+    hintEl.textContent = `${modeCfg.label}: ${modeCfg.hint}. Нажми запуск, и волна сама соберет новую очередь`
+  }
+  listEl.innerHTML = `
+    <div class="my-wave-orb mode-${active} ${_myWaveBuilding || _myWavePreloading ? 'is-loading' : ''}" aria-label="${modeCfg.label}">
+      <div class="my-wave-orb-ring"></div>
+      <div class="my-wave-orb-core"></div>
+    </div>
+  `
 }
 
 function playTrackFromMyWave(index) {
@@ -4354,20 +4376,6 @@ function ensureRoomsUI() {
   box.className = 'glass-card social-hub'
   box.style.padding = '14px'
   box.innerHTML = `
-    <div class="social-room-box rooms-wave-box">
-      <div class="rooms-wave-header">
-        <div class="rooms-wave-title">
-          <strong>Flow Wave в комнатах</strong>
-          <span>Выбери режим, найди треки и запускай волну прямо из комнаты</span>
-        </div>
-        <div class="rooms-wave-actions">
-          <button class="btn-small" onclick="openPage('search')">Найти треки</button>
-          <button class="btn-small" onclick="openPage('library')">Выбрать из библиотеки</button>
-          <button class="btn-small" onclick="startMyWave()">Запустить волну</button>
-        </div>
-      </div>
-      <div id="rooms-wave-modes" class="rooms-wave-modes"></div>
-    </div>
     <div class="social-room-box">
       <div class="social-section-title">Подключение</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -4387,15 +4395,31 @@ function ensureRoomsUI() {
         <button class="btn-small" onclick="openRoomInvitePicker()">Пригласить друга</button>
       </div>
     </div>
-    <div class="social-room-box">
+    <div class="social-room-box rooms-main-tile">
       <div class="social-section-title">В комнате</div>
       <div id="room-members-list" class="social-friends-grid"><div class="flow-empty-state compact"><strong>Комната пустая</strong><span>Создай руму или присоединись по invite.</span></div></div>
     </div>
-    <div class="social-room-box">
+    <div class="social-room-box rooms-main-tile">
       <div class="social-section-title">Поиск в очередь</div>
       <input id="room-queue-search" class="token-field flow-input" placeholder="Найти трек и добавить в очередь..." oninput="searchRoomQueueTracks()" />
       <div style="margin-top:8px"><button class="btn-small" onclick="openRoomOwnTracksPicker()">Свои треки</button></div>
       <div id="room-search-results" class="profile-picker-list" style="margin-top:8px"><div class="flow-empty-state compact"><strong>Начни поиск</strong><span>Введи название трека, чтобы добавить его в очередь.</span></div></div>
+    </div>
+    <div class="social-room-box rooms-wave-inline">
+      <div class="my-wave rooms-wave-my-wave">
+        <div class="my-wave-hero">
+          <div class="my-wave-badge">Моя волна</div>
+          <h3>Волна для комнаты</h3>
+          <p id="rooms-wave-hint">Выбери режим и запусти волну для общей очереди</p>
+          <div class="my-wave-actions">
+            <button class="my-wave-start" onclick="startMyWave()">Запустить волну</button>
+            <button class="btn-small" onclick="openPage('search')">Найти треки</button>
+            <button class="btn-small" onclick="openPage('library')">Выбрать песни</button>
+            <div class="my-wave-modes" id="rooms-wave-modes"></div>
+          </div>
+        </div>
+        <div class="my-wave-list" id="rooms-wave-list"></div>
+      </div>
     </div>
     <div class="social-room-box">
       <div class="social-section-title">Очередь прослушивания</div>
@@ -4404,7 +4428,7 @@ function ensureRoomsUI() {
     </div>
   `
   root.appendChild(box)
-  renderRoomsWaveModes()
+  renderRoomsMyWave()
 }
 
 async function renderFriends() {
