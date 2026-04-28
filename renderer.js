@@ -2410,11 +2410,28 @@ function normalizeProfileSyncError(err, fallback = 'Сервер недосту�
   const text = String(err?.message || err || '').trim()
   if (!text) return fallback
   const low = text.toLowerCase()
-  if (low.includes('failed to fetch') || low.includes('networkerror') || low.includes('network request failed')) {
+  if (
+    low.includes('failed to fetch') ||
+    low.includes('networkerror') ||
+    low.includes('network request failed') ||
+    low.includes('stream timeout') ||
+    low.includes('timeout')
+  ) {
     return 'Не удалось подключиться к серверу'
   }
   if (/<[^>]+>/.test(text) || text.length > 220) return fallback
   return sanitizeDisplayText(text)
+}
+
+function isRetryableProfileSyncError(err) {
+  const low = String(err?.message || err || '').toLowerCase()
+  return (
+    low.includes('failed to fetch') ||
+    low.includes('networkerror') ||
+    low.includes('network request failed') ||
+    low.includes('stream timeout') ||
+    low.includes('timeout')
+  )
 }
 
 function getSupabaseClient() {
@@ -2531,8 +2548,10 @@ async function syncProfileCloudNow() {
   try {
     const me = ensureActiveProfile()
     if (!me?.username) return { ok: false, error: 'Нет активного профиля' }
+    const settings = getSettings()
+    const flowBase = String(settings?.proxyBaseUrl || FLOW_SERVER_DEFAULT_URL || '').trim().replace(/\/+$/, '')
     const sb = getSupabaseClient()
-    if (!sb) return { ok: false, error: 'Сервер синхронизации недоступен' }
+    if (!sb && !/^https?:\/\//i.test(flowBase)) return { ok: false, error: 'Сервер синхронизации недоступен' }
     const custom = getProfileCustom()
     const stats = getListenStats()
     const safeTotalTracks = Math.max(0, Math.floor(Number(stats.totalTracks || 0) || 0))
@@ -2550,11 +2569,36 @@ async function syncProfileCloudNow() {
       total_tracks: safeTotalTracks,
       total_seconds: safeTotalSeconds,
     }
-    let { error } = await sb.from('flow_profiles').upsert(payload, { onConflict: 'username' })
-    if (error && String(error.message || '').toLowerCase().includes('profile_color')) {
-      const fallbackPayload = Object.assign({}, payload)
-      delete fallbackPayload.profile_color
-      ;({ error } = await sb.from('flow_profiles').upsert(fallbackPayload, { onConflict: 'username' }))
+    if (/^https?:\/\//i.test(flowBase)) {
+      try {
+        const ctrl = new AbortController()
+        const t = setTimeout(() => ctrl.abort(), 9000)
+        const rsp = await fetch(`${flowBase}/flow/profile/sync`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: ctrl.signal,
+        })
+        clearTimeout(t)
+        const data = await rsp.json().catch(() => ({}))
+        if (rsp.ok && data?.ok !== false) return { ok: true }
+      } catch {}
+    }
+    if (!sb) return { ok: false, error: 'Сервер синхронизации недоступен' }
+    const runUpsert = async () => {
+      let { error } = await sb.from('flow_profiles').upsert(payload, { onConflict: 'username' })
+      if (error && String(error.message || '').toLowerCase().includes('profile_color')) {
+        const fallbackPayload = Object.assign({}, payload)
+        delete fallbackPayload.profile_color
+        ;({ error } = await sb.from('flow_profiles').upsert(fallbackPayload, { onConflict: 'username' }))
+      }
+      return error
+    }
+
+    let error = await runUpsert()
+    if (error && isRetryableProfileSyncError(error)) {
+      await new Promise((resolve) => setTimeout(resolve, 650))
+      error = await runUpsert()
     }
     if (error) return { ok: false, error: normalizeProfileSyncError(error) }
     return { ok: true }
@@ -5041,6 +5085,20 @@ function initPeerSocial() {
 
 async function submitAuth() {
   if (_authSubmitting) return
+  const AUTH_REQUEST_TIMEOUT_MS = 12000
+  const runAuthCall = async (promiseFactory, timeoutText) => {
+    let timer = null
+    try {
+      return await Promise.race([
+        promiseFactory(),
+        new Promise((resolve) => {
+          timer = setTimeout(() => resolve({ ok: false, error: timeoutText }), AUTH_REQUEST_TIMEOUT_MS)
+        })
+      ])
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
+  }
   const input = document.getElementById('auth-login')
   const passInput = document.getElementById('auth-password')
   const submitBtn = document.querySelector('#screen-auth .auth-form .btn-main')
@@ -5053,11 +5111,17 @@ async function submitAuth() {
   _authSubmitting = true
   if (submitBtn) submitBtn.disabled = true
   try {
-    let result = await fn(username, password)
+    let result = await runAuthCall(
+      () => fn(username, password),
+      'Сервер долго не отвечает. Попробуйте снова через пару секунд.'
+    )
     if (!result?.ok && _authMode === 'login' && result?.legacy && typeof peerSocial.migrateLegacyAccount === 'function') {
       const ok = confirm('Найден старый аккаунт без пароля. Мигрировать его на текущий пароль?')
       if (!ok) return setAuthError('Миграция отменена')
-      result = await peerSocial.migrateLegacyAccount(username, password)
+      result = await runAuthCall(
+        () => peerSocial.migrateLegacyAccount(username, password),
+        'Миграция не успела завершиться. Повторите попытку.'
+      )
       if (result?.ok) showToast('Аккаунт мигрирован. Теперь вход работает через пароль.')
     }
     if (!result?.ok) return setAuthError(result?.error || 'Ошибка входа')

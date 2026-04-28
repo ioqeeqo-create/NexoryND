@@ -16,9 +16,44 @@
 
   const DEFAULT_SUPABASE_URL = 'https://cdfwiqgwwxdzznvbpcgj.supabase.co'
   const DEFAULT_SUPABASE_KEY = 'sb_publishable_fAF9-Qezjp_51olpGfpkYw_K1q1Yzxm'
+  const FLOW_SERVER_DEFAULT_URL = 'http://85.239.34.229:8787'
   const DB_PROFILES = 'flow_profiles'
   const DB_FRIENDS = 'flow_friends'
   const DB_FRIEND_REQUESTS = 'flow_friend_requests'
+
+  function getFlowServerBaseUrl() {
+    try {
+      const settings = JSON.parse(localStorage.getItem('flow_settings') || '{}') || {}
+      const base = String(settings.proxyBaseUrl || FLOW_SERVER_DEFAULT_URL || '').trim()
+      return /^https?:\/\//i.test(base) ? base.replace(/\/+$/, '') : ''
+    } catch {
+      return String(FLOW_SERVER_DEFAULT_URL || '').trim()
+    }
+  }
+
+  async function callFlowServer(path, { method = 'GET', body, timeoutMs = 12000 } = {}) {
+    const base = getFlowServerBaseUrl()
+    if (!base) return { ok: false, error: 'Flow server URL is empty' }
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), Math.max(1500, Number(timeoutMs || 0)))
+    try {
+      const rsp = await fetch(`${base}${path}`, {
+        method,
+        headers: body ? { 'Content-Type': 'application/json' } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+        signal: ctrl.signal,
+      })
+      const data = await rsp.json().catch(() => ({}))
+      if (!rsp.ok || data?.ok === false) {
+        return { ok: false, error: data?.error || `HTTP ${rsp.status}` }
+      }
+      return { ok: true, data }
+    } catch (err) {
+      return { ok: false, error: normalizeAuthError(err, 'Flow server недоступен') }
+    } finally {
+      clearTimeout(timer)
+    }
+  }
 
   function getProfiles() {
     try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.profiles) || '[]') || [] } catch { return [] }
@@ -58,8 +93,23 @@
     if (!username || username.length < 3) return { ok: false, error: 'Username: минимум 3 символа [a-z0-9_-.]' }
     const password = String(rawPassword || '')
     if (password.length < 4) return { ok: false, error: 'Пароль: минимум 4 символа' }
+    const viaFlowServer = await callFlowServer('/flow/auth/register', {
+      method: 'POST',
+      body: { username, password },
+      timeoutMs: 14000,
+    })
+    if (viaFlowServer?.ok) {
+      const profile = viaFlowServer.data?.profile || { username, createdAt: Date.now() }
+      const profiles = getProfiles()
+      if (!profiles.some((p) => p.username === username)) {
+        profiles.push({ username, createdAt: Number(profile?.createdAt || Date.now()) })
+        saveProfiles(profiles)
+      }
+      localStorage.setItem(STORAGE_KEYS.current, username)
+      return { ok: true, profile: { username, createdAt: Number(profile?.createdAt || Date.now()) } }
+    }
     const sb = getSupabase()
-    if (!sb) return { ok: false, error: 'Сервер недоступен' }
+    if (!sb) return { ok: false, error: viaFlowServer?.error || 'Сервер недоступен' }
     try {
       const { data: existing } = await sb
         .from(DB_PROFILES)
@@ -94,8 +144,23 @@
     const password = String(rawPassword || '')
     if (!username) return { ok: false, error: 'Введите Username' }
     if (!password) return { ok: false, error: 'Введите пароль' }
+    const viaFlowServer = await callFlowServer('/flow/auth/login', {
+      method: 'POST',
+      body: { username, password },
+      timeoutMs: 14000,
+    })
+    if (viaFlowServer?.ok) {
+      const profile = getProfiles().find((p) => p.username === username) || { username, createdAt: Date.now() }
+      const profiles = getProfiles()
+      if (!profiles.some((p) => p.username === username)) {
+        profiles.push(profile)
+        saveProfiles(profiles)
+      }
+      localStorage.setItem(STORAGE_KEYS.current, username)
+      return { ok: true, profile }
+    }
     const sb = getSupabase()
-    if (!sb) return { ok: false, error: 'Сервер недоступен' }
+    if (!sb) return { ok: false, error: viaFlowServer?.error || 'Сервер недоступен' }
     let row = null
     try {
       const { data, error } = await sb
@@ -131,8 +196,22 @@
     const password = String(rawPassword || '')
     if (!username) return { ok: false, error: 'Введите Username' }
     if (password.length < 4) return { ok: false, error: 'Пароль: минимум 4 символа' }
+    const viaFlowServer = await callFlowServer('/flow/auth/migrate', {
+      method: 'POST',
+      body: { username, password },
+      timeoutMs: 14000,
+    })
+    if (viaFlowServer?.ok) {
+      const profiles = getProfiles()
+      if (!profiles.some((p) => p.username === username)) {
+        profiles.push({ username, createdAt: Date.now() })
+        saveProfiles(profiles)
+      }
+      localStorage.setItem(STORAGE_KEYS.current, username)
+      return { ok: true, profile: { username } }
+    }
     const sb = getSupabase()
-    if (!sb) return { ok: false, error: 'Сервер недоступен' }
+    if (!sb) return { ok: false, error: viaFlowServer?.error || 'Сервер недоступен' }
     try {
       const { data, error } = await sb
         .from(DB_PROFILES)
@@ -233,6 +312,12 @@
 
   async function upsertProfileCloud(username) {
     try {
+      const cloud = await callFlowServer('/flow/profile/upsert', {
+        method: 'POST',
+        body: { username },
+        timeoutMs: 9000,
+      })
+      if (cloud?.ok) return
       const sb = getSupabase()
       if (!sb || !username) return
       await sb.from(DB_PROFILES).upsert({
@@ -245,6 +330,12 @@
 
   async function setProfileOfflineCloud(username) {
     try {
+      const cloud = await callFlowServer('/flow/profile/offline', {
+        method: 'POST',
+        body: { username },
+        timeoutMs: 9000,
+      })
+      if (cloud?.ok) return
       const sb = getSupabase()
       if (!sb || !username) return
       await sb.from(DB_PROFILES).upsert({
@@ -257,6 +348,12 @@
 
   async function pullFriendsFromCloud(username) {
     try {
+      const cloud = await callFlowServer(`/flow/friends?username=${encodeURIComponent(String(username || ''))}`, { timeoutMs: 9000 })
+      if (cloud?.ok && Array.isArray(cloud?.data?.friends)) {
+        const list = [...new Set(cloud.data.friends.map((x) => normalizeUsername(x)).filter(Boolean))]
+        localStorage.setItem(STORAGE_KEYS.friendsPrefix + username, JSON.stringify(list))
+        return
+      }
       const sb = getSupabase()
       if (!sb || !username) return
       const { data } = await sb.from(DB_FRIENDS)
@@ -270,6 +367,12 @@
 
   async function syncFriendToCloud(ownerUsername, friendUsername) {
     try {
+      const cloud = await callFlowServer('/flow/friends/add', {
+        method: 'POST',
+        body: { ownerUsername, friendUsername },
+        timeoutMs: 9000,
+      })
+      if (cloud?.ok) return
       const sb = getSupabase()
       if (!sb || !ownerUsername || !friendUsername) return
       await sb.from(DB_FRIENDS).upsert({
@@ -285,6 +388,12 @@
 
   async function removeFriendFromCloud(ownerUsername, friendUsername) {
     try {
+      const cloud = await callFlowServer('/flow/friends/remove', {
+        method: 'POST',
+        body: { ownerUsername, friendUsername },
+        timeoutMs: 9000,
+      })
+      if (cloud?.ok) return
       const sb = getSupabase()
       if (!sb || !ownerUsername || !friendUsername) return
       await sb.from(DB_FRIENDS)
@@ -303,8 +412,14 @@
     const to = normalizeUsername(toUsername)
     if (!from || !to || from === to) return { ok: false, error: 'Некорректный запрос' }
     try {
+      const cloud = await callFlowServer('/flow/friends/request', {
+        method: 'POST',
+        body: { fromUsername: from, toUsername: to },
+        timeoutMs: 10000,
+      })
+      if (cloud?.ok) return { ok: true }
       const sb = getSupabase()
-      if (!sb) return { ok: false, error: 'Supabase недоступен' }
+      if (!sb) return { ok: false, error: cloud?.error || 'Сервер недоступен' }
       const { data: existing } = await sb.from(DB_FRIENDS)
         .select('owner_username')
         .eq('owner_username', from)
@@ -328,6 +443,8 @@
     const safe = normalizeUsername(username)
     if (!safe) return []
     try {
+      const cloud = await callFlowServer(`/flow/friends/requests?username=${encodeURIComponent(safe)}`, { timeoutMs: 9000 })
+      if (cloud?.ok && Array.isArray(cloud?.data?.requests)) return cloud.data.requests
       const sb = getSupabase()
       if (!sb) return []
       const { data } = await sb.from(DB_FRIEND_REQUESTS)
@@ -346,8 +463,14 @@
     const from = normalizeUsername(fromUsername)
     if (!to || !from) return { ok: false, error: 'Некорректные данные' }
     try {
+      const cloud = await callFlowServer('/flow/friends/respond', {
+        method: 'POST',
+        body: { currentUsername: to, fromUsername: from, accept: Boolean(accept) },
+        timeoutMs: 10000,
+      })
+      if (cloud?.ok) return { ok: true }
       const sb = getSupabase()
-      if (!sb) return { ok: false, error: 'Supabase недоступен' }
+      if (!sb) return { ok: false, error: cloud?.error || 'Сервер недоступен' }
       const status = accept ? 'accepted' : 'rejected'
       const { error } = await sb.from(DB_FRIEND_REQUESTS)
         .update({ status, updated_at: new Date().toISOString() })
@@ -496,21 +619,27 @@
 
     probeUser(username, timeoutMs = 3500) {
       return new Promise((resolve) => {
-        const sb = this._sb || getSupabase()
         const safe = normalizeUsername(username)
-        if (!sb || !safe) return resolve(false)
-        Promise.race([
-          sb.from(DB_PROFILES).select('online,last_seen').eq('username', safe).maybeSingle(),
-          new Promise((r) => setTimeout(() => r({ data: null }), Math.max(1000, Number(timeoutMs || 0))))
-        ]).then((r) => {
-          const row = r?.data
-          if (!row) return resolve(false)
-          const seen = Date.parse(String(row.last_seen || ''))
-          const seenFresh = !Number.isNaN(seen) && (Date.now() - seen) < 75000
-          if (row.online === true && seenFresh) return resolve(true)
-          if (seenFresh) return resolve(true)
-          resolve(false)
-        }).catch(() => resolve(false))
+        if (!safe) return resolve(false)
+        callFlowServer(`/flow/profile/probe?username=${encodeURIComponent(safe)}`, { timeoutMs: Math.max(1400, Number(timeoutMs || 0)) })
+          .then((cloud) => {
+            if (cloud?.ok) return resolve(Boolean(cloud?.data?.online))
+            const sb = this._sb || getSupabase()
+            if (!sb) return resolve(false)
+            return Promise.race([
+              sb.from(DB_PROFILES).select('online,last_seen').eq('username', safe).maybeSingle(),
+              new Promise((r) => setTimeout(() => r({ data: null }), Math.max(1000, Number(timeoutMs || 0))))
+            ]).then((r) => {
+              const row = r?.data
+              if (!row) return resolve(false)
+              const seen = Date.parse(String(row.last_seen || ''))
+              const seenFresh = !Number.isNaN(seen) && (Date.now() - seen) < 75000
+              if (row.online === true && seenFresh) return resolve(true)
+              if (seenFresh) return resolve(true)
+              resolve(false)
+            }).catch(() => resolve(false))
+          })
+          .catch(() => resolve(false))
       })
     }
 
