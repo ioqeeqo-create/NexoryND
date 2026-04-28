@@ -4403,23 +4403,23 @@ function ensureRoomsUI() {
       <div class="social-section-title">Поиск в очередь</div>
       <input id="room-queue-search" class="token-field flow-input" placeholder="Найти трек и добавить в очередь..." oninput="searchRoomQueueTracks()" />
       <div style="margin-top:8px"><button class="btn-small" onclick="openRoomOwnTracksPicker()">Свои треки</button></div>
-      <div id="room-search-results" class="profile-picker-list" style="margin-top:8px"><div class="flow-empty-state compact"><strong>Начни поиск</strong><span>Введи название трека, чтобы добавить его в очередь.</span></div></div>
-    </div>
-    <div class="social-room-box rooms-wave-inline">
-      <div class="my-wave rooms-wave-my-wave">
-        <div class="my-wave-hero">
-          <div class="my-wave-badge">Моя волна</div>
-          <h3>Волна для комнаты</h3>
-          <p id="rooms-wave-hint">Выбери режим и запусти волну для общей очереди</p>
-          <div class="my-wave-actions">
-            <button class="my-wave-start" onclick="startMyWave()">Запустить волну</button>
-            <button class="btn-small" onclick="openPage('search')">Найти треки</button>
-            <button class="btn-small" onclick="openPage('library')">Выбрать песни</button>
-            <div class="my-wave-modes" id="rooms-wave-modes"></div>
+      <div class="rooms-wave-embedded">
+        <div class="my-wave rooms-wave-my-wave">
+          <div class="my-wave-hero">
+            <div class="my-wave-badge">Моя волна</div>
+            <h3>Волна для комнаты</h3>
+            <p id="rooms-wave-hint">Выбери режим и запусти волну для общей очереди</p>
+            <div class="my-wave-actions">
+              <button class="my-wave-start" onclick="startMyWave()">Запустить волну</button>
+              <button class="btn-small" onclick="openPage('search')">Найти треки</button>
+              <button class="btn-small" onclick="openPage('library')">Выбрать песни</button>
+              <div class="my-wave-modes" id="rooms-wave-modes"></div>
+            </div>
           </div>
+          <div class="my-wave-list" id="rooms-wave-list"></div>
         </div>
-        <div class="my-wave-list" id="rooms-wave-list"></div>
       </div>
+      <div id="room-search-results" class="profile-picker-list" style="margin-top:8px"><div class="flow-empty-state compact"><strong>Начни поиск</strong><span>Введи название трека, чтобы добавить его в очередь.</span></div></div>
     </div>
     <div class="social-room-box">
       <div class="social-section-title">Очередь прослушивания</div>
