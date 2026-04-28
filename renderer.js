@@ -2396,14 +2396,39 @@ function getPublicProfilePayload(username = _profile?.username) {
 let _supabaseProfileSyncTimer = null
 const DEFAULT_SUPABASE_URL = 'https://cdfwiqgwwxdzznvbpcgj.supabase.co'
 const DEFAULT_SUPABASE_KEY = 'sb_publishable_fAF9-Qezjp_51olpGfpkYw_K1q1Yzxm'
+function resolveSupabaseConfig() {
+  const rawUrl = String(localStorage.getItem('flow_supabase_url') || '').trim()
+  const rawKey = String(localStorage.getItem('flow_supabase_key') || '').trim()
+  const fallbackUrl = String(DEFAULT_SUPABASE_URL || '').trim()
+  const fallbackKey = String(DEFAULT_SUPABASE_KEY || '').trim()
+  const safeUrl = /^https?:\/\//i.test(rawUrl) ? rawUrl : fallbackUrl
+  const safeKey = rawKey || fallbackKey
+  return { url: safeUrl, key: safeKey }
+}
+
+function normalizeProfileSyncError(err, fallback = 'Сервер недоступен') {
+  const text = String(err?.message || err || '').trim()
+  if (!text) return fallback
+  const low = text.toLowerCase()
+  if (low.includes('failed to fetch') || low.includes('networkerror') || low.includes('network request failed')) {
+    return 'Не удалось подключиться к серверу'
+  }
+  if (/<[^>]+>/.test(text) || text.length > 220) return fallback
+  return sanitizeDisplayText(text)
+}
+
 function getSupabaseClient() {
   try {
     const factory = window?.supabase?.createClient
     if (typeof factory !== 'function') return null
-    const url = String(localStorage.getItem('flow_supabase_url') || DEFAULT_SUPABASE_URL || '').trim()
-    const key = String(localStorage.getItem('flow_supabase_key') || DEFAULT_SUPABASE_KEY || '').trim()
+    const { url, key } = resolveSupabaseConfig()
     if (!url || !key) return null
-    if (!window.__flowSbProfileClient) window.__flowSbProfileClient = factory(url, key)
+    const nextSig = `${url}::${key}`
+    const prevSig = String(window.__flowSbProfileClientSig || '')
+    if (!window.__flowSbProfileClient || prevSig !== nextSig) {
+      window.__flowSbProfileClient = factory(url, key)
+      window.__flowSbProfileClientSig = nextSig
+    }
     return window.__flowSbProfileClient
   } catch {
     return null
@@ -2503,35 +2528,39 @@ async function refreshFriendProfileFromCloud(username, force = false) {
 }
 
 async function syncProfileCloudNow() {
-  const me = ensureActiveProfile()
-  if (!me?.username) return { ok: false, error: 'no profile' }
-  const sb = getSupabaseClient()
-  if (!sb) return { ok: false, error: 'no supabase' }
-  const custom = getProfileCustom()
-  const stats = getListenStats()
-  const safeTotalTracks = Math.max(0, Math.floor(Number(stats.totalTracks || 0) || 0))
-  const safeTotalSeconds = Math.max(0, Math.floor(Number(stats.totalSeconds || 0) || 0))
-  const payload = {
-    username: me.username,
-    online: true,
-    last_seen: new Date().toISOString(),
-    avatar_data: custom.avatarData || null,
-    banner_data: custom.bannerData || null,
-    profile_color: custom.profileColor || null,
-    bio: custom.bio || '',
-    pinned_tracks: Array.isArray(custom.pinnedTracks) ? custom.pinnedTracks.slice(0, 5) : [],
-    pinned_playlists: Array.isArray(custom.pinnedPlaylists) ? custom.pinnedPlaylists.slice(0, 5) : [],
-    total_tracks: safeTotalTracks,
-    total_seconds: safeTotalSeconds,
+  try {
+    const me = ensureActiveProfile()
+    if (!me?.username) return { ok: false, error: 'Нет активного профиля' }
+    const sb = getSupabaseClient()
+    if (!sb) return { ok: false, error: 'Сервер синхронизации недоступен' }
+    const custom = getProfileCustom()
+    const stats = getListenStats()
+    const safeTotalTracks = Math.max(0, Math.floor(Number(stats.totalTracks || 0) || 0))
+    const safeTotalSeconds = Math.max(0, Math.floor(Number(stats.totalSeconds || 0) || 0))
+    const payload = {
+      username: me.username,
+      online: true,
+      last_seen: new Date().toISOString(),
+      avatar_data: custom.avatarData || null,
+      banner_data: custom.bannerData || null,
+      profile_color: custom.profileColor || null,
+      bio: custom.bio || '',
+      pinned_tracks: Array.isArray(custom.pinnedTracks) ? custom.pinnedTracks.slice(0, 5) : [],
+      pinned_playlists: Array.isArray(custom.pinnedPlaylists) ? custom.pinnedPlaylists.slice(0, 5) : [],
+      total_tracks: safeTotalTracks,
+      total_seconds: safeTotalSeconds,
+    }
+    let { error } = await sb.from('flow_profiles').upsert(payload, { onConflict: 'username' })
+    if (error && String(error.message || '').toLowerCase().includes('profile_color')) {
+      const fallbackPayload = Object.assign({}, payload)
+      delete fallbackPayload.profile_color
+      ;({ error } = await sb.from('flow_profiles').upsert(fallbackPayload, { onConflict: 'username' }))
+    }
+    if (error) return { ok: false, error: normalizeProfileSyncError(error) }
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: normalizeProfileSyncError(err) }
   }
-  let { error } = await sb.from('flow_profiles').upsert(payload, { onConflict: 'username' })
-  if (error && String(error.message || '').toLowerCase().includes('profile_color')) {
-    const fallbackPayload = Object.assign({}, payload)
-    delete fallbackPayload.profile_color
-    ;({ error } = await sb.from('flow_profiles').upsert(fallbackPayload, { onConflict: 'username' }))
-  }
-  if (error) return { ok: false, error: error.message || String(error) }
-  return { ok: true }
 }
 
 function scheduleProfileCloudSync() {
@@ -4557,11 +4586,15 @@ function syncIntegrationsUI() {
   const s = getSettings()
   const d = document.getElementById('discord-client-id')
   const p = document.getElementById('proxy-base-url')
+  const psUrl = document.getElementById('profiles-supabase-url')
+  const psKey = document.getElementById('profiles-supabase-key')
   const k = document.getElementById('lastfm-api-key')
   const ss = document.getElementById('lastfm-shared-secret')
   const sk = document.getElementById('lastfm-session-key')
   if (d) d.value = s.discordClientId || ''
   if (p) p.value = normalizeFlowServerUrl(s.proxyBaseUrl || FLOW_SERVER_DEFAULT_URL)
+  if (psUrl) psUrl.value = String(localStorage.getItem('flow_supabase_url') || '').trim()
+  if (psKey) psKey.value = String(localStorage.getItem('flow_supabase_key') || '').trim()
   if (k) k.value = s.lastfmApiKey || ''
   if (ss) ss.value = s.lastfmSharedSecret || ''
   if (sk) sk.value = s.lastfmSessionKey || ''
@@ -4574,6 +4607,72 @@ function saveProxySettings() {
   if (input) input.value = proxyBaseUrl
   showToast('Flow сервер сохранён')
   checkFlowServerStatus().catch(() => {})
+}
+
+function resetSupabaseProfileClientCache() {
+  window.__flowSbProfileClient = null
+  window.__flowSbProfileClientSig = ''
+}
+
+function saveProfileSyncSettings() {
+  const urlInput = document.getElementById('profiles-supabase-url')
+  const keyInput = document.getElementById('profiles-supabase-key')
+  const rawUrl = String(urlInput?.value || '').trim()
+  const rawKey = String(keyInput?.value || '').trim()
+  if (rawUrl && !/^https?:\/\//i.test(rawUrl)) {
+    showToast('URL сервера профилей должен начинаться с http:// или https://', true)
+    return
+  }
+  if (rawUrl) localStorage.setItem('flow_supabase_url', rawUrl)
+  else localStorage.removeItem('flow_supabase_url')
+  if (rawKey) localStorage.setItem('flow_supabase_key', rawKey)
+  else localStorage.removeItem('flow_supabase_key')
+  resetSupabaseProfileClientCache()
+  showToast('Сервер профилей сохранён')
+  checkProfileSyncConnection().catch(() => {})
+}
+
+function resetProfileSyncSettings() {
+  localStorage.removeItem('flow_supabase_url')
+  localStorage.removeItem('flow_supabase_key')
+  const urlInput = document.getElementById('profiles-supabase-url')
+  const keyInput = document.getElementById('profiles-supabase-key')
+  if (urlInput) urlInput.value = ''
+  if (keyInput) keyInput.value = ''
+  resetSupabaseProfileClientCache()
+  showToast('Сервер профилей сброшен на стандартный')
+  checkProfileSyncConnection().catch(() => {})
+}
+
+async function checkProfileSyncConnection() {
+  const statusEl = document.getElementById('profile-sync-status')
+  const setStatus = (text, ok = null) => {
+    if (!statusEl) return
+    statusEl.textContent = text
+    if (ok === true) statusEl.style.color = '#7ee787'
+    else if (ok === false) statusEl.style.color = '#ff9b9b'
+    else statusEl.style.color = ''
+  }
+  setStatus('Профили: проверяю...')
+  try {
+    const sb = getSupabaseClient()
+    if (!sb) {
+      setStatus('Профили: клиент недоступен', false)
+      return { ok: false }
+    }
+    const started = performance.now()
+    const { error } = await sb.from('flow_profiles').select('username').limit(1)
+    const ping = Math.max(1, Math.round(performance.now() - started))
+    if (error) {
+      setStatus(`Профили: ошибка (${normalizeProfileSyncError(error)})`, false)
+      return { ok: false, error: error.message || String(error) }
+    }
+    setStatus(`Профили: онлайн, ping ${ping} ms`, true)
+    return { ok: true, ping }
+  } catch (err) {
+    setStatus(`Профили: оффлайн (${normalizeProfileSyncError(err)})`, false)
+    return { ok: false, error: err?.message || String(err) }
+  }
 }
 
 async function checkFlowServerStatus() {

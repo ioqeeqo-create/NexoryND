@@ -702,6 +702,23 @@
           <div id="proxy-check-status" class="integration-hint" style="margin-top:4px">Аудио-прокси: не проверено</div>
         </div>
         <div class="glass-card" style="padding:18px;border-radius:18px;margin-top:12px;max-width:760px;">
+          <div class="vs-section-title" style="margin-bottom:8px;">Сервер профилей</div>
+          <input id="profiles-supabase-url" class="token-field flow-input" placeholder="https://your-project.supabase.co" />
+          <div class="token-field-wrap" style="margin-top:8px">
+            <input id="profiles-supabase-key" class="token-field flow-input" type="password" placeholder="Supabase anon/publishable key" />
+            <button class="token-field-eye" onclick="toggleToken('profiles-supabase-key')" title="Показать/скрыть">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+          <div class="integration-hint">Используется для входа/регистрации, друзей и синхронизации профиля. Можно указать ваш другой Supabase проект.</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+            <button class="btn-small" onclick="saveProfileSyncSettings()">Сохранить сервер профилей</button>
+            <button class="btn-small" onclick="checkProfileSyncConnection()">Проверить подключение</button>
+            <button class="btn-small" onclick="resetProfileSyncSettings()">Сбросить на стандартный</button>
+          </div>
+          <div id="profile-sync-status" class="integration-hint" style="margin-top:8px">Профили: не проверено</div>
+        </div>
+        <div class="glass-card" style="padding:18px;border-radius:18px;margin-top:12px;max-width:760px;">
           <div class="vs-section-title" style="margin-bottom:8px;">Last.fm интеграция</div>
           <input id="lastfm-api-key" class="token-field flow-input" placeholder="Last.fm API Key" />
           <input id="lastfm-shared-secret" class="token-field flow-input" placeholder="Last.fm Shared Secret" style="margin-top:8px" />

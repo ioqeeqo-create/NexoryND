@@ -204,19 +204,27 @@
   }
 
   function getSupabaseConfig() {
-    const url = String(localStorage.getItem(STORAGE_KEYS.supabaseUrl) || DEFAULT_SUPABASE_URL || '').trim()
-    const key = String(localStorage.getItem(STORAGE_KEYS.supabaseKey) || DEFAULT_SUPABASE_KEY || '').trim()
+    const rawUrl = String(localStorage.getItem(STORAGE_KEYS.supabaseUrl) || '').trim()
+    const rawKey = String(localStorage.getItem(STORAGE_KEYS.supabaseKey) || '').trim()
+    const fallbackUrl = String(DEFAULT_SUPABASE_URL || '').trim()
+    const fallbackKey = String(DEFAULT_SUPABASE_KEY || '').trim()
+    const url = /^https?:\/\//i.test(rawUrl) ? rawUrl : fallbackUrl
+    const key = rawKey || fallbackKey
     return { url, key }
   }
 
   let _supabase = null
+  let _supabaseSig = ''
   function getSupabase() {
     try {
-      if (_supabase) return _supabase
       const cfg = getSupabaseConfig()
       const factory = window?.supabase?.createClient
       if (!factory || !cfg.url || !cfg.key) return null
-      _supabase = factory(cfg.url, cfg.key, { realtime: { params: { eventsPerSecond: 30 } } })
+      const nextSig = `${cfg.url}::${cfg.key}`
+      if (!_supabase || _supabaseSig !== nextSig) {
+        _supabase = factory(cfg.url, cfg.key, { realtime: { params: { eventsPerSecond: 30 } } })
+        _supabaseSig = nextSig
+      }
       return _supabase
     } catch {
       return null
