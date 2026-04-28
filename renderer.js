@@ -6351,7 +6351,7 @@ function prevTrack() {
   const allowShuffle = playbackMode.shuffle && queueScope === 'liked'
   if (allowShuffle) {
     queueIndex = pickRandomQueueIndex()
-    if (queueIndex >= 0) playTrackObj(queue[queueIndex])
+    if (queueIndex >= 0) safePlayTrack(queue[queueIndex])
     return
   }
   if (queueIndex > 0) {
@@ -6362,7 +6362,14 @@ function prevTrack() {
     audio.currentTime = 0
     return
   }
-  playTrackObj(queue[queueIndex])
+  safePlayTrack(queue[queueIndex])
+}
+
+function safePlayTrack(track, opts = {}) {
+  return playTrackObj(track, opts).catch((err) => {
+    console.warn('playTrackObj failed:', err?.message || err)
+    showToast(`Не удалось переключить трек: ${sanitizeDisplayText(err?.message || err)}`, true)
+  })
 }
 
 function nextTrack(autoEnded = false) {
@@ -6379,12 +6386,12 @@ function nextTrack(autoEnded = false) {
   const allowShuffle = playbackMode.shuffle && queueScope === 'liked'
   if (allowShuffle) {
     queueIndex = pickRandomQueueIndex()
-    if (queueIndex >= 0) playTrackObj(queue[queueIndex])
+    if (queueIndex >= 0) safePlayTrack(queue[queueIndex])
     return
   }
   if (queueIndex < queue.length - 1) {
     queueIndex++
-    playTrackObj(queue[queueIndex])
+    safePlayTrack(queue[queueIndex])
     maybePreloadMyWave(false)
     return
   }
@@ -6395,7 +6402,7 @@ function nextTrack(autoEnded = false) {
   }
   if (playbackMode.repeat === 'all') {
     queueIndex = 0
-    playTrackObj(queue[queueIndex])
+    safePlayTrack(queue[queueIndex])
     return
   }
   const playBtn = document.getElementById('play-btn')
@@ -6442,23 +6449,28 @@ audio.ontimeupdate = () => {
   }
 }
 audio.onended = () => {
-  stopLyricsSyncLoop()
-  _listenTickAt = 0
-  const playBtn = document.getElementById('play-btn')
-  if (playBtn) playBtn.innerHTML = ICONS.play
-  if (currentTrack) scrobbleLastFm(currentTrack)
-  if (isRoomClientRestricted()) return
-  if (_roomState?.roomId && _roomState?.host && sharedQueue.length) {
-    const nextRoomTrack = sharedQueue.shift()
-    renderRoomQueue()
-    broadcastQueueUpdate()
-    saveRoomStateToServer({ shared_queue: sharedQueue, playback_ts: Date.now() }).catch(() => {})
-    if (nextRoomTrack) {
-      playTrackObj(nextRoomTrack, { fromSharedQueue: true }).catch(() => {})
-      return
+  try {
+    stopLyricsSyncLoop()
+    _listenTickAt = 0
+    const playBtn = document.getElementById('play-btn')
+    if (playBtn) playBtn.innerHTML = ICONS.play
+    if (currentTrack) scrobbleLastFm(currentTrack)
+    if (isRoomClientRestricted()) return
+    if (_roomState?.roomId && _roomState?.host && sharedQueue.length) {
+      const nextRoomTrack = sharedQueue.shift()
+      renderRoomQueue()
+      broadcastQueueUpdate()
+      saveRoomStateToServer({ shared_queue: sharedQueue, playback_ts: Date.now() }).catch(() => {})
+      if (nextRoomTrack) {
+        safePlayTrack(nextRoomTrack, { fromSharedQueue: true })
+        return
+      }
     }
+    nextTrack(true)
+  } catch (err) {
+    console.error('audio.onended handler failed:', err)
+    showToast(`Ошибка после завершения трека: ${sanitizeDisplayText(err?.message || err)}`, true)
   }
-  nextTrack(true)
 }
 
 // в”Ђв”Ђв”Ђ SEARCH в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
