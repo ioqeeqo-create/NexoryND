@@ -43,6 +43,7 @@ let _analyser = null
 let _freqData = null
 let _customFontLoadedKey = ''
 let _authMode = 'login'
+let _authSubmitting = false
 let _profile = null
 let _socialPeer = null
 let _roomState = { roomId: null, host: false, hostPeerId: null }
@@ -2142,13 +2143,35 @@ function setFlowConfigStatus(text, isError = false) {
   el.classList.toggle('token-msg-ok', !isError)
 }
 
+const FLOW_PRESET_ALLOWED_KEYS = new Set([
+  'flow_visual',
+  'flow_playback_mode',
+  'flow_track_covers',
+  'flow_my_wave_mode',
+  'flow_sidebar_w',
+  'flow_volume_slider',
+  'flow_onboarding_done',
+  'flow_first_launch_done',
+])
+
+function pickSafeFlowPresetStorage(rawStorage = {}) {
+  const safe = {}
+  Object.entries(rawStorage || {}).forEach(([key, value]) => {
+    if (!String(key || '').startsWith('flow_')) return
+    if (!FLOW_PRESET_ALLOWED_KEYS.has(key)) return
+    safe[key] = String(value ?? '')
+  })
+  return safe
+}
+
 function collectFlowConfigPayload() {
-  const storage = {}
+  const rawStorage = {}
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i)
     if (!key || !key.startsWith('flow_')) continue
-    storage[key] = localStorage.getItem(key)
+    rawStorage[key] = localStorage.getItem(key)
   }
+  const storage = pickSafeFlowPresetStorage(rawStorage)
   return {
     format: 'flow-preset-v1',
     app: 'Flow',
@@ -2199,12 +2222,12 @@ function importFlowConfigFile(input) {
         const toDelete = []
         for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i)
-          if (key && key.startsWith('flow_')) toDelete.push(key)
+          if (key && FLOW_PRESET_ALLOWED_KEYS.has(key)) toDelete.push(key)
         }
         toDelete.forEach((key) => localStorage.removeItem(key))
       }
-      Object.entries(storage).forEach(([key, value]) => {
-        if (!key.startsWith('flow_')) return
+      const safeStorage = pickSafeFlowPresetStorage(storage)
+      Object.entries(safeStorage).forEach(([key, value]) => {
         localStorage.setItem(key, String(value ?? ''))
       })
       setFlowConfigStatus('Flow preset импортирован. Перезагружаю приложение...', false)
@@ -2307,7 +2330,15 @@ function switchTab(tab) {
 
 function setAuthError(text = '') {
   const el = document.getElementById('auth-error')
-  if (el) el.textContent = text
+  if (el) el.textContent = sanitizeAuthError(text)
+}
+
+function sanitizeAuthError(raw = '') {
+  const text = String(raw || '').trim()
+  if (!text) return ''
+  // Supabase/Cloudflare outages may return full HTML; do not dump markup into auth UI.
+  if (/<[^>]+>/.test(text) || text.length > 220) return 'Сервер временно недоступен. Попробуйте снова чуть позже.'
+  return sanitizeDisplayText(text)
 }
 
 function syncProfileUi() {
@@ -4910,36 +4941,47 @@ function initPeerSocial() {
 }
 
 async function submitAuth() {
+  if (_authSubmitting) return
   const input = document.getElementById('auth-login')
   const passInput = document.getElementById('auth-password')
+  const submitBtn = document.querySelector('#screen-auth .auth-form .btn-main')
   const username = String(input?.value || '').trim()
   const password = String(passInput?.value || '')
   if (!username) return setAuthError('Введите Username')
   if (!password) return setAuthError('Введите пароль')
   const fn = _authMode === 'register' ? peerSocial.createProfile : peerSocial.loginProfile
   if (typeof fn !== 'function') return setAuthError('Social модуль не загружен')
-  let result = await fn(username, password)
-  if (!result?.ok && _authMode === 'login' && result?.legacy && typeof peerSocial.migrateLegacyAccount === 'function') {
-    const ok = confirm('Найден старый аккаунт без пароля. Мигрировать его на текущий пароль?')
-    if (!ok) return setAuthError('Миграция отменена')
-    result = await peerSocial.migrateLegacyAccount(username, password)
-    if (result?.ok) showToast('Аккаунт мигрирован. Теперь вход работает через пароль.')
+  _authSubmitting = true
+  if (submitBtn) submitBtn.disabled = true
+  try {
+    let result = await fn(username, password)
+    if (!result?.ok && _authMode === 'login' && result?.legacy && typeof peerSocial.migrateLegacyAccount === 'function') {
+      const ok = confirm('Найден старый аккаунт без пароля. Мигрировать его на текущий пароль?')
+      if (!ok) return setAuthError('Миграция отменена')
+      result = await peerSocial.migrateLegacyAccount(username, password)
+      if (result?.ok) showToast('Аккаунт мигрирован. Теперь вход работает через пароль.')
+    }
+    if (!result?.ok) return setAuthError(result?.error || 'Ошибка входа')
+    _profile = result.profile
+    setAuthError('')
+    if (passInput) passInput.value = ''
+    document.getElementById('screen-auth')?.classList.add('hidden')
+    document.getElementById('screen-main')?.classList.remove('hidden')
+    syncProfileUi()
+    ensureSocialUI()
+    ensureRoomsUI()
+    renderFriends()
+    initPeerSocial()
+    showOnboardingIfNeeded()
+    pollFriendsPresence().catch(() => {})
+    if (_friendsPollTimer) clearInterval(_friendsPollTimer)
+    _friendsPollTimer = setInterval(() => { pollFriendsPresence().catch(() => {}) }, FRIEND_POLL_INTERVAL_MS)
+  } catch (err) {
+    setAuthError(err?.message || 'Сбой авторизации. Проверьте подключение и попробуйте снова.')
+  } finally {
+    _authSubmitting = false
+    if (submitBtn) submitBtn.disabled = false
   }
-  if (!result?.ok) return setAuthError(result?.error || 'Ошибка входа')
-  _profile = result.profile
-  setAuthError('')
-  if (passInput) passInput.value = ''
-  document.getElementById('screen-auth')?.classList.add('hidden')
-  document.getElementById('screen-main')?.classList.remove('hidden')
-  syncProfileUi()
-  ensureSocialUI()
-  ensureRoomsUI()
-  renderFriends()
-  initPeerSocial()
-  showOnboardingIfNeeded()
-  pollFriendsPresence().catch(() => {})
-  if (_friendsPollTimer) clearInterval(_friendsPollTimer)
-  _friendsPollTimer = setInterval(() => { pollFriendsPresence().catch(() => {}) }, FRIEND_POLL_INTERVAL_MS)
 }
 
 function logout() {

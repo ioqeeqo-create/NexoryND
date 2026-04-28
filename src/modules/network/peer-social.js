@@ -7,6 +7,13 @@
     supabaseKey: 'flow_supabase_key',
   }
 
+  function normalizeAuthError(err, fallback = 'Ошибка авторизации') {
+    const text = String(err?.message || err || '').trim()
+    if (!text) return fallback
+    if (/<[^>]+>/.test(text) || text.length > 220) return 'Сервер временно недоступен. Попробуйте позже.'
+    return text
+  }
+
   const DEFAULT_SUPABASE_URL = 'https://cdfwiqgwwxdzznvbpcgj.supabase.co'
   const DEFAULT_SUPABASE_KEY = 'sb_publishable_fAF9-Qezjp_51olpGfpkYw_K1q1Yzxm'
   const DB_PROFILES = 'flow_profiles'
@@ -69,9 +76,9 @@
         online: true,
         last_seen: new Date().toISOString(),
       })
-      if (error) return { ok: false, error: error.message || 'Не удалось создать аккаунт' }
+      if (error) return { ok: false, error: normalizeAuthError(error, 'Не удалось создать аккаунт') }
     } catch (e) {
-      return { ok: false, error: e?.message || String(e) }
+      return { ok: false, error: normalizeAuthError(e, 'Не удалось создать аккаунт') }
     }
     const profiles = getProfiles()
     if (profiles.some((p) => p.username === username)) return { ok: true, profile: { username, createdAt: Date.now() } }
@@ -96,7 +103,7 @@
         .select('username,password_hash,password_salt')
         .eq('username', username)
         .maybeSingle()
-      if (error) return { ok: false, error: error.message || 'Ошибка входа' }
+      if (error) return { ok: false, error: normalizeAuthError(error, 'Ошибка входа') }
       if (!data?.username) return { ok: false, error: 'Профиль не найден, зарегистрируйся' }
       row = data
       const salt = String(row.password_salt || '')
@@ -107,7 +114,7 @@
       const actual = await hashPassword(password, salt)
       if (actual !== expected) return { ok: false, error: 'Неверный пароль' }
     } catch (e) {
-      return { ok: false, error: e?.message || String(e) }
+      return { ok: false, error: normalizeAuthError(e, 'Ошибка входа') }
     }
     const profile = getProfiles().find((p) => p.username === username) || { username, createdAt: Date.now() }
     const profiles = getProfiles()
@@ -132,7 +139,7 @@
         .select('username,password_hash,password_salt')
         .eq('username', username)
         .maybeSingle()
-      if (error) return { ok: false, error: error.message || 'Ошибка миграции' }
+      if (error) return { ok: false, error: normalizeAuthError(error, 'Ошибка миграции') }
       if (!data?.username) return { ok: false, error: 'Профиль не найден' }
       const hasPassword = String(data.password_hash || '').trim() && String(data.password_salt || '').trim()
       if (hasPassword) return { ok: false, error: 'Аккаунт уже мигрирован. Войди через пароль.' }
@@ -148,7 +155,7 @@
         })
         .eq('username', username)
         .is('password_hash', null)
-      if (upError) return { ok: false, error: upError.message || 'Не удалось завершить миграцию' }
+      if (upError) return { ok: false, error: normalizeAuthError(upError, 'Не удалось завершить миграцию') }
       const profiles = getProfiles()
       if (!profiles.some((p) => p.username === username)) {
         profiles.push({ username, createdAt: Date.now() })
@@ -157,7 +164,7 @@
       localStorage.setItem(STORAGE_KEYS.current, username)
       return { ok: true, profile: { username } }
     } catch (e) {
-      return { ok: false, error: e?.message || String(e) }
+      return { ok: false, error: normalizeAuthError(e, 'Ошибка миграции') }
     }
   }
 
