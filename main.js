@@ -16,6 +16,7 @@ const {
 const SAFE_GPU_FLAG = '--flow-safe-gpu'
 const _isSafeGpuMode = process.argv.includes(SAFE_GPU_FLAG)
 let _safeGpuRestartRequested = false
+let _appQuitting = false
 
 // Reduce noisy Chromium cache/GPU logs in terminal.
 app.commandLine.appendSwitch('disable-gpu-shader-disk-cache')
@@ -27,6 +28,10 @@ if (_isSafeGpuMode) {
   app.commandLine.appendSwitch('disable-gpu-compositing')
   app.commandLine.appendSwitch('disable-vulkan')
   console.log('[safe-gpu] enabled')
+} else if (process.platform === 'win32') {
+  // Prefer ANGLE on D3D11 instead of Vulkan on Windows — avoids entirely black windows on some GPUs/drivers
+  // where the renderer keeps running but nothing composites (no render-process-gone).
+  app.commandLine.appendSwitch('use-angle', 'd3d11')
 }
 
 function relaunchInSafeGpuMode(reason = 'unknown') {
@@ -1064,6 +1069,11 @@ function createWindow() {
   })
 }
 
+app.on('gpu-process-crashed', (event, killed) => {
+  if (_appQuitting) return
+  relaunchInSafeGpuMode(`gpu-process-crashed:${killed ? 'killed' : 'crashed'}`)
+})
+
 app.whenReady().then(() => {
   startProxyServer()
   checkAndDownloadYtDlp()
@@ -1090,6 +1100,7 @@ app.whenReady().then(() => {
 })
 
 app.on('before-quit', () => {
+  _appQuitting = true
   if (_proxyServer) _proxyServer.close()
   if (_discordRpcClient) {
     try { _discordRpcClient.clearActivity() } catch {}
