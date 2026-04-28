@@ -16,6 +16,7 @@ const {
 const SAFE_GPU_FLAG = '--flow-safe-gpu'
 const _isSafeGpuMode = process.argv.includes(SAFE_GPU_FLAG)
 let _safeGpuRestartRequested = false
+let _appQuitting = false
 
 // Reduce noisy Chromium cache/GPU logs in terminal.
 app.commandLine.appendSwitch('disable-gpu-shader-disk-cache')
@@ -24,8 +25,13 @@ app.commandLine.appendSwitch('log-level', '3')
 if (_isSafeGpuMode) {
   app.disableHardwareAcceleration()
   app.commandLine.appendSwitch('disable-gpu')
-  app.commandLine.appendSwitch('in-process-gpu')
+  app.commandLine.appendSwitch('disable-gpu-compositing')
+  app.commandLine.appendSwitch('disable-vulkan')
   console.log('[safe-gpu] enabled')
+} else if (process.platform === 'win32') {
+  // Prefer ANGLE on D3D11 instead of Vulkan on Windows — avoids entirely black windows on some GPUs/drivers
+  // where the renderer keeps running but nothing composites (no render-process-gone).
+  app.commandLine.appendSwitch('use-angle', 'd3d11')
 }
 
 function relaunchInSafeGpuMode(reason = 'unknown') {
@@ -33,7 +39,7 @@ function relaunchInSafeGpuMode(reason = 'unknown') {
   _safeGpuRestartRequested = true
   try {
     console.warn('[safe-gpu] relaunch requested:', reason)
-    const args = process.argv.filter((a) => a !== SAFE_GPU_FLAG)
+    const args = process.argv.slice(1).filter((a) => a !== SAFE_GPU_FLAG)
     args.push(SAFE_GPU_FLAG)
     app.relaunch({ args })
   } catch (e) {
@@ -1041,10 +1047,14 @@ function createWindow() {
     },
     icon: path.join(__dirname, 'assets/icon.ico')
   })
-  win.loadFile('index.html')
+  win.loadFile('index.html', _isSafeGpuMode ? { query: { safeGpu: '1' } } : undefined)
   _mainWindow = win
-  win.webContents.once('did-finish-load', () => { _safeGpuRestartRequested = false })
-  win.on('unresponsive', () => relaunchInSafeGpuMode('window-unresponsive'))
+  win.webContents.once('did-finish-load', () => {
+    _safeGpuRestartRequested = false
+  })
+  win.on('unresponsive', () => {
+    relaunchInSafeGpuMode('window-unresponsive')
+  })
   win.webContents.on('render-process-gone', (event, details) => {
     const reason = String(details?.reason || 'render-process-gone')
     if (reason !== 'clean-exit') relaunchInSafeGpuMode(reason)
@@ -1058,6 +1068,11 @@ function createWindow() {
     if (_mainWindow === win) _mainWindow = null
   })
 }
+
+app.on('gpu-process-crashed', (event, killed) => {
+  if (_appQuitting) return
+  relaunchInSafeGpuMode(`gpu-process-crashed:${killed ? 'killed' : 'crashed'}`)
+})
 
 app.whenReady().then(() => {
   startProxyServer()
@@ -1085,6 +1100,7 @@ app.whenReady().then(() => {
 })
 
 app.on('before-quit', () => {
+  _appQuitting = true
   if (_proxyServer) _proxyServer.close()
   if (_discordRpcClient) {
     try { _discordRpcClient.clearActivity() } catch {}
@@ -1833,13 +1849,24 @@ ipcMain.handle('import-playlist-link', async (e, { url, tokens = {} }) => {
     const ymToken = String(tokens?.yandex || '').trim()
     if (!ymToken) return { ok: false, error: 'Yandex token required' }
     try {
-      const r = await httpsGetJson(
-        'api.music.yandex.net',
-        `/users/${encodeURIComponent(yRef.user)}/playlists/${encodeURIComponent(yRef.kind)}`,
-        { Authorization: `OAuth ${ymToken}`, 'X-Yandex-Music-Client': 'WindowsPhone/3.20', 'User-Agent': 'Windows 10' },
-        15000
-      )
-      const pl = r?.body?.result || {}
+      const yHeaders = { Authorization: `OAuth ${ymToken}`, 'X-Yandex-Music-Client': 'WindowsPhone/3.20', 'User-Agent': 'Windows 10' }
+      const tryPaths = yRef.user === 'me'
+        ? [`/users/me/playlists/${encodeURIComponent(yRef.kind)}`]
+        : [`/users/${encodeURIComponent(yRef.user)}/playlists/${encodeURIComponent(yRef.kind)}`]
+      if (yRef.user === 'me') {
+        const meStatus = await httpsGetJson('api.music.yandex.net', '/account/status', yHeaders, 12000).catch(() => null)
+        const uid = String(meStatus?.body?.result?.account?.uid || '').trim()
+        if (uid) tryPaths.push(`/users/${encodeURIComponent(uid)}/playlists/${encodeURIComponent(yRef.kind)}`)
+      }
+      let pl = null
+      for (const pathTry of tryPaths) {
+        const r = await httpsGetJson('api.music.yandex.net', pathTry, yHeaders, 15000).catch(() => null)
+        if (r?.status === 200 && r?.body?.result) {
+          pl = r.body.result
+          break
+        }
+      }
+      if (!pl) return { ok: false, error: 'Yandex import: playlist unavailable for this link/token' }
       const tracks = Array.isArray(pl?.tracks) ? pl.tracks : []
       const out = tracks.map((row) => {
         const t = row?.track || row

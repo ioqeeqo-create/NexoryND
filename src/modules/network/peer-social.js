@@ -5,13 +5,56 @@
     friendsPrefix: 'flow_friends_',
     supabaseUrl: 'flow_supabase_url',
     supabaseKey: 'flow_supabase_key',
+    localAuth: 'flow_local_auth',
+  }
+
+  function normalizeAuthError(err, fallback = 'Ошибка авторизации') {
+    const text = String(err?.message || err || '').trim()
+    if (!text) return fallback
+    if (/<[^>]+>/.test(text) || text.length > 220) return 'Сервер временно недоступен. Попробуйте позже.'
+    return text
   }
 
   const DEFAULT_SUPABASE_URL = 'https://cdfwiqgwwxdzznvbpcgj.supabase.co'
   const DEFAULT_SUPABASE_KEY = 'sb_publishable_fAF9-Qezjp_51olpGfpkYw_K1q1Yzxm'
+  const FLOW_SERVER_DEFAULT_URL = 'http://85.239.34.229:8787'
   const DB_PROFILES = 'flow_profiles'
   const DB_FRIENDS = 'flow_friends'
   const DB_FRIEND_REQUESTS = 'flow_friend_requests'
+
+  function getFlowServerBaseUrl() {
+    try {
+      const settings = JSON.parse(localStorage.getItem('flow_settings') || '{}') || {}
+      const base = String(settings.proxyBaseUrl || FLOW_SERVER_DEFAULT_URL || '').trim()
+      return /^https?:\/\//i.test(base) ? base.replace(/\/+$/, '') : ''
+    } catch {
+      return String(FLOW_SERVER_DEFAULT_URL || '').trim()
+    }
+  }
+
+  async function callFlowServer(path, { method = 'GET', body, timeoutMs = 12000 } = {}) {
+    const base = getFlowServerBaseUrl()
+    if (!base) return { ok: false, error: 'Flow server URL is empty' }
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), Math.max(1500, Number(timeoutMs || 0)))
+    try {
+      const rsp = await fetch(`${base}${path}`, {
+        method,
+        headers: body ? { 'Content-Type': 'application/json' } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+        signal: ctrl.signal,
+      })
+      const data = await rsp.json().catch(() => ({}))
+      if (!rsp.ok || data?.ok === false) {
+        return { ok: false, error: data?.error || `HTTP ${rsp.status}` }
+      }
+      return { ok: true, data }
+    } catch (err) {
+      return { ok: false, error: normalizeAuthError(err, 'Flow server недоступен') }
+    } finally {
+      clearTimeout(timer)
+    }
+  }
 
   function getProfiles() {
     try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.profiles) || '[]') || [] } catch { return [] }
@@ -19,6 +62,35 @@
 
   function saveProfiles(list) {
     localStorage.setItem(STORAGE_KEYS.profiles, JSON.stringify(list || []))
+  }
+
+  function getLocalAuthMap() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.localAuth) || '{}') || {} } catch { return {} }
+  }
+
+  function saveLocalAuthMap(map) {
+    try { localStorage.setItem(STORAGE_KEYS.localAuth, JSON.stringify(map || {})) } catch {}
+  }
+
+  function upsertLocalAuth(username, password) {
+    const safe = normalizeUsername(username)
+    if (!safe) return
+    const pass = String(password || '')
+    if (pass.length < 4) return
+    const map = getLocalAuthMap()
+    const salt = randomSalt(24)
+    const hash = btoa(unescape(encodeURIComponent(`${pass}::${salt}`))).slice(0, 120)
+    map[safe] = { salt, hash, updatedAt: Date.now() }
+    saveLocalAuthMap(map)
+  }
+
+  function verifyLocalAuth(username, password) {
+    const safe = normalizeUsername(username)
+    const map = getLocalAuthMap()
+    const row = map[safe]
+    if (!row?.salt || !row?.hash) return false
+    const actual = btoa(unescape(encodeURIComponent(`${String(password || '')}::${String(row.salt || '')}`))).slice(0, 120)
+    return actual === String(row.hash || '')
   }
 
   function normalizeUsername(value) {
@@ -51,8 +123,32 @@
     if (!username || username.length < 3) return { ok: false, error: 'Username: минимум 3 символа [a-z0-9_-.]' }
     const password = String(rawPassword || '')
     if (password.length < 4) return { ok: false, error: 'Пароль: минимум 4 символа' }
+    const viaFlowServer = await callFlowServer('/flow/auth/register', {
+      method: 'POST',
+      body: { username, password },
+      timeoutMs: 14000,
+    })
+    if (viaFlowServer?.ok) {
+      const profile = viaFlowServer.data?.profile || { username, createdAt: Date.now() }
+      const profiles = getProfiles()
+      if (!profiles.some((p) => p.username === username)) {
+        profiles.push({ username, createdAt: Number(profile?.createdAt || Date.now()) })
+        saveProfiles(profiles)
+      }
+      localStorage.setItem(STORAGE_KEYS.current, username)
+      return { ok: true, profile: { username, createdAt: Number(profile?.createdAt || Date.now()) } }
+    }
     const sb = getSupabase()
-    if (!sb) return { ok: false, error: 'Сервер недоступен' }
+    if (!sb) {
+      const profiles = getProfiles()
+      if (profiles.some((p) => p.username === username)) return { ok: false, error: 'Такой Username уже занят' }
+      const profile = { username, createdAt: Date.now() }
+      profiles.push(profile)
+      saveProfiles(profiles)
+      upsertLocalAuth(username, password)
+      localStorage.setItem(STORAGE_KEYS.current, username)
+      return { ok: true, profile }
+    }
     try {
       const { data: existing } = await sb
         .from(DB_PROFILES)
@@ -69,15 +165,16 @@
         online: true,
         last_seen: new Date().toISOString(),
       })
-      if (error) return { ok: false, error: error.message || 'Не удалось создать аккаунт' }
+      if (error) return { ok: false, error: normalizeAuthError(error, 'Не удалось создать аккаунт') }
     } catch (e) {
-      return { ok: false, error: e?.message || String(e) }
+      return { ok: false, error: normalizeAuthError(e, 'Не удалось создать аккаунт') }
     }
     const profiles = getProfiles()
     if (profiles.some((p) => p.username === username)) return { ok: true, profile: { username, createdAt: Date.now() } }
     const profile = { username, createdAt: Date.now() }
     profiles.push(profile)
     saveProfiles(profiles)
+    upsertLocalAuth(username, password)
     localStorage.setItem(STORAGE_KEYS.current, username)
     return { ok: true, profile }
   }
@@ -87,8 +184,29 @@
     const password = String(rawPassword || '')
     if (!username) return { ok: false, error: 'Введите Username' }
     if (!password) return { ok: false, error: 'Введите пароль' }
+    const viaFlowServer = await callFlowServer('/flow/auth/login', {
+      method: 'POST',
+      body: { username, password },
+      timeoutMs: 14000,
+    })
+    if (viaFlowServer?.ok) {
+      const profile = getProfiles().find((p) => p.username === username) || { username, createdAt: Date.now() }
+      const profiles = getProfiles()
+      if (!profiles.some((p) => p.username === username)) {
+        profiles.push(profile)
+        saveProfiles(profiles)
+      }
+      localStorage.setItem(STORAGE_KEYS.current, username)
+      return { ok: true, profile }
+    }
     const sb = getSupabase()
-    if (!sb) return { ok: false, error: 'Сервер недоступен' }
+    if (!sb) {
+      const profile = getProfiles().find((p) => p.username === username) || null
+      if (!profile) return { ok: false, error: 'Профиль не найден, зарегистрируйся' }
+      if (!verifyLocalAuth(username, password)) return { ok: false, error: 'Неверный пароль' }
+      localStorage.setItem(STORAGE_KEYS.current, username)
+      return { ok: true, profile }
+    }
     let row = null
     try {
       const { data, error } = await sb
@@ -96,7 +214,7 @@
         .select('username,password_hash,password_salt')
         .eq('username', username)
         .maybeSingle()
-      if (error) return { ok: false, error: error.message || 'Ошибка входа' }
+      if (error) return { ok: false, error: normalizeAuthError(error, 'Ошибка входа') }
       if (!data?.username) return { ok: false, error: 'Профиль не найден, зарегистрируйся' }
       row = data
       const salt = String(row.password_salt || '')
@@ -107,7 +225,7 @@
       const actual = await hashPassword(password, salt)
       if (actual !== expected) return { ok: false, error: 'Неверный пароль' }
     } catch (e) {
-      return { ok: false, error: e?.message || String(e) }
+      return { ok: false, error: normalizeAuthError(e, 'Ошибка входа') }
     }
     const profile = getProfiles().find((p) => p.username === username) || { username, createdAt: Date.now() }
     const profiles = getProfiles()
@@ -124,15 +242,38 @@
     const password = String(rawPassword || '')
     if (!username) return { ok: false, error: 'Введите Username' }
     if (password.length < 4) return { ok: false, error: 'Пароль: минимум 4 символа' }
+    const viaFlowServer = await callFlowServer('/flow/auth/migrate', {
+      method: 'POST',
+      body: { username, password },
+      timeoutMs: 14000,
+    })
+    if (viaFlowServer?.ok) {
+      const profiles = getProfiles()
+      if (!profiles.some((p) => p.username === username)) {
+        profiles.push({ username, createdAt: Date.now() })
+        saveProfiles(profiles)
+      }
+      localStorage.setItem(STORAGE_KEYS.current, username)
+      return { ok: true, profile: { username } }
+    }
     const sb = getSupabase()
-    if (!sb) return { ok: false, error: 'Сервер недоступен' }
+    if (!sb) {
+      upsertLocalAuth(username, password)
+      const profiles = getProfiles()
+      if (!profiles.some((p) => p.username === username)) {
+        profiles.push({ username, createdAt: Date.now() })
+        saveProfiles(profiles)
+      }
+      localStorage.setItem(STORAGE_KEYS.current, username)
+      return { ok: true, profile: { username } }
+    }
     try {
       const { data, error } = await sb
         .from(DB_PROFILES)
         .select('username,password_hash,password_salt')
         .eq('username', username)
         .maybeSingle()
-      if (error) return { ok: false, error: error.message || 'Ошибка миграции' }
+      if (error) return { ok: false, error: normalizeAuthError(error, 'Ошибка миграции') }
       if (!data?.username) return { ok: false, error: 'Профиль не найден' }
       const hasPassword = String(data.password_hash || '').trim() && String(data.password_salt || '').trim()
       if (hasPassword) return { ok: false, error: 'Аккаунт уже мигрирован. Войди через пароль.' }
@@ -148,16 +289,17 @@
         })
         .eq('username', username)
         .is('password_hash', null)
-      if (upError) return { ok: false, error: upError.message || 'Не удалось завершить миграцию' }
+      if (upError) return { ok: false, error: normalizeAuthError(upError, 'Не удалось завершить миграцию') }
       const profiles = getProfiles()
       if (!profiles.some((p) => p.username === username)) {
         profiles.push({ username, createdAt: Date.now() })
         saveProfiles(profiles)
       }
       localStorage.setItem(STORAGE_KEYS.current, username)
+      upsertLocalAuth(username, password)
       return { ok: true, profile: { username } }
     } catch (e) {
-      return { ok: false, error: e?.message || String(e) }
+      return { ok: false, error: normalizeAuthError(e, 'Ошибка миграции') }
     }
   }
 
@@ -197,19 +339,27 @@
   }
 
   function getSupabaseConfig() {
-    const url = String(localStorage.getItem(STORAGE_KEYS.supabaseUrl) || DEFAULT_SUPABASE_URL || '').trim()
-    const key = String(localStorage.getItem(STORAGE_KEYS.supabaseKey) || DEFAULT_SUPABASE_KEY || '').trim()
+    const rawUrl = String(localStorage.getItem(STORAGE_KEYS.supabaseUrl) || '').trim()
+    const rawKey = String(localStorage.getItem(STORAGE_KEYS.supabaseKey) || '').trim()
+    const fallbackUrl = String(DEFAULT_SUPABASE_URL || '').trim()
+    const fallbackKey = String(DEFAULT_SUPABASE_KEY || '').trim()
+    const url = /^https?:\/\//i.test(rawUrl) ? rawUrl : fallbackUrl
+    const key = rawKey || fallbackKey
     return { url, key }
   }
 
   let _supabase = null
+  let _supabaseSig = ''
   function getSupabase() {
     try {
-      if (_supabase) return _supabase
       const cfg = getSupabaseConfig()
       const factory = window?.supabase?.createClient
       if (!factory || !cfg.url || !cfg.key) return null
-      _supabase = factory(cfg.url, cfg.key, { realtime: { params: { eventsPerSecond: 30 } } })
+      const nextSig = `${cfg.url}::${cfg.key}`
+      if (!_supabase || _supabaseSig !== nextSig) {
+        _supabase = factory(cfg.url, cfg.key, { realtime: { params: { eventsPerSecond: 30 } } })
+        _supabaseSig = nextSig
+      }
       return _supabase
     } catch {
       return null
@@ -218,6 +368,12 @@
 
   async function upsertProfileCloud(username) {
     try {
+      const cloud = await callFlowServer('/flow/profile/upsert', {
+        method: 'POST',
+        body: { username },
+        timeoutMs: 9000,
+      })
+      if (cloud?.ok) return
       const sb = getSupabase()
       if (!sb || !username) return
       await sb.from(DB_PROFILES).upsert({
@@ -230,6 +386,12 @@
 
   async function setProfileOfflineCloud(username) {
     try {
+      const cloud = await callFlowServer('/flow/profile/offline', {
+        method: 'POST',
+        body: { username },
+        timeoutMs: 9000,
+      })
+      if (cloud?.ok) return
       const sb = getSupabase()
       if (!sb || !username) return
       await sb.from(DB_PROFILES).upsert({
@@ -242,6 +404,12 @@
 
   async function pullFriendsFromCloud(username) {
     try {
+      const cloud = await callFlowServer(`/flow/friends?username=${encodeURIComponent(String(username || ''))}`, { timeoutMs: 9000 })
+      if (cloud?.ok && Array.isArray(cloud?.data?.friends)) {
+        const list = [...new Set(cloud.data.friends.map((x) => normalizeUsername(x)).filter(Boolean))]
+        localStorage.setItem(STORAGE_KEYS.friendsPrefix + username, JSON.stringify(list))
+        return
+      }
       const sb = getSupabase()
       if (!sb || !username) return
       const { data } = await sb.from(DB_FRIENDS)
@@ -255,6 +423,12 @@
 
   async function syncFriendToCloud(ownerUsername, friendUsername) {
     try {
+      const cloud = await callFlowServer('/flow/friends/add', {
+        method: 'POST',
+        body: { ownerUsername, friendUsername },
+        timeoutMs: 9000,
+      })
+      if (cloud?.ok) return
       const sb = getSupabase()
       if (!sb || !ownerUsername || !friendUsername) return
       await sb.from(DB_FRIENDS).upsert({
@@ -270,6 +444,12 @@
 
   async function removeFriendFromCloud(ownerUsername, friendUsername) {
     try {
+      const cloud = await callFlowServer('/flow/friends/remove', {
+        method: 'POST',
+        body: { ownerUsername, friendUsername },
+        timeoutMs: 9000,
+      })
+      if (cloud?.ok) return
       const sb = getSupabase()
       if (!sb || !ownerUsername || !friendUsername) return
       await sb.from(DB_FRIENDS)
@@ -288,8 +468,14 @@
     const to = normalizeUsername(toUsername)
     if (!from || !to || from === to) return { ok: false, error: 'Некорректный запрос' }
     try {
+      const cloud = await callFlowServer('/flow/friends/request', {
+        method: 'POST',
+        body: { fromUsername: from, toUsername: to },
+        timeoutMs: 10000,
+      })
+      if (cloud?.ok) return { ok: true }
       const sb = getSupabase()
-      if (!sb) return { ok: false, error: 'Supabase недоступен' }
+      if (!sb) return { ok: false, error: cloud?.error || 'Сервер недоступен' }
       const { data: existing } = await sb.from(DB_FRIENDS)
         .select('owner_username')
         .eq('owner_username', from)
@@ -313,6 +499,8 @@
     const safe = normalizeUsername(username)
     if (!safe) return []
     try {
+      const cloud = await callFlowServer(`/flow/friends/requests?username=${encodeURIComponent(safe)}`, { timeoutMs: 9000 })
+      if (cloud?.ok && Array.isArray(cloud?.data?.requests)) return cloud.data.requests
       const sb = getSupabase()
       if (!sb) return []
       const { data } = await sb.from(DB_FRIEND_REQUESTS)
@@ -331,8 +519,14 @@
     const from = normalizeUsername(fromUsername)
     if (!to || !from) return { ok: false, error: 'Некорректные данные' }
     try {
+      const cloud = await callFlowServer('/flow/friends/respond', {
+        method: 'POST',
+        body: { currentUsername: to, fromUsername: from, accept: Boolean(accept) },
+        timeoutMs: 10000,
+      })
+      if (cloud?.ok) return { ok: true }
       const sb = getSupabase()
-      if (!sb) return { ok: false, error: 'Supabase недоступен' }
+      if (!sb) return { ok: false, error: cloud?.error || 'Сервер недоступен' }
       const status = accept ? 'accepted' : 'rejected'
       const { error } = await sb.from(DB_FRIEND_REQUESTS)
         .update({ status, updated_at: new Date().toISOString() })
@@ -350,7 +544,7 @@
   class FlowPeerSocial {
     constructor(username, opts = {}) {
       this.username = normalizeUsername(username)
-      this.maxPeers = Number(opts.maxPeers || 3)
+      this.maxPeers = Number(opts.maxPeers || 5)
       this.peer = null
       this.connections = new Map()
       this.roomId = null
@@ -481,21 +675,27 @@
 
     probeUser(username, timeoutMs = 3500) {
       return new Promise((resolve) => {
-        const sb = this._sb || getSupabase()
         const safe = normalizeUsername(username)
-        if (!sb || !safe) return resolve(false)
-        Promise.race([
-          sb.from(DB_PROFILES).select('online,last_seen').eq('username', safe).maybeSingle(),
-          new Promise((r) => setTimeout(() => r({ data: null }), Math.max(1000, Number(timeoutMs || 0))))
-        ]).then((r) => {
-          const row = r?.data
-          if (!row) return resolve(false)
-          const seen = Date.parse(String(row.last_seen || ''))
-          const seenFresh = !Number.isNaN(seen) && (Date.now() - seen) < 75000
-          if (row.online === true && seenFresh) return resolve(true)
-          if (seenFresh) return resolve(true)
-          resolve(false)
-        }).catch(() => resolve(false))
+        if (!safe) return resolve(false)
+        callFlowServer(`/flow/profile/probe?username=${encodeURIComponent(safe)}`, { timeoutMs: Math.max(1400, Number(timeoutMs || 0)) })
+          .then((cloud) => {
+            if (cloud?.ok) return resolve(Boolean(cloud?.data?.online))
+            const sb = this._sb || getSupabase()
+            if (!sb) return resolve(false)
+            return Promise.race([
+              sb.from(DB_PROFILES).select('online,last_seen').eq('username', safe).maybeSingle(),
+              new Promise((r) => setTimeout(() => r({ data: null }), Math.max(1000, Number(timeoutMs || 0))))
+            ]).then((r) => {
+              const row = r?.data
+              if (!row) return resolve(false)
+              const seen = Date.parse(String(row.last_seen || ''))
+              const seenFresh = !Number.isNaN(seen) && (Date.now() - seen) < 75000
+              if (row.online === true && seenFresh) return resolve(true)
+              if (seenFresh) return resolve(true)
+              resolve(false)
+            }).catch(() => resolve(false))
+          })
+          .catch(() => resolve(false))
       })
     }
 

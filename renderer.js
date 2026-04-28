@@ -43,6 +43,7 @@ let _analyser = null
 let _freqData = null
 let _customFontLoadedKey = ''
 let _authMode = 'login'
+let _authSubmitting = false
 let _profile = null
 let _socialPeer = null
 let _roomState = { roomId: null, host: false, hostPeerId: null }
@@ -269,9 +270,9 @@ function updateRoomUi() {
   const roleBadgeEl = document.getElementById('room-role-badge')
   if (countEl) {
     if (_roomState?.roomId && _socialPeer) {
-      countEl.textContent = `Участники: ${_socialPeer.peersCount()}/3`
+      countEl.textContent = `Участники: ${_socialPeer.peersCount()}/5`
     } else {
-      countEl.textContent = 'Участники: —/3'
+      countEl.textContent = 'Участники: —/5'
     }
   }
   if (roleBadgeEl) {
@@ -352,13 +353,17 @@ function prepareProfileImageData(file, dataUrl, kind = 'avatar') {
 }
 
 const ICONS = {
-  play: '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5v14l11-7Z"/></svg>',
-  pause: '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6v12"/><path d="M15 6v12"/></svg>',
-  plus: '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>',
-  close: '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>'
+  play: '<svg class="ui-icon ctrl-play-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9.5 7.75v8.5l7.25-4.25-7.25-4.25z"/></svg>',
+  pause: '<svg class="ui-icon ctrl-play-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="8" y="6.5" width="3.25" height="11" rx="1"/><rect x="12.75" y="6.5" width="3.25" height="11" rx="1"/></svg>',
+  plus: '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>',
+  close: '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>'
 }
-const HEART_OUTLINE = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.35-9.5-8A5.5 5.5 0 0 1 12 5.1 5.5 5.5 0 0 1 21.5 13c-2.5 3.65-9.5 8-9.5 8Z"/></svg>'
-const HEART_FILLED = '<svg class="ui-icon" viewBox="0 0 24 24" fill="currentColor" fill-opacity="0.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.35-9.5-8A5.5 5.5 0 0 1 12 5.1 5.5 5.5 0 0 1 21.5 13c-2.5 3.65-9.5 8-9.5 8Z"/></svg>'
+/** Внутренности <svg id="pm-play-icon"> (fullscreen): только фигуры, без обёртки */
+const PM_PLAY_SHAPE = '<path fill="currentColor" d="M9.5 7.75v8.5l7.25-4.25-7.25-4.25z"/>'
+const PM_PAUSE_SHAPE = '<g fill="currentColor"><rect x="7" y="6.5" width="3.5" height="11" rx="1"/><rect x="13.5" y="6.5" width="3.5" height="11" rx="1"/></g>'
+const HEART_OUTLINE = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.2s-6.1-3.95-8.35-7.1a4.1 4.1 0 0 1 6.55-4.9l1.8 1.75 1.8-1.75a4.1 4.1 0 0 1 6.55 4.9c-2.25 3.15-8.35 7.1-8.35 7.1Z"/></svg>'
+const HEART_FILLED = '<svg class="ui-icon" viewBox="0 0 24 24" fill="currentColor" fill-opacity="0.22" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.2s-6.1-3.95-8.35-7.1a4.1 4.1 0 0 1 6.55-4.9l1.8 1.75 1.8-1.75a4.1 4.1 0 0 1 6.55 4.9c-2.25 3.15-8.35 7.1-8.35 7.1Z"/></svg>'
+const SIMILAR_ICON = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 14c1.7-4.2 5.5-7 9.8-7 .6 0 1.2 0 1.8.1"/><path d="M8 21c1.1-2.8 3.4-5 6.3-6"/><path d="M4 10c0-1.1.2-2.1.6-3"/><path d="M15 21h6"/><path d="M18 18v6"/></svg>'
 
 // в”Ђв”Ђв”Ђ VISUAL SETTINGS в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 const defaultVisual = {
@@ -1038,10 +1043,25 @@ function applyHomeSliderStyle() {
   const style = v.homeSliderStyle === 'wave' ? 'wave' : 'line'
   const p = document.getElementById('home-clone-progress')
   if (p) p.classList.toggle('home-slider-wave', style === 'wave')
+  const mainProgress = document.getElementById('progress')
+  const pmProgress = document.getElementById('pm-progress')
+  ;[mainProgress, pmProgress].forEach((el) => {
+    if (!el) return
+    el.classList.toggle('flow-slider-wave', style === 'wave')
+    updateWaveSliderFill(el)
+  })
   const b1 = document.getElementById('slider-style-line')
   const b2 = document.getElementById('slider-style-wave')
   if (b1) b1.classList.toggle('active', style === 'line')
   if (b2) b2.classList.toggle('active', style === 'wave')
+}
+
+function updateWaveSliderFill(el) {
+  if (!el) return
+  const value = Number(el.value || 0)
+  const max = Number(el.max || 1) || 1
+  const fill = Math.max(0, Math.min(100, (value / max) * 100))
+  el.style.setProperty('--progress-fill', `${fill}%`)
 }
 
 function toggleHomeWidgetEnabled() {
@@ -1411,9 +1431,7 @@ function syncPlayerModeUI() {
   }
   // play/pause icon sync
   const icon = document.getElementById('pm-play-icon')
-  if (icon) icon.innerHTML = audio.paused
-    ? '<polygon points="5 3 19 12 5 21 5 3"/>'
-    : '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>'
+  if (icon) icon.innerHTML = audio.paused ? PM_PLAY_SHAPE : PM_PAUSE_SHAPE
   // volume sync
   const pmVol = document.getElementById('pm-volume')
   if (pmVol) pmVol.value = audio.volume
@@ -2053,7 +2071,7 @@ async function setCustomTrackCover(input) {
     saveCustomCoverMap(map)
     _coverLoadState.clear()
     syncPlayerUIFromTrack()
-    renderQueue()
+    // Legacy queue renderer was removed; refresh visible collections only.
     renderPlaylists()
     renderLiked()
     renderRoomQueue()
@@ -2091,7 +2109,7 @@ function clearCustomTrackCover() {
   restoreSourceCoversInCollections()
   _coverLoadState.clear()
   syncPlayerUIFromTrack()
-  renderQueue()
+  // Legacy queue renderer was removed; refresh visible collections only.
   renderPlaylists()
   renderLiked()
   renderRoomQueue()
@@ -2125,13 +2143,35 @@ function setFlowConfigStatus(text, isError = false) {
   el.classList.toggle('token-msg-ok', !isError)
 }
 
+const FLOW_PRESET_ALLOWED_KEYS = new Set([
+  'flow_visual',
+  'flow_playback_mode',
+  'flow_track_covers',
+  'flow_my_wave_mode',
+  'flow_sidebar_w',
+  'flow_volume_slider',
+  'flow_onboarding_done',
+  'flow_first_launch_done',
+])
+
+function pickSafeFlowPresetStorage(rawStorage = {}) {
+  const safe = {}
+  Object.entries(rawStorage || {}).forEach(([key, value]) => {
+    if (!String(key || '').startsWith('flow_')) return
+    if (!FLOW_PRESET_ALLOWED_KEYS.has(key)) return
+    safe[key] = String(value ?? '')
+  })
+  return safe
+}
+
 function collectFlowConfigPayload() {
-  const storage = {}
+  const rawStorage = {}
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i)
     if (!key || !key.startsWith('flow_')) continue
-    storage[key] = localStorage.getItem(key)
+    rawStorage[key] = localStorage.getItem(key)
   }
+  const storage = pickSafeFlowPresetStorage(rawStorage)
   return {
     format: 'flow-preset-v1',
     app: 'Flow',
@@ -2182,12 +2222,12 @@ function importFlowConfigFile(input) {
         const toDelete = []
         for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i)
-          if (key && key.startsWith('flow_')) toDelete.push(key)
+          if (key && FLOW_PRESET_ALLOWED_KEYS.has(key)) toDelete.push(key)
         }
         toDelete.forEach((key) => localStorage.removeItem(key))
       }
-      Object.entries(storage).forEach(([key, value]) => {
-        if (!key.startsWith('flow_')) return
+      const safeStorage = pickSafeFlowPresetStorage(storage)
+      Object.entries(safeStorage).forEach(([key, value]) => {
         localStorage.setItem(key, String(value ?? ''))
       })
       setFlowConfigStatus('Flow preset импортирован. Перезагружаю приложение...', false)
@@ -2290,7 +2330,15 @@ function switchTab(tab) {
 
 function setAuthError(text = '') {
   const el = document.getElementById('auth-error')
-  if (el) el.textContent = text
+  if (el) el.textContent = sanitizeAuthError(text)
+}
+
+function sanitizeAuthError(raw = '') {
+  const text = String(raw || '').trim()
+  if (!text) return ''
+  // Supabase/Cloudflare outages may return full HTML; do not dump markup into auth UI.
+  if (/<[^>]+>/.test(text) || text.length > 220) return 'Сервер временно недоступен. Попробуйте снова чуть позже.'
+  return sanitizeDisplayText(text)
 }
 
 function syncProfileUi() {
@@ -2348,14 +2396,56 @@ function getPublicProfilePayload(username = _profile?.username) {
 let _supabaseProfileSyncTimer = null
 const DEFAULT_SUPABASE_URL = 'https://cdfwiqgwwxdzznvbpcgj.supabase.co'
 const DEFAULT_SUPABASE_KEY = 'sb_publishable_fAF9-Qezjp_51olpGfpkYw_K1q1Yzxm'
+function resolveSupabaseConfig() {
+  const rawUrl = String(localStorage.getItem('flow_supabase_url') || '').trim()
+  const rawKey = String(localStorage.getItem('flow_supabase_key') || '').trim()
+  const fallbackUrl = String(DEFAULT_SUPABASE_URL || '').trim()
+  const fallbackKey = String(DEFAULT_SUPABASE_KEY || '').trim()
+  const safeUrl = /^https?:\/\//i.test(rawUrl) ? rawUrl : fallbackUrl
+  const safeKey = rawKey || fallbackKey
+  return { url: safeUrl, key: safeKey }
+}
+
+function normalizeProfileSyncError(err, fallback = 'Сервер недоступен') {
+  const text = String(err?.message || err || '').trim()
+  if (!text) return fallback
+  const low = text.toLowerCase()
+  if (
+    low.includes('failed to fetch') ||
+    low.includes('networkerror') ||
+    low.includes('network request failed') ||
+    low.includes('stream timeout') ||
+    low.includes('timeout')
+  ) {
+    return 'Не удалось подключиться к серверу'
+  }
+  if (/<[^>]+>/.test(text) || text.length > 220) return fallback
+  return sanitizeDisplayText(text)
+}
+
+function isRetryableProfileSyncError(err) {
+  const low = String(err?.message || err || '').toLowerCase()
+  return (
+    low.includes('failed to fetch') ||
+    low.includes('networkerror') ||
+    low.includes('network request failed') ||
+    low.includes('stream timeout') ||
+    low.includes('timeout')
+  )
+}
+
 function getSupabaseClient() {
   try {
     const factory = window?.supabase?.createClient
     if (typeof factory !== 'function') return null
-    const url = String(localStorage.getItem('flow_supabase_url') || DEFAULT_SUPABASE_URL || '').trim()
-    const key = String(localStorage.getItem('flow_supabase_key') || DEFAULT_SUPABASE_KEY || '').trim()
+    const { url, key } = resolveSupabaseConfig()
     if (!url || !key) return null
-    if (!window.__flowSbProfileClient) window.__flowSbProfileClient = factory(url, key)
+    const nextSig = `${url}::${key}`
+    const prevSig = String(window.__flowSbProfileClientSig || '')
+    if (!window.__flowSbProfileClient || prevSig !== nextSig) {
+      window.__flowSbProfileClient = factory(url, key)
+      window.__flowSbProfileClientSig = nextSig
+    }
     return window.__flowSbProfileClient
   } catch {
     return null
@@ -2455,33 +2545,66 @@ async function refreshFriendProfileFromCloud(username, force = false) {
 }
 
 async function syncProfileCloudNow() {
-  const me = ensureActiveProfile()
-  if (!me?.username) return { ok: false, error: 'no profile' }
-  const sb = getSupabaseClient()
-  if (!sb) return { ok: false, error: 'no supabase' }
-  const custom = getProfileCustom()
-  const stats = getListenStats()
-  const payload = {
-    username: me.username,
-    online: true,
-    last_seen: new Date().toISOString(),
-    avatar_data: custom.avatarData || null,
-    banner_data: custom.bannerData || null,
-    profile_color: custom.profileColor || null,
-    bio: custom.bio || '',
-    pinned_tracks: Array.isArray(custom.pinnedTracks) ? custom.pinnedTracks.slice(0, 5) : [],
-    pinned_playlists: Array.isArray(custom.pinnedPlaylists) ? custom.pinnedPlaylists.slice(0, 5) : [],
-    total_tracks: Number(stats.totalTracks || 0),
-    total_seconds: Number(stats.totalSeconds || 0),
+  try {
+    const me = ensureActiveProfile()
+    if (!me?.username) return { ok: false, error: 'Нет активного профиля' }
+    const settings = getSettings()
+    const flowBase = String(settings?.proxyBaseUrl || FLOW_SERVER_DEFAULT_URL || '').trim().replace(/\/+$/, '')
+    const sb = getSupabaseClient()
+    if (!sb && !/^https?:\/\//i.test(flowBase)) return { ok: false, error: 'Сервер синхронизации недоступен' }
+    const custom = getProfileCustom()
+    const stats = getListenStats()
+    const safeTotalTracks = Math.max(0, Math.floor(Number(stats.totalTracks || 0) || 0))
+    const safeTotalSeconds = Math.max(0, Math.floor(Number(stats.totalSeconds || 0) || 0))
+    const payload = {
+      username: me.username,
+      online: true,
+      last_seen: new Date().toISOString(),
+      avatar_data: custom.avatarData || null,
+      banner_data: custom.bannerData || null,
+      profile_color: custom.profileColor || null,
+      bio: custom.bio || '',
+      pinned_tracks: Array.isArray(custom.pinnedTracks) ? custom.pinnedTracks.slice(0, 5) : [],
+      pinned_playlists: Array.isArray(custom.pinnedPlaylists) ? custom.pinnedPlaylists.slice(0, 5) : [],
+      total_tracks: safeTotalTracks,
+      total_seconds: safeTotalSeconds,
+    }
+    if (/^https?:\/\//i.test(flowBase)) {
+      try {
+        const ctrl = new AbortController()
+        const t = setTimeout(() => ctrl.abort(), 9000)
+        const rsp = await fetch(`${flowBase}/flow/profile/sync`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: ctrl.signal,
+        })
+        clearTimeout(t)
+        const data = await rsp.json().catch(() => ({}))
+        if (rsp.ok && data?.ok !== false) return { ok: true }
+      } catch {}
+    }
+    if (!sb) return { ok: false, error: 'Сервер синхронизации недоступен' }
+    const runUpsert = async () => {
+      let { error } = await sb.from('flow_profiles').upsert(payload, { onConflict: 'username' })
+      if (error && String(error.message || '').toLowerCase().includes('profile_color')) {
+        const fallbackPayload = Object.assign({}, payload)
+        delete fallbackPayload.profile_color
+        ;({ error } = await sb.from('flow_profiles').upsert(fallbackPayload, { onConflict: 'username' }))
+      }
+      return error
+    }
+
+    let error = await runUpsert()
+    if (error && isRetryableProfileSyncError(error)) {
+      await new Promise((resolve) => setTimeout(resolve, 650))
+      error = await runUpsert()
+    }
+    if (error) return { ok: false, error: normalizeProfileSyncError(error) }
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: normalizeProfileSyncError(err) }
   }
-  let { error } = await sb.from('flow_profiles').upsert(payload, { onConflict: 'username' })
-  if (error && String(error.message || '').toLowerCase().includes('profile_color')) {
-    const fallbackPayload = Object.assign({}, payload)
-    delete fallbackPayload.profile_color
-    ;({ error } = await sb.from('flow_profiles').upsert(fallbackPayload, { onConflict: 'username' }))
-  }
-  if (error) return { ok: false, error: error.message || String(error) }
-  return { ok: true }
 }
 
 function scheduleProfileCloudSync() {
@@ -2770,7 +2893,7 @@ function renderRoomQueue() {
   el.innerHTML = ''
   sharedQueue.forEach((t, i) => {
     const row = document.createElement('div')
-    row.className = 'profile-row'
+    row.className = 'profile-row room-queue-row'
     row.dataset.idx = String(i)
     if (canEdit) {
       row.draggable = true
@@ -2795,8 +2918,8 @@ function renderRoomQueue() {
     }
     const coverUrl = getListCoverUrl(t)
     const cover = coverUrl
-      ? `<div class="profile-row-cover" style="background-image:url(${coverUrl})"></div>`
-      : `<div class="profile-row-cover profile-row-cover-fallback">♪</div>`
+      ? `<div class="profile-row-cover room-queue-cover" style="background-image:url(${coverUrl})"></div>`
+      : `<div class="profile-row-cover profile-row-cover-fallback room-queue-cover">♪</div>`
     const controls = canEdit
       ? `<button class="playlist-track-action danger">✕</button>`
       : ''
@@ -3094,6 +3217,7 @@ function setMyWaveMode(mode) {
   _myWaveMode = MY_WAVE_MODES[mode] ? mode : 'default'
   try { localStorage.setItem('flow_my_wave_mode', _myWaveMode) } catch {}
   renderMyWave()
+  renderRoomsMyWave()
 }
 
 function getMyWaveTrackKey(track) {
@@ -3389,7 +3513,7 @@ async function maybePreloadMyWave(force = false) {
     if (fresh.length) {
       queue.push(...fresh)
       _myWaveRenderedTracks = queue.slice()
-      renderQueue()
+      // Legacy queue renderer was removed; my-wave queue is reflected via player and room renders.
       showToast(`Моя волна дозагрузила ${fresh.length} треков`)
       if (force && queueIndex >= startLength - 1 && queue[queueIndex + 1]) {
         queueIndex++
@@ -3452,6 +3576,35 @@ function renderMyWave() {
   }
   listEl.innerHTML = `
     <div class="my-wave-orb mode-${mode} ${_myWaveBuilding || _myWavePreloading ? 'is-loading' : ''}" aria-label="${modeCfg.label}">
+      <div class="my-wave-orb-ring"></div>
+      <div class="my-wave-orb-core"></div>
+    </div>
+  `
+  renderRoomsMyWave()
+}
+
+function renderRoomsMyWave() {
+  const hintEl = document.getElementById('rooms-wave-hint')
+  const modesEl = document.getElementById('rooms-wave-modes')
+  const listEl = document.getElementById('rooms-wave-list')
+  if (!hintEl || !modesEl || !listEl) return
+  const active = getMyWaveMode()
+  const modeCfg = MY_WAVE_MODES[active] || MY_WAVE_MODES.default
+  const seedCount = getMyWaveSeedTracks().length
+  modesEl.innerHTML = Object.entries(MY_WAVE_MODES).map(([id, cfg]) => (
+    `<button class="my-wave-mode ${id === active ? 'active' : ''}" data-wave-mode="${id}" onclick="setMyWaveMode('${id}')">${cfg.label}</button>`
+  )).join('')
+  if (seedCount < 3) {
+    hintEl.textContent = `Послушай или лайкни еще ${3 - seedCount} трек(ов), чтобы волна поняла твой вкус`
+  } else if (_myWaveBuilding) {
+    hintEl.textContent = `${modeCfg.label}: ищу новые треки по твоему вкусу...`
+  } else if (_myWavePreloading) {
+    hintEl.textContent = `${modeCfg.label}: дозагружаю новые треки, чтобы волна не кончалась...`
+  } else {
+    hintEl.textContent = `${modeCfg.label}: ${modeCfg.hint}. Нажми запуск, и волна сама соберет новую очередь`
+  }
+  listEl.innerHTML = `
+    <div class="my-wave-orb mode-${active} ${_myWaveBuilding || _myWavePreloading ? 'is-loading' : ''}" aria-label="${modeCfg.label}">
       <div class="my-wave-orb-ring"></div>
       <div class="my-wave-orb-core"></div>
     </div>
@@ -4342,7 +4495,7 @@ function ensureRoomsUI() {
   box.className = 'glass-card social-hub'
   box.style.padding = '14px'
   box.innerHTML = `
-    <div class="social-room-box">
+    <div class="social-room-box rooms-connect-tile">
       <div class="social-section-title">Подключение</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <input id="join-room-input" class="token-field flow-input" placeholder="ID или ник хоста" style="flex:1;min-width:180px" />
@@ -4353,7 +4506,7 @@ function ensureRoomsUI() {
       <div id="room-status" style="margin-top:8px;font-size:12px;opacity:.85">Рума: не активна</div>
       <div style="margin-top:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <span id="room-role-badge" class="room-role-badge room-role-solo">SOLO</span>
-        <span id="room-members-count" style="font-size:12px;opacity:.8">Участники: —/3</span>
+        <span id="room-members-count" style="font-size:12px;opacity:.8">Участники: —/5</span>
       </div>
       <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn-small" onclick="copyInviteLink()">Copy Invite Link/ID</button>
@@ -4361,14 +4514,30 @@ function ensureRoomsUI() {
         <button class="btn-small" onclick="openRoomInvitePicker()">Пригласить друга</button>
       </div>
     </div>
-    <div class="social-room-box">
+    <div class="social-room-box rooms-main-tile rooms-members-tile">
       <div class="social-section-title">В комнате</div>
       <div id="room-members-list" class="social-friends-grid"><div class="flow-empty-state compact"><strong>Комната пустая</strong><span>Создай руму или присоединись по invite.</span></div></div>
     </div>
-    <div class="social-room-box">
+    <div class="social-room-box rooms-main-tile rooms-search-tile">
       <div class="social-section-title">Поиск в очередь</div>
       <input id="room-queue-search" class="token-field flow-input" placeholder="Найти трек и добавить в очередь..." oninput="searchRoomQueueTracks()" />
       <div style="margin-top:8px"><button class="btn-small" onclick="openRoomOwnTracksPicker()">Свои треки</button></div>
+      <div class="rooms-wave-embedded">
+        <div class="my-wave rooms-wave-my-wave">
+          <div class="my-wave-hero">
+            <div class="my-wave-badge">Моя волна</div>
+            <h3>Волна для комнаты</h3>
+            <p id="rooms-wave-hint">Выбери режим и запусти волну для общей очереди</p>
+            <div class="my-wave-actions">
+              <button class="my-wave-start" onclick="startMyWave()">Запустить волну</button>
+              <button class="btn-small" onclick="openPage('search')">Найти треки</button>
+              <button class="btn-small" onclick="openPage('library')">Выбрать песни</button>
+              <div class="my-wave-modes" id="rooms-wave-modes"></div>
+            </div>
+          </div>
+          <div class="my-wave-list" id="rooms-wave-list"></div>
+        </div>
+      </div>
       <div id="room-search-results" class="profile-picker-list" style="margin-top:8px"><div class="flow-empty-state compact"><strong>Начни поиск</strong><span>Введи название трека, чтобы добавить его в очередь.</span></div></div>
     </div>
     <div class="social-room-box">
@@ -4378,6 +4547,7 @@ function ensureRoomsUI() {
     </div>
   `
   root.appendChild(box)
+  renderRoomsMyWave()
 }
 
 async function renderFriends() {
@@ -4460,11 +4630,15 @@ function syncIntegrationsUI() {
   const s = getSettings()
   const d = document.getElementById('discord-client-id')
   const p = document.getElementById('proxy-base-url')
+  const psUrl = document.getElementById('profiles-supabase-url')
+  const psKey = document.getElementById('profiles-supabase-key')
   const k = document.getElementById('lastfm-api-key')
   const ss = document.getElementById('lastfm-shared-secret')
   const sk = document.getElementById('lastfm-session-key')
   if (d) d.value = s.discordClientId || ''
   if (p) p.value = normalizeFlowServerUrl(s.proxyBaseUrl || FLOW_SERVER_DEFAULT_URL)
+  if (psUrl) psUrl.value = String(localStorage.getItem('flow_supabase_url') || '').trim()
+  if (psKey) psKey.value = String(localStorage.getItem('flow_supabase_key') || '').trim()
   if (k) k.value = s.lastfmApiKey || ''
   if (ss) ss.value = s.lastfmSharedSecret || ''
   if (sk) sk.value = s.lastfmSessionKey || ''
@@ -4477,6 +4651,72 @@ function saveProxySettings() {
   if (input) input.value = proxyBaseUrl
   showToast('Flow сервер сохранён')
   checkFlowServerStatus().catch(() => {})
+}
+
+function resetSupabaseProfileClientCache() {
+  window.__flowSbProfileClient = null
+  window.__flowSbProfileClientSig = ''
+}
+
+function saveProfileSyncSettings() {
+  const urlInput = document.getElementById('profiles-supabase-url')
+  const keyInput = document.getElementById('profiles-supabase-key')
+  const rawUrl = String(urlInput?.value || '').trim()
+  const rawKey = String(keyInput?.value || '').trim()
+  if (rawUrl && !/^https?:\/\//i.test(rawUrl)) {
+    showToast('URL сервера профилей должен начинаться с http:// или https://', true)
+    return
+  }
+  if (rawUrl) localStorage.setItem('flow_supabase_url', rawUrl)
+  else localStorage.removeItem('flow_supabase_url')
+  if (rawKey) localStorage.setItem('flow_supabase_key', rawKey)
+  else localStorage.removeItem('flow_supabase_key')
+  resetSupabaseProfileClientCache()
+  showToast('Сервер профилей сохранён')
+  checkProfileSyncConnection().catch(() => {})
+}
+
+function resetProfileSyncSettings() {
+  localStorage.removeItem('flow_supabase_url')
+  localStorage.removeItem('flow_supabase_key')
+  const urlInput = document.getElementById('profiles-supabase-url')
+  const keyInput = document.getElementById('profiles-supabase-key')
+  if (urlInput) urlInput.value = ''
+  if (keyInput) keyInput.value = ''
+  resetSupabaseProfileClientCache()
+  showToast('Сервер профилей сброшен на стандартный')
+  checkProfileSyncConnection().catch(() => {})
+}
+
+async function checkProfileSyncConnection() {
+  const statusEl = document.getElementById('profile-sync-status')
+  const setStatus = (text, ok = null) => {
+    if (!statusEl) return
+    statusEl.textContent = text
+    if (ok === true) statusEl.style.color = '#7ee787'
+    else if (ok === false) statusEl.style.color = '#ff9b9b'
+    else statusEl.style.color = ''
+  }
+  setStatus('Профили: проверяю...')
+  try {
+    const sb = getSupabaseClient()
+    if (!sb) {
+      setStatus('Профили: клиент недоступен', false)
+      return { ok: false }
+    }
+    const started = performance.now()
+    const { error } = await sb.from('flow_profiles').select('username').limit(1)
+    const ping = Math.max(1, Math.round(performance.now() - started))
+    if (error) {
+      setStatus(`Профили: ошибка (${normalizeProfileSyncError(error)})`, false)
+      return { ok: false, error: error.message || String(error) }
+    }
+    setStatus(`Профили: онлайн, ping ${ping} ms`, true)
+    return { ok: true, ping }
+  } catch (err) {
+    setStatus(`Профили: оффлайн (${normalizeProfileSyncError(err)})`, false)
+    return { ok: false, error: err?.message || String(err) }
+  }
 }
 
 async function checkFlowServerStatus() {
@@ -4637,11 +4877,11 @@ function initPeerSocial() {
   startProfilesRealtimeSync()
   if (_socialPeer) _socialPeer.destroy()
   _socialPeer = new peerSocial.FlowPeerSocial(_profile.username, {
-    maxPeers: 3,
+    maxPeers: 5,
     onStatus: (evt) => {
       if (evt.type === 'ready') setSocialStatus(`online: ${evt.id}`)
       if (evt.type === 'peer-joined') {
-        setRoomStatus(`Рума ${_roomState.roomId || '—'}: участников ${_socialPeer.peersCount()}/3`)
+        setRoomStatus(`Рума ${_roomState.roomId || '—'}: участников ${_socialPeer.peersCount()}/5`)
         const me = getPublicProfilePayload(_profile?.username)
         if (me && _socialPeer?.peer?.id) _roomMembers.set(_socialPeer.peer.id, me)
         if (evt.peerId && !_roomMembers.has(evt.peerId)) {
@@ -4667,7 +4907,7 @@ function initPeerSocial() {
         if (evt.peerId) showToast(`${String(evt.peerId).replace(/^flow-/, '')}: вошёл в руму`)
       }
       if (evt.type === 'peer-left') {
-        setRoomStatus(`Рума ${_roomState.roomId || '—'}: участников ${_socialPeer.peersCount()}/3`)
+        setRoomStatus(`Рума ${_roomState.roomId || '—'}: участников ${_socialPeer.peersCount()}/5`)
         if (evt.peerId) {
           _roomMembers.delete(evt.peerId)
           _peerProfiles.delete(evt.peerId)
@@ -4811,10 +5051,12 @@ function initPeerSocial() {
       }
       if (msg.type === 'room-control-toggle' && msg.roomId === _roomState.roomId && msg._peerId && msg._peerId !== _socialPeer?.peer?.id) {
         const shouldPause = Boolean(msg.paused)
+        const wasPaused = Boolean(audio.paused)
         if (shouldPause && !audio.paused) audio.pause()
         if (!shouldPause && audio.paused) audio.play().catch(() => {})
+        // Keep room playback state in sync even when action came from non-host participant.
+        if (_roomState?.host && wasPaused !== Boolean(audio.paused)) broadcastPlaybackSync(true)
         if (_roomState?.host) {
-          broadcastPlaybackSync(true)
           saveRoomStateToServer({
             playback_state: { paused: Boolean(audio.paused), currentTime: Number(audio.currentTime || 0) },
             playback_ts: Date.now(),
@@ -4844,36 +5086,67 @@ function initPeerSocial() {
 }
 
 async function submitAuth() {
+  if (_authSubmitting) return
+  const AUTH_REQUEST_TIMEOUT_MS = 12000
+  const runAuthCall = async (promiseFactory, timeoutText) => {
+    let timer = null
+    try {
+      return await Promise.race([
+        promiseFactory(),
+        new Promise((resolve) => {
+          timer = setTimeout(() => resolve({ ok: false, error: timeoutText }), AUTH_REQUEST_TIMEOUT_MS)
+        })
+      ])
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
+  }
   const input = document.getElementById('auth-login')
   const passInput = document.getElementById('auth-password')
+  const submitBtn = document.querySelector('#screen-auth .auth-form .btn-main')
   const username = String(input?.value || '').trim()
   const password = String(passInput?.value || '')
   if (!username) return setAuthError('Введите Username')
   if (!password) return setAuthError('Введите пароль')
   const fn = _authMode === 'register' ? peerSocial.createProfile : peerSocial.loginProfile
   if (typeof fn !== 'function') return setAuthError('Social модуль не загружен')
-  let result = await fn(username, password)
-  if (!result?.ok && _authMode === 'login' && result?.legacy && typeof peerSocial.migrateLegacyAccount === 'function') {
-    const ok = confirm('Найден старый аккаунт без пароля. Мигрировать его на текущий пароль?')
-    if (!ok) return setAuthError('Миграция отменена')
-    result = await peerSocial.migrateLegacyAccount(username, password)
-    if (result?.ok) showToast('Аккаунт мигрирован. Теперь вход работает через пароль.')
+  _authSubmitting = true
+  if (submitBtn) submitBtn.disabled = true
+  try {
+    let result = await runAuthCall(
+      () => fn(username, password),
+      'Сервер долго не отвечает. Попробуйте снова через пару секунд.'
+    )
+    if (!result?.ok && _authMode === 'login' && result?.legacy && typeof peerSocial.migrateLegacyAccount === 'function') {
+      const ok = confirm('Найден старый аккаунт без пароля. Мигрировать его на текущий пароль?')
+      if (!ok) return setAuthError('Миграция отменена')
+      result = await runAuthCall(
+        () => peerSocial.migrateLegacyAccount(username, password),
+        'Миграция не успела завершиться. Повторите попытку.'
+      )
+      if (result?.ok) showToast('Аккаунт мигрирован. Теперь вход работает через пароль.')
+    }
+    if (!result?.ok) return setAuthError(result?.error || 'Ошибка входа')
+    _profile = result.profile
+    setAuthError('')
+    if (passInput) passInput.value = ''
+    document.getElementById('screen-auth')?.classList.add('hidden')
+    document.getElementById('screen-main')?.classList.remove('hidden')
+    syncProfileUi()
+    ensureSocialUI()
+    ensureRoomsUI()
+    renderFriends()
+    initPeerSocial()
+    showOnboardingIfNeeded()
+    pollFriendsPresence().catch(() => {})
+    if (_friendsPollTimer) clearInterval(_friendsPollTimer)
+    _friendsPollTimer = setInterval(() => { pollFriendsPresence().catch(() => {}) }, FRIEND_POLL_INTERVAL_MS)
+  } catch (err) {
+    setAuthError(err?.message || 'Сбой авторизации. Проверьте подключение и попробуйте снова.')
+  } finally {
+    _authSubmitting = false
+    if (submitBtn) submitBtn.disabled = false
   }
-  if (!result?.ok) return setAuthError(result?.error || 'Ошибка входа')
-  _profile = result.profile
-  setAuthError('')
-  if (passInput) passInput.value = ''
-  document.getElementById('screen-auth')?.classList.add('hidden')
-  document.getElementById('screen-main')?.classList.remove('hidden')
-  syncProfileUi()
-  ensureSocialUI()
-  ensureRoomsUI()
-  renderFriends()
-  initPeerSocial()
-  showOnboardingIfNeeded()
-  pollFriendsPresence().catch(() => {})
-  if (_friendsPollTimer) clearInterval(_friendsPollTimer)
-  _friendsPollTimer = setInterval(() => { pollFriendsPresence().catch(() => {}) }, FRIEND_POLL_INTERVAL_MS)
 }
 
 function logout() {
@@ -4951,7 +5224,7 @@ function createRoom() {
   _roomMembers.clear()
   sharedQueue = []
   if (_socialPeer?.peer?.id) _roomMembers.set(_socialPeer.peer.id, getPublicProfilePayload(_profile?.username))
-  setRoomStatus(`Рума ${r.roomId}: участников 1/3`)
+  setRoomStatus(`Рума ${r.roomId}: участников 1/5`)
   resetRoomHeartbeat()
   startRoomServerSync()
   saveRoomStateToServer({ shared_queue: [], now_playing: null, playback_ts: Date.now() }).catch(() => {})
@@ -5225,7 +5498,11 @@ function notifyFriendPresenceChange(username, prev = {}, next = {}) {
   const prevTrack = prev.track ? `${prev.track.artist || ''}:${prev.track.title || ''}` : ''
   const nextTrack = next.track ? `${next.track.artist || ''}:${next.track.title || ''}` : ''
   if (next.online && nextTrack && nextTrack !== prevTrack && canNotify(`track:${nextTrack}`)) {
-    showToast(`${name} слушает: ${next.track.title || 'трек'}${next.track.artist ? ` — ${next.track.artist}` : ''}`)
+    const hostProfile = _roomMembers.get(String(_roomState?.hostPeerId || ''))
+    const hostName = String(hostProfile?.username || '').trim().toLowerCase()
+    const isHostTrack = Boolean(_roomState?.roomId && !_roomState?.host && hostName && name.toLowerCase() === hostName)
+    if (isHostTrack) showToast(`host (${name}) поставил трек: ${next.track.title || 'трек'}${next.track.artist ? ` — ${next.track.artist}` : ''}`)
+    else showToast(`${name} слушает: ${next.track.title || 'трек'}${next.track.artist ? ` — ${next.track.artist}` : ''}`)
   }
 }
 
@@ -5957,7 +6234,7 @@ async function playTrackObj(track, opts = {}) {
   applyCoverArt(cover, effectiveCover, track.bg || 'linear-gradient(135deg,#7c3aed,#a855f7)')
   if (playBtn) playBtn.innerHTML = ICONS.pause
   const pmIcon = document.getElementById('pm-play-icon')
-  if (pmIcon) pmIcon.innerHTML = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>'
+  if (pmIcon) pmIcon.innerHTML = PM_PAUSE_SHAPE
   updatePlayerLikeBtn()
   // РћР±РЅРѕРІР»СЏРµРј titlebar
   const tinfo = document.getElementById('titlebar-track-info')
@@ -6010,12 +6287,12 @@ function togglePlay() {
     if (_audioCtx?.state === 'suspended') _audioCtx.resume().catch(() => {})
     if (playBtn) playBtn.innerHTML = ICONS.pause
     const icon = document.getElementById('pm-play-icon')
-    if (icon) icon.innerHTML = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>'
+    if (icon) icon.innerHTML = PM_PAUSE_SHAPE
   } else {
     audio.pause()
     if (playBtn) playBtn.innerHTML = ICONS.play
     const icon = document.getElementById('pm-play-icon')
-    if (icon) icon.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"/>'
+    if (icon) icon.innerHTML = PM_PLAY_SHAPE
   }
   if (isRoomParticipant) {
     _socialPeer?.send?.({
@@ -6074,7 +6351,7 @@ function prevTrack() {
   const allowShuffle = playbackMode.shuffle && queueScope === 'liked'
   if (allowShuffle) {
     queueIndex = pickRandomQueueIndex()
-    if (queueIndex >= 0) playTrackObj(queue[queueIndex])
+    if (queueIndex >= 0) safePlayTrack(queue[queueIndex])
     return
   }
   if (queueIndex > 0) {
@@ -6085,7 +6362,14 @@ function prevTrack() {
     audio.currentTime = 0
     return
   }
-  playTrackObj(queue[queueIndex])
+  safePlayTrack(queue[queueIndex])
+}
+
+function safePlayTrack(track, opts = {}) {
+  return playTrackObj(track, opts).catch((err) => {
+    console.warn('playTrackObj failed:', err?.message || err)
+    showToast(`Не удалось переключить трек: ${sanitizeDisplayText(err?.message || err)}`, true)
+  })
 }
 
 function nextTrack(autoEnded = false) {
@@ -6102,12 +6386,12 @@ function nextTrack(autoEnded = false) {
   const allowShuffle = playbackMode.shuffle && queueScope === 'liked'
   if (allowShuffle) {
     queueIndex = pickRandomQueueIndex()
-    if (queueIndex >= 0) playTrackObj(queue[queueIndex])
+    if (queueIndex >= 0) safePlayTrack(queue[queueIndex])
     return
   }
   if (queueIndex < queue.length - 1) {
     queueIndex++
-    playTrackObj(queue[queueIndex])
+    safePlayTrack(queue[queueIndex])
     maybePreloadMyWave(false)
     return
   }
@@ -6118,7 +6402,7 @@ function nextTrack(autoEnded = false) {
   }
   if (playbackMode.repeat === 'all') {
     queueIndex = 0
-    playTrackObj(queue[queueIndex])
+    safePlayTrack(queue[queueIndex])
     return
   }
   const playBtn = document.getElementById('play-btn')
@@ -6132,10 +6416,16 @@ audio.ontimeupdate = () => {
   if (shouldSyncUi) {
     _lastUiSyncAt = performance.now()
     const p = document.getElementById('progress')
-    if (p && audio.duration) p.value = audio.currentTime / audio.duration
+    if (p && audio.duration) {
+      p.value = audio.currentTime / audio.duration
+      updateWaveSliderFill(p)
+    }
 
     const pmp = document.getElementById('pm-progress')
-    if (pmp && audio.duration) pmp.value = audio.currentTime / audio.duration
+    if (pmp && audio.duration) {
+      pmp.value = audio.currentTime / audio.duration
+      updateWaveSliderFill(pmp)
+    }
 
     const cur = fmtTime(audio.currentTime)
     const tot = fmtTime(audio.duration)
@@ -6159,23 +6449,28 @@ audio.ontimeupdate = () => {
   }
 }
 audio.onended = () => {
-  stopLyricsSyncLoop()
-  _listenTickAt = 0
-  const playBtn = document.getElementById('play-btn')
-  if (playBtn) playBtn.innerHTML = ICONS.play
-  if (currentTrack) scrobbleLastFm(currentTrack)
-  if (isRoomClientRestricted()) return
-  if (_roomState?.roomId && _roomState?.host && sharedQueue.length) {
-    const nextRoomTrack = sharedQueue.shift()
-    renderRoomQueue()
-    broadcastQueueUpdate()
-    saveRoomStateToServer({ shared_queue: sharedQueue, playback_ts: Date.now() }).catch(() => {})
-    if (nextRoomTrack) {
-      playTrackObj(nextRoomTrack, { fromSharedQueue: true }).catch(() => {})
-      return
+  try {
+    stopLyricsSyncLoop()
+    _listenTickAt = 0
+    const playBtn = document.getElementById('play-btn')
+    if (playBtn) playBtn.innerHTML = ICONS.play
+    if (currentTrack) scrobbleLastFm(currentTrack)
+    if (isRoomClientRestricted()) return
+    if (_roomState?.roomId && _roomState?.host && sharedQueue.length) {
+      const nextRoomTrack = sharedQueue.shift()
+      renderRoomQueue()
+      broadcastQueueUpdate()
+      saveRoomStateToServer({ shared_queue: sharedQueue, playback_ts: Date.now() }).catch(() => {})
+      if (nextRoomTrack) {
+        safePlayTrack(nextRoomTrack, { fromSharedQueue: true })
+        return
+      }
     }
+    nextTrack(true)
+  } catch (err) {
+    console.error('audio.onended handler failed:', err)
+    showToast(`Ошибка после завершения трека: ${sanitizeDisplayText(err?.message || err)}`, true)
   }
-  nextTrack(true)
 }
 
 // в”Ђв”Ђв”Ђ SEARCH в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
@@ -7040,7 +7335,7 @@ async function importPlaylistFromLink(urlFromUi = '') {
     return
   }
   const settings = getSettings()
-  const isYandexLink = /(^|\/\/)(music\.)?yandex\.[^/]+\/users\/[^/]+\/playlists\/[^/?#]+/i.test(url)
+  const isYandexLink = /(^|\/\/)(music\.)?yandex\.[^/]+\/(?:users\/[^/]+\/playlists\/[^/?#]+|playlists\/[^/?#]+)/i.test(url)
   if (isYandexLink && !settings.yandexToken) {
     showToast('Для импорта Яндекс Музыки нужен активный OAuth token', true)
     openPage('settings')
@@ -7342,16 +7637,16 @@ function makeTrackEl(track, showPlaylist=false, bindDefaultPlay=true) {
   const badge = srcLbl ? `<span class="track-source track-source-${track.source}">${srcLbl}</span>` : ''
   el.innerHTML=`
     <div class="track-cover" style="${coverStyle}">${trackCover?'':'<svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'}
-      <div class="cover-overlay"><div class="cover-play-icon"><svg viewBox="0 0 24 24" width="10" height="10" style="fill:#111;margin-left:1px"><polygon points="5 3 19 12 5 21 5 3"/></svg></div></div>
+      <div class="cover-overlay"><div class="cover-play-icon"><svg class="track-play-glyph" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9.5 7.75v8.5l7.25-4.25-7.25-4.25z"/></svg></div></div>
     </div>
     <div class="track-info">
       <span class="track-name">${track.title}</span>
       <span class="track-artist">${track.artist||'вЂ”'} ${badge}</span>
     </div>
     <button class="track-like ${liked?'liked':''}" data-track-json="${trackJson}" onclick="event.stopPropagation();likeTrack(${trackJson})">${liked ? HEART_FILLED : HEART_OUTLINE}</button>
-    <button class="track-like" onclick="event.stopPropagation();findSimilarTracks(${trackJson})" title="Найти похожие">≈</button>
+    <button class="track-like" onclick="event.stopPropagation();findSimilarTracks(${trackJson})" title="Найти похожие">${SIMILAR_ICON}</button>
     ${showPlaylist?`<button class="track-like" onclick="event.stopPropagation();addToPlaylist(${trackJson})" title="Р’ РїР»РµР№Р»РёСЃС‚">${ICONS.plus}</button>`:''}
-    <button class="track-play"><svg viewBox="0 0 24 24" width="10" height="10" style="fill:currentColor;margin-left:1px"><polygon points="5 3 19 12 5 21 5 3"/></svg></button>`
+    <button class="track-play"><svg class="track-play-glyph" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9.5 7.75v8.5l7.25-4.25-7.25-4.25z"/></svg></button>`
   if (trackCover) {
     const coverEl = el.querySelector('.track-cover')
     observeLazyCoverBackground(coverEl, trackCover, fallbackBg, getTrackKey(track))
