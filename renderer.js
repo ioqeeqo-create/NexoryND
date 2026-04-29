@@ -403,6 +403,7 @@ const defaultVisual = {
   navActiveHighlight: false,
   sidebarPosition: 'left',
   cardDensity: 'comfort',
+  toastPosition: 'default',
   gifMode: { bg: true, track: true, playlist: true },
   lyrics: { scrollMode: 'smooth', align: 'left', size: 16, blur: 4 }
 }
@@ -417,6 +418,35 @@ function saveVisual(patch) {
   const updated = Object.assign(v, patch)
   localStorage.setItem('flow_visual', JSON.stringify(updated))
   return updated
+}
+
+function getToastPosition(value = getVisual().toastPosition) {
+  const allowed = new Set(['default', 'top-left', 'top-right', 'bottom-left', 'bottom-right'])
+  return allowed.has(value) ? value : 'default'
+}
+
+function applyToastPosition(position = getVisual().toastPosition) {
+  const safe = getToastPosition(position)
+  document.body.setAttribute('data-toast-position', safe)
+  document.querySelectorAll('[data-toast-position-option]').forEach((btn) => {
+    btn.classList.toggle('active', btn.getAttribute('data-toast-position-option') === safe)
+  })
+}
+
+function setToastPosition(position) {
+  const safe = getToastPosition(position)
+  saveVisual({ toastPosition: safe })
+  applyToastPosition(safe)
+  showToast(safe === 'default' ? 'Уведомления: как сейчас' : 'Позиция уведомлений сохранена')
+}
+
+function toggleSettingsFold(id) {
+  const section = document.querySelector(`[data-settings-fold="${id}"]`)
+  if (!section) return
+  const collapsed = !section.classList.contains('is-collapsed')
+  section.classList.toggle('is-collapsed', collapsed)
+  const btn = section.querySelector('.settings-fold-head')
+  if (btn) btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true')
 }
 
 function syncFontControls() {
@@ -948,6 +978,7 @@ function applyVisualSettings() {
   document.documentElement.style.setProperty('--glass-blur', pb + 'px')
   document.documentElement.style.setProperty('--glass-bg', `rgba(255,255,255,${glass/100})`)
   document.documentElement.style.setProperty('--ui-scale', String((+scale || 100) / 100))
+  applyToastPosition(v.toastPosition || 'default')
 
   const bgBlur = document.getElementById('bg-cover-blur')
   if (bgBlur) bgBlur.style.filter = `blur(${blur}px) brightness(${bright/100})`
@@ -1284,6 +1315,7 @@ function initVisualSettings() {
   if (gifBg) gifBg.classList.toggle('active', Boolean(gifMode.bg))
   if (gifTrack) gifTrack.classList.toggle('active', Boolean(gifMode.track))
   if (gifPlaylist) gifPlaylist.classList.toggle('active', Boolean(gifMode.playlist))
+  applyToastPosition(v.toastPosition || 'default')
   refreshCustomBgPreview()
   refreshTrackCoverPreview()
   applyLyricsVisualSettings()
@@ -1321,6 +1353,59 @@ function setSidebarPosition(position) {
   applySidebarPosition(safe)
   showToast(safe === 'top' ? 'Меню перемещено наверх' : 'Меню возвращено влево')
 }
+
+function getSafeToastPosition(position) {
+  const allowed = new Set(['default', 'top-left', 'top-right', 'bottom-left', 'bottom-right'])
+  return allowed.has(position) ? position : 'default'
+}
+
+function applyToastPosition(position = getVisual().toastPosition) {
+  const safe = getSafeToastPosition(position)
+  document.body.setAttribute('data-toast-position', safe)
+  document.querySelectorAll('[data-toast-pos]').forEach((btn) => {
+    btn.classList.toggle('active', btn.getAttribute('data-toast-pos') === safe)
+  })
+}
+
+function setToastPosition(position) {
+  const safe = getSafeToastPosition(position)
+  saveVisual({ toastPosition: safe })
+  applyToastPosition(safe)
+  showToast('Позиция уведомлений сохранена')
+}
+
+function getSettingsSectionsState() {
+  try {
+    const raw = JSON.parse(localStorage.getItem('flow_settings_sections') || '{}')
+    return raw && typeof raw === 'object' ? raw : {}
+  } catch {
+    return {}
+  }
+}
+
+function saveSettingsSectionsState(state) {
+  try { localStorage.setItem('flow_settings_sections', JSON.stringify(state || {})) } catch {}
+}
+
+function applySettingsSectionsState() {
+  const state = getSettingsSectionsState()
+  document.querySelectorAll('.vs-collapsible[data-settings-section]').forEach((section) => {
+    const key = section.getAttribute('data-settings-section')
+    const collapsed = Boolean(state[key])
+    section.classList.toggle('collapsed', collapsed)
+    section.querySelector('.vs-section-head')?.setAttribute('aria-expanded', collapsed ? 'false' : 'true')
+  })
+}
+
+function toggleSettingsSection(key) {
+  const sectionKey = String(key || '').trim()
+  if (!sectionKey) return
+  const state = getSettingsSectionsState()
+  state[sectionKey] = !Boolean(state[sectionKey])
+  saveSettingsSectionsState(state)
+  applySettingsSectionsState()
+}
+window.toggleSettingsSection = toggleSettingsSection
 
 let _settingsCategory = 'appearance'
 

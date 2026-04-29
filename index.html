@@ -300,8 +300,12 @@
       <div id="settings-panel-appearance" class="settings-category-panel active">
         <div class="visual-settings">
 
-          <div class="vs-section glass-card">
-            <div class="vs-section-title">Стиль интерфейса</div>
+          <div class="vs-section glass-card vs-collapsible" data-settings-section="interface">
+            <button type="button" class="vs-section-head" onclick="toggleSettingsSection('interface')" aria-expanded="true">
+              <span class="vs-section-title">Интерфейс</span>
+              <span class="vs-section-chevron">⌄</span>
+            </button>
+            <div class="vs-section-body">
             <div class="vs-row">
               <label class="vs-label">Тема UI</label>
               <div class="vs-btn-group">
@@ -327,10 +331,15 @@
                 <button class="vsb" id="density-compact" onclick="setCardDensity('compact')">Компактно</button>
               </div>
             </div>
+            </div>
           </div>
 
-          <div class="vs-section glass-card">
-            <div class="vs-section-title">Фон и обложки</div>
+          <div class="vs-section glass-card vs-collapsible" data-settings-section="background">
+            <button type="button" class="vs-section-head" onclick="toggleSettingsSection('background')" aria-expanded="true">
+              <span class="vs-section-title">Фон</span>
+              <span class="vs-section-chevron">⌄</span>
+            </button>
+            <div class="vs-section-body">
             <div class="vs-row">
               <label class="vs-label">Тип фона</label>
               <div class="vs-btn-group">
@@ -353,7 +362,19 @@
                 <div class="vs-media-preview-sub" id="custom-bg-preview-text">Ничего не выбрано</div>
               </div>
             </div>
-            <div class="vs-divider"></div>
+            <div class="vs-row">
+              <label class="vs-label">Фон: использовать GIF</label>
+              <div class="vs-toggle active" id="toggle-gif-bg" onclick="toggleGifMode('bg')"><div class="vs-toggle-thumb"></div></div>
+            </div>
+            </div>
+          </div>
+
+          <div class="vs-section glass-card vs-collapsible" data-settings-section="cover">
+            <button type="button" class="vs-section-head" onclick="toggleSettingsSection('cover')" aria-expanded="true">
+              <span class="vs-section-title">Обложка трека</span>
+              <span class="vs-section-chevron">⌄</span>
+            </button>
+            <div class="vs-section-body">
             <div class="vs-row" style="align-items:flex-start;flex-direction:column;gap:8px">
               <label class="vs-label">Кастомная обложка для текущего трека</label>
               <div class="vs-btn-group">
@@ -372,10 +393,6 @@
               </div>
             </div>
             <div class="vs-row">
-              <label class="vs-label">Фон: использовать GIF</label>
-              <div class="vs-toggle active" id="toggle-gif-bg" onclick="toggleGifMode('bg')"><div class="vs-toggle-thumb"></div></div>
-            </div>
-            <div class="vs-row">
               <label class="vs-label">Обложки треков: использовать GIF</label>
               <div class="vs-toggle active" id="toggle-gif-track" onclick="toggleGifMode('track')"><div class="vs-toggle-thumb"></div></div>
             </div>
@@ -383,10 +400,15 @@
               <label class="vs-label">Обложки плейлистов: использовать GIF</label>
               <div class="vs-toggle active" id="toggle-gif-playlist" onclick="toggleGifMode('playlist')"><div class="vs-toggle-thumb"></div></div>
             </div>
+            </div>
           </div>
 
-          <div class="vs-section glass-card">
-            <div class="vs-section-title">Размытие и яркость</div>
+          <div class="vs-section glass-card vs-collapsible" data-settings-section="blur">
+            <button type="button" class="vs-section-head" onclick="toggleSettingsSection('blur')" aria-expanded="true">
+              <span class="vs-section-title">Размытие и яркость</span>
+              <span class="vs-section-chevron">⌄</span>
+            </button>
+            <div class="vs-section-body">
             <div class="vs-row">
               <label class="vs-label">Blur фона <span class="vs-val" id="vs-blur-val">40px</span></label>
               <input type="range" min="0" max="80" value="40" class="vs-slider" id="vs-blur" oninput="applyVisualSettings()">
@@ -403,10 +425,15 @@
               <label class="vs-label">Blur панелей <span class="vs-val" id="vs-panel-blur-val">30px</span></label>
               <input type="range" min="0" max="60" value="30" class="vs-slider" id="vs-panel-blur" oninput="applyVisualSettings()">
             </div>
+            </div>
           </div>
 
-          <div class="vs-section glass-card">
-            <div class="vs-section-title">Акцентный цвет</div>
+          <div class="vs-section glass-card vs-collapsible" data-settings-section="accent">
+            <button type="button" class="vs-section-head" onclick="toggleSettingsSection('accent')" aria-expanded="true">
+              <span class="vs-section-title">Акцентный цвет</span>
+              <span class="vs-section-chevron">⌄</span>
+            </button>
+            <div class="vs-section-body">
             <div class="vs-row">
               <div class="vs-color-grid">
                 <button class="vscol active" style="background:linear-gradient(135deg,#7c3aed,#a855f7)" onclick="setAccent('#7c3aed','#a855f7')" title="Фиолетовый"></button>
@@ -422,10 +449,15 @@
                 <button class="vscol" style="background:linear-gradient(135deg,#3f3f46,#d4d4d8)" onclick="setAccent('#3f3f46','#d4d4d8')" title="Smoke"></button>
               </div>
             </div>
+            </div>
           </div>
 
-          <div class="vs-section glass-card">
-            <div class="vs-section-title">Эффекты</div>
+          <div class="vs-section glass-card vs-collapsible" data-settings-section="effects">
+            <button type="button" class="vs-section-head" onclick="toggleSettingsSection('effects')" aria-expanded="true">
+              <span class="vs-section-title">Эффекты</span>
+              <span class="vs-section-chevron">⌄</span>
+            </button>
+            <div class="vs-section-body">
             <div class="vs-row">
               <label class="vs-label">Анимированные орбы</label>
               <div class="vs-toggle active" id="toggle-orbs" onclick="toggleEffect('orbs')"><div class="vs-toggle-thumb"></div></div>
@@ -450,18 +482,28 @@
               <label class="vs-label">Цвет орба 2</label>
               <input type="color" id="orb2-color" value="#a855f7" onchange="setOrbColor(2,this.value)">
             </div>
+            </div>
           </div>
 
-          <div class="vs-section glass-card">
-            <div class="vs-section-title">Масштаб интерфейса</div>
+          <div class="vs-section glass-card vs-collapsible" data-settings-section="scale">
+            <button type="button" class="vs-section-head" onclick="toggleSettingsSection('scale')" aria-expanded="true">
+              <span class="vs-section-title">Масштаб интерфейса</span>
+              <span class="vs-section-chevron">⌄</span>
+            </button>
+            <div class="vs-section-body">
             <div class="vs-row">
               <label class="vs-label">UI Scale <span class="vs-val" id="vs-scale-val">100%</span></label>
               <input type="range" min="80" max="130" value="100" class="vs-slider" id="vs-scale" oninput="applyVisualSettings()">
             </div>
+            </div>
           </div>
 
-          <div class="vs-section glass-card">
-            <div class="vs-section-title">Шрифт</div>
+          <div class="vs-section glass-card vs-collapsible" data-settings-section="font">
+            <button type="button" class="vs-section-head" onclick="toggleSettingsSection('font')" aria-expanded="true">
+              <span class="vs-section-title">Шрифт</span>
+              <span class="vs-section-chevron">⌄</span>
+            </button>
+            <div class="vs-section-body">
             <div class="vs-row">
               <label class="vs-label">Режим шрифта</label>
               <div class="vs-btn-group">
@@ -483,6 +525,27 @@
             <div class="vs-row">
               <label class="vs-label">Применять к заголовкам</label>
               <div class="vs-toggle" id="toggle-font-title" onclick="toggleCustomFontTitle()"><div class="vs-toggle-thumb"></div></div>
+            </div>
+            </div>
+          </div>
+
+          <div class="vs-section glass-card vs-collapsible" data-settings-section="notifications">
+            <button type="button" class="vs-section-head" onclick="toggleSettingsSection('notifications')" aria-expanded="true">
+              <span class="vs-section-title">Уведомления</span>
+              <span class="vs-section-chevron">⌄</span>
+            </button>
+            <div class="vs-section-body">
+            <div class="vs-row">
+              <label class="vs-label">Позиция уведомлений</label>
+              <div class="vs-btn-group">
+                <button class="vsb" id="toast-pos-current" data-toast-pos="default" onclick="setToastPosition('default')">Как сейчас</button>
+                <button class="vsb" id="toast-pos-top-left" data-toast-pos="top-left" onclick="setToastPosition('top-left')">Слева сверху</button>
+                <button class="vsb" id="toast-pos-top-right" data-toast-pos="top-right" onclick="setToastPosition('top-right')">Справа сверху</button>
+                <button class="vsb" id="toast-pos-bottom-left" data-toast-pos="bottom-left" onclick="setToastPosition('bottom-left')">Слева снизу</button>
+                <button class="vsb" id="toast-pos-bottom-right" data-toast-pos="bottom-right" onclick="setToastPosition('bottom-right')">Справа снизу</button>
+              </div>
+            </div>
+            <div class="token-msg" style="display:block">Зелёные и красные уведомления будут появляться в выбранной точке с отступом от меню и плеера.</div>
             </div>
           </div>
 

@@ -1553,6 +1553,51 @@ body.nav-active-highlight .stab.active { background:rgba(124,58,237,0.18); borde
 /* VISUAL SETTINGS */
 .visual-settings { display:flex; flex-direction:column; gap:10px; max-width:760px; }
 .vs-section { padding:14px 16px; border-radius:16px; }
+.vs-collapsible { padding:0; overflow:hidden; }
+.vs-section-head {
+  width:100%;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:14px 16px;
+  border:0;
+  background:transparent;
+  color:var(--text);
+  font-family:var(--font-ui);
+  cursor:pointer;
+  text-align:left;
+}
+.vs-section-head:hover { background:rgba(255,255,255,0.035); }
+.vs-section-head .vs-section-title { margin:0; }
+.vs-section-chevron {
+  width:24px;
+  height:24px;
+  border-radius:999px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:var(--muted);
+  background:rgba(255,255,255,0.05);
+  border:1px solid rgba(255,255,255,0.08);
+  transition:transform 0.22s ease, color 0.22s ease, background 0.22s ease;
+}
+.vs-collapsible.collapsed .vs-section-chevron { transform:rotate(-90deg); color:var(--text); }
+.vs-section-body {
+  padding:0 16px 14px;
+  display:grid;
+  grid-template-rows:1fr;
+  opacity:1;
+  transition:grid-template-rows 0.26s ease, opacity 0.2s ease, padding 0.26s ease;
+}
+.vs-collapsible.collapsed .vs-section-body {
+  grid-template-rows:0fr;
+  opacity:0;
+  padding-top:0;
+  padding-bottom:0;
+}
+.vs-section-body > * { min-height:0; }
+.vs-collapsible.collapsed .vs-section-body > * { overflow:hidden; }
 .vs-section-title { font-size:12px; font-weight:700; color:var(--text); margin-bottom:10px; opacity:0.92; letter-spacing:0.02em; }
 .vs-row { display:flex; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap; }
 .vs-row:last-child { margin-bottom:0; }
@@ -2277,11 +2322,14 @@ body.lyrics-effect-contrast .lyrics-line.active { color:#fff; }
    TOAST
 ═══════════════════════════════ */
 .toast {
-  position:fixed; bottom:calc(var(--player-h) + 16px); left:50%;
+  position:fixed;
+  bottom:calc(var(--player-h) + 16px);
+  left:50%;
   transform:translateX(-50%) translateY(10px);
   background:linear-gradient(135deg, rgba(16,185,129,0.18), rgba(30,30,50,0.95));
   border:1px solid rgba(52,211,153,0.34);
   color:var(--text); padding:10px 20px; border-radius:10px;
+  max-width:min(420px, calc(100vw - 32px));
   font-size:13px; z-index:9999; opacity:0;
   backdrop-filter:blur(20px);
   transition:all 0.3s; pointer-events:none;
@@ -2295,6 +2343,50 @@ body.lyrics-effect-contrast .lyrics-line.active { color:#fff; }
   border-color:rgba(248,113,113,0.3);
   color:#fca5a5;
   box-shadow:0 8px 24px rgba(0,0,0,0.4), 0 0 28px rgba(248,113,113,0.14);
+}
+body[data-toast-position="top-left"] .toast,
+body[data-toast-position="bottom-left"] .toast {
+  left:calc(var(--sidebar-w) + 18px);
+  right:auto;
+  transform:translateY(10px);
+}
+body[data-toast-position="top-right"] .toast,
+body[data-toast-position="bottom-right"] .toast {
+  left:auto;
+  right:18px;
+  transform:translateY(10px);
+}
+body[data-toast-position="top-left"] .toast,
+body[data-toast-position="top-right"] .toast {
+  top:calc(var(--titlebar-h) + 18px);
+  bottom:auto;
+}
+body[data-toast-position="bottom-left"] .toast,
+body[data-toast-position="bottom-right"] .toast {
+  top:auto;
+  bottom:calc(var(--player-h) + 18px);
+}
+body[data-toast-position="top-left"] .toast.toast-show,
+body[data-toast-position="top-right"] .toast.toast-show,
+body[data-toast-position="bottom-left"] .toast.toast-show,
+body[data-toast-position="bottom-right"] .toast.toast-show {
+  transform:translateY(0);
+}
+body.layout-top-nav[data-toast-position="top-left"] .toast {
+  left:18px;
+  top:calc(var(--titlebar-h) + 82px);
+}
+body.layout-top-nav[data-toast-position="top-right"] .toast {
+  top:calc(var(--titlebar-h) + 82px);
+}
+body.layout-top-nav[data-toast-position="bottom-left"] .toast {
+  left:18px;
+}
+@media (max-width: 900px) {
+  body[data-toast-position="top-left"] .toast,
+  body[data-toast-position="bottom-left"] .toast {
+    left:18px;
+  }
 }
 
 .flow-empty-state {
