@@ -1417,7 +1417,24 @@ function toggleSettingsSection(key) {
   const sectionKey = String(key || '').trim()
   if (!sectionKey) return
   const state = getSettingsSectionsState()
-  state[sectionKey] = !Boolean(state[sectionKey])
+  const defaultCollapsed = {
+    interface: false,
+    background: true,
+    cover: true,
+    blur: false,
+    accent: false,
+    effects: false,
+    scale: false,
+    font: true,
+    notifications: false,
+    accountVk: true,
+    accountYandex: true,
+    accountSoundcloud: true,
+  }
+  const currentCollapsed = Object.prototype.hasOwnProperty.call(state, sectionKey)
+    ? Boolean(state[sectionKey])
+    : Boolean(defaultCollapsed[sectionKey])
+  state[sectionKey] = !currentCollapsed
   saveSettingsSectionsState(state)
   applySettingsSectionsState()
 }
@@ -2348,7 +2365,7 @@ function importFlowConfigFile(input) {
       })
       setFlowConfigStatus('Flow preset импортирован. Сессия аккаунта сохранена, перезагрузка не требуется.', false)
       showToast('Flow preset импортирован')
-      applyVisual()
+      applyVisualSettings()
       applySourceStatus()
       applyUiTextOverrides()
       renderPlaylists()
