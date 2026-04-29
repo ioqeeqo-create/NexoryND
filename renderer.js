@@ -1320,6 +1320,10 @@ function initVisualSettings() {
   refreshTrackCoverPreview()
   applyLyricsVisualSettings()
   reorderVisualSettingsSections()
+  try {
+    normalizeSettingsSectionsPersistence()
+    applySettingsSectionsState()
+  } catch (_) {}
   // background filter
   const coverBlur = document.getElementById('bg-cover-blur')
   if (coverBlur) coverBlur.style.filter = `blur(${v.blur}px) brightness(${v.bright/100})`
@@ -1374,6 +1378,22 @@ function setToastPosition(position) {
   showToast('Позиция уведомлений сохранена')
 }
 
+/** true = секция свёрнута (как в блоках аккаунтов). Всегда храним полный объект ключей. */
+const SETTINGS_SECTION_COLLAPSED_DEFAULTS = {
+  interface: true,
+  background: true,
+  cover: true,
+  blur: true,
+  accent: true,
+  effects: true,
+  scale: true,
+  font: true,
+  notifications: true,
+  accountVk: true,
+  accountYandex: true,
+  accountSoundcloud: true,
+}
+
 function getSettingsSectionsState() {
   try {
     const raw = JSON.parse(localStorage.getItem('flow_settings_sections') || '{}')
@@ -1387,27 +1407,30 @@ function saveSettingsSectionsState(state) {
   try { localStorage.setItem('flow_settings_sections', JSON.stringify(state || {})) } catch {}
 }
 
-function applySettingsSectionsState() {
-  const state = getSettingsSectionsState()
-  const defaultCollapsed = {
-    interface: true,
-    background: true,
-    cover: true,
-    blur: true,
-    accent: true,
-    effects: true,
-    scale: true,
-    font: true,
-    notifications: true,
-    accountVk: true,
-    accountYandex: true,
-    accountSoundcloud: true,
+function getMergedSettingsSectionsState() {
+  const saved = getSettingsSectionsState()
+  const out = {}
+  for (const key of Object.keys(SETTINGS_SECTION_COLLAPSED_DEFAULTS)) {
+    if (Object.prototype.hasOwnProperty.call(saved, key)) {
+      out[key] = Boolean(saved[key])
+    } else {
+      out[key] = SETTINGS_SECTION_COLLAPSED_DEFAULTS[key]
+    }
   }
+  return out
+}
+
+/** Дописывает в localStorage все ключи (убирает баг «кликнул одну — остальные схлопнулись»). */
+function normalizeSettingsSectionsPersistence() {
+  saveSettingsSectionsState(getMergedSettingsSectionsState())
+}
+
+function applySettingsSectionsState() {
+  const merged = getMergedSettingsSectionsState()
   document.querySelectorAll('.vs-collapsible[data-settings-section]').forEach((section) => {
     const key = section.getAttribute('data-settings-section')
-    const collapsed = Object.prototype.hasOwnProperty.call(state, key)
-      ? Boolean(state[key])
-      : Boolean(defaultCollapsed[key])
+    if (!key || !Object.prototype.hasOwnProperty.call(merged, key)) return
+    const collapsed = Boolean(merged[key])
     section.classList.toggle('collapsed', collapsed)
     section.querySelector('.vs-section-head')?.setAttribute('aria-expanded', collapsed ? 'false' : 'true')
   })
@@ -1415,27 +1438,10 @@ function applySettingsSectionsState() {
 
 function toggleSettingsSection(key) {
   const sectionKey = String(key || '').trim()
-  if (!sectionKey) return
-  const state = getSettingsSectionsState()
-  const defaultCollapsed = {
-    interface: true,
-    background: true,
-    cover: true,
-    blur: true,
-    accent: true,
-    effects: true,
-    scale: true,
-    font: true,
-    notifications: true,
-    accountVk: true,
-    accountYandex: true,
-    accountSoundcloud: true,
-  }
-  const currentCollapsed = Object.prototype.hasOwnProperty.call(state, sectionKey)
-    ? Boolean(state[sectionKey])
-    : Boolean(defaultCollapsed[sectionKey])
-  state[sectionKey] = !currentCollapsed
-  saveSettingsSectionsState(state)
+  if (!sectionKey || !Object.prototype.hasOwnProperty.call(SETTINGS_SECTION_COLLAPSED_DEFAULTS, sectionKey)) return
+  const merged = getMergedSettingsSectionsState()
+  merged[sectionKey] = !Boolean(merged[sectionKey])
+  saveSettingsSectionsState(merged)
   applySettingsSectionsState()
 }
 window.toggleSettingsSection = toggleSettingsSection
