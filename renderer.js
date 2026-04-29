@@ -7808,14 +7808,13 @@ function syncLyrics(currentTime) {
     const end = idx >= 0 ? Number(_lyricsData[idx + 1]?.time || (start + 2.2)) : 0
     const duration = Math.max(0.4, end - start)
     const progress = idx >= 0 ? Math.max(0, Math.min(1, (currentTime - start) / duration)) : 0
-    const easedProgress = progress * progress * (3 - 2 * progress)
     document.querySelectorAll('.lyrics-line.active').forEach((lineEl) => {
       const chars = Array.from(lineEl.querySelectorAll('.lyrics-char'))
       if (!chars.length) return
-      const spread = easedProgress * chars.length
+      const spread = progress * chars.length
       const activeCount = Math.max(0, Math.min(chars.length, Math.floor(spread)))
       const nextFrac = Math.max(0, Math.min(1, spread - activeCount))
-      lineEl.style.setProperty('--line-progress', `${(easedProgress * 100).toFixed(2)}%`)
+      lineEl.style.setProperty('--line-progress', `${(progress * 100).toFixed(2)}%`)
       chars.forEach((charEl, cIdx) => {
         charEl.classList.toggle('karaoke-on', cIdx < activeCount)
         const isNext = cIdx === activeCount && activeCount < chars.length

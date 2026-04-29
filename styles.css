@@ -2258,7 +2258,7 @@ body.lyrics-effect-contrast .lyrics-line.active { color:#fff; }
   flex-direction:column;
   padding:0;
   position:absolute;
-  top:-50px;
+  top:-58px;
   right:14px;
   z-index:6;
 }
@@ -2326,9 +2326,9 @@ body.lyrics-effect-contrast .lyrics-line.active { color:#fff; }
   display:none;
 }
 .pm-lyrics-close {
-  border:1px solid rgba(255,255,255,0.2);
-  background:linear-gradient(135deg, rgba(124,58,237,0.26), rgba(59,130,246,0.17));
-  box-shadow:0 8px 24px rgba(14,10,28,0.4), inset 0 1px 0 rgba(255,255,255,0.24);
+  border:1px solid rgba(255,255,255,0.16);
+  background:linear-gradient(135deg, rgba(18,22,34,0.86), rgba(10,13,22,0.78));
+  box-shadow:0 8px 24px rgba(6,8,14,0.48), inset 0 1px 0 rgba(255,255,255,0.14);
   backdrop-filter:blur(10px);
   -webkit-backdrop-filter:blur(10px);
   color:rgba(255,255,255,0.9);
@@ -2347,9 +2347,9 @@ body.lyrics-effect-contrast .lyrics-line.active { color:#fff; }
 }
 .pm-lyrics-close:hover {
   transform:translateY(-1px);
-  border-color:rgba(255,255,255,0.3);
-  background:linear-gradient(135deg, rgba(124,58,237,0.38), rgba(59,130,246,0.24));
-  box-shadow:0 12px 28px rgba(14,10,28,0.45), inset 0 1px 0 rgba(255,255,255,0.28);
+  border-color:rgba(255,255,255,0.24);
+  background:linear-gradient(135deg, rgba(24,29,43,0.92), rgba(14,18,30,0.84));
+  box-shadow:0 12px 28px rgba(6,8,14,0.58), inset 0 1px 0 rgba(255,255,255,0.18);
 }
 .pm-lyrics-close .ui-icon { width:13px; height:13px; }
 .pm-lyrics-content {
