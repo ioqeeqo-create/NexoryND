@@ -3,6 +3,8 @@ const { contextBridge, ipcRenderer } = require('electron')
 contextBridge.exposeInMainWorld('api', {
   minimize: () => ipcRenderer.send('window-minimize'),
   close: () => ipcRenderer.send('window-close'),
+  maximizeToggle: () => ipcRenderer.invoke('window-maximize-toggle'),
+  isWindowMaximized: () => ipcRenderer.invoke('window-is-maximized'),
   openExternal: (url) => ipcRenderer.send('open-external', url),
   getVkToken: (login, password) => ipcRenderer.invoke('vk-get-token', { login, password }),
   vkBrowserAuth: () => ipcRenderer.invoke('vk-browser-auth'),

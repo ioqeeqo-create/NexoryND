@@ -377,8 +377,8 @@ const ICONS = {
   plus: '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>',
   close: '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>'
 }
-const HEART_OUTLINE = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.35-9.5-8A5.5 5.5 0 0 1 12 5.1 5.5 5.5 0 0 1 21.5 13c-2.5 3.65-9.5 8-9.5 8Z"/></svg>'
-const HEART_FILLED = '<svg class="ui-icon" viewBox="0 0 24 24" fill="currentColor" fill-opacity="0.22" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.35-9.5-8A5.5 5.5 0 0 1 12 5.1 5.5 5.5 0 0 1 21.5 13c-2.5 3.65-9.5 8-9.5 8Z"/></svg>'
+const HEART_OUTLINE = '<svg class="ui-icon flow-ref-heart" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M12 20.4s6.5-4.35 8.82-7.74A5.05 5.05 0 0012 6.42a5.05 5.05 0 00-8.82 6.24C5.47 15.93 12 20.35 12 20.42z"/></svg>'
+const HEART_FILLED = '<svg class="ui-icon flow-ref-heart" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M12 20.4s6.5-4.35 8.82-7.74A5.05 5.05 0 0012 6.42a5.05 5.05 0 00-8.82 6.24C5.47 15.93 12 20.35 12 20.42z"/><path fill="#e11d48" d="M12 16c-.72-.62-2.65-2.35-2.65-4a1.75 1.75 0 013.38-.72A1.75 1.75 0 0114.65 12c0 1.65-1.93 3.38-2.65 4z"/></svg>'
 const PM_PLAY_INNER = '<path fill="currentColor" d="M9 8 L17 12 L9 16 Z"/>'
 const PM_PAUSE_INNER = '<rect fill="currentColor" x="7.25" y="5.75" width="4" height="12.5" rx="1.15"/><rect fill="currentColor" x="12.75" y="5.75" width="4" height="12.5" rx="1.15"/>'
 const ICON_SIMILAR = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M14.83 14.83a4 4 0 0 1-6.63 1.1 4 4 0 0 1 1.53-6.73 4 4 0 0 1 5 .37l5.74 5.32"/><path d="M9.17 9.17a4 4 0 0 0 6.63-1.1 4 4 0 0 0-1.53 6.73 4 4 0 0 0-5-.37l-5.74-5.32"/></svg>'
@@ -390,7 +390,7 @@ const defaultVisual = {
   accent: '#4b5563', accent2: '#9ca3af',
   orb1Color: '#4b5563',
   orb2Color: '#9ca3af',
-  visualMode: 'minimal',   // 'minimal' | 'premium'
+  visualMode: 'minimal',   // 'minimal' | 'floated'
   fontMode: 'default',
   customFontName: null,
   customFontData: null,
@@ -409,8 +409,20 @@ const defaultVisual = {
 }
 
 function getVisual() {
-  try { return Object.assign({}, defaultVisual, JSON.parse(localStorage.getItem('flow_visual') || '{}')) }
-  catch { return { ...defaultVisual } }
+  try {
+    const rawStr = localStorage.getItem('flow_visual') || '{}'
+    let raw = {}
+    try { raw = JSON.parse(rawStr) } catch (_) { raw = {} }
+    if (raw.visualMode === 'premium') {
+      raw.visualMode = 'floated'
+      try {
+        localStorage.setItem('flow_visual', JSON.stringify(raw))
+      } catch (_) {}
+    }
+    return Object.assign({}, defaultVisual, raw)
+  } catch {
+    return { ...defaultVisual }
+  }
 }
 
 function saveVisual(patch) {
@@ -547,21 +559,47 @@ function toggleCustomFontTitle() {
   applyFontSettings(false)
 }
 
+function normalizeVisualThemeMode(mode) {
+  const m = String(mode || '')
+  if (m === 'premium' || m === 'floated') return 'floated'
+  return 'minimal'
+}
+
 function applyVisualMode(mode) {
-  const safe = mode === 'premium' ? 'premium' : 'minimal'
-  document.body.classList.remove('visual-minimal', 'visual-premium')
-  document.body.classList.add(`visual-${safe}`)
+  const safe = normalizeVisualThemeMode(mode)
+  document.body.classList.remove('visual-minimal', 'visual-premium', 'visual-floated')
+  document.body.classList.add(safe === 'floated' ? 'visual-floated' : 'visual-minimal')
   const minimalBtn = document.getElementById('vm-minimal')
-  const premiumBtn = document.getElementById('vm-premium')
+  const floatedBtn = document.getElementById('vm-floated')
   if (minimalBtn) minimalBtn.classList.toggle('active', safe === 'minimal')
-  if (premiumBtn) premiumBtn.classList.toggle('active', safe === 'premium')
+  if (floatedBtn) floatedBtn.classList.toggle('active', safe === 'floated')
 }
 
 function setVisualMode(mode) {
-  const safe = mode === 'premium' ? 'premium' : 'minimal'
+  const safe = normalizeVisualThemeMode(mode)
   saveVisual({ visualMode: safe })
   applyVisualMode(safe)
-  showToast(safe === 'premium' ? 'Режим: Премиум (старый)' : 'Режим: Минимализм')
+  showToast(safe === 'floated' ? 'Режим: минимал' : 'Режим: минимализм')
+}
+
+async function toggleWindowMaximize() {
+  try {
+    if (!window.api?.maximizeToggle) return
+    const r = await window.api.maximizeToggle()
+    syncTitlebarMaximizeIcon(Boolean(r?.maximized))
+  } catch (_) {}
+}
+
+function syncTitlebarMaximizeIcon(isMaximized) {
+  const expand = document.getElementById('titlebar-ico-expand')
+  const restore = document.getElementById('titlebar-ico-restore')
+  const wrap = expand?.closest('button')
+  if (expand) expand.style.display = isMaximized ? 'none' : 'block'
+  if (restore) restore.style.display = isMaximized ? 'block' : 'none'
+  if (wrap) {
+    wrap.setAttribute('title', isMaximized ? 'Восстановить' : 'Развернуть')
+    wrap.setAttribute('aria-label', isMaximized ? 'Восстановить окно' : 'Развернуть окно')
+  }
 }
 
 function applyCardDensity(density = 'comfort') {
@@ -8042,6 +8080,12 @@ window.addEventListener('DOMContentLoaded', () => {
       showToast(`Запущен билд v${r.version}`)
     }).catch(() => {})
   }
+  if (window.api?.isWindowMaximized) {
+    window.api.isWindowMaximized().then((m) => syncTitlebarMaximizeIcon(Boolean(m))).catch(() => {})
+  }
+  window.addEventListener('resize', () => {
+    window.api?.isWindowMaximized?.()?.then?.((m) => syncTitlebarMaximizeIcon(Boolean(m)))?.catch?.(() => {})
+  })
 
   if (window.api?.youtubeEngineStatus) {
     window.api.youtubeEngineStatus()

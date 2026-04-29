@@ -1150,8 +1150,31 @@ app.on('before-quit', () => {
     try { _discordRpcClient.destroy() } catch {}
   }
 })
-ipcMain.on('window-minimize', (e) => BrowserWindow.fromWebContents(e.sender).minimize())
-ipcMain.on('window-close', (e) => BrowserWindow.fromWebContents(e.sender).close())
+ipcMain.on('window-minimize', (e) => {
+  const w = BrowserWindow.fromWebContents(e.sender)
+  if (w && !w.isDestroyed()) w.minimize()
+})
+ipcMain.on('window-close', (e) => {
+  const w = BrowserWindow.fromWebContents(e.sender)
+  if (w && !w.isDestroyed()) w.close()
+})
+
+ipcMain.handle('window-maximize-toggle', (e) => {
+  const w = BrowserWindow.fromWebContents(e.sender)
+  if (!w || w.isDestroyed()) return { maximized: false }
+  if (w.isMaximized()) {
+    w.unmaximize()
+    return { maximized: false }
+  }
+  w.maximize()
+  return { maximized: true }
+})
+
+ipcMain.handle('window-is-maximized', (e) => {
+  const w = BrowserWindow.fromWebContents(e.sender)
+  if (!w || w.isDestroyed()) return false
+  return Boolean(w.isMaximized())
+})
 ipcMain.on('open-external', (e, url) => shell.openExternal(url))
 
 // в”Ђв”Ђв”Ђ HELPERS в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
