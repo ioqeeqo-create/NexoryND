@@ -2336,11 +2336,13 @@ function importFlowConfigFile(input) {
           'flow_social_pending',
           'flow_friends_cache',
           'flow_auth_last_user',
+          'flow_profiles',
+          'flow_current_user',
         ])
         const toDelete = []
         for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i)
-          if (key && key.startsWith('flow_') && !protectedKeys.has(key)) toDelete.push(key)
+          if (key && key.startsWith('flow_') && !protectedKeys.has(key) && !key.startsWith('flow_friends_')) toDelete.push(key)
         }
         toDelete.forEach((key) => localStorage.removeItem(key))
       }
@@ -2360,6 +2362,9 @@ function importFlowConfigFile(input) {
           || key === 'flow_social_profile'
           || key === 'flow_social_pending'
           || key === 'flow_auth_last_user'
+          || key === 'flow_profiles'
+          || key === 'flow_current_user'
+          || key.startsWith('flow_friends_')
         ) return
         localStorage.setItem(key, String(value ?? ''))
       })

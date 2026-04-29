@@ -21,6 +21,13 @@
     localStorage.setItem(STORAGE_KEYS.profiles, JSON.stringify(list || []))
   }
 
+  function rememberCurrentUser(username) {
+    const safe = normalizeUsername(username)
+    if (!safe) return
+    localStorage.setItem(STORAGE_KEYS.current, safe)
+    localStorage.setItem('flow_auth_last_user', safe)
+  }
+
   function normalizeUsername(value) {
     return String(value || '').trim().toLowerCase().replace(/[^a-z0-9_\-.]/g, '').slice(0, 32)
   }
@@ -78,7 +85,7 @@
     const profile = { username, createdAt: Date.now() }
     profiles.push(profile)
     saveProfiles(profiles)
-    localStorage.setItem(STORAGE_KEYS.current, username)
+    rememberCurrentUser(username)
     return { ok: true, profile }
   }
 
@@ -115,7 +122,7 @@
       profiles.push(profile)
       saveProfiles(profiles)
     }
-    localStorage.setItem(STORAGE_KEYS.current, username)
+    rememberCurrentUser(username)
     return { ok: true, profile }
   }
 
@@ -154,7 +161,7 @@
         profiles.push({ username, createdAt: Date.now() })
         saveProfiles(profiles)
       }
-      localStorage.setItem(STORAGE_KEYS.current, username)
+      rememberCurrentUser(username)
       return { ok: true, profile: { username } }
     } catch (e) {
       return { ok: false, error: e?.message || String(e) }
@@ -162,13 +169,24 @@
   }
 
   function getCurrentProfile() {
-    const username = localStorage.getItem(STORAGE_KEYS.current)
+    let username = normalizeUsername(localStorage.getItem(STORAGE_KEYS.current) || '')
+    if (!username) {
+      username = normalizeUsername(localStorage.getItem('flow_auth_last_user') || '')
+    }
+    if (!username) {
+      try {
+        const legacyActive = JSON.parse(localStorage.getItem('flow_profile_active') || 'null')
+        username = normalizeUsername(legacyActive?.username || legacyActive?.login || '')
+      } catch {}
+    }
     if (!username) return null
+    rememberCurrentUser(username)
     return getProfiles().find((p) => p.username === username) || { username }
   }
 
   function logoutProfile() {
     localStorage.removeItem(STORAGE_KEYS.current)
+    localStorage.removeItem('flow_auth_last_user')
   }
 
   function getFriends(username) {
