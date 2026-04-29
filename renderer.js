@@ -2303,20 +2303,55 @@ function importFlowConfigFile(input) {
         throw new Error('Неверный формат файла')
       }
       if (preset.replaceAll) {
+        const protectedKeys = new Set([
+          'flow_profile',
+          'flow_profile_accounts',
+          'flow_profile_active',
+          'flow_profile_presence',
+          'flow_profile_pending_messages',
+          'flow_profile_presence_room_id',
+          'flow_profile_password',
+          'flow_profile_password_hash',
+          'flow_profile_password_salt',
+          'flow_social_accounts',
+          'flow_social_session',
+          'flow_social_profile',
+          'flow_social_pending',
+          'flow_friends_cache',
+          'flow_auth_last_user',
+        ])
         const toDelete = []
         for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i)
-          if (key && key.startsWith('flow_')) toDelete.push(key)
+          if (key && key.startsWith('flow_') && !protectedKeys.has(key)) toDelete.push(key)
         }
         toDelete.forEach((key) => localStorage.removeItem(key))
       }
       Object.entries(storage).forEach(([key, value]) => {
         if (!key.startsWith('flow_')) return
+        if (
+          key === 'flow_profile'
+          || key === 'flow_profile_accounts'
+          || key === 'flow_profile_active'
+          || key === 'flow_profile_presence'
+          || key === 'flow_profile_pending_messages'
+          || key === 'flow_profile_password'
+          || key === 'flow_profile_password_hash'
+          || key === 'flow_profile_password_salt'
+          || key === 'flow_social_accounts'
+          || key === 'flow_social_session'
+          || key === 'flow_social_profile'
+          || key === 'flow_social_pending'
+          || key === 'flow_auth_last_user'
+        ) return
         localStorage.setItem(key, String(value ?? ''))
       })
-      setFlowConfigStatus('Flow preset импортирован. Перезагружаю приложение...', false)
+      setFlowConfigStatus('Flow preset импортирован. Сессия аккаунта сохранена, перезагрузка не требуется.', false)
       showToast('Flow preset импортирован')
-      setTimeout(() => window.location.reload(), 250)
+      applyVisual()
+      applySourceStatus()
+      applyUiTextOverrides()
+      renderPlaylists()
     } catch (err) {
       setFlowConfigStatus(`Ошибка импорта: ${err?.message || err}`, true)
       showToast('Не удалось импортировать preset', true)
