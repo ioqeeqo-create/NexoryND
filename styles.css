@@ -919,6 +919,9 @@ body.layout-top-nav .player-bar {
   align-items:stretch;
 }
 #page-rooms-content .social-room-box:last-child { grid-column: 1 / -1; }
+#page-rooms-content .social-room-box:last-child {
+  border: 0;
+}
 .rooms-search-tile {
   display:flex;
   flex-direction:column;
