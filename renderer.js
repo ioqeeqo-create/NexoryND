@@ -1389,9 +1389,19 @@ function saveSettingsSectionsState(state) {
 
 function applySettingsSectionsState() {
   const state = getSettingsSectionsState()
+  const defaultCollapsed = {
+    background: true,
+    cover: true,
+    font: true,
+    accountVk: true,
+    accountYandex: true,
+    accountSoundcloud: true,
+  }
   document.querySelectorAll('.vs-collapsible[data-settings-section]').forEach((section) => {
     const key = section.getAttribute('data-settings-section')
-    const collapsed = Boolean(state[key])
+    const collapsed = Object.prototype.hasOwnProperty.call(state, key)
+      ? Boolean(state[key])
+      : Boolean(defaultCollapsed[key])
     section.classList.toggle('collapsed', collapsed)
     section.querySelector('.vs-section-head')?.setAttribute('aria-expanded', collapsed ? 'false' : 'true')
   })
@@ -3564,6 +3574,35 @@ function renderMyWave() {
       <div class="my-wave-orb-core"></div>
     </div>
   `
+  renderRoomsMyWave()
+}
+
+function renderRoomsMyWave() {
+  const hintEl = document.getElementById('rooms-wave-hint')
+  const modesEl = document.getElementById('rooms-wave-modes')
+  const listEl = document.getElementById('rooms-wave-list')
+  if (!hintEl || !modesEl || !listEl) return
+  const mode = getMyWaveMode()
+  const modeCfg = MY_WAVE_MODES[mode] || MY_WAVE_MODES.default
+  const seedCount = getMyWaveSeedTracks().length
+  modesEl.innerHTML = Object.entries(MY_WAVE_MODES).map(([id, cfg]) => (
+    `<button class="my-wave-mode ${id === mode ? 'active' : ''}" data-wave-mode="${id}" onclick="setMyWaveMode('${id}')">${cfg.label}</button>`
+  )).join('')
+  if (seedCount < 3) {
+    hintEl.textContent = `Послушай или лайкни еще ${3 - seedCount} трек(ов), чтобы волна поняла твой вкус`
+  } else if (_myWaveBuilding) {
+    hintEl.textContent = `${modeCfg.label}: ищу новые треки по твоему вкусу...`
+  } else if (_myWavePreloading) {
+    hintEl.textContent = `${modeCfg.label}: дозагружаю новые треки, чтобы волна не кончалась...`
+  } else {
+    hintEl.textContent = `${modeCfg.label}: ${modeCfg.hint}. Нажми запуск, и волна сама соберет новую очередь`
+  }
+  listEl.innerHTML = `
+    <div class="my-wave-orb mode-${mode} ${_myWaveBuilding || _myWavePreloading ? 'is-loading' : ''}" aria-label="${modeCfg.label}">
+      <div class="my-wave-orb-ring"></div>
+      <div class="my-wave-orb-core"></div>
+    </div>
+  `
 }
 
 function playTrackFromMyWave(index) {
@@ -4476,14 +4515,27 @@ function ensureRoomsUI() {
       <div class="room-widget-meta">
         <span id="room-status">Рума: не активна</span>
         <span id="room-members-count">Участники: —/3</span>
-        <button class="btn-small" onclick="promptInviteJoin()">Ввести Invite</button>
         <button class="btn-small" onclick="copyInviteLink()">Copy Invite Link/ID</button>
       </div>
     </div>
-    <div class="social-room-box">
+    <div class="social-room-box rooms-search-tile">
       <div class="social-section-title">Поиск в очередь</div>
       <input id="room-queue-search" class="token-field flow-input" placeholder="Найти трек и добавить в очередь..." oninput="searchRoomQueueTracks()" />
       <div style="margin-top:8px"><button class="btn-small" onclick="openRoomOwnTracksPicker()">Свои треки</button></div>
+      <div class="rooms-wave-embedded">
+        <div class="my-wave rooms-wave-my-wave">
+          <div class="my-wave-hero">
+            <div class="my-wave-badge">Моя волна</div>
+            <h3>Волна для комнаты</h3>
+            <p id="rooms-wave-hint">Выбери режим и запусти волну для общей очереди</p>
+            <div class="my-wave-actions">
+              <button class="my-wave-start" onclick="startMyWave()">Запустить волну</button>
+              <div class="my-wave-modes" id="rooms-wave-modes"></div>
+            </div>
+          </div>
+          <div class="my-wave-list" id="rooms-wave-list"></div>
+        </div>
+      </div>
       <div id="room-search-results" class="profile-picker-list" style="margin-top:8px"><div class="flow-empty-state compact"><strong>Начни поиск</strong><span>Введи название трека, чтобы добавить его в очередь.</span></div></div>
     </div>
     <div class="social-room-box">
@@ -4494,6 +4546,7 @@ function ensureRoomsUI() {
   `
   root.appendChild(box)
   syncSocialWidgetState()
+  renderRoomsMyWave()
 }
 
 async function renderFriends() {

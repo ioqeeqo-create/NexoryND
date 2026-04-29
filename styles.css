@@ -919,6 +919,43 @@ body.layout-top-nav .player-bar {
   align-items:stretch;
 }
 #page-rooms-content .social-room-box:last-child { grid-column: 1 / -1; }
+.rooms-search-tile {
+  display:flex;
+  flex-direction:column;
+}
+.rooms-wave-embedded {
+  margin-top:8px;
+}
+.rooms-wave-my-wave {
+  margin-top:0;
+  padding:10px;
+  min-height:0;
+}
+.rooms-wave-my-wave .my-wave-hero h3 {
+  margin:2px 0;
+  font-size:15px;
+}
+.rooms-wave-my-wave .my-wave-actions {
+  margin-top:8px;
+  align-items:flex-start;
+  gap:6px;
+}
+.rooms-wave-my-wave .my-wave-list {
+  min-height:58px;
+  margin-top:8px;
+}
+.rooms-wave-my-wave .my-wave-orb {
+  min-height:58px;
+  border-radius:14px;
+}
+.rooms-wave-my-wave .my-wave-orb-ring {
+  width:min(34vw, 210px);
+  height:min(34vw, 210px);
+}
+.rooms-wave-my-wave .my-wave-orb-core {
+  width:min(24vw, 145px);
+  height:34px;
+}
 .room-connect-panel {
   min-width:0;
   display:flex;
@@ -1109,15 +1146,23 @@ body.layout-top-nav .player-bar {
 .room-widget-meta {
   display:flex;
   align-items:center;
-  gap:8px;
+  gap:10px;
   flex-wrap:wrap;
   color:rgba(240,245,255,0.78);
   font-size:12px;
+}
+.room-widget-meta #room-status,
+.room-widget-meta #room-members-count {
+  white-space:nowrap;
+}
+.room-widget-meta .btn-small {
+  margin-left:auto;
 }
 @media (max-width: 960px) {
   #page-rooms-content .social-hub { grid-template-columns:1fr; }
   .social-widget,
   .widget-content { min-height:240px; }
+  .room-widget-meta .btn-small { margin-left:0; }
 }
 
 /* ═══════════════════════════════

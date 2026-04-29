@@ -637,8 +637,12 @@
             </button>
           </div>
 
-          <div style="margin:10px 0 16px;padding:12px;border-radius:14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);">
-            <div class="vs-section-title" style="margin-bottom:8px;">Авторизация VK</div>
+          <div class="vs-section glass-card vs-collapsible" data-settings-section="accountVk" style="margin:10px 0 16px;">
+            <button type="button" class="vs-section-head" onclick="toggleSettingsSection('accountVk')" aria-expanded="false">
+              <span class="vs-section-title">Авторизация VK</span>
+              <span class="vs-section-chevron">⌄</span>
+            </button>
+            <div class="vs-section-body">
             <div id="vk-status" style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);margin-bottom:10px;">
               <div>
                 <div id="vk-status-text" style="font-size:13px;color:rgba(255,255,255,0.92)">Не настроен</div>
@@ -667,10 +671,15 @@
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
               </button>
             </div>
+            </div>
           </div>
 
-          <div class="yandex-token-card">
-            <div class="vs-section-title" style="margin-bottom:8px;">Яндекс Музыка импорт</div>
+          <div class="vs-section glass-card vs-collapsible" data-settings-section="accountYandex" style="margin:10px 0 16px;">
+            <button type="button" class="vs-section-head" onclick="toggleSettingsSection('accountYandex')" aria-expanded="false">
+              <span class="vs-section-title">Яндекс Музыка импорт</span>
+              <span class="vs-section-chevron">⌄</span>
+            </button>
+            <div class="vs-section-body">
             <div id="ym-status" style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);margin-bottom:10px;">
               <div>
                 <div id="ym-status-text" style="font-size:13px;color:rgba(255,255,255,0.92)">Не настроен</div>
@@ -702,15 +711,25 @@
             <div id="ym-msg" class="token-msg" style="display:block"></div>
           </div>
 
-          <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">SoundCloud Client ID (для будущего импорта)</div>
-          <div class="token-field-wrap">
-            <input id="sc-custom-val" type="password" class="token-field" placeholder="Вставь SoundCloud Client ID...">
-            <button class="token-field-eye" onclick="toggleToken('sc-custom-val')" title="Показать/скрыть">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </div>
+          </div>
+          <div class="vs-section glass-card vs-collapsible" data-settings-section="accountSoundcloud" style="margin:10px 0 0;">
+            <button type="button" class="vs-section-head" onclick="toggleSettingsSection('accountSoundcloud')" aria-expanded="false">
+              <span class="vs-section-title">SoundCloud Client ID</span>
+              <span class="vs-section-chevron">⌄</span>
             </button>
-            <button class="token-field-apply" onclick="applyScId()" title="Сохранить">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-            </button>
+            <div class="vs-section-body">
+              <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">SoundCloud Client ID (для будущего импорта)</div>
+              <div class="token-field-wrap">
+                <input id="sc-custom-val" type="password" class="token-field" placeholder="Вставь SoundCloud Client ID...">
+                <button class="token-field-eye" onclick="toggleToken('sc-custom-val')" title="Показать/скрыть">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+                <button class="token-field-apply" onclick="applyScId()" title="Сохранить">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
