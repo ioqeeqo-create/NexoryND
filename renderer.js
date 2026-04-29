@@ -4514,11 +4514,6 @@ function ensureRoomsUI() {
           </div>
         </div>
       </div>
-      <div class="room-join-strip">
-        <input id="join-room-input" class="token-field flow-input" placeholder="ID или ник хоста" style="flex:1;min-width:180px" />
-        <button class="btn-small" onclick="joinRoomById()">Присоединиться</button>
-        <button class="btn-small" onclick="copyInviteLink()">Copy Invite Link/ID</button>
-      </div>
     </div>
     <div class="social-room-box rooms-search-tile">
       <div class="social-section-title">Поиск в очередь</div>
