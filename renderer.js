@@ -1,4 +1,4 @@
-﻿const { audioPlayer = {}, smartCleaning = {}, dragDrop = {}, peerSocial = {} } = window.FlowModules || {}
+﻿const { audioPlayer = {}, smartCleaning = {}, dragDrop = {}, peerSocial = {}, waveEngine: WE } = window.FlowModules || {}
 const audio = (audioPlayer.createPlayerAudio || ((onErr) => {
   const el = new Audio()
   el.volume = 0.8
@@ -88,53 +88,44 @@ const FRIEND_PROFILE_REFRESH_MS = 15000
 const FLOW_SERVER_DEFAULT_URL = 'http://85.239.34.229:8787'
 const FRIEND_NOTIFY_COOLDOWN_MS = 90 * 1000
 const PROFILE_CACHE_TTL_MS = 5 * 60 * 1000
-const MY_WAVE_MIN_TRACKS = 10
-const MY_WAVE_MAX_TRACKS = 30
-const MY_WAVE_MODES = {
-  default: {
-    label: 'Обычная',
-    hint: 'глубокая очередь по общему вкусу, жанрам и похожим артистам',
-    keywords: ['official','audio','music','mix','single','album','remix','feat','prod','viral','trend','trending','hit','popular','vibe','tiktok','hyperpop','phonk','dreamcore'],
-    queryTerms: ['viral hits', 'tiktok vibe', 'trending music', 'popular mix', 'hyperpop viral', 'phonk viral', 'slowed reverb popular'],
-  },
-  sad: {
-    label: 'Грустная',
-    hint: 'мягкая и меланхоличная очередь из твоих предпочтений',
-    keywords: ['sad','slow','slowed','reverb','dreamcore','doll','mirrors','lofi','lo-fi','melancholy','melancholic','alone','lonely','cry','tears','rain','night','dark','blue','broken','heartbreak','empty','pain','груст','печаль','слез','один','одна','одиноч','дожд','ноч','боль','разбит','тоска','пуст','плак','забыть'],
-    queryTerms: ['sad viral', 'sad tiktok', 'slowed reverb popular', 'dreamcore music', 'sad aesthetic tiktok', 'depression cherry vibe', 'melancholic pop'],
-  },
-  happy: {
-    label: 'Веселая',
-    hint: 'более светлая и позитивная очередь по твоему вкусу',
-    keywords: ['happy','smile','summer','sun','sunny','party','dance','fun','joy','love','good','vibe','vibes','club','bright','feel good','hyperpop','glitchcore','весел','улыб','лето','солн','танц','кайф','радост','любов','позитив','движ','туса','вечерин'],
-    queryTerms: ['happy viral', 'tiktok happy', 'feel good', 'hyperpop happy', 'glitchcore pop', 'summer vibe', 'party mix'],
-  },
-  energetic: {
-    label: 'Энергичная',
-    hint: 'треклист поживее, чтобы разогнаться',
-    keywords: ['energy','energetic','speed','fast','power','rock','metal','drum','bass','dnb','phonk','rave','club','hard','workout','rage','trap','banger','aggressive','brazilian','drift','gym','фонк','энерг','быстр','мощ','рок','метал','рейв','клуб','фонк','драм','бас','разнос','жестк'],
-    queryTerms: ['phonk viral', 'aggressive phonk', 'brazilian funk popular', 'gym phonk', 'tiktok hype', 'energetic viral', 'club banger'],
-  },
-  calm: {
-    label: 'Спокойная',
-    hint: 'ровная очередь без резких прыжков',
-    keywords: ['calm','chill','relax','ambient','acoustic','piano','sleep','dream','soft','quiet','slow','lofi','lo-fi','dreamcore','softcore','спокой','чил','расслаб','акуст','пианино','сон','мечт','тих','медлен','мягк'],
-    queryTerms: ['chill viral', 'calm tiktok', 'soft night', 'lofi vibe', 'dreamcore chill', 'ambient playlist', 'relax mix'],
-  },
-  romantic: {
-    label: 'Романтика',
-    hint: 'больше треков про любовь и мягкий вайб',
-    keywords: ['love','heart','kiss','romance','romantic','baby','darling','sweet','relationship','miss you','slowed','soft','любов','сердц','роман','поцел','мила','милый','нежн','скуч','твоя','твой','влюб'],
-    queryTerms: ['romantic viral', 'love tiktok', 'soft love', 'heartbreak love', 'slowed love songs', 'night romance', 'relationship songs'],
-  },
+/** Ленивый API «Моя волна» (реализация в src/modules/wave-engine.js). */
+let _waveEngineApi = null
+function waveEngine() {
+  if (!_waveEngineApi && WE?.createWaveEngine) {
+    _waveEngineApi = WE.createWaveEngine({
+      getListenHistory,
+      getLiked,
+      getPlaylists,
+      normalizePlaylist,
+      sanitizeTrack,
+      sanitizeTrackList,
+      getSettings,
+      searchHybridTracks,
+      normalizeTrackSignature,
+      getQueue: () => queue,
+      getCurrentTrack: () => currentTrack,
+    })
+  }
+  return _waveEngineApi
 }
-const MY_WAVE_TOKEN_STOPWORDS = new Set(['official','audio','video','music','feat','ft','prod','remix','mix','single','album','lyrics','lyric','clip','track','version','radio','edit','the','and','for','with','для','при','это','как','или','feat.'])
-/** Поведенческий слой «волны»: ранний скип (−) vs дослушал до конца (+), без ML. */
-const WAVE_TASTE_STORAGE_KEY = 'flow_wave_taste_v1'
-const WAVE_EARLY_SKIP_SEC = 14
-const WAVE_TASTE_MAX_ART = 22
-const WAVE_TASTE_MAX_TOK = 16
-const WAVE_MY_WAVE_MIN_DURATION_SEC = 75
+function findMyWaveRecommendations(min, mode) {
+  const api = waveEngine()
+  return api ? api.findMyWaveRecommendations(min, mode) : Promise.resolve([])
+}
+
+function getMyWaveSeedTracks() {
+  const api = waveEngine()
+  return api ? api.getMyWaveSeedTracks() : []
+}
+
+function recordWaveEarlySkip(track) {
+  waveEngine()?.recordWaveEarlySkip?.(track)
+}
+
+function recordWavePositiveListen(track) {
+  waveEngine()?.recordWavePositiveListen?.(track)
+}
+
 const _friendProfileRefreshAt = new Map()
 const _friendNotifyAt = new Map()
 
@@ -3407,7 +3398,7 @@ function getListenHistory() {
 function saveListenHistory(list = []) {
   if (!_profile?.username) return
   const key = `flow_listen_history_${_profile.username}`
-  try { localStorage.setItem(key, JSON.stringify(Array.isArray(list) ? list.slice(0, MY_WAVE_MAX_TRACKS) : [])) } catch {}
+  try { localStorage.setItem(key, JSON.stringify(Array.isArray(list) ? list.slice(0, WE?.MY_WAVE_MAX_TRACKS ?? 30) : [])) } catch {}
 }
 
 function pushListenHistory(track) {
@@ -3421,408 +3412,21 @@ function pushListenHistory(track) {
     if (!itemKey || seen.has(itemKey) || !item?.track?.id) continue
     seen.add(itemKey)
     next.push(item)
-    if (next.length >= MY_WAVE_MAX_TRACKS) break
+    if (next.length >= (WE?.MY_WAVE_MAX_TRACKS ?? 30)) break
   }
   saveListenHistory(next)
 }
 
 function getMyWaveMode() {
-  return MY_WAVE_MODES[_myWaveMode] ? _myWaveMode : 'default'
+  return WE?.MY_WAVE_MODES?.[_myWaveMode] ? _myWaveMode : 'default'
 }
 
 function setMyWaveMode(mode) {
-  _myWaveMode = MY_WAVE_MODES[mode] ? mode : 'default'
+  _myWaveMode = WE?.MY_WAVE_MODES?.[mode] ? mode : 'default'
   try { localStorage.setItem('flow_my_wave_mode', _myWaveMode) } catch {}
   renderMyWave()
 }
 
-function getMyWaveTrackKey(track) {
-  const safe = sanitizeTrack(track)
-  if (!safe?.id) return ''
-  return `${safe.source || 'unknown'}:${safe.id}`
-}
-
-function addMyWaveCandidate(map, track, weight = 1, playedAt = 0) {
-  const safe = sanitizeTrack(track)
-  const key = getMyWaveTrackKey(safe)
-  if (!key) return
-  const prev = map.get(key)
-  const score = Number(weight) || 0
-  if (prev) {
-    prev.weight += score
-    prev.playedAt = Math.max(Number(prev.playedAt || 0), Number(playedAt || 0))
-  } else {
-    map.set(key, { key, track: safe, weight: score, playedAt: Number(playedAt || 0) })
-  }
-}
-
-function getMyWaveCandidates() {
-  const map = new Map()
-  const history = getListenHistory()
-  history.forEach((item, idx) => {
-    addMyWaveCandidate(map, item?.track, 6 + Math.max(0, MY_WAVE_MAX_TRACKS - idx) / 8, item?.playedAt)
-  })
-  getLiked().forEach((track) => addMyWaveCandidate(map, track, 4, 0))
-  getPlaylists().map(normalizePlaylist).forEach((pl) => {
-    ;(pl.tracks || []).forEach((track) => addMyWaveCandidate(map, track, 2, 0))
-  })
-  return Array.from(map.values())
-}
-
-function getMyWaveSeedTracks() {
-  return getMyWaveCandidates()
-    .sort((a, b) => (Number(b.weight || 0) + Number(b.playedAt || 0) / 1e13) - (Number(a.weight || 0) + Number(a.playedAt || 0) / 1e13))
-    .map((item) => item.track)
-    .filter(Boolean)
-}
-
-function getMyWaveTokens(track) {
-  return `${track?.artist || ''} ${track?.title || ''}`
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s-]+/gu, ' ')
-    .split(/\s+/)
-    .map((x) => x.trim())
-    .filter((x) => x.length >= 3 && !MY_WAVE_TOKEN_STOPWORDS.has(x) && !/^\d+$/.test(x))
-}
-
-function normalizeMyWaveArtistName(value) {
-  return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ')
-}
-
-function getMyWaveArtistNames(track) {
-  return String(track?.artist || '')
-    .split(/\s*(?:,|&|\+| x | feat\.? | ft\.? | при участии | и )\s*/i)
-    .map(normalizeMyWaveArtistName)
-    .filter((name) => name && name !== '—' && name.length >= 2)
-    .slice(0, 4)
-}
-
-function getMyWavePrimaryArtist(track) {
-  return getMyWaveArtistNames(track)[0] || normalizeMyWaveArtistName(track?.artist || '')
-}
-
-/** Секунды для фильтров; у разных источников duration в секундах или ms. */
-function getNormalizedTrackDurationSec(track) {
-  const raw = Number(track?.duration_ms ?? track?.duration ?? track?.durationSec)
-  if (!Number.isFinite(raw) || raw <= 0) return null
-  const src = String(track?.source || '').toLowerCase()
-  if (src === 'youtube' || src === 'vk' || src === 'yandex') {
-    return raw > 7200 ? raw / 1000 : raw
-  }
-  if (raw >= 30000) return raw / 1000
-  if (raw < 600) return raw
-  return raw / 1000
-}
-
-function loadWaveTasteMap() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(WAVE_TASTE_STORAGE_KEY) || 'null')
-    if (!parsed || typeof parsed !== 'object') return { artistNeg: {}, tokenNeg: {}, artistPos: {} }
-    return {
-      artistNeg: typeof parsed.artistNeg === 'object' && parsed.artistNeg ? parsed.artistNeg : {},
-      tokenNeg: typeof parsed.tokenNeg === 'object' && parsed.tokenNeg ? parsed.tokenNeg : {},
-      artistPos: typeof parsed.artistPos === 'object' && parsed.artistPos ? parsed.artistPos : {},
-    }
-  } catch {
-    return { artistNeg: {}, tokenNeg: {}, artistPos: {} }
-  }
-}
-
-function saveWaveTasteMap(taste) {
-  try {
-    const prune = (obj, limit = 48) => {
-      const ent = Object.entries(obj || {}).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
-      const out = {}
-      ent.slice(0, limit).forEach(([k, v]) => { if (k && Number.isFinite(Number(v))) out[k] = Number(v) })
-      return out
-    }
-    const payload = {
-      artistNeg: prune(taste?.artistNeg || {}),
-      tokenNeg: prune(taste?.tokenNeg || {}),
-      artistPos: prune(taste?.artistPos || {}, 32),
-    }
-    localStorage.setItem(WAVE_TASTE_STORAGE_KEY, JSON.stringify(payload))
-  } catch {}
-}
-
-function bumpWaveNeg(map, key, delta) {
-  const k = String(key || '').trim().toLowerCase()
-  if (!k || k.length < 2) return map
-  map[k] = Math.min(WAVE_TASTE_MAX_ART, Math.max(0, Number(map[k] || 0) + delta))
-  return map
-}
-
-function bumpWavePos(map, key, delta) {
-  const k = String(key || '').trim().toLowerCase()
-  if (!k || k.length < 2) return map
-  map[k] = Math.min(WAVE_TASTE_MAX_ART, Math.max(0, Number(map[k] || 0) + delta))
-  return map
-}
-
-function recordWaveEarlySkip(track) {
-  const safe = sanitizeTrack(track)
-  if (!safe?.artist) return
-  const taste = loadWaveTasteMap()
-  bumpWaveNeg(taste.artistNeg, getMyWavePrimaryArtist(safe), 5)
-  getMyWaveTokens(safe).slice(0, 6).forEach((tok) => bumpWaveNeg(taste.tokenNeg, tok, 3))
-  saveWaveTasteMap(taste)
-}
-
-function recordWavePositiveListen(track) {
-  const safe = sanitizeTrack(track)
-  if (!safe?.artist) return
-  const taste = loadWaveTasteMap()
-  bumpWavePos(taste.artistPos, getMyWavePrimaryArtist(safe), 1.2)
-  saveWaveTasteMap(taste)
-}
-
-function applyWaveTasteToScore(track, baseScore) {
-  const taste = loadWaveTasteMap()
-  let s = baseScore
-  getMyWaveArtistNames(track).forEach((a) => {
-    const k = normalizeMyWaveArtistName(a)
-    s -= Math.min(taste.artistNeg[k] || taste.artistNeg[a] || 0, WAVE_TASTE_MAX_ART) * 0.85
-    s += Math.min(taste.artistPos[k] || taste.artistPos[a] || 0, WAVE_TASTE_MAX_ART) * 0.45
-  })
-  getMyWaveTokens(track).forEach((tok) => {
-    s -= Math.min(taste.tokenNeg[tok] || 0, WAVE_TASTE_MAX_TOK) * 0.65
-  })
-  return s
-}
-
-function buildMyWavePreferenceProfile(candidates) {
-  const profile = { artists: new Map(), sources: new Map(), tokens: new Map(), totalWeight: 0 }
-  const bump = (map, key, score) => {
-    const safeKey = String(key || '').trim().toLowerCase()
-    if (!safeKey || safeKey === '—') return
-    map.set(safeKey, (map.get(safeKey) || 0) + score)
-  }
-  candidates.forEach((item) => {
-    const track = item.track || {}
-    const score = Math.max(1, Number(item.weight || 1))
-    profile.totalWeight += score
-    getMyWaveArtistNames(track).forEach((artist, idx) => bump(profile.artists, artist, score * (idx === 0 ? 0.9 : 0.45)))
-    bump(profile.sources, track.source, score * 0.6)
-    getMyWaveTokens(track).forEach((token) => bump(profile.tokens, token, score * 0.65))
-  })
-  return profile
-}
-
-function getMyWavePreferenceTerms(profile, limit = 8) {
-  return Array.from(profile.tokens.entries())
-    .filter(([token]) => token && !MY_WAVE_TOKEN_STOPWORDS.has(token))
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, limit)
-    .map(([token]) => token)
-}
-
-function getMyWaveMoodScore(track, mode) {
-  const cfg = MY_WAVE_MODES[mode] || MY_WAVE_MODES.default
-  const text = `${track?.artist || ''} ${track?.title || ''}`.toLowerCase()
-  const hits = (cfg.keywords || []).reduce((sum, keyword) => sum + (text.includes(keyword) ? 1 : 0), 0)
-  return hits * (mode === 'default' ? 1.5 : 7)
-}
-
-function getMyWaveTrendScore(track, resultIndex = 0) {
-  const metricKeys = [
-    'popularity',
-    'playback_count',
-    'play_count',
-    'plays',
-    'stream_count',
-    'favorite_count',
-    'likes_count',
-    'likes',
-    'reposts_count',
-    'reposts',
-    'score',
-  ]
-  let score = 0
-  for (const key of metricKeys) {
-    const raw = Number(track?.[key])
-    if (!Number.isFinite(raw) || raw <= 0) continue
-    score += raw <= 100 ? Math.min(raw / 100, 1) * 10 : Math.min(Math.log10(raw + 1), 7) * 1.8
-  }
-  const text = `${track?.artist || ''} ${track?.title || ''}`.toLowerCase()
-  const vibeWords = ['viral', 'trend', 'trending', 'tiktok', 'tik tok', 'hit', 'popular', 'vibe', 'slay', 'speed', 'sped up', 'phonk', 'вайб', 'тренд', 'хит']
-  score += vibeWords.reduce((sum, word) => sum + (text.includes(word) ? 3 : 0), 0)
-  score += Math.max(0, 8 - Math.min(8, Number(resultIndex) || 0))
-  return Math.min(score, 28)
-}
-
-function getMyWaveVibeScore(track, mode = getMyWaveMode()) {
-  const text = `${track?.artist || ''} ${track?.title || ''}`.toLowerCase()
-  const vibeSets = {
-    default: ['viral', 'tiktok', 'tik tok', 'hyperpop', 'phonk', 'dreamcore', 'slowed', 'reverb', 'hit', 'vibe'],
-    sad: ['miss you', 'broken', 'lonely', 'mirrors', 'doll', 'babydoll', 'slowed', 'reverb', 'dreamcore', 'aesthetic', 'empty', 'pain'],
-    happy: ['hyperpop', 'glitchcore', 'dance', 'party', 'summer', 'feel good', 'cute', 'bubblegum', 'vibe'],
-    energetic: ['phonk', 'sigma', 'dxrk', 'murder', 'brazilian', 'drift', 'tmsts', 'gym', 'aggressive', 'rage', 'hype'],
-    calm: ['lofi', 'lo-fi', 'dreamcore', 'ambient', 'soft', 'night', 'rain', 'sleep', 'chill'],
-    romantic: ['love', 'miss you', 'heart', 'romantic', 'relationship', 'slowed', 'soft', 'kiss'],
-  }
-  const words = vibeSets[mode] || vibeSets.default
-  return Math.min(words.reduce((sum, word) => sum + (text.includes(word) ? (mode === 'energetic' ? 7 : 5) : 0), 0), 24)
-}
-
-function getMyWaveOfficialBonus(track) {
-  const text = `${track?.artist || ''} ${track?.title || ''}`.toLowerCase()
-  const strong = ['official audio', 'official music video', 'original mix', 'album version', 'full version', 'official video']
-  if (strong.some((w) => text.includes(w))) return 10
-  if (/\bofficial\b/.test(text) && (text.includes('audio') || text.includes('video'))) return 6
-  return 0
-}
-
-function getMyWaveQualityPenalty(track, mode = getMyWaveMode()) {
-  const text = `${track?.artist || ''} ${track?.title || ''}`.toLowerCase()
-  if (mode === 'sad' && ['slowed', 'reverb', 'acoustic', 'dreamcore'].some((word) => text.includes(word))) {
-    const sec = getNormalizedTrackDurationSec(track)
-    if (sec != null && sec < 40) return 28
-    return 0
-  }
-  const noisy = [
-    'nightcore', '1 hour', '8d audio', 'bass boosted', 'karaoke', 'instrumental remake',
-    'speed up', 'sped up', 'speedup', 'tiktok version', 'cover by', 'cover (', ' acoustic cover',
-    'fan cover', 'remake', 'snippet', 'preview only', 'short version', 'edit audio', 'tik tok',
-    'минус', 'караоке', 'перепев', 'фанатск', 'mashup', 'bootleg', 'vocals only',
-    'live from concert', 'на шоу', 'pitch ',
-  ]
-  let pen = noisy.some((word) => text.includes(word)) ? 22 : 0
-  const sec = getNormalizedTrackDurationSec(track)
-  if (sec != null && sec < 45) pen += 40
-  else if (sec != null && sec < WAVE_MY_WAVE_MIN_DURATION_SEC) pen += 14
-  return pen
-}
-
-function scoreMyWaveTrack(track, profile, mode, resultIndex = 0) {
-  const source = String(track.source || '').trim().toLowerCase()
-  const artists = getMyWaveArtistNames(track)
-  let score = 0
-  const artistMatch = Math.max(0, ...artists.map((artist) => profile.artists.get(artist) || 0))
-  score += Math.min(artistMatch, 18) * 0.75
-  score += (profile.sources.get(source) || 0) * 0.8
-  getMyWaveTokens(track).forEach((token) => { score += Math.min(profile.tokens.get(token) || 0, 12) })
-  score += getMyWaveMoodScore(track, mode)
-  score += getMyWaveTrendScore(track, resultIndex)
-  score += getMyWaveVibeScore(track, mode)
-  score -= getMyWaveQualityPenalty(track, mode)
-  score += getMyWaveOfficialBonus(track)
-  score = applyWaveTasteToScore(track, score)
-  return score
-}
-
-function getMyWaveExcludedSignatures() {
-  const set = new Set()
-  const add = (track) => {
-    const sig = normalizeTrackSignature(track)
-    if (sig) set.add(sig)
-  }
-  getMyWaveCandidates().forEach((item) => add(item.track))
-  queue.forEach(add)
-  if (currentTrack) add(currentTrack)
-  return set
-}
-
-function isMyWaveRecommendationAllowed(track, excluded, selected) {
-  const safe = sanitizeTrack(track)
-  if (!safe?.id && !safe?.title) return false
-  const sig = normalizeTrackSignature(safe)
-  if (!sig || excluded.has(sig) || selected.has(sig)) return false
-  const text = `${safe.artist || ''} ${safe.title || ''}`.toLowerCase()
-  if (!text.trim() || text.includes('karaoke') || text.includes('instrumental remake')) return false
-  const durSec = getNormalizedTrackDurationSec(safe)
-  if (durSec != null && durSec < WAVE_MY_WAVE_MIN_DURATION_SEC) return false
-  return true
-}
-
-function getMyWaveTopArtists(seedTracks, limit = 8) {
-  const counts = new Map()
-  seedTracks.forEach((track, idx) => {
-    getMyWaveArtistNames(track).forEach((artist, artistIdx) => {
-      counts.set(artist, (counts.get(artist) || 0) + Math.max(1, 10 - idx) * (artistIdx === 0 ? 1 : 0.55))
-    })
-  })
-  return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, limit).map(([artist]) => artist)
-}
-
-function buildMyWaveQueries(seedTracks, mode = getMyWaveMode(), profile = buildMyWavePreferenceProfile(getMyWaveCandidates())) {
-  const cfg = MY_WAVE_MODES[mode] || MY_WAVE_MODES.default
-  const artists = getMyWaveTopArtists(seedTracks, 8)
-  const seeds = seedTracks.slice(0, 10)
-  const prefTerms = getMyWavePreferenceTerms(profile, 8)
-  const moodTerms = (cfg.queryTerms || MY_WAVE_MODES.default.queryTerms || []).slice(0, 6)
-  const trendTermsByMode = {
-    default: ['viral hits', 'tiktok vibe', 'trending now', 'popular songs', 'hyperpop viral', 'phonk viral'],
-    sad: ['slowed reverb popular', 'sad tiktok', 'dreamcore music', 'sad aesthetic tiktok'],
-    happy: ['happy tiktok', 'hyperpop viral', 'feel good hits', 'party tiktok'],
-    energetic: ['phonk viral', 'aggressive phonk', 'brazilian funk popular', 'gym phonk', 'tiktok hype'],
-    calm: ['chill tiktok', 'lofi vibe', 'dreamcore chill', 'soft night'],
-    romantic: ['love tiktok', 'romantic viral', 'slowed love songs', 'heartbreak love'],
-  }
-  const trendTerms = trendTermsByMode[mode] || trendTermsByMode.default
-  const queries = []
-  artists.forEach((artist, idx) => {
-    const term = moodTerms[idx % moodTerms.length] || 'similar'
-    queries.push(`${artist} ${term}`)
-    queries.push(`${artist} ${trendTerms[idx % trendTerms.length]}`)
-    if (mode === 'energetic') queries.push(`${artist} phonk viral`)
-    if (mode === 'sad') queries.push(`${artist} slowed reverb popular`)
-    queries.push(`${artist} similar artists`)
-  })
-  seeds.forEach((track, idx) => {
-    const artist = String(track?.artist || '').trim()
-    const term = moodTerms[idx % moodTerms.length] || 'similar'
-    const token = prefTerms[idx % Math.max(1, prefTerms.length)] || ''
-    if (artist && token) queries.push(`${artist} ${token} ${term}`)
-    else if (artist) queries.push(`${artist} ${term}`)
-  })
-  prefTerms.forEach((token, idx) => {
-    const term = moodTerms[idx % moodTerms.length] || 'playlist'
-    queries.push(`${token} ${term}`)
-  })
-  moodTerms.forEach((term) => queries.push(`${term} music`))
-  trendTerms.forEach((term) => queries.push(term))
-  return Array.from(new Set(queries.map((q) => q.trim()).filter(Boolean))).slice(0, 28)
-}
-
-async function findMyWaveRecommendations(min = MY_WAVE_MIN_TRACKS, mode = getMyWaveMode()) {
-  const candidates = getMyWaveCandidates()
-  const profile = buildMyWavePreferenceProfile(candidates)
-  const target = Math.min(MY_WAVE_MAX_TRACKS, Math.max(MY_WAVE_MIN_TRACKS, Number(min) || MY_WAVE_MIN_TRACKS))
-  const seedTracks = getMyWaveSeedTracks()
-  const queries = buildMyWaveQueries(seedTracks, mode, profile)
-  const excluded = getMyWaveExcludedSignatures()
-  const selected = new Set()
-  const selectedArtists = new Map()
-  const found = []
-  const settings = getSettings()
-  for (const query of queries) {
-    if (found.length >= target) break
-    let results = []
-    try {
-      const hybrid = await searchHybridTracks(query, settings)
-      results = sanitizeTrackList(hybrid?.tracks || [])
-    } catch {}
-    const ranked = results
-      .map((track) => sanitizeTrack(track))
-      .map((track, idx) => ({ track, idx }))
-      .filter(({ track }) => isMyWaveRecommendationAllowed(track, excluded, selected))
-      .map(({ track, idx }) => ({ track, score: scoreMyWaveTrack(track, profile, mode, idx) }))
-      .sort((a, b) => b.score - a.score)
-    let pickedFromQuery = 0
-    for (const { track } of ranked) {
-      const artist = getMyWavePrimaryArtist(track)
-      const artistCount = selectedArtists.get(artist) || 0
-      if (artist && artistCount >= 2 && found.length < target - 4) continue
-      const sig = normalizeTrackSignature(track)
-      selected.add(sig)
-      if (artist) selectedArtists.set(artist, artistCount + 1)
-      found.push(track)
-      pickedFromQuery += 1
-      if (pickedFromQuery >= 3 || found.length >= target) break
-    }
-  }
-  return found.slice(0, target)
-}
 
 async function maybePreloadMyWave(force = false) {
   if (queueScope !== 'myWave' || _myWaveBuilding || _myWavePreloading) return
@@ -3867,7 +3471,7 @@ async function startMyWave() {
   renderMyWave()
   showToast('Моя волна подбирает новые треки...')
   try {
-    const tracks = await findMyWaveRecommendations(MY_WAVE_MIN_TRACKS, getMyWaveMode())
+    const tracks = await findMyWaveRecommendations(WE?.MY_WAVE_MIN_TRACKS ?? 10, getMyWaveMode())
     if (!tracks.length) return showToast('Волна пока не нашла новые треки. Попробуй другой режим или послушай еще музыку', true)
     _myWaveRenderedTracks = tracks.slice()
     queue = tracks.slice()
@@ -3889,10 +3493,10 @@ function renderMyWave() {
   const modesEl = document.getElementById('my-wave-modes')
   if (!listEl || !hintEl) return
   const mode = getMyWaveMode()
-  const modeCfg = MY_WAVE_MODES[mode] || MY_WAVE_MODES.default
+  const modeCfg = WE?.MY_WAVE_MODES?.[mode] || WE?.MY_WAVE_MODES?.default
   const seedCount = getMyWaveSeedTracks().length
   if (modesEl) {
-    modesEl.innerHTML = Object.entries(MY_WAVE_MODES).map(([id, cfg]) => (
+    modesEl.innerHTML = Object.entries(WE?.MY_WAVE_MODES || {}).map(([id, cfg]) => (
       `<button class="my-wave-mode ${id === mode ? 'active' : ''}" data-wave-mode="${id}" onclick="setMyWaveMode('${id}')">${cfg.label}</button>`
     )).join('')
   }
@@ -3920,9 +3524,9 @@ function renderRoomsMyWave() {
   const listEl = document.getElementById('rooms-wave-list')
   if (!hintEl || !modesEl || !listEl) return
   const mode = getMyWaveMode()
-  const modeCfg = MY_WAVE_MODES[mode] || MY_WAVE_MODES.default
+  const modeCfg = WE?.MY_WAVE_MODES?.[mode] || WE?.MY_WAVE_MODES?.default
   const seedCount = getMyWaveSeedTracks().length
-  modesEl.innerHTML = Object.entries(MY_WAVE_MODES).map(([id, cfg]) => (
+  modesEl.innerHTML = Object.entries(WE?.MY_WAVE_MODES || {}).map(([id, cfg]) => (
     `<button class="my-wave-mode ${id === mode ? 'active' : ''}" data-wave-mode="${id}" onclick="setMyWaveMode('${id}')">${cfg.label}</button>`
   )).join('')
   if (seedCount < 3) {
@@ -6598,7 +6202,7 @@ function nextTrack(autoEnded = false) {
     !autoEnded &&
     currentTrack &&
     Number(audio?.duration || 0) > 2 &&
-    Number(audio?.currentTime || 0) < WAVE_EARLY_SKIP_SEC
+    Number(audio?.currentTime || 0) < (WE?.WAVE_EARLY_SKIP_SEC ?? 14)
   ) {
     recordWaveEarlySkip(currentTrack)
   }
@@ -6636,7 +6240,7 @@ function nextTrack(autoEnded = false) {
 audio.ontimeupdate = () => {
   // Keep general UI updates lightweight, but make lyrics sync feel tighter.
   const shouldSyncUi = (performance.now() - _lastUiSyncAt) >= 90
-  if (_lyricsOpen && _lyricsData.length) syncLyrics((audio.currentTime || 0) + 0.03)
+  if (_lyricsOpen && _lyricsData.length) syncLyrics(getLyricsSmoothedTime())
   if (shouldSyncUi) {
     _lastUiSyncAt = performance.now()
     const p = document.getElementById('progress')
@@ -7895,6 +7499,33 @@ let _lyricsSettingsOpen = false
 let _lyricsObserver = null
 let _lyricsLastPaintAt = 0
 let _lyricsRafId = 0
+/** Сглаживание времени между «ступеньками» currentTime для караоке (lerp по performance.now). */
+const LYRICS_TIME_DRIFT_RESYNC_SEC = 0.1
+let _lyricsSmoothedTimeAnchor = { audio: 0, perfMs: 0 }
+
+function getLyricsSmoothedTime() {
+  try {
+    if (!audio || audio.paused || audio.ended) {
+      const t = Number(audio?.currentTime || 0)
+      _lyricsSmoothedTimeAnchor = { audio: t, perfMs: performance.now() }
+      return t
+    }
+    const now = performance.now()
+    const actual = Number(audio.currentTime || 0)
+    if (!_lyricsSmoothedTimeAnchor.perfMs) {
+      _lyricsSmoothedTimeAnchor = { audio: actual, perfMs: now }
+      return actual
+    }
+    const predicted = _lyricsSmoothedTimeAnchor.audio + (now - _lyricsSmoothedTimeAnchor.perfMs) / 1000
+    if (Math.abs(actual - predicted) > LYRICS_TIME_DRIFT_RESYNC_SEC) {
+      _lyricsSmoothedTimeAnchor = { audio: actual, perfMs: now }
+      return actual
+    }
+    return predicted
+  } catch {
+    return Number(audio?.currentTime || 0)
+  }
+}
 
 function stopLyricsSyncLoop() {
   if (_lyricsRafId) cancelAnimationFrame(_lyricsRafId)
@@ -7908,7 +7539,7 @@ function startLyricsSyncLoop() {
       _lyricsRafId = 0
       return
     }
-    syncLyrics(audio.currentTime || 0)
+    syncLyrics(getLyricsSmoothedTime())
     _lyricsRafId = requestAnimationFrame(tick)
   }
   _lyricsRafId = requestAnimationFrame(tick)
@@ -7938,13 +7569,25 @@ function observeLyricsVisibility(target) {
   target.querySelectorAll('.lyrics-line').forEach((line) => _lyricsObserver.observe(line))
 }
 
+function normalizeLyricsPlaybackMode(raw) {
+  const m = String(raw || '')
+  if (m === 'karaoke') return 'karaoke'
+  if (m === 'focus') return 'focus'
+  if (m === 'scale') return 'scale'
+  if (m === 'neon') return 'neon'
+  return 'standard'
+}
+
+/** Пресеты кнопок «A» для подсветки выбора в попапе. */
+const _LYRICS_SIZE_PRESETS = [16, 22, 28, 38]
+
 function getLyricsVisualSettings() {
   const v = getVisual()
   const src = v.lyrics || {}
   return {
     scrollMode: src.scrollMode === 'line' ? 'line' : 'smooth',
     align: src.align === 'center' ? 'center' : 'left',
-    playbackMode: src.playbackMode === 'karaoke' ? 'karaoke' : (src.playbackMode === 'focus' ? 'focus' : 'standard'),
+    playbackMode: normalizeLyricsPlaybackMode(src.playbackMode),
     effect: src.effect === 'glow' ? 'glow' : (src.effect === 'contrast' ? 'contrast' : 'soft'),
     size: Math.max(13, Math.min(42, Number(src.size || 16))),
     blur: Math.max(0, Math.min(8, Number(src.blur || 4))),
@@ -7957,26 +7600,40 @@ function applyLyricsVisualSettings() {
   document.documentElement.style.setProperty('--lyrics-blur', `${cfg.blur}px`)
   document.body.classList.toggle('lyrics-align-center', cfg.align === 'center')
   document.body.classList.toggle('lyrics-align-left', cfg.align !== 'center')
-  document.body.classList.remove('lyrics-mode-standard', 'lyrics-mode-karaoke', 'lyrics-mode-focus')
+  document.body.classList.remove('lyrics-mode-standard', 'lyrics-mode-karaoke', 'lyrics-mode-focus', 'lyrics-mode-scale', 'lyrics-mode-neon')
   document.body.classList.add(`lyrics-mode-${cfg.playbackMode}`)
   document.body.classList.remove('lyrics-effect-soft', 'lyrics-effect-glow', 'lyrics-effect-contrast')
   document.body.classList.add(`lyrics-effect-${cfg.effect}`)
-  const modeEl = document.getElementById('pm-lyrics-scroll-mode')
-  const playbackModeEl = document.getElementById('pm-lyrics-playback-mode')
-  const effectEl = document.getElementById('pm-lyrics-effect')
-  const sizeEl = document.getElementById('pm-lyrics-size')
+  document.querySelectorAll('.pm-lyrics-opt[data-playback]').forEach((btn) => {
+    btn.classList.toggle('is-active', btn.getAttribute('data-playback') === cfg.playbackMode)
+  })
+  document.querySelectorAll('.pm-lyrics-opt[data-effect]').forEach((btn) => {
+    btn.classList.toggle('is-active', btn.getAttribute('data-effect') === cfg.effect)
+  })
+  const scrollSmooth = document.getElementById('pm-lyrics-scroll-smooth')
+  const scrollLine = document.getElementById('pm-lyrics-scroll-line')
+  if (scrollSmooth) scrollSmooth.classList.toggle('is-active', cfg.scrollMode === 'smooth')
+  if (scrollLine) scrollLine.classList.toggle('is-active', cfg.scrollMode === 'line')
   const leftBtn = document.getElementById('pm-lyrics-align-left')
   const centerBtn = document.getElementById('pm-lyrics-align-center')
-  if (playbackModeEl) playbackModeEl.value = cfg.playbackMode
-  if (modeEl) modeEl.value = cfg.scrollMode
-  if (effectEl) effectEl.value = cfg.effect
-  if (sizeEl) sizeEl.value = String(cfg.size)
-  if (leftBtn) leftBtn.classList.toggle('active', cfg.align === 'left')
-  if (centerBtn) centerBtn.classList.toggle('active', cfg.align === 'center')
+  if (leftBtn) leftBtn.classList.toggle('is-active', cfg.align === 'left')
+  if (centerBtn) centerBtn.classList.toggle('is-active', cfg.align === 'center')
+  let near = _LYRICS_SIZE_PRESETS[0]
+  let best = Math.abs(cfg.size - near)
+  for (const s of _LYRICS_SIZE_PRESETS) {
+    const d = Math.abs(cfg.size - s)
+    if (d < best) {
+      best = d
+      near = s
+    }
+  }
+  document.querySelectorAll('.pm-lyrics-size-a').forEach((btn) => {
+    btn.classList.toggle('is-active', Number(btn.dataset.size) === near)
+  })
 }
 
 function setLyricsPlaybackMode(mode) {
-  const safe = mode === 'karaoke' ? 'karaoke' : (mode === 'focus' ? 'focus' : 'standard')
+  const safe = normalizeLyricsPlaybackMode(mode)
   const v = getVisual()
   const lyrics = Object.assign({}, v.lyrics || {}, { playbackMode: safe })
   saveVisual({ lyrics })
@@ -8029,11 +7686,28 @@ function toggleLyrics() {
   }
 }
 
+function closeLyricsSettingsPanel() {
+  if (!_lyricsSettingsOpen) return
+  _lyricsSettingsOpen = false
+  document.getElementById('pm-lyrics-controls-panel')?.classList.add('hidden')
+}
+
 function toggleLyricsSettingsPanel() {
   _lyricsSettingsOpen = !_lyricsSettingsOpen
   const panel = document.getElementById('pm-lyrics-controls-panel')
   if (panel) panel.classList.toggle('hidden', !_lyricsSettingsOpen)
 }
+
+document.addEventListener('click', (event) => {
+  if (!_lyricsSettingsOpen) return
+  const wrap = document.querySelector('.pm-lyrics-settings-wrap')
+  if (wrap?.contains(event.target)) return
+  closeLyricsSettingsPanel()
+})
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') closeLyricsSettingsPanel()
+})
 
 function togglePmLyricsFromCover() {
   toggleLyrics()
@@ -8071,6 +7745,7 @@ async function loadLyrics(track) {
   if (!container && !pmContainer) return
   _lyricsData = []
   _lyricsActiveIdx = -1
+  _lyricsSmoothedTimeAnchor = { audio: 0, perfMs: 0 }
   if (titleEl) titleEl.textContent = track.title || '—'
   if (pmTitleEl) pmTitleEl.textContent = track.title || '—'
   if (container) container.innerHTML = '<div class="lyrics-loading"><div class="spinner"></div><span>Загрузка текста...</span></div>'
@@ -8141,7 +7816,9 @@ function syncLyrics(currentTime) {
   }
   const idxChanged = idx !== _lyricsActiveIdx
   const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()
-  if (!idxChanged && now - _lyricsLastPaintAt < 16) return
+  const karaokeHighRate = cfg.playbackMode === 'karaoke' && idx >= 0
+  // В режиме караоке не дробим обновление «волны»: иначе lerp времени почти не виден (--karaoke-frac трётся тем же троттлом ~16 мс).
+  if (!idxChanged && now - _lyricsLastPaintAt < 16 && !karaokeHighRate) return
   _lyricsLastPaintAt = now
   if (idxChanged) {
     _lyricsActiveIdx = idx

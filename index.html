@@ -877,30 +877,47 @@
   <div class="pm-lyrics-shell hidden" id="pm-lyrics-shell">
     <div class="pm-lyrics-head">
       <div class="pm-lyrics-track" id="pm-lyrics-track-name">—</div>
-      <div class="pm-lyrics-head-top">
-        <button class="pm-lyrics-mini-btn" onclick="toggleLyricsSettingsPanel()" title="Настройки текста">
-          <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.04 1.56V21a2 2 0 1 1-4 0V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.04 1.56h.09a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87"/></svg>
-        </button>
-        <button class="pm-lyrics-close" onclick="toggleLyrics()" title="Скрыть текст">СКРЫТЬ ТЕКСТ <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+      <div class="pm-lyrics-settings-wrap">
+      <button class="pm-lyrics-mini-btn" id="pm-lyrics-settings-btn" type="button" onclick="toggleLyricsSettingsPanel()" title="Оформление текста">
+        <svg class="ui-icon pm-lyrics-settings-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="2" x2="6" y1="14" y2="14"/><line x1="10" x2="14" y1="8" y2="8"/><line x1="18" x2="22" y1="16" y2="16"/>
+        </svg>
+      </button>
+      <div class="pm-lyrics-controls pm-lyrics-popover hidden" id="pm-lyrics-controls-panel" role="dialog" aria-label="Оформление текста">
+        <div class="pm-lyrics-popover-inner">
+          <div class="pm-lyrics-size-row" role="group" aria-label="Размер текста">
+            <button type="button" class="pm-lyrics-size-a" id="pm-lyrics-size-xs" data-size="16" onclick="setLyricsSize(this.dataset.size)" title="Компакт">A</button>
+            <button type="button" class="pm-lyrics-size-a" id="pm-lyrics-size-s" data-size="22" onclick="setLyricsSize(this.dataset.size)" title="Средний">A</button>
+            <button type="button" class="pm-lyrics-size-a" id="pm-lyrics-size-m" data-size="28" onclick="setLyricsSize(this.dataset.size)" title="Крупнее">A</button>
+            <button type="button" class="pm-lyrics-size-a" id="pm-lyrics-size-l" data-size="38" onclick="setLyricsSize(this.dataset.size)" title="Максимум">A</button>
+          </div>
+          <div class="pm-lyrics-sep" role="presentation"></div>
+          <div class="pm-lyrics-section-label">Стиль текста</div>
+          <div class="pm-lyrics-opt-list">
+            <button type="button" class="pm-lyrics-opt" data-playback="standard" onclick="setLyricsPlaybackMode(this.dataset.playback)">Обычный</button>
+            <button type="button" class="pm-lyrics-opt" data-playback="scale" onclick="setLyricsPlaybackMode(this.dataset.playback)">Масштаб</button>
+            <button type="button" class="pm-lyrics-opt" data-playback="focus" onclick="setLyricsPlaybackMode(this.dataset.playback)">Фокус</button>
+            <button type="button" class="pm-lyrics-opt" data-playback="neon" onclick="setLyricsPlaybackMode(this.dataset.playback)">Неон</button>
+            <button type="button" class="pm-lyrics-opt" data-playback="karaoke" onclick="setLyricsPlaybackMode(this.dataset.playback)">Караоке</button>
+          </div>
+          <div class="pm-lyrics-sep" role="presentation"></div>
+          <div class="pm-lyrics-section-label">Эффект</div>
+          <div class="pm-lyrics-opt-list">
+            <button type="button" class="pm-lyrics-opt" data-effect="soft" onclick="setLyricsEffect(this.dataset.effect)">Приглушение</button>
+            <button type="button" class="pm-lyrics-opt" data-effect="glow" onclick="setLyricsEffect(this.dataset.effect)">Подсветка</button>
+            <button type="button" class="pm-lyrics-opt" data-effect="contrast" onclick="setLyricsEffect(this.dataset.effect)">Контраст</button>
+          </div>
+          <div class="pm-lyrics-sep" role="presentation"></div>
+          <div class="pm-lyrics-section-label pm-lyrics-section-label-muted">Режим и выравнивание</div>
+          <div class="pm-lyrics-compact-row">
+            <button type="button" class="pm-lyrics-toggle" id="pm-lyrics-scroll-smooth" data-scroll="smooth" onclick="setLyricsScrollMode(this.dataset.scroll)">Плавный</button>
+            <button type="button" class="pm-lyrics-toggle" id="pm-lyrics-scroll-line" data-scroll="line" onclick="setLyricsScrollMode(this.dataset.scroll)">Построчно</button>
+            <span class="pm-lyrics-compact-gap"></span>
+            <button type="button" class="pm-lyrics-toggle" id="pm-lyrics-align-left" onclick="setLyricsAlign('left')">Лево</button>
+            <button type="button" class="pm-lyrics-toggle" id="pm-lyrics-align-center" onclick="setLyricsAlign('center')">Центр</button>
+          </div>
+        </div>
       </div>
-      <div class="pm-lyrics-controls hidden" id="pm-lyrics-controls-panel">
-        <select id="pm-lyrics-playback-mode" onchange="setLyricsPlaybackMode(this.value)">
-          <option value="standard">Стандарт</option>
-          <option value="karaoke">Караоке</option>
-          <option value="focus">Фокус</option>
-        </select>
-        <select id="pm-lyrics-scroll-mode" onchange="setLyricsScrollMode(this.value)">
-          <option value="smooth">Плавный</option>
-          <option value="line">Построчный</option>
-        </select>
-        <select id="pm-lyrics-effect" onchange="setLyricsEffect(this.value)">
-          <option value="soft">Soft</option>
-          <option value="glow">Glow</option>
-          <option value="contrast">Contrast</option>
-        </select>
-        <button class="pm-lyrics-align-btn active" id="pm-lyrics-align-left" onclick="setLyricsAlign('left')">Лево</button>
-        <button class="pm-lyrics-align-btn" id="pm-lyrics-align-center" onclick="setLyricsAlign('center')">Центр</button>
-        <input id="pm-lyrics-size" type="range" min="13" max="42" value="16" oninput="setLyricsSize(this.value)">
       </div>
     </div>
     <div class="pm-lyrics-content" id="pm-lyrics-content">
@@ -1069,8 +1086,9 @@
 <script src="src/modules/utils/smart-cleaning.js"></script>
 <script src="src/modules/audio/player-core.js"></script>
 <script src="src/modules/network/peer-social.js"></script>
-<script src="src/modules/ui/drag-drop.js"></script>
-<script src="renderer.js"></script>
+  <script src="src/modules/ui/drag-drop.js"></script>
+  <script src="src/modules/wave-engine.js"></script>
+  <script src="renderer.js"></script>
 </body>
 </html>
 
