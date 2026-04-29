@@ -31,6 +31,68 @@ const DEFAULT_YANDEX_TOKEN = String(process.env.YANDEX_TOKEN || process.env.YM_T
 const DEFAULT_YANDEX_COOKIE = String(process.env.YANDEX_COOKIE || process.env.YANDEX_MUSIC_COOKIE || '').trim()
 const VK_UA = 'VKAndroidApp/5.52-4543 (Android 5.1.1; SDK 22; x86_64; unknown Android SDK built for x86_64; en; 320x480)'
 const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+const VK_CLIENTS = [
+  { id: '2274003', secret: 'hHbZxrka2uZ6jB1inYsH' },
+  { id: '3140623', secret: 'Y8Jc6Q3Vqf4M6w5rjW8h' },
+]
+
+function resolveEnvPath() {
+  const existing = [path.join(process.cwd(), '.env'), path.join(__dirname, '..', '.env')]
+    .find((candidate) => fs.existsSync(candidate))
+  return existing || path.join(__dirname, '..', '.env')
+}
+
+function upsertEnv(entries = {}) {
+  const envPath = resolveEnvPath()
+  const src = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : ''
+  const lines = src.split(/\r?\n/)
+  const map = new Map()
+  for (const line of lines) {
+    const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/)
+    if (!m) continue
+    map.set(m[1], m[2])
+  }
+  Object.entries(entries).forEach(([k, v]) => {
+    if (!k) return
+    const value = String(v == null ? '' : v).replace(/\r?\n/g, ' ').trim()
+    map.set(k, value)
+    process.env[k] = value
+  })
+  const out = Array.from(map.entries()).map(([k, v]) => `${k}=${v}`).join('\n') + '\n'
+  fs.writeFileSync(envPath, out, 'utf8')
+  return envPath
+}
+
+async function tryVkPasswordToken(login, password) {
+  for (const client of VK_CLIENTS) {
+    const params = new URLSearchParams({
+      grant_type: 'password',
+      client_id: String(client.id),
+      client_secret: String(client.secret),
+      username: String(login || '').trim(),
+      password: String(password || ''),
+      scope: 'audio,offline',
+      v: '5.131',
+      '2fa_supported': '1',
+    })
+    const rsp = await axios.get(`https://oauth.vk.com/token?${params.toString()}`, {
+      headers: { 'User-Agent': VK_UA, 'Accept': 'application/json' },
+      timeout: 18000,
+      validateStatus: () => true,
+    })
+    const body = rsp?.data || {}
+    if (body?.access_token) return { ok: true, token: String(body.access_token), via: 'password-grant' }
+    if (body?.error === 'need_validation') {
+      return {
+        ok: false,
+        need_validation: true,
+        error: 'need_validation',
+        details: body,
+      }
+    }
+  }
+  return { ok: false, error: 'vk login failed' }
+}
 
 function writeJson(res, code, data) {
   res.writeHead(code, {
@@ -569,6 +631,55 @@ const server = http.createServer(async (req, res) => {
       yandexToken: Boolean(DEFAULT_YANDEX_TOKEN),
       yandexCookie: Boolean(DEFAULT_YANDEX_COOKIE),
     })
+  }
+
+  if (req.method === 'GET' && url.pathname === '/auth/status') {
+    return writeJson(res, 200, {
+      ok: true,
+      vkToken: Boolean(String(process.env.VK_ACCESS_TOKEN || '').trim()),
+      vkCookie: Boolean(String(process.env.VK_COOKIE || '').trim()),
+      yandexToken: Boolean(String(process.env.YANDEX_TOKEN || process.env.YM_TOKEN || '').trim()),
+      yandexCookie: Boolean(String(process.env.YANDEX_COOKIE || process.env.YANDEX_MUSIC_COOKIE || '').trim()),
+    })
+  }
+
+  if (req.method === 'POST' && url.pathname === '/auth/save') {
+    try {
+      const body = await readBody(req)
+      const patch = {}
+      if (body?.vkToken != null) patch.VK_ACCESS_TOKEN = String(body.vkToken || '').trim()
+      if (body?.vkCookie != null) patch.VK_COOKIE = String(body.vkCookie || '').trim()
+      if (body?.yandexToken != null) patch.YANDEX_TOKEN = String(body.yandexToken || '').trim()
+      if (body?.yandexCookie != null) patch.YANDEX_COOKIE = String(body.yandexCookie || '').trim()
+      const envPath = upsertEnv(patch)
+      return writeJson(res, 200, { ok: true, saved: Object.keys(patch), envPath })
+    } catch (err) {
+      return writeJson(res, 400, { ok: false, error: err?.message || String(err) })
+    }
+  }
+
+  if (req.method === 'POST' && url.pathname === '/auth/vk/login') {
+    try {
+      const body = await readBody(req)
+      const login = String(body?.login || '').trim()
+      const password = String(body?.password || '')
+      if (!login || !password) return writeJson(res, 400, { ok: false, error: 'login/password required' })
+      const result = await tryVkPasswordToken(login, password)
+      if (result?.ok && result?.token) {
+        const envPath = upsertEnv({ VK_ACCESS_TOKEN: result.token })
+        return writeJson(res, 200, { ok: true, via: result.via, saved: ['VK_ACCESS_TOKEN'], envPath })
+      }
+      if (result?.need_validation) {
+        return writeJson(res, 409, {
+          ok: false,
+          error: 'vk needs additional validation (sms/2fa). Use /auth/save with VK_COOKIE from browser session.',
+          details: result.details || null,
+        })
+      }
+      return writeJson(res, 401, { ok: false, error: result?.error || 'vk login failed' })
+    } catch (err) {
+      return writeJson(res, 400, { ok: false, error: err?.message || String(err) })
+    }
   }
 
   if (req.method === 'GET' && url.pathname === '/vk/playlist') {
