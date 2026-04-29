@@ -37,7 +37,7 @@ let playbackMode = (() => {
   catch { return { ...defaultPlayback } }
 })()
 
-const COVER_ICON = '<svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'
+const COVER_ICON = '<svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'
 let _audioCtx = null
 let _analyser = null
 let _freqData = null
@@ -375,13 +375,16 @@ function prepareProfileImageData(file, dataUrl, kind = 'avatar') {
 }
 
 const ICONS = {
-  play: '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5v14l11-7Z"/></svg>',
-  pause: '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6v12"/><path d="M15 6v12"/></svg>',
-  plus: '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>',
-  close: '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>'
+  play: '<svg class="ui-icon ctrl-play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M9 8 L17 12 L9 16 Z"/></svg>',
+  pause: '<svg class="ui-icon ctrl-play-icon" viewBox="0 0 24 24" fill="currentColor"><rect x="7.25" y="5.75" width="4" height="12.5" rx="1.15"/><rect x="12.75" y="5.75" width="4" height="12.5" rx="1.15"/></svg>',
+  plus: '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>',
+  close: '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>'
 }
-const HEART_OUTLINE = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.35-9.5-8A5.5 5.5 0 0 1 12 5.1 5.5 5.5 0 0 1 21.5 13c-2.5 3.65-9.5 8-9.5 8Z"/></svg>'
-const HEART_FILLED = '<svg class="ui-icon" viewBox="0 0 24 24" fill="currentColor" fill-opacity="0.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.35-9.5-8A5.5 5.5 0 0 1 12 5.1 5.5 5.5 0 0 1 21.5 13c-2.5 3.65-9.5 8-9.5 8Z"/></svg>'
+const HEART_OUTLINE = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.35-9.5-8A5.5 5.5 0 0 1 12 5.1 5.5 5.5 0 0 1 21.5 13c-2.5 3.65-9.5 8-9.5 8Z"/></svg>'
+const HEART_FILLED = '<svg class="ui-icon" viewBox="0 0 24 24" fill="currentColor" fill-opacity="0.22" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.35-9.5-8A5.5 5.5 0 0 1 12 5.1 5.5 5.5 0 0 1 21.5 13c-2.5 3.65-9.5 8-9.5 8Z"/></svg>'
+const PM_PLAY_INNER = '<path fill="currentColor" d="M9 8 L17 12 L9 16 Z"/>'
+const PM_PAUSE_INNER = '<rect fill="currentColor" x="7.25" y="5.75" width="4" height="12.5" rx="1.15"/><rect fill="currentColor" x="12.75" y="5.75" width="4" height="12.5" rx="1.15"/>'
+const ICON_SIMILAR = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M14.83 14.83a4 4 0 0 1-6.63 1.1 4 4 0 0 1 1.53-6.73 4 4 0 0 1 5 .37l5.74 5.32"/><path d="M9.17 9.17a4 4 0 0 0 6.63-1.1 4 4 0 0 0-1.53 6.73 4 4 0 0 0-5-.37l-5.74-5.32"/></svg>'
 
 // в”Ђв”Ђв”Ђ VISUAL SETTINGS в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 const defaultVisual = {
@@ -1390,15 +1393,15 @@ function saveSettingsSectionsState(state) {
 function applySettingsSectionsState() {
   const state = getSettingsSectionsState()
   const defaultCollapsed = {
-    interface: false,
+    interface: true,
     background: true,
     cover: true,
-    blur: false,
-    accent: false,
-    effects: false,
-    scale: false,
+    blur: true,
+    accent: true,
+    effects: true,
+    scale: true,
     font: true,
-    notifications: false,
+    notifications: true,
     accountVk: true,
     accountYandex: true,
     accountSoundcloud: true,
@@ -1418,15 +1421,15 @@ function toggleSettingsSection(key) {
   if (!sectionKey) return
   const state = getSettingsSectionsState()
   const defaultCollapsed = {
-    interface: false,
+    interface: true,
     background: true,
     cover: true,
-    blur: false,
-    accent: false,
-    effects: false,
-    scale: false,
+    blur: true,
+    accent: true,
+    effects: true,
+    scale: true,
     font: true,
-    notifications: false,
+    notifications: true,
     accountVk: true,
     accountYandex: true,
     accountSoundcloud: true,
@@ -1552,9 +1555,7 @@ function syncPlayerModeUI() {
   }
   // play/pause icon sync
   const icon = document.getElementById('pm-play-icon')
-  if (icon) icon.innerHTML = audio.paused
-    ? '<polygon points="5 3 19 12 5 21 5 3"/>'
-    : '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>'
+  if (icon) icon.innerHTML = audio.paused ? PM_PLAY_INNER : PM_PAUSE_INNER
   // volume sync
   const pmVol = document.getElementById('pm-volume')
   if (pmVol) pmVol.value = audio.volume
@@ -2313,6 +2314,11 @@ function importFlowConfigFile(input) {
   const reader = new FileReader()
   reader.onload = () => {
     try {
+      const sessionBackup = {
+        flow_profiles: localStorage.getItem('flow_profiles'),
+        flow_current_user: localStorage.getItem('flow_current_user'),
+        flow_auth_last_user: localStorage.getItem('flow_auth_last_user'),
+      }
       const parsed = JSON.parse(String(reader.result || '{}'))
       const preset = normalizeImportedFlowPreset(parsed)
       const storage = preset?.storage
@@ -2368,12 +2374,19 @@ function importFlowConfigFile(input) {
         ) return
         localStorage.setItem(key, String(value ?? ''))
       })
+      // Force-restore auth session keys regardless of preset payload content.
+      Object.entries(sessionBackup).forEach(([key, value]) => {
+        if (typeof value === 'string' && value.trim()) localStorage.setItem(key, value)
+      })
       setFlowConfigStatus('Flow preset импортирован. Сессия аккаунта сохранена, перезагрузка не требуется.', false)
       showToast('Flow preset импортирован')
-      applyVisualSettings()
-      applySourceStatus()
-      applyUiTextOverrides()
-      renderPlaylists()
+      try { applyVisualSettings() } catch {}
+      try { applySourceStatus() } catch {}
+      try { applyUiTextOverrides() } catch {}
+      try { renderPlaylists() } catch {}
+      try { syncProfileUi() } catch {}
+      try { renderFriends().catch(() => {}) } catch {}
+      try { pollFriendsPresence(true).catch(() => {}) } catch {}
     } catch (err) {
       setFlowConfigStatus(`Ошибка импорта: ${err?.message || err}`, true)
       showToast('Не удалось импортировать preset', true)
@@ -2472,6 +2485,14 @@ function switchTab(tab) {
 function setAuthError(text = '') {
   const el = document.getElementById('auth-error')
   if (el) el.textContent = text
+}
+
+function setAuthScreensAuthorized(isAuthorized) {
+  const loggedIn = Boolean(isAuthorized)
+  document.getElementById('screen-auth')?.classList.toggle('hidden', loggedIn)
+  document.getElementById('screen-main')?.classList.toggle('hidden', !loggedIn)
+  // Hide the bottom player panel before login/register.
+  document.getElementById('player-bar')?.classList.toggle('hidden', !loggedIn)
 }
 
 function syncProfileUi() {
@@ -2642,6 +2663,8 @@ async function syncProfileCloudNow() {
   if (!sb) return { ok: false, error: 'no supabase' }
   const custom = getProfileCustom()
   const stats = getListenStats()
+  const totalTracks = toDbSafeBigint(stats.totalTracks, 0)
+  const totalSeconds = toDbSafeBigint(stats.totalSeconds, 0)
   const payload = {
     username: me.username,
     online: true,
@@ -2652,13 +2675,17 @@ async function syncProfileCloudNow() {
     bio: custom.bio || '',
     pinned_tracks: Array.isArray(custom.pinnedTracks) ? custom.pinnedTracks.slice(0, 5) : [],
     pinned_playlists: Array.isArray(custom.pinnedPlaylists) ? custom.pinnedPlaylists.slice(0, 5) : [],
-    total_tracks: Number(stats.totalTracks || 0),
-    total_seconds: Number(stats.totalSeconds || 0),
+    total_tracks: totalTracks,
+    total_seconds: totalSeconds,
   }
   let { error } = await sb.from('flow_profiles').upsert(payload, { onConflict: 'username' })
   if (error && String(error.message || '').toLowerCase().includes('profile_color')) {
     const fallbackPayload = Object.assign({}, payload)
     delete fallbackPayload.profile_color
+    ;({ error } = await sb.from('flow_profiles').upsert(fallbackPayload, { onConflict: 'username' }))
+  }
+  if (error && /invalid input syntax for type bigint/i.test(String(error.message || ''))) {
+    const fallbackPayload = Object.assign({}, payload, { total_tracks: 0, total_seconds: 0 })
     ;({ error } = await sb.from('flow_profiles').upsert(fallbackPayload, { onConflict: 'username' }))
   }
   if (error) return { ok: false, error: error.message || String(error) }
@@ -3232,6 +3259,14 @@ function getListenStats() {
   if (!_profile?.username) return { totalTracks: 0, totalSeconds: 0, lastTrackKey: null }
   const key = `flow_listen_stats_${_profile.username}`
   try { return Object.assign({ totalTracks: 0, totalSeconds: 0, lastTrackKey: null }, JSON.parse(localStorage.getItem(key) || '{}')) } catch { return { totalTracks: 0, totalSeconds: 0, lastTrackKey: null } }
+}
+
+function toDbSafeBigint(value, fallback = 0) {
+  if (typeof value === 'number' && Number.isFinite(value)) return Math.max(0, Math.round(value))
+  const normalized = String(value ?? '').trim().replace(/\s+/g, '').replace(',', '.')
+  const parsed = Number(normalized)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.max(0, Math.round(parsed))
 }
 
 function getListenHistory() {
@@ -3910,11 +3945,13 @@ async function submitProfileEditModal() {
   saveProfileCustom(draft)
   syncProfileUi()
   renderProfilePage()
+  scheduleProfileCloudSync()
   const result = await syncProfileCloudNow().catch((err) => ({ ok: false, error: err?.message || String(err) }))
+  renderFriends().catch(() => {})
+  pollFriendsPresence(true).catch(() => {})
   if (!result?.ok) return showToast(`Профиль сохранён локально, но сервер не ответил: ${result?.error || 'ошибка'}`, true)
   closeProfileEditModal()
   showToast('Профиль сохранён и синхронизирован с сервером')
-  renderFriends().catch(() => {})
 }
 
 async function pickProfileAvatar() {
@@ -5085,9 +5122,11 @@ async function submitAuth() {
   if (!result?.ok) return setAuthError(result?.error || 'Ошибка входа')
   _profile = result.profile
   setAuthError('')
+  try {
+    if (_profile?.username) localStorage.setItem('flow_auth_last_user', String(_profile.username).trim().toLowerCase())
+  } catch {}
   if (passInput) passInput.value = ''
-  document.getElementById('screen-auth')?.classList.add('hidden')
-  document.getElementById('screen-main')?.classList.remove('hidden')
+  setAuthScreensAuthorized(true)
   syncProfileUi()
   ensureSocialUI()
   ensureRoomsUI()
@@ -5117,8 +5156,7 @@ function logout() {
   disconnectDiscordRpc().catch?.(() => {})
   if (typeof peerSocial.logoutProfile === 'function') peerSocial.logoutProfile()
   _profile = null
-  document.getElementById('screen-main')?.classList.add('hidden')
-  document.getElementById('screen-auth')?.classList.remove('hidden')
+  setAuthScreensAuthorized(false)
 }
 
 async function addFriendByUsername() {
@@ -5480,8 +5518,7 @@ function startApp() {
   const profile = typeof peerSocial.getCurrentProfile === 'function' ? peerSocial.getCurrentProfile() : null
   _profile = profile || null
   if (_profile) {
-    document.getElementById('screen-auth')?.classList.add('hidden')
-    document.getElementById('screen-main')?.classList.remove('hidden')
+    setAuthScreensAuthorized(true)
     syncProfileUi()
     ensureSocialUI()
     ensureRoomsUI()
@@ -5497,8 +5534,7 @@ function startApp() {
       window.api?.discordRpcConnect?.(s.discordClientId).catch(() => {})
     }
   } else {
-    document.getElementById('screen-main')?.classList.add('hidden')
-    document.getElementById('screen-auth')?.classList.remove('hidden')
+    setAuthScreensAuthorized(false)
     switchTab('login')
     syncIntegrationsUI()
   }
@@ -5819,6 +5855,7 @@ function openPage(id, opts = {}) {
   const idx = pages.indexOf(id)
   if (idx >= 0) document.querySelectorAll('.nav-item')[idx]?.classList.add('active')
   _activePageId = id
+  try { document.body.setAttribute('data-active-page', id) } catch {}
   if (_deferredPageRenderRaf) cancelAnimationFrame(_deferredPageRenderRaf)
   _deferredPageRenderRaf = requestAnimationFrame(() => {
     _deferredPageRenderRaf = 0
@@ -5922,7 +5959,7 @@ async function playTrackObj(track, opts = {}) {
   if (nameEl) nameEl.textContent = track.title || 'Без названия'
   const setStage = (text) => { if (artistEl) artistEl.textContent = text }
   setStage('Загрузка…')
-  if (playBtn) playBtn.innerHTML = '<svg class="ui-icon spin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9"/><path d="M12 7v5l3 2"/></svg>'
+  if (playBtn) playBtn.innerHTML = '<svg class="ui-icon spin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9"/><path d="M12 7v5l3 2"/></svg>'
 
   // SoundCloud transcoding URL -> direct stream URL
   if (track.source === 'soundcloud' && track.scTranscoding && window.api?.scStream) {
@@ -6180,7 +6217,7 @@ async function playTrackObj(track, opts = {}) {
   applyCoverArt(cover, effectiveCover, track.bg || 'linear-gradient(135deg,#7c3aed,#a855f7)')
   if (playBtn) playBtn.innerHTML = ICONS.pause
   const pmIcon = document.getElementById('pm-play-icon')
-  if (pmIcon) pmIcon.innerHTML = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>'
+  if (pmIcon) pmIcon.innerHTML = PM_PAUSE_INNER
   updatePlayerLikeBtn()
   // РћР±РЅРѕРІР»СЏРµРј titlebar
   const tinfo = document.getElementById('titlebar-track-info')
@@ -6233,12 +6270,12 @@ function togglePlay() {
     if (_audioCtx?.state === 'suspended') _audioCtx.resume().catch(() => {})
     if (playBtn) playBtn.innerHTML = ICONS.pause
     const icon = document.getElementById('pm-play-icon')
-    if (icon) icon.innerHTML = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>'
+    if (icon) icon.innerHTML = PM_PAUSE_INNER
   } else {
     audio.pause()
     if (playBtn) playBtn.innerHTML = ICONS.play
     const icon = document.getElementById('pm-play-icon')
-    if (icon) icon.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"/>'
+    if (icon) icon.innerHTML = PM_PLAY_INNER
   }
   if (isRoomParticipant) {
     _socialPeer?.send?.({
@@ -6462,7 +6499,7 @@ function searchTracks(queryOverride = '') {
       renderResults(results)
     } catch (err) {
       const message = sanitizeDisplayText(normalizeInvokeError(err))
-      container.innerHTML = `<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.8 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0Z"/></svg></div><p>${message}</p><small>Источник: ${getSourceLabel()}</small><div style="display:flex;gap:8px;justify-content:center;margin-top:12px"><button class="btn-small" onclick="searchTracks()">Повторить</button><button class="btn-small" onclick="openPage('settings')">Настройки</button></div></div>`
+      container.innerHTML = `<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.8 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0Z"/></svg></div><p>${message}</p><small>Источник: ${getSourceLabel()}</small><div style="display:flex;gap:8px;justify-content:center;margin-top:12px"><button class="btn-small" onclick="searchTracks()">Повторить</button><button class="btn-small" onclick="openPage('settings')">Настройки</button></div></div>`
     }
   }, 350)
 }
@@ -6497,7 +6534,7 @@ function renderResults(results) {
   const countEl = document.getElementById('results-count')
   const srcEl = document.getElementById('results-source-label')
   if (!results?.length) {
-    container.innerHTML = `<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg></div><p>Ничего не найдено</p><small>Попробуй другой запрос или источник</small></div>`
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg></div><p>Ничего не найдено</p><small>Попробуй другой запрос или источник</small></div>`
     if (meta) meta.style.display = 'none'
     return
   }
@@ -6817,7 +6854,7 @@ function renderLiked() {
   const token = ++_likedRenderToken
   const liked = getLiked()
   const container = document.getElementById('liked-list'); if (!container) return
-  if (!liked.length) { container.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.35-9.5-8A5.5 5.5 0 0 1 12 5.1 5.5 5.5 0 0 1 21.5 13c-2.5 3.65-9.5 8-9.5 8Z"/></svg></div><p>Ты еще не лайкнул ни одного трека</p></div>`; return }
+  if (!liked.length) { container.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.35-9.5-8A5.5 5.5 0 0 1 12 5.1 5.5 5.5 0 0 1 21.5 13c-2.5 3.65-9.5 8-9.5 8Z"/></svg></div><p>Ты еще не лайкнул ни одного трека</p></div>`; return }
   container.innerHTML = ''
   let i = 0
   const chunkSize = 18
@@ -6915,7 +6952,7 @@ function openPlaylist(idx) {
   if (coverEl) {
     const playlistCover = sanitizeMediaByGifMode(pl.coverData || '', 'playlist')
     coverEl.style.backgroundImage = playlistCover ? `url(${playlistCover})` : ''
-    coverEl.innerHTML = playlistCover ? '' : '<svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'
+    coverEl.innerHTML = playlistCover ? '' : '<svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'
   }
   document.getElementById('playlists-list').classList.add('hidden')
   document.querySelector('.section-header')?.classList.add('hidden')
@@ -6926,7 +6963,7 @@ function openPlaylist(idx) {
     requestAnimationFrame(() => viewEl.classList.add('is-opening'))
   }
   const container = document.getElementById('playlist-tracks')
-  if (!pl.tracks.length) { container.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div><p>Плейлист пуст</p></div>`; return }
+  if (!pl.tracks.length) { container.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div><p>Плейлист пуст</p></div>`; return }
   container.innerHTML=''
   const token = ++_openPlaylistTrackRenderToken
   let cursor = 0
@@ -7365,7 +7402,7 @@ function renderPlaylists() {
   const token = ++_playlistRenderToken
   const pls = getPlaylists().map(normalizePlaylist)
   const container = document.getElementById('playlists-list'); if (!container) return
-  if (!pls.length) { container.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg></div><p>Нет плейлистов — создай первый!</p></div>`; return }
+  if (!pls.length) { container.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg></div><p>Нет плейлистов — создай первый!</p></div>`; return }
   container.innerHTML=''
   let idx = 0
   const chunkSize = 12
@@ -7379,7 +7416,7 @@ function renderPlaylists() {
       const playlistCover = sanitizeMediaByGifMode(pl.coverData || '', 'playlist')
       const coverStyle = ''
       el.innerHTML=`
-        <div class="playlist-icon" style="${coverStyle}" title="Плейлист">${playlistCover ? '' : '<svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'}</div>
+        <div class="playlist-icon" style="${coverStyle}" title="Плейлист">${playlistCover ? '' : '<svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'}</div>
         <div class="playlist-info" onclick="openPlaylist(${currentIdx})" style="cursor:pointer">
           <span class="playlist-name">${pl.name}</span>
           <span class="playlist-count">${pl.tracks.length} треков${pl.description ? ` • ${pl.description}` : ''}</span>
@@ -7564,17 +7601,17 @@ function makeTrackEl(track, showPlaylist=false, bindDefaultPlay=true) {
   const srcLbl = SRC_LABELS[track.source]||''
   const badge = srcLbl ? `<span class="track-source track-source-${track.source}">${srcLbl}</span>` : ''
   el.innerHTML=`
-    <div class="track-cover" style="${coverStyle}">${trackCover?'':'<svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'}
-      <div class="cover-overlay"><div class="cover-play-icon"><svg viewBox="0 0 24 24" width="10" height="10" style="fill:#111;margin-left:1px"><polygon points="5 3 19 12 5 21 5 3"/></svg></div></div>
+    <div class="track-cover" style="${coverStyle}">${trackCover?'':'<svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'}
+      <div class="cover-overlay"><div class="cover-play-icon"><svg class="ctrl-play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M9 8 L17 12 L9 16 Z"/></svg></div></div>
     </div>
     <div class="track-info">
       <span class="track-name">${track.title}</span>
       <span class="track-artist">${track.artist||'вЂ”'} ${badge}</span>
     </div>
     <button class="track-like ${liked?'liked':''}" data-track-json="${trackJson}" onclick="event.stopPropagation();likeTrack(${trackJson})">${liked ? HEART_FILLED : HEART_OUTLINE}</button>
-    <button class="track-like" onclick="event.stopPropagation();findSimilarTracks(${trackJson})" title="Найти похожие">≈</button>
+    <button class="track-like" onclick="event.stopPropagation();findSimilarTracks(${trackJson})" title="Найти похожие">${ICON_SIMILAR}</button>
     ${showPlaylist?`<button class="track-like" onclick="event.stopPropagation();addToPlaylist(${trackJson})" title="Р’ РїР»РµР№Р»РёСЃС‚">${ICONS.plus}</button>`:''}
-    <button class="track-play"><svg viewBox="0 0 24 24" width="10" height="10" style="fill:currentColor;margin-left:1px"><polygon points="5 3 19 12 5 21 5 3"/></svg></button>`
+    <button class="track-play"><svg class="ctrl-play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M9 8 L17 12 L9 16 Z"/></svg></button>`
   if (trackCover) {
     const coverEl = el.querySelector('.track-cover')
     observeLazyCoverBackground(coverEl, trackCover, fallbackBg, getTrackKey(track))
@@ -7622,10 +7659,22 @@ function startLyricsSyncLoop() {
       _lyricsRafId = 0
       return
     }
-    syncLyrics((audio.currentTime || 0) + 0.03)
+    syncLyrics(audio.currentTime || 0)
     _lyricsRafId = requestAnimationFrame(tick)
   }
   _lyricsRafId = requestAnimationFrame(tick)
+}
+
+function getKaraokeLineDuration(idx) {
+  if (idx < 0 || idx >= _lyricsData.length) return 0
+  const start = Number(_lyricsData[idx]?.time || 0)
+  const nextStartRaw = Number(_lyricsData[idx + 1]?.time)
+  const nextStart = Number.isFinite(nextStartRaw) ? nextStartRaw : (start + 2.4)
+  const gapDuration = Math.max(0.35, nextStart - start)
+  const chars = Math.max(1, String(_lyricsData[idx]?.text || '').length)
+  const readingDuration = Math.max(0.85, Math.min(3.8, chars * 0.085))
+  // Long instrumental gaps should freeze on the line instead of stretching highlight.
+  return Math.min(gapDuration, readingDuration)
 }
 
 function observeLyricsVisibility(target) {
@@ -7862,8 +7911,7 @@ function syncLyrics(currentTime) {
       })
     }
     const start = idx >= 0 ? Number(_lyricsData[idx]?.time || 0) : 0
-    const end = idx >= 0 ? Number(_lyricsData[idx + 1]?.time || (start + 2.2)) : 0
-    const duration = Math.max(0.4, end - start)
+    const duration = Math.max(0.35, idx >= 0 ? getKaraokeLineDuration(idx) : 0.35)
     const progress = idx >= 0 ? Math.max(0, Math.min(1, (currentTime - start) / duration)) : 0
     document.querySelectorAll('.lyrics-line.active').forEach((lineEl) => {
       const chars = Array.from(lineEl.querySelectorAll('.lyrics-char'))
@@ -7951,6 +7999,7 @@ function setupAppDragAndDrop() {
 window.addEventListener('DOMContentLoaded', () => {
   enableMojibakeAutoFix()
   startApp()
+  try { document.body.setAttribute('data-active-page', _activePageId || 'home') } catch {}
   applyUiTextOverrides()
   setupSidebarResize()
   setupCardTilt()
