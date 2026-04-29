@@ -1390,9 +1390,15 @@ function saveSettingsSectionsState(state) {
 function applySettingsSectionsState() {
   const state = getSettingsSectionsState()
   const defaultCollapsed = {
+    interface: false,
     background: true,
     cover: true,
+    blur: false,
+    accent: false,
+    effects: false,
+    scale: false,
     font: true,
+    notifications: false,
     accountVk: true,
     accountYandex: true,
     accountSoundcloud: true,
