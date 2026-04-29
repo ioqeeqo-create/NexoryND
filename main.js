@@ -1687,40 +1687,6 @@ async function fetchVkPlaylistFromFlowServer(serverBaseUrl, link, token = '') {
   }
 }
 
-async function fetchYandexPlaylistFromFlowServer(serverBaseUrl, link, token = '') {
-  let base = String(serverBaseUrl || '').trim()
-  if (!base) return null
-  if (!/^https?:\/\//i.test(base)) base = `http://${base}`
-  base = base.replace(/\/+$/, '').replace(/\/health$/i, '')
-  if (/^https:\/\/85\.239\.34\.229(?::8787)?$/i.test(base)) base = base.replace(/^https:/i, 'http:')
-  const rsp = await axios.post(`${base}/yandex/playlist`, {
-    url: String(link || '').trim(),
-    token: String(token || '').trim(),
-  }, {
-    timeout: 35000,
-    maxBodyLength: 256 * 1024,
-    validateStatus: () => true,
-    headers: { 'Content-Type': 'application/json' },
-  })
-  const body = rsp?.data || {}
-  if (!body?.ok) throw new Error(body?.error || `server status ${rsp?.status || 0}`)
-  const tracks = Array.isArray(body.tracks)
-    ? body.tracks.map((t) => ({
-      title: t?.title || null,
-      artist: t?.artist || '—',
-      duration: Number(t?.duration || 0) || null,
-    })).filter((t) => t.title)
-    : []
-  if (!tracks.length) throw new Error('server returned empty Yandex playlist')
-  return {
-    ok: true,
-    service: 'yandex',
-    name: String(body.name || 'Yandex Playlist'),
-    tracks,
-    via: 'flow-vk-server',
-  }
-}
-
 ipcMain.handle('import-playlist-link', async (e, { url, tokens = {} }) => {
   const link = String(url || '').trim()
   if (!link) return { ok: false, error: 'empty url' }
@@ -1865,22 +1831,7 @@ ipcMain.handle('import-playlist-link', async (e, { url, tokens = {} }) => {
   const yRef = parseYandexPlaylistRef(link)
   if (yRef) {
     const ymToken = String(tokens?.yandex || '').trim()
-    const serverBaseUrl = String(tokens?.serverBaseUrl || '').trim()
-    let serverErr = null
-    if (serverBaseUrl) {
-      try {
-        const fromServer = await fetchYandexPlaylistFromFlowServer(serverBaseUrl, link, ymToken)
-        if (fromServer?.tracks?.length) return fromServer
-      } catch (err) {
-        serverErr = err
-      }
-    }
-    if (!yRef.user) {
-      return { ok: false, error: 'Yandex import server: short playlists/* links require server parsing with valid session' }
-    }
-    if (!ymToken) {
-      return { ok: false, error: 'Yandex import server: ' + (serverErr?.message || 'token required and server unavailable') }
-    }
+    if (!ymToken) return { ok: false, error: 'Yandex token required' }
     try {
       const r = await httpsGetJson(
         'api.music.yandex.net',
@@ -1899,7 +1850,6 @@ ipcMain.handle('import-playlist-link', async (e, { url, tokens = {} }) => {
       }).filter((t) => t.title)
       return { ok: true, service: 'yandex', name: String(pl?.title || 'Yandex Playlist'), tracks: out }
     } catch (err) {
-      if (serverErr) return { ok: false, error: 'Yandex import server: ' + (serverErr?.message || String(serverErr)) + ' | local: ' + (err?.message || String(err)) }
       return { ok: false, error: 'Yandex import: ' + (err?.message || String(err)) }
     }
   }
