@@ -26,6 +26,9 @@ loadDotEnv()
 const PORT = Number(process.env.PORT || 8787)
 const HOST = String(process.env.HOST || '0.0.0.0')
 const DEFAULT_VK_TOKEN = String(process.env.VK_ACCESS_TOKEN || '').trim()
+const DEFAULT_VK_COOKIE = String(process.env.VK_COOKIE || '').trim()
+const DEFAULT_YANDEX_TOKEN = String(process.env.YANDEX_TOKEN || process.env.YM_TOKEN || '').trim()
+const DEFAULT_YANDEX_COOKIE = String(process.env.YANDEX_COOKIE || process.env.YANDEX_MUSIC_COOKIE || '').trim()
 const VK_UA = 'VKAndroidApp/5.52-4543 (Android 5.1.1; SDK 22; x86_64; unknown Android SDK built for x86_64; en; 320x480)'
 const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 
@@ -279,7 +282,7 @@ function extractRowsFromHtml(html, max = 260) {
   }
 }
 
-async function fetchViaWidget(ref) {
+async function fetchViaWidget(ref, cookie = '') {
   if (!ref?.ownerId || !ref?.albumId || !ref?.accessKey) return null
   const baseParams = {
     owner_id: String(ref.ownerId),
@@ -323,6 +326,7 @@ async function fetchViaWidget(ref) {
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
           'Referer': 'https://vk.com/',
+          ...(cookie ? { Cookie: cookie } : {}),
         },
         timeout: 20000,
         maxRedirects: 6,
@@ -349,7 +353,7 @@ async function fetchViaWidget(ref) {
   return { name: 'VK Playlist', tracks: [], error: errors.slice(0, 3).join(' | ') }
 }
 
-async function fetchViaHtml(link, ref) {
+async function fetchViaHtml(link, ref, cookie = '') {
   const safeLink = String(link || '').trim()
   const candidates = /^https?:\/\//i.test(safeLink) ? [safeLink] : []
   if (ref?.ownerId && ref?.albumId) {
@@ -369,6 +373,7 @@ async function fetchViaHtml(link, ref) {
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
           'Referer': 'https://vk.com/',
+          ...(cookie ? { Cookie: cookie } : {}),
         },
         timeout: 17000,
         maxRedirects: 6,
@@ -386,12 +391,13 @@ async function fetchViaHtml(link, ref) {
   return tracks.length ? { name, tracks } : { name, tracks: [], error: errors.slice(0, 3).join(' | ') }
 }
 
-async function resolveVkPlaylist(link, token = '') {
+async function resolveVkPlaylist(link, token = '', cookie = '') {
   const safeLink = String(link || '').trim()
   const ref = parseVkPlaylistRef(safeLink)
   if (!/^https?:\/\/(m\.)?vk\.com\//i.test(safeLink) && !ref?.accessKey) throw new Error('bad VK url')
   if (!ref) throw new Error('cannot parse VK playlist id')
   const vkToken = getVkToken(token)
+  const vkCookie = String(cookie || '').trim() || DEFAULT_VK_COOKIE
   const hasToken = Boolean(vkToken)
   let apiError = ''
 
@@ -402,15 +408,151 @@ async function resolveVkPlaylist(link, token = '') {
   })
   if (api?.tracks?.length) return api
 
-  const widget = await fetchViaWidget(ref).catch((err) => ({ error: err?.message || String(err), tracks: [] }))
+  const widget = await fetchViaWidget(ref, vkCookie).catch((err) => ({ error: err?.message || String(err), tracks: [] }))
   if (widget?.tracks?.length) return widget
 
-  const html = await fetchViaHtml(safeLink, ref).catch((err) => ({ error: err?.message || String(err), tracks: [] }))
+  const html = await fetchViaHtml(safeLink, ref, vkCookie).catch((err) => ({ error: err?.message || String(err), tracks: [] }))
   if (html?.tracks?.length) return html
 
   if (!hasToken) throw new Error('auth_required')
   const details = [apiError, widget?.error, html?.error].filter(Boolean).join(' | ')
   throw new Error(`playlist parse failed${details ? `: ${details}` : ''}`)
+}
+
+function parseYandexPlaylistRef(link) {
+  const raw = String(link || '').trim()
+  if (!raw) return null
+  try {
+    const u = new URL(raw)
+    const full = u.pathname.match(/\/users\/([^/]+)\/playlists\/([^/?#]+)/i)
+    if (full) return { user: decodeURIComponent(full[1]), kind: decodeURIComponent(full[2]) }
+    const short = u.pathname.match(/\/playlists\/([^/?#]+)/i)
+    if (short) return { user: null, kind: decodeURIComponent(short[1]) }
+    return null
+  } catch {
+    return null
+  }
+}
+
+async function resolveYandexRefFromPage(link, cookie = '') {
+  const rsp = await axios.get(String(link || '').trim(), {
+    headers: {
+      'User-Agent': BROWSER_UA,
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Referer': 'https://music.yandex.ru/',
+      ...(cookie ? { Cookie: cookie } : {}),
+    },
+    timeout: 25000,
+    maxRedirects: 6,
+    validateStatus: () => true,
+  })
+  const html = String(rsp?.data || '')
+  if (rsp.status >= 400 || !html) throw new Error(`yandex page status ${rsp.status}`)
+  const kind = html.match(/"kind"\s*:\s*"([^"]+)"/i)?.[1] || html.match(/"playlistId"\s*:\s*"([^"]+)"/i)?.[1]
+  const uid = html.match(/"owner"\s*:\s*\{[^}]*"uid"\s*:\s*([0-9]+)/is)?.[1] || html.match(/"ownerUid"\s*:\s*([0-9]+)/i)?.[1]
+  if (!kind || !uid) throw new Error('cannot resolve yandex owner/kind from page')
+  return { user: String(uid), kind: String(kind) }
+}
+
+function mapYandexTrackRows(rows, limit = 1200) {
+  const out = []
+  const seen = new Set()
+  for (const row of rows || []) {
+    const t = row?.track || row || {}
+    const title = cleanupVkText(t?.title || t?.name || '')
+    const artist = cleanupVkText(Array.isArray(t?.artists) ? t.artists.map((a) => a?.name).filter(Boolean).join(', ') : (t?.artist || ''))
+    if (!title || !artist) continue
+    const key = `${artist.toLowerCase()}::${title.toLowerCase()}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    const item = { title, artist }
+    const durationMs = Number(t?.durationMs || row?.durationMs || 0)
+    if (Number.isFinite(durationMs) && durationMs > 0) item.duration = Math.round(durationMs / 1000)
+    out.push(item)
+    if (out.length >= limit) break
+  }
+  return out
+}
+
+async function fetchYandexPlaylistViaApi(ref, token) {
+  if (!ref || !token) return null
+  const r = await axios.get(`https://api.music.yandex.net/users/${encodeURIComponent(ref.user)}/playlists/${encodeURIComponent(ref.kind)}`, {
+    headers: {
+      'Authorization': `OAuth ${String(token).trim()}`,
+      'X-Yandex-Music-Client': 'WindowsPhone/3.20',
+      'User-Agent': 'Windows 10',
+    },
+    timeout: 20000,
+    validateStatus: () => true,
+  })
+  if (r.status >= 400 || !r?.data?.result) throw new Error(`Yandex API status ${r.status}`)
+  const pl = r.data.result || {}
+  return {
+    name: cleanupVkText(pl?.title || 'Yandex Playlist'),
+    tracks: mapYandexTrackRows(pl?.tracks || []),
+    via: 'yandex-api',
+  }
+}
+
+async function fetchYandexPlaylistViaHandlers(ref, cookie = '') {
+  if (!ref) return null
+  const lightUrl = `https://music.yandex.ru/handlers/playlist.jsx?owner=${encodeURIComponent(ref.user)}&kinds=${encodeURIComponent(ref.kind)}&light=true&withLikesCount=true&lang=ru`
+  const r = await axios.get(lightUrl, {
+    headers: {
+      'User-Agent': BROWSER_UA,
+      'Accept': 'application/json,text/plain,*/*',
+      'Referer': 'https://music.yandex.ru/',
+      ...(cookie ? { Cookie: cookie } : {}),
+    },
+    timeout: 25000,
+    validateStatus: () => true,
+  })
+  if (r.status >= 400) throw new Error(`Yandex handlers status ${r.status}`)
+  const body = r?.data || {}
+  const pl = body?.playlist || body?.result || body
+  const tracks = mapYandexTrackRows(pl?.tracks || pl?.trackIds || [])
+  return {
+    name: cleanupVkText(pl?.title || body?.title || 'Yandex Playlist'),
+    tracks,
+    via: 'yandex-handlers',
+  }
+}
+
+async function resolveYandexPlaylist(link, token = '', cookie = '') {
+  const parsedRef = parseYandexPlaylistRef(link)
+  if (!parsedRef) throw new Error('bad yandex playlist url')
+  const errors = []
+  const ymToken = String(token || '').trim() || DEFAULT_YANDEX_TOKEN
+  const ymCookie = String(cookie || '').trim() || DEFAULT_YANDEX_COOKIE
+  let ref = parsedRef
+  if (!ref.user) {
+    try {
+      ref = await resolveYandexRefFromPage(link, ymCookie)
+    } catch (err) {
+      errors.push(err?.message || String(err))
+    }
+  }
+  if (!ref?.user || !ref?.kind) throw new Error(errors.join(' | ') || 'cannot resolve yandex playlist reference')
+
+  if (ymToken) {
+    try {
+      const api = await fetchYandexPlaylistViaApi(ref, ymToken)
+      if (api?.tracks?.length) return api
+      errors.push('yandex api empty')
+    } catch (err) {
+      errors.push(err?.message || String(err))
+    }
+  }
+
+  try {
+    const handlers = await fetchYandexPlaylistViaHandlers(ref, ymCookie)
+    if (handlers?.tracks?.length) return handlers
+    errors.push('yandex handlers empty')
+  } catch (err) {
+    errors.push(err?.message || String(err))
+  }
+
+  throw new Error(errors.join(' | ') || 'yandex playlist parse failed')
 }
 
 const server = http.createServer(async (req, res) => {
@@ -423,12 +565,15 @@ const server = http.createServer(async (req, res) => {
       service: 'flow-vk-server',
       uptimeSec: Math.round(process.uptime()),
       vkServerToken: Boolean(DEFAULT_VK_TOKEN),
+      vkCookie: Boolean(DEFAULT_VK_COOKIE),
+      yandexToken: Boolean(DEFAULT_YANDEX_TOKEN),
+      yandexCookie: Boolean(DEFAULT_YANDEX_COOKIE),
     })
   }
 
   if (req.method === 'GET' && url.pathname === '/vk/playlist') {
     try {
-      const data = await resolveVkPlaylist(url.searchParams.get('url'), url.searchParams.get('token') || '')
+      const data = await resolveVkPlaylist(url.searchParams.get('url'), url.searchParams.get('token') || '', url.searchParams.get('cookie') || '')
       return writeJson(res, 200, { ok: true, service: 'vk', via: data.via || 'vk-server', name: data.name || 'VK Playlist', count: (data.tracks || []).length, tracks: data.tracks || [] })
     } catch (err) {
       return writeJson(res, 400, { ok: false, error: err?.message || String(err) })
@@ -438,8 +583,78 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'POST' && url.pathname === '/vk/playlist') {
     try {
       const body = await readBody(req)
-      const data = await resolveVkPlaylist(body?.url, body?.token || '')
+      const data = await resolveVkPlaylist(body?.url, body?.token || '', body?.cookie || '')
       return writeJson(res, 200, { ok: true, service: 'vk', via: data.via || 'vk-server', name: data.name || 'VK Playlist', count: (data.tracks || []).length, tracks: data.tracks || [] })
+    } catch (err) {
+      return writeJson(res, 400, { ok: false, error: err?.message || String(err) })
+    }
+  }
+
+  if (req.method === 'GET' && url.pathname === '/yandex/playlist') {
+    try {
+      const data = await resolveYandexPlaylist(
+        url.searchParams.get('url'),
+        url.searchParams.get('token') || '',
+        url.searchParams.get('cookie') || ''
+      )
+      return writeJson(res, 200, {
+        ok: true,
+        service: 'yandex',
+        via: data.via || 'yandex-server',
+        name: data.name || 'Yandex Playlist',
+        count: (data.tracks || []).length,
+        tracks: data.tracks || [],
+      })
+    } catch (err) {
+      return writeJson(res, 400, { ok: false, error: err?.message || String(err) })
+    }
+  }
+
+  if (req.method === 'POST' && url.pathname === '/yandex/playlist') {
+    try {
+      const body = await readBody(req)
+      const data = await resolveYandexPlaylist(body?.url, body?.token || '', body?.cookie || '')
+      return writeJson(res, 200, {
+        ok: true,
+        service: 'yandex',
+        via: data.via || 'yandex-server',
+        name: data.name || 'Yandex Playlist',
+        count: (data.tracks || []).length,
+        tracks: data.tracks || [],
+      })
+    } catch (err) {
+      return writeJson(res, 400, { ok: false, error: err?.message || String(err) })
+    }
+  }
+
+  if (req.method === 'POST' && url.pathname === '/import/playlist') {
+    try {
+      const body = await readBody(req)
+      const link = String(body?.url || '').trim()
+      if (!link) return writeJson(res, 400, { ok: false, error: 'empty url' })
+      if (/vk\.com/i.test(link)) {
+        const data = await resolveVkPlaylist(link, body?.token || '', body?.cookie || '')
+        return writeJson(res, 200, {
+          ok: true,
+          service: 'vk',
+          via: data.via || 'vk-server',
+          name: data.name || 'VK Playlist',
+          count: (data.tracks || []).length,
+          tracks: data.tracks || [],
+        })
+      }
+      if (/music\.yandex\./i.test(link)) {
+        const data = await resolveYandexPlaylist(link, body?.token || '', body?.cookie || '')
+        return writeJson(res, 200, {
+          ok: true,
+          service: 'yandex',
+          via: data.via || 'yandex-server',
+          name: data.name || 'Yandex Playlist',
+          count: (data.tracks || []).length,
+          tracks: data.tracks || [],
+        })
+      }
+      return writeJson(res, 400, { ok: false, error: 'unsupported url host' })
     } catch (err) {
       return writeJson(res, 400, { ok: false, error: err?.message || String(err) })
     }

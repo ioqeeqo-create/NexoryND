@@ -12,9 +12,11 @@ function parseYandexPlaylistRef(input) {
   const raw = String(input || '').trim()
   if (!raw) return null
   const fromPath = (path = '') => {
-    const m = String(path || '').match(/\/users\/([^/?#]+)\/playlists\/([^/?#]+)/i)
-    if (!m) return null
-    return { user: decodeURIComponent(m[1]), kind: decodeURIComponent(m[2]) }
+    const full = String(path || '').match(/\/users\/([^/?#]+)\/playlists\/([^/?#]+)/i)
+    if (full) return { user: decodeURIComponent(full[1]), kind: decodeURIComponent(full[2]) }
+    const short = String(path || '').match(/\/playlists\/([^/?#]+)/i)
+    if (short) return { user: null, kind: decodeURIComponent(short[1]) }
+    return null
   }
   try {
     const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`

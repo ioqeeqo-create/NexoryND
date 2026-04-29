@@ -1417,7 +1417,24 @@ function toggleSettingsSection(key) {
   const sectionKey = String(key || '').trim()
   if (!sectionKey) return
   const state = getSettingsSectionsState()
-  state[sectionKey] = !Boolean(state[sectionKey])
+  const defaultCollapsed = {
+    interface: false,
+    background: true,
+    cover: true,
+    blur: false,
+    accent: false,
+    effects: false,
+    scale: false,
+    font: true,
+    notifications: false,
+    accountVk: true,
+    accountYandex: true,
+    accountSoundcloud: true,
+  }
+  const currentCollapsed = Object.prototype.hasOwnProperty.call(state, sectionKey)
+    ? Boolean(state[sectionKey])
+    : Boolean(defaultCollapsed[sectionKey])
+  state[sectionKey] = !currentCollapsed
   saveSettingsSectionsState(state)
   applySettingsSectionsState()
 }
@@ -4948,7 +4965,11 @@ function initPeerSocial() {
         _peerProfiles.set(msg._peerId, profileWithPeer)
         cachePeerProfile(profileWithPeer, msg._peerId)
         _roomMembers.set(msg._peerId, profileWithPeer)
-        if (Array.isArray(msg.sharedQueue)) sharedQueue = msg.sharedQueue
+        // Accept queue snapshots only from current host to avoid stale/empty overwrites.
+        if (Array.isArray(msg.sharedQueue) && msg._peerId === _roomState.hostPeerId) {
+          sharedQueue = msg.sharedQueue
+          renderRoomQueue()
+        }
         if (_roomState.host) broadcastRoomMembersState()
         resetRoomHeartbeat()
         updateRoomUi()
@@ -7207,19 +7228,12 @@ async function importPlaylistFromLink(urlFromUi = '') {
   }
   const settings = getSettings()
   const isYandexLink = /(^|\/\/)(music\.)?yandex\.[^/]+\/users\/[^/]+\/playlists\/[^/?#]+/i.test(url)
-  if (isYandexLink && !settings.yandexToken) {
-    showToast('Для импорта Яндекс Музыки нужен активный OAuth token', true)
-    openPage('settings')
-    switchSettingsTab('sources')
-    setTimeout(() => document.getElementById('ym-token-val')?.focus(), 120)
-    return
-  }
   showToast('Импортирую плейлист...')
   openImportProgress(0)
   _importProgressOpenedAt = Date.now()
   setImportProgressIndeterminate(true)
   const isVkLink = /(^|\/\/)(m\.)?vk\.com\//i.test(url)
-  updateImportProgress(0, 0, isVkLink ? 'Отправляю VK плейлист на РФ сервер и получаю список треков...' : (isYandexLink ? 'Читаю плейлист Яндекс Музыки по OAuth token...' : 'Разбираю ссылку и получаю список треков...'))
+  updateImportProgress(0, 0, isVkLink ? 'Отправляю VK плейлист на сервер и получаю список треков...' : (isYandexLink ? 'Отправляю Яндекс плейлист на сервер и получаю список треков...' : 'Разбираю ссылку и получаю список треков...'))
   const imported = await window.api.importPlaylistLink(url.trim(), {
     spotify: settings.spotifyToken || '',
     yandex: settings.yandexToken || '',
@@ -7244,12 +7258,9 @@ async function importPlaylistFromLink(urlFromUi = '') {
       return
     }
     if (isYandexLink && /yandex token required|oauth|token/i.test(errorText)) {
-      updateImportProgress(0, 0, 'Яндекс Музыка требует активный OAuth token. Открой Источники и сохрани токен.')
+      updateImportProgress(0, 0, 'Сервер не смог прочитать Яндекс плейлист. Добавь серверный доступ к аккаунту или OAuth token.')
       await closeImportProgressSafe(1800)
-      showToast('Для Яндекс Музыки нужен OAuth token', true)
-      openPage('settings')
-      switchSettingsTab('sources')
-      setTimeout(() => document.getElementById('ym-token-val')?.focus(), 120)
+      showToast('Яндекс импорт: серверу нужен доступ к аккаунту или OAuth token', true)
       return
     }
     updateImportProgress(0, 0, `Ошибка: ${errorText}`)
