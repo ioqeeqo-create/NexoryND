@@ -286,10 +286,33 @@ function updateRoomUi() {
       roleBadgeEl.className = 'room-role-badge room-role-client'
     }
   }
+  syncSocialWidgetState()
   updateHostLockUi()
   renderRoomMembers()
   renderRoomNowPlaying()
   renderRoomQueue()
+}
+
+function syncSocialWidgetState() {
+  const widget = document.getElementById('social-widget')
+  if (!widget) return
+  const active = Boolean(_roomState?.roomId)
+  widget.classList.toggle('is-active', active)
+  widget.classList.toggle('is-empty', !active)
+  widget.setAttribute('aria-label', active ? 'Панель комнаты' : 'Создать комнату')
+}
+
+function handleSocialWidgetClick(event) {
+  const target = event?.target
+  if (target?.closest?.('button, input, .social-friend-card')) return
+  if (_roomState?.roomId) return
+  createRoom()
+}
+
+function handleSocialWidgetKeydown(event) {
+  if (!event || (event.key !== 'Enter' && event.key !== ' ')) return
+  event.preventDefault()
+  handleSocialWidgetClick(event)
 }
 
 function resolveInviteToRoomId(raw) {
@@ -4339,31 +4362,38 @@ function ensureRoomsUI() {
   if (!root) return
   const box = document.createElement('div')
   box.id = 'rooms-hub'
-  box.className = 'glass-card social-hub'
-  box.style.padding = '14px'
+  box.className = 'glass-card social-hub rooms-liquid-hub'
   box.innerHTML = `
-    <div class="social-room-box">
-      <div class="social-section-title">Подключение</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <div class="room-connect-panel">
+      <div id="social-widget" class="social-widget is-empty" onclick="handleSocialWidgetClick(event)" onkeydown="handleSocialWidgetKeydown(event)" role="button" tabindex="0">
+        <div class="widget-placeholder">
+          <span class="glow-text">Создать комнату</span>
+        </div>
+        <div class="widget-content">
+          <div class="widget-members-area">
+            <div class="widget-mini-head">
+              <span class="social-section-title">В комнате</span>
+              <span id="room-role-badge" class="room-role-badge room-role-solo">SOLO</span>
+            </div>
+            <div id="room-members-list" class="sidebar-users"><div class="flow-empty-state compact"><strong>Комната пустая</strong><span>Создай руму или присоединись по invite.</span></div></div>
+          </div>
+          <div class="actions-menu">
+            <button class="action-btn invite" onclick="event.stopPropagation();openRoomInvitePicker()" title="Пригласить друга"><span>＋</span><small>Пригласить</small></button>
+            <button class="action-btn noop" onclick="event.stopPropagation();showToast('Пока ничего')" title="Пока ничего"><span>ничего</span><small>Пока ничего</small></button>
+            <button class="action-btn leave" onclick="event.stopPropagation();leaveRoom()" title="Покинуть группу"><span>✕</span><small>Покинуть</small></button>
+          </div>
+        </div>
+      </div>
+      <div class="room-join-strip">
         <input id="join-room-input" class="token-field flow-input" placeholder="ID или ник хоста" style="flex:1;min-width:180px" />
         <button class="btn-small" onclick="joinRoomById()">Присоединиться</button>
-        <button class="btn-small" onclick="createRoom()">Создать свою комнату</button>
-        <button class="btn-small" onclick="leaveRoom()">Покинуть руму</button>
       </div>
-      <div id="room-status" style="margin-top:8px;font-size:12px;opacity:.85">Рума: не активна</div>
-      <div style="margin-top:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span id="room-role-badge" class="room-role-badge room-role-solo">SOLO</span>
-        <span id="room-members-count" style="font-size:12px;opacity:.8">Участники: —/3</span>
-      </div>
-      <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn-small" onclick="copyInviteLink()">Copy Invite Link/ID</button>
+      <div class="room-widget-meta">
+        <span id="room-status">Рума: не активна</span>
+        <span id="room-members-count">Участники: —/3</span>
         <button class="btn-small" onclick="promptInviteJoin()">Ввести Invite</button>
-        <button class="btn-small" onclick="openRoomInvitePicker()">Пригласить друга</button>
+        <button class="btn-small" onclick="copyInviteLink()">Copy Invite Link/ID</button>
       </div>
-    </div>
-    <div class="social-room-box">
-      <div class="social-section-title">В комнате</div>
-      <div id="room-members-list" class="social-friends-grid"><div class="flow-empty-state compact"><strong>Комната пустая</strong><span>Создай руму или присоединись по invite.</span></div></div>
     </div>
     <div class="social-room-box">
       <div class="social-section-title">Поиск в очередь</div>
@@ -4378,6 +4408,7 @@ function ensureRoomsUI() {
     </div>
   `
   root.appendChild(box)
+  syncSocialWidgetState()
 }
 
 async function renderFriends() {
