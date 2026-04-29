@@ -26,6 +26,17 @@ if (_isSafeGpuMode) {
   app.commandLine.appendSwitch('disable-gpu')
   app.commandLine.appendSwitch('in-process-gpu')
   console.log('[safe-gpu] enabled')
+} else {
+  try {
+    app.commandLine.appendSwitch('enable-gpu-rasterization')
+    // Ускоренная работа текстур в GPU (Electron/Chromium)
+    app.commandLine.appendSwitch('enable-native-gpu-memory-buffers')
+  } catch (_) {}
+  try {
+    if (process.env.FLOW_GPU_IGNORE_BLOCKLIST === '1') {
+      app.commandLine.appendSwitch('ignore-gpu-blocklist')
+    }
+  } catch (_) {}
 }
 
 function relaunchInSafeGpuMode(reason = 'unknown') {

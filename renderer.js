@@ -6672,10 +6672,19 @@ function isLiked(track) { return getLiked().some(t => t.id===track.id && t.sourc
 
 function likeTrack(track) {
   let liked = getLiked()
-  if (isLiked(track)) { liked=liked.filter(t=>!(t.id===track.id&&t.source===track.source)); showToast('РЈР±СЂР°РЅРѕ РёР· Р»СЋР±РёРјС‹С…') }
-  else { liked.push(track); showToast('Р”РѕР±Р°РІР»РµРЅРѕ РІ Р»СЋР±РёРјС‹Рµ в™Ґ') }
+  if (isLiked(track)) {
+    liked = liked.filter((t) => !(t.id === track.id && t.source === track.source))
+    showToast('РЈР±СЂР°РЅРѕ РёР· Р»СЋР±РёРјС‹С…')
+  } else {
+    liked.push(track)
+    showToast('Р”РѕР±Р°РІР»РµРЅРѕ РІ Р»СЋР±РёРјС‹Рµ в™Ґ')
+  }
   localStorage.setItem('flow_liked', JSON.stringify(liked))
-  renderLiked(); updatePlayerLikeBtn(); syncLikeButtonsInVisibleLists()
+  syncLikeButtonsInVisibleLists()
+  updatePlayerLikeBtn()
+  requestAnimationFrame(() => {
+    renderLiked()
+  })
 }
 
 function syncLikeButtonsInVisibleLists() {
@@ -7498,6 +7507,27 @@ let _lyricsOpen = false
 let _lyricsSettingsOpen = false
 let _lyricsObserver = null
 let _lyricsLastPaintAt = 0
+
+/** Интервал согласования с частотой кадров (~60–165 Гц); караоке идёт на каждый RAF. */
+let _lyricsFrameBudgetCachedMs = null
+function refreshLyricsFrameBudgetCache() {
+  _lyricsFrameBudgetCachedMs = null
+}
+function getLyricsFrameBudgetMs() {
+  if (_lyricsFrameBudgetCachedMs != null) return _lyricsFrameBudgetCachedMs
+  try {
+    const rr = Number(typeof window !== 'undefined' && window.screen?.refreshRate)
+    if (Number.isFinite(rr) && rr >= 30 && rr <= 360) {
+      _lyricsFrameBudgetCachedMs = Math.max(4, Math.floor(1000 / rr))
+      return _lyricsFrameBudgetCachedMs
+    }
+  } catch (_) {}
+  _lyricsFrameBudgetCachedMs = 1000 / 60
+  return _lyricsFrameBudgetCachedMs
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('resize', refreshLyricsFrameBudgetCache, { passive: true })
+}
 let _lyricsRafId = 0
 /** Сглаживание времени между «ступеньками» currentTime для караоке (lerp по performance.now). */
 const LYRICS_TIME_DRIFT_RESYNC_SEC = 0.1
@@ -7817,8 +7847,9 @@ function syncLyrics(currentTime) {
   const idxChanged = idx !== _lyricsActiveIdx
   const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()
   const karaokeHighRate = cfg.playbackMode === 'karaoke' && idx >= 0
-  // В режиме караоке не дробим обновление «волны»: иначе lerp времени почти не виден (--karaoke-frac трётся тем же троттлом ~16 мс).
-  if (!idxChanged && now - _lyricsLastPaintAt < 16 && !karaokeHighRate) return
+  const frameBudget = getLyricsFrameBudgetMs()
+  // При не-караоке не чаще одного экранного кадра (60/90/120/144 Гц), караоке — каждый RAF.
+  if (!idxChanged && now - _lyricsLastPaintAt < frameBudget && !karaokeHighRate) return
   _lyricsLastPaintAt = now
   if (idxChanged) {
     _lyricsActiveIdx = idx
