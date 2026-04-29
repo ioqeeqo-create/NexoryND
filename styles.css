@@ -1947,6 +1947,13 @@ body.nav-active-highlight .src-tab.active { background:rgba(124,58,237,0.18); bo
   display:flex; align-items:center;
   padding:0 20px; gap:20px; z-index:90;
 }
+/* Нижний glass-bar с backdrop-filter не должен «просвечивать» поверх экрана входа
+   при opacity:0 у .screen — убираем из дерева отрисовки, пока нет сессии. */
+#screen-main.hidden .player-bar,
+.player-bar.hidden {
+  display: none !important;
+  pointer-events: none !important;
+}
 .player-track {
   position: relative;
   display:flex; align-items:center; gap:12px; width:300px; flex-shrink:0;

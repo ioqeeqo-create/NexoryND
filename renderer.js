@@ -2282,9 +2282,95 @@ function collectFlowConfigPayload() {
   }
 }
 
-function exportFlowConfig() {
+async function presetEmbedInvoke(fileUrl) {
   try {
-    const payload = collectFlowConfigPayload()
+    if (typeof window.api?.presetEmbedMedia === 'function') {
+      return await window.api.presetEmbedMedia(fileUrl)
+    }
+  } catch {}
+  return { ok: false, dataUrl: '' }
+}
+
+async function embedOneFileUrl(fileUrl, cache, embedInvoke, failedEmbed) {
+  const t = String(fileUrl || '').trim()
+  if (!/^file:\/\//i.test(t)) return fileUrl
+  if (cache.has(t)) return cache.get(t)
+  const res = await embedInvoke(t)
+  const ok = !!(res && res.ok && res.dataUrl)
+  const replacement = ok ? res.dataUrl : fileUrl
+  if (!ok) failedEmbed?.push?.(t)
+  cache.set(t, replacement)
+  return replacement
+}
+
+async function embedFileUrlsDeep(value, embedInvoke, cache, failedEmbed) {
+  if (value === null || value === undefined) return value
+  if (typeof value === 'string') {
+    const t = String(value).trim()
+    if (/^file:\/\//i.test(t)) {
+      return await embedOneFileUrl(t, cache, embedInvoke, failedEmbed)
+    }
+    return value
+  }
+  if (Array.isArray(value)) {
+    const out = []
+    for (let i = 0; i < value.length; i++) out.push(await embedFileUrlsDeep(value[i], embedInvoke, cache, failedEmbed))
+    return out
+  }
+  if (typeof value === 'object') {
+    const keys = Object.keys(value)
+    const out = {}
+    for (let j = 0; j < keys.length; j++) {
+      const k = keys[j]
+      out[k] = await embedFileUrlsDeep(value[k], embedInvoke, cache, failedEmbed)
+    }
+    return out
+  }
+  return value
+}
+
+async function portableizePresetStorage(rawStorage, embedInvoke = presetEmbedInvoke) {
+  if (!rawStorage || typeof rawStorage !== 'object') return { storage: rawStorage || {}, failedEmbed: [] }
+  const cache = new Map()
+  const failedEmbed = []
+  const storage = {}
+  const keysList = Object.keys(rawStorage)
+  for (let i = 0; i < keysList.length; i++) {
+    const key = keysList[i]
+    const raw = rawStorage[key]
+    const sv = raw == null ? '' : String(raw)
+    if (!sv) {
+      storage[key] = sv
+      continue
+    }
+    const trimmed = sv.trim()
+    if (
+      (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+      (trimmed.startsWith('[') && trimmed.endsWith(']'))
+    ) {
+      try {
+        const parsed = JSON.parse(sv)
+        const embedded = await embedFileUrlsDeep(parsed, embedInvoke, cache, failedEmbed)
+        storage[key] = JSON.stringify(embedded)
+        continue
+      } catch {
+        /** fallthrough to plain-string handling */
+      }
+    }
+    if (/^file:\/\//i.test(trimmed)) {
+      storage[key] = await embedOneFileUrl(trimmed, cache, embedInvoke, failedEmbed)
+    } else {
+      storage[key] = sv
+    }
+  }
+  return { storage, failedEmbed }
+}
+
+async function exportFlowConfig() {
+  try {
+    const basePayload = collectFlowConfigPayload()
+    const { storage, failedEmbed } = await portableizePresetStorage(basePayload.storage)
+    const payload = { ...basePayload, storage }
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
     const stamp = new Date().toISOString().slice(0, 10)
     const link = document.createElement('a')
@@ -2296,6 +2382,12 @@ function exportFlowConfig() {
     URL.revokeObjectURL(link.href)
     setFlowConfigStatus('Flow preset экспортирован. Можно отправлять .flowpreset другу.', false)
     showToast('Flow preset экспортирован')
+    if (failedEmbed && failedEmbed.length) {
+      showToast(
+        `Не удалось встроить ${failedEmbed.length} файл(ов) с диска — на другом ПК их не будет.`,
+        true
+      )
+    }
   } catch (err) {
     setFlowConfigStatus(`Ошибка экспорта: ${err?.message || err}`, true)
     showToast('Не удалось экспортировать preset', true)
@@ -2306,6 +2398,24 @@ function pickFlowConfigFile() {
   const input = document.getElementById('flow-config-input')
   if (!input) return
   input.click()
+}
+
+/** После записи ключей пресета в localStorage подтянуть in-memory состояние и не затирать flow_visual ползунками формы. */
+function syncRuntimeCachesAfterPresetImport() {
+  try {
+    playbackMode = Object.assign({}, defaultPlayback, JSON.parse(localStorage.getItem('flow_playback_mode') || '{}'))
+  } catch {
+    playbackMode = { ...defaultPlayback }
+  }
+  try {
+    _myWaveMode = localStorage.getItem('flow_my_wave_mode') || 'default'
+  } catch {}
+  try {
+    const s = getSettings()
+    currentSource = s.activeSource || 'hybrid'
+    updateSourceBadge()
+    syncSearchSourcePills()
+  } catch {}
 }
 
 function importFlowConfigFile(input) {
@@ -2378,11 +2488,19 @@ function importFlowConfigFile(input) {
       Object.entries(sessionBackup).forEach(([key, value]) => {
         if (typeof value === 'string' && value.trim()) localStorage.setItem(key, value)
       })
+      syncRuntimeCachesAfterPresetImport()
       setFlowConfigStatus('Flow preset импортирован. Сессия аккаунта сохранена, перезагрузка не требуется.', false)
       showToast('Flow preset импортирован')
-      try { applyVisualSettings() } catch {}
-      try { applySourceStatus() } catch {}
+      try { applySettingsSectionsState() } catch {}
+      // Важно: не вызывать applyVisualSettings() — она берёт значения из DOM и перезаписывает только что импортированный flow_visual.
+      try { initVisualSettings() } catch {}
+      try { syncIntegrationsUI() } catch {}
       try { applyUiTextOverrides() } catch {}
+      requestAnimationFrame(() => {
+        try { syncPlaybackModeUI() } catch {}
+        try { syncTrackCoverStatus() } catch {}
+        try { syncFontControls() } catch {}
+      })
       try { renderPlaylists() } catch {}
       try { syncProfileUi() } catch {}
       try { renderFriends().catch(() => {}) } catch {}

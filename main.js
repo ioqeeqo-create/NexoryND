@@ -6,7 +6,7 @@ const https = require('https')
 const http = require('http')
 const crypto = require('crypto')
 const axios = require('axios')
-const { pathToFileURL } = require('url')
+const { pathToFileURL, fileURLToPath } = require('url')
 const {
   parseSpotifyPlaylistId,
   parseYandexPlaylistRef,
@@ -119,6 +119,54 @@ ipcMain.handle('save-custom-media', async (event, payload = {}) => {
   const filePath = path.join(getCustomMediaDir(), fileName)
   fs.writeFileSync(filePath, Buffer.from(bytes))
   return { ok: true, url: pathToFileURL(filePath).toString(), path: filePath, name: fileName }
+})
+
+const PRESET_EMBED_MEDIA_MAX_BYTES = 8 * 1024 * 1024
+
+function mimeFromLocalExt(ext = '') {
+  const e = String(ext || '').toLowerCase()
+  if (e === '.gif') return 'image/gif'
+  if (e === '.png') return 'image/png'
+  if (e === '.webp') return 'image/webp'
+  if (e === '.jpg' || e === '.jpeg') return 'image/jpeg'
+  if (e === '.svg') return 'image/svg+xml'
+  return 'application/octet-stream'
+}
+
+/** Read file:// only when it points inside userData/custom-media; return data URL for portable presets. */
+ipcMain.handle('preset-embed-media', async (event, fileUrlRaw = '') => {
+  const urlStr = String(fileUrlRaw || '').trim()
+  if (!/^file:\/\//i.test(urlStr)) return { ok: false, error: 'not-file-url', dataUrl: '' }
+  let abs
+  try {
+    abs = fileURLToPath(urlStr)
+  } catch {
+    return { ok: false, error: 'bad-url', dataUrl: '' }
+  }
+  const baseDir = path.resolve(getCustomMediaDir())
+  const resolved = path.resolve(abs)
+  const rel = path.relative(baseDir, resolved)
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    return { ok: false, error: 'outside-custom-media', dataUrl: '' }
+  }
+  let st
+  try {
+    st = fs.statSync(resolved)
+  } catch {
+    return { ok: false, error: 'not-found', dataUrl: '' }
+  }
+  if (!st.isFile() || st.size > PRESET_EMBED_MEDIA_MAX_BYTES) {
+    return { ok: false, error: 'too-large-or-not-file', dataUrl: '' }
+  }
+  let buf
+  try {
+    buf = fs.readFileSync(resolved)
+  } catch {
+    return { ok: false, error: 'read-failed', dataUrl: '' }
+  }
+  const mime = mimeFromLocalExt(path.extname(resolved))
+  const dataUrl = `data:${mime};base64,${buf.toString('base64')}`
+  return { ok: true, dataUrl, error: '' }
 })
 
 // --- Offline stream cache (SoundCloud / Audius / Spotify direct URLs) ---
