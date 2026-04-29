@@ -20,13 +20,13 @@
   --lyrics-size: 16px;
   --lyrics-blur: 4px;
   /* Flow icon scale — единая сетка для nav / плеер / списки */
-  --flow-icon-xs: 16px;
-  --flow-icon-sm: 18px;
-  --flow-icon-md: 22px;
-  --flow-icon-lg: 28px;
-  --flow-icon-xl: 36px;
-  --flow-icon-xxl: 42px;
-  --flow-icon-stroke: 1.85;
+  --flow-icon-xs: 14px;
+  --flow-icon-sm: 16px;
+  --flow-icon-md: 20px;
+  --flow-icon-lg: 24px;
+  --flow-icon-xl: 32px;
+  --flow-icon-xxl: 38px;
+  --flow-icon-stroke: 1.72;
   /* Motion — плавные остановки без тяжёлых эффектов (opacity/transform/GPU) */
   --anim-micro: 0.22s;
   --anim-fast: 0.28s;

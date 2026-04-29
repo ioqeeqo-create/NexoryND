@@ -129,6 +129,12 @@ const MY_WAVE_MODES = {
   },
 }
 const MY_WAVE_TOKEN_STOPWORDS = new Set(['official','audio','video','music','feat','ft','prod','remix','mix','single','album','lyrics','lyric','clip','track','version','radio','edit','the','and','for','with','для','при','это','как','или','feat.'])
+/** Поведенческий слой «волны»: ранний скип (−) vs дослушал до конца (+), без ML. */
+const WAVE_TASTE_STORAGE_KEY = 'flow_wave_taste_v1'
+const WAVE_EARLY_SKIP_SEC = 14
+const WAVE_TASTE_MAX_ART = 22
+const WAVE_TASTE_MAX_TOK = 16
+const WAVE_MY_WAVE_MIN_DURATION_SEC = 75
 const _friendProfileRefreshAt = new Map()
 const _friendNotifyAt = new Map()
 
@@ -3495,6 +3501,95 @@ function getMyWavePrimaryArtist(track) {
   return getMyWaveArtistNames(track)[0] || normalizeMyWaveArtistName(track?.artist || '')
 }
 
+/** Секунды для фильтров; у разных источников duration в секундах или ms. */
+function getNormalizedTrackDurationSec(track) {
+  const raw = Number(track?.duration_ms ?? track?.duration ?? track?.durationSec)
+  if (!Number.isFinite(raw) || raw <= 0) return null
+  const src = String(track?.source || '').toLowerCase()
+  if (src === 'youtube' || src === 'vk' || src === 'yandex') {
+    return raw > 7200 ? raw / 1000 : raw
+  }
+  if (raw >= 30000) return raw / 1000
+  if (raw < 600) return raw
+  return raw / 1000
+}
+
+function loadWaveTasteMap() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(WAVE_TASTE_STORAGE_KEY) || 'null')
+    if (!parsed || typeof parsed !== 'object') return { artistNeg: {}, tokenNeg: {}, artistPos: {} }
+    return {
+      artistNeg: typeof parsed.artistNeg === 'object' && parsed.artistNeg ? parsed.artistNeg : {},
+      tokenNeg: typeof parsed.tokenNeg === 'object' && parsed.tokenNeg ? parsed.tokenNeg : {},
+      artistPos: typeof parsed.artistPos === 'object' && parsed.artistPos ? parsed.artistPos : {},
+    }
+  } catch {
+    return { artistNeg: {}, tokenNeg: {}, artistPos: {} }
+  }
+}
+
+function saveWaveTasteMap(taste) {
+  try {
+    const prune = (obj, limit = 48) => {
+      const ent = Object.entries(obj || {}).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+      const out = {}
+      ent.slice(0, limit).forEach(([k, v]) => { if (k && Number.isFinite(Number(v))) out[k] = Number(v) })
+      return out
+    }
+    const payload = {
+      artistNeg: prune(taste?.artistNeg || {}),
+      tokenNeg: prune(taste?.tokenNeg || {}),
+      artistPos: prune(taste?.artistPos || {}, 32),
+    }
+    localStorage.setItem(WAVE_TASTE_STORAGE_KEY, JSON.stringify(payload))
+  } catch {}
+}
+
+function bumpWaveNeg(map, key, delta) {
+  const k = String(key || '').trim().toLowerCase()
+  if (!k || k.length < 2) return map
+  map[k] = Math.min(WAVE_TASTE_MAX_ART, Math.max(0, Number(map[k] || 0) + delta))
+  return map
+}
+
+function bumpWavePos(map, key, delta) {
+  const k = String(key || '').trim().toLowerCase()
+  if (!k || k.length < 2) return map
+  map[k] = Math.min(WAVE_TASTE_MAX_ART, Math.max(0, Number(map[k] || 0) + delta))
+  return map
+}
+
+function recordWaveEarlySkip(track) {
+  const safe = sanitizeTrack(track)
+  if (!safe?.artist) return
+  const taste = loadWaveTasteMap()
+  bumpWaveNeg(taste.artistNeg, getMyWavePrimaryArtist(safe), 5)
+  getMyWaveTokens(safe).slice(0, 6).forEach((tok) => bumpWaveNeg(taste.tokenNeg, tok, 3))
+  saveWaveTasteMap(taste)
+}
+
+function recordWavePositiveListen(track) {
+  const safe = sanitizeTrack(track)
+  if (!safe?.artist) return
+  const taste = loadWaveTasteMap()
+  bumpWavePos(taste.artistPos, getMyWavePrimaryArtist(safe), 1.2)
+  saveWaveTasteMap(taste)
+}
+
+function applyWaveTasteToScore(track, baseScore) {
+  const taste = loadWaveTasteMap()
+  let s = baseScore
+  getMyWaveArtistNames(track).forEach((a) => {
+    const k = normalizeMyWaveArtistName(a)
+    s -= Math.min(taste.artistNeg[k] || taste.artistNeg[a] || 0, WAVE_TASTE_MAX_ART) * 0.85
+    s += Math.min(taste.artistPos[k] || taste.artistPos[a] || 0, WAVE_TASTE_MAX_ART) * 0.45
+  })
+  getMyWaveTokens(track).forEach((tok) => {
+    s -= Math.min(taste.tokenNeg[tok] || 0, WAVE_TASTE_MAX_TOK) * 0.65
+  })
+  return s
+}
+
 function buildMyWavePreferenceProfile(candidates) {
   const profile = { artists: new Map(), sources: new Map(), tokens: new Map(), totalWeight: 0 }
   const bump = (map, key, score) => {
@@ -3569,11 +3664,33 @@ function getMyWaveVibeScore(track, mode = getMyWaveMode()) {
   return Math.min(words.reduce((sum, word) => sum + (text.includes(word) ? (mode === 'energetic' ? 7 : 5) : 0), 0), 24)
 }
 
+function getMyWaveOfficialBonus(track) {
+  const text = `${track?.artist || ''} ${track?.title || ''}`.toLowerCase()
+  const strong = ['official audio', 'official music video', 'original mix', 'album version', 'full version', 'official video']
+  if (strong.some((w) => text.includes(w))) return 10
+  if (/\bofficial\b/.test(text) && (text.includes('audio') || text.includes('video'))) return 6
+  return 0
+}
+
 function getMyWaveQualityPenalty(track, mode = getMyWaveMode()) {
   const text = `${track?.artist || ''} ${track?.title || ''}`.toLowerCase()
-  if (mode === 'sad' && ['slowed', 'reverb', 'acoustic', 'dreamcore'].some((word) => text.includes(word))) return 0
-  const noisy = ['nightcore', '1 hour', '8d audio', 'bass boosted', 'karaoke', 'instrumental remake']
-  return noisy.some((word) => text.includes(word)) ? 16 : 0
+  if (mode === 'sad' && ['slowed', 'reverb', 'acoustic', 'dreamcore'].some((word) => text.includes(word))) {
+    const sec = getNormalizedTrackDurationSec(track)
+    if (sec != null && sec < 40) return 28
+    return 0
+  }
+  const noisy = [
+    'nightcore', '1 hour', '8d audio', 'bass boosted', 'karaoke', 'instrumental remake',
+    'speed up', 'sped up', 'speedup', 'tiktok version', 'cover by', 'cover (', ' acoustic cover',
+    'fan cover', 'remake', 'snippet', 'preview only', 'short version', 'edit audio', 'tik tok',
+    'минус', 'караоке', 'перепев', 'фанатск', 'mashup', 'bootleg', 'vocals only',
+    'live from concert', 'на шоу', 'pitch ',
+  ]
+  let pen = noisy.some((word) => text.includes(word)) ? 22 : 0
+  const sec = getNormalizedTrackDurationSec(track)
+  if (sec != null && sec < 45) pen += 40
+  else if (sec != null && sec < WAVE_MY_WAVE_MIN_DURATION_SEC) pen += 14
+  return pen
 }
 
 function scoreMyWaveTrack(track, profile, mode, resultIndex = 0) {
@@ -3588,6 +3705,8 @@ function scoreMyWaveTrack(track, profile, mode, resultIndex = 0) {
   score += getMyWaveTrendScore(track, resultIndex)
   score += getMyWaveVibeScore(track, mode)
   score -= getMyWaveQualityPenalty(track, mode)
+  score += getMyWaveOfficialBonus(track)
+  score = applyWaveTasteToScore(track, score)
   return score
 }
 
@@ -3610,6 +3729,8 @@ function isMyWaveRecommendationAllowed(track, excluded, selected) {
   if (!sig || excluded.has(sig) || selected.has(sig)) return false
   const text = `${safe.artist || ''} ${safe.title || ''}`.toLowerCase()
   if (!text.trim() || text.includes('karaoke') || text.includes('instrumental remake')) return false
+  const durSec = getNormalizedTrackDurationSec(safe)
+  if (durSec != null && durSec < WAVE_MY_WAVE_MIN_DURATION_SEC) return false
   return true
 }
 
@@ -6472,6 +6593,15 @@ function nextTrack(autoEnded = false) {
     return
   }
   if (!queue.length) return
+  if (
+    queueScope === 'myWave' &&
+    !autoEnded &&
+    currentTrack &&
+    Number(audio?.duration || 0) > 2 &&
+    Number(audio?.currentTime || 0) < WAVE_EARLY_SKIP_SEC
+  ) {
+    recordWaveEarlySkip(currentTrack)
+  }
   if (autoEnded && playbackMode.repeat === 'one') {
     audio.currentTime = 0
     audio.play().catch(() => {})
@@ -6553,6 +6683,7 @@ audio.onended = () => {
       return
     }
   }
+  if (queueScope === 'myWave' && currentTrack) recordWavePositiveListen(currentTrack)
   nextTrack(true)
 }
 

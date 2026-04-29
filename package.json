@@ -1,6 +1,14 @@
 {
   "name": "flow",
-  "version": "2.2.3",
+  "version": "2.2.4",
+  "description": "Flow — десктопный музыкальный плеер: поиск, плейлисты, SoundCloud, комнаты и персональная «Моя волна».",
+  "author": "ioqeeqo-create",
+  "license": "MIT",
+  "homepage": "https://github.com/ioqeeqo-create/FlowPleerLoww#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ioqeeqo-create/FlowPleerLoww.git"
+  },
   "main": "main.js",
   "scripts": {
     "start": "electron .",
