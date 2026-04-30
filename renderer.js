@@ -86,6 +86,8 @@ const FRIEND_POLL_INTERVAL_MS = 3500
 const FRIEND_FRESH_ONLINE_MS = 18000
 const FRIEND_PROFILE_REFRESH_MS = 15000
 const FLOW_SERVER_DEFAULT_URL = 'http://85.239.34.229:8787'
+const FLOW_SOCIAL_DEFAULT_API_BASE = 'http://85.239.34.229:3847'
+const FLOW_SOCIAL_DEFAULT_API_SECRET = 'ed33640b3cd6ca2418ebb2016d9f234db18fb58a25564a1c889363eb1d997dd4'
 const FRIEND_NOTIFY_COOLDOWN_MS = 90 * 1000
 const PROFILE_CACHE_TTL_MS = 5 * 60 * 1000
 /** Ленивый API «Моя волна» (реализация в src/modules/wave-engine.js). */
@@ -1891,12 +1893,14 @@ function getSettings() {
     discordClientId: '', discordRpcEnabled: false, lastfmApiKey: '', lastfmSharedSecret: '', lastfmSessionKey: '',
     proxyBaseUrl: FLOW_SERVER_DEFAULT_URL,
     compactUi: false,
-    flowSocialApiBase: '',
-    flowSocialApiSecret: '',
+    flowSocialApiBase: FLOW_SOCIAL_DEFAULT_API_BASE,
+    flowSocialApiSecret: FLOW_SOCIAL_DEFAULT_API_SECRET,
   }
   if (typeof raw.compactUi !== 'boolean') raw.compactUi = false
-  if (!Object.prototype.hasOwnProperty.call(raw, 'flowSocialApiBase')) raw.flowSocialApiBase = ''
-  if (!Object.prototype.hasOwnProperty.call(raw, 'flowSocialApiSecret')) raw.flowSocialApiSecret = ''
+  if (!Object.prototype.hasOwnProperty.call(raw, 'flowSocialApiBase')) raw.flowSocialApiBase = FLOW_SOCIAL_DEFAULT_API_BASE
+  if (!Object.prototype.hasOwnProperty.call(raw, 'flowSocialApiSecret')) raw.flowSocialApiSecret = FLOW_SOCIAL_DEFAULT_API_SECRET
+  if (!String(raw.flowSocialApiBase || '').trim()) raw.flowSocialApiBase = FLOW_SOCIAL_DEFAULT_API_BASE
+  if (!String(raw.flowSocialApiSecret || '').trim()) raw.flowSocialApiSecret = FLOW_SOCIAL_DEFAULT_API_SECRET
   raw.proxyBaseUrl = normalizeFlowServerUrl(raw.proxyBaseUrl)
   const prevActive = raw.activeSource
   raw.activeSource = normalizeStoredActiveSource(raw.activeSource)

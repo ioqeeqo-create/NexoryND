@@ -1,4 +1,6 @@
 ;(function initFlowSocialBackend() {
+  const DEFAULT_BASE = 'http://85.239.34.229:3847'
+  const DEFAULT_SECRET = 'ed33640b3cd6ca2418ebb2016d9f234db18fb58a25564a1c889363eb1d997dd4'
   const listeners = new Set()
   let ws = null
   let reconnectTimer = null
@@ -8,15 +10,23 @@
   let lastTopics = []
 
   function getConfig() {
-    let base = ''
-    let secret = ''
+    let base = DEFAULT_BASE
+    let secret = DEFAULT_SECRET
     try {
-      base = String(localStorage.getItem('flow_social_api_base') || '').trim().replace(/\/$/, '')
-      secret = String(localStorage.getItem('flow_social_api_secret') || '').trim()
+      const lsBase = String(localStorage.getItem('flow_social_api_base') || '').trim().replace(/\/$/, '')
+      const lsSecret = String(localStorage.getItem('flow_social_api_secret') || '').trim()
+      if (lsBase) base = lsBase
+      if (lsSecret) secret = lsSecret
       if (typeof window.getSettings === 'function') {
         const s = window.getSettings()
-        if (s?.flowSocialApiBase) base = String(s.flowSocialApiBase).trim().replace(/\/$/, '')
-        if (s?.flowSocialApiSecret) secret = String(s.flowSocialApiSecret).trim()
+        if (s?.flowSocialApiBase) {
+          const sBase = String(s.flowSocialApiBase).trim().replace(/\/$/, '')
+          if (sBase) base = sBase
+        }
+        if (s?.flowSocialApiSecret) {
+          const sSecret = String(s.flowSocialApiSecret).trim()
+          if (sSecret) secret = sSecret
+        }
       }
     } catch (_) {}
     return { base, secret }
