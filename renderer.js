@@ -50,11 +50,13 @@ let _lastRoomSyncAt = 0
 let _currentTrackStartedAt = 0
 let _flowSocialRoomUnsub = null
 let _roomServerHeartbeatTimer = null
+let _roomServerFullSyncTimer = null
 let _profilesRealtimeUnsub = null
 let _lastAppliedServerPlaybackTs = 0
 let _lastRoomServerLoadAt = 0
 let _friendPresence = new Map()
 let _friendsPollTimer = null
+let _friendsForceRefreshTimer = null
 let _playlistDragIndex = -1
 let _playlistEditContext = null
 let _libraryActionMode = null
@@ -82,9 +84,9 @@ let _profileEditDraft = null
 let _roomContext = null
 let _roomServerSaveTimer = null
 let _lastServerStatusCheckAt = 0
-const FRIEND_POLL_INTERVAL_MS = 3500
-const FRIEND_FRESH_ONLINE_MS = 18000
-const FRIEND_PROFILE_REFRESH_MS = 15000
+const FRIEND_POLL_INTERVAL_MS = 2500
+const FRIEND_FRESH_ONLINE_MS = 9000
+const FRIEND_PROFILE_REFRESH_MS = 7000
 const FLOW_SERVER_DEFAULT_URL = 'http://85.239.34.229:8787'
 const FLOW_SOCIAL_DEFAULT_API_BASE = 'http://85.239.34.229:3847'
 const FLOW_SOCIAL_DEFAULT_API_SECRET = 'ed33640b3cd6ca2418ebb2016d9f234db18fb58a25564a1c889363eb1d997dd4'
@@ -2959,6 +2961,8 @@ function stopRoomServerSync() {
   _flowSocialRoomUnsub = null
   if (_roomServerHeartbeatTimer) clearInterval(_roomServerHeartbeatTimer)
   _roomServerHeartbeatTimer = null
+  if (_roomServerFullSyncTimer) clearInterval(_roomServerFullSyncTimer)
+  _roomServerFullSyncTimer = null
 }
 
 function stopProfilesRealtimeSync() {
@@ -3007,12 +3011,21 @@ function startProfilesRealtimeSync() {
     )
     _peerProfiles.set(peerId, merged)
     cachePeerProfile(merged, peerId)
+    if (username !== self) scheduleFriendsPresenceRefresh(true, 180)
     if (_profile?.username && username === String(_profile.username).trim().toLowerCase()) {
       syncProfileUi()
     }
     renderFriends().catch(() => {})
     if (_roomState?.roomId) renderRoomMembers()
   })
+}
+
+function scheduleFriendsPresenceRefresh(force = false, delay = 220) {
+  if (_friendsForceRefreshTimer) clearTimeout(_friendsForceRefreshTimer)
+  _friendsForceRefreshTimer = setTimeout(() => {
+    _friendsForceRefreshTimer = null
+    pollFriendsPresence(Boolean(force)).catch(() => {})
+  }, Math.max(80, Number(delay || 220)))
 }
 
 async function upsertRoomMemberPresence() {
@@ -3074,9 +3087,12 @@ async function loadRoomStateFromServer(force = false) {
     if (!isFlowSocialReady()) return
     const rid = encodeURIComponent(_roomState.roomId)
     const nowIso = new Date(Date.now() - 20000).toISOString()
+    const membersPath = force
+      ? `/flow-api/v1/room-members/${rid}`
+      : `/flow-api/v1/room-members/${rid}?since=${encodeURIComponent(nowIso)}`
     const [room, members] = await Promise.all([
       flowSocialGet(`/flow-api/v1/rooms/${rid}`),
-      flowSocialGet(`/flow-api/v1/room-members/${rid}?since=${encodeURIComponent(nowIso)}`),
+      flowSocialGet(membersPath),
     ])
     if (room?.host_peer_id) _roomState.hostPeerId = String(room.host_peer_id)
     if (Array.isArray(room?.shared_queue)) {
@@ -3126,13 +3142,16 @@ function startRoomServerSync() {
     const rid = String(msg?.room_id || '').trim()
     if (rid !== String(_roomState.roomId || '').trim()) return
     if (msg?.table !== 'flow_rooms' && msg?.table !== 'flow_room_members') return
-    loadRoomStateFromServer(true).catch(() => {})
+    loadRoomStateFromServer(false).catch(() => {})
   })
   upsertRoomMemberPresence().catch(() => {})
   loadRoomStateFromServer(true).catch(() => {})
   _roomServerHeartbeatTimer = setInterval(() => {
     upsertRoomMemberPresence().catch(() => {})
   }, 2500)
+  _roomServerFullSyncTimer = setInterval(() => {
+    loadRoomStateFromServer(true).catch(() => {})
+  }, 12000)
 }
 
 function renderRoomMembers() {
@@ -5495,7 +5514,8 @@ async function pollFriendsPresence(force = false) {
         }
       }
     }
-    await refreshFriendProfileFromCloud(uname, force).catch(() => null)
+    const shouldForceProfileRefresh = force || !prev.online
+    await refreshFriendProfileFromCloud(uname, shouldForceProfileRefresh).catch(() => null)
     return [uname, state]
   }))
   const prevPresence = _friendPresence
