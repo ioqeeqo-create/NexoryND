@@ -3567,6 +3567,163 @@ body.visual-floated .results-source-label {
   opacity: 0.8;
 }
 
+/* ═══════════════════════════════
+   COMPACT / ZEN UI (body.flow-compact-ui)
+═══════════════════════════════ */
+body.flow-compact-ui {
+  --flow-icon-lg: 22px;
+  --flow-icon-md: 18px;
+  --player-h: 72px;
+}
+body.flow-compact-ui .content {
+  padding: 16px 18px;
+  padding-bottom: calc(var(--player-h) + 16px);
+}
+body.flow-compact-ui .content-header {
+  margin-bottom: 12px;
+}
+body.flow-compact-ui .content-header h2 {
+  font-size: 17px;
+  letter-spacing: -0.02em;
+}
+body.flow-compact-ui .content-sub {
+  display: none;
+}
+body.flow-compact-ui .sidebar {
+  padding: 12px 8px;
+  padding-bottom: calc(var(--player-h) + 10px);
+}
+body.flow-compact-ui .sidebar-logo {
+  padding: 2px 6px 12px;
+  font-size: 15px;
+  justify-content: center;
+  display: flex;
+}
+body.flow-compact-ui .sidebar-logo span,
+body.flow-compact-ui .sidebar .nav-label,
+body.flow-compact-ui .sidebar .user-info {
+  opacity: 0;
+  width: 0;
+  max-width: 0;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+}
+body.flow-compact-ui .sidebar .nav-item {
+  justify-content: center;
+  padding: 9px 8px;
+  gap: 0;
+}
+body.flow-compact-ui .sidebar .nav-item svg {
+  margin: 0 auto;
+}
+body.flow-compact-ui .sidebar .sidebar-user {
+  justify-content: center;
+  gap: 6px;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+body.flow-compact-ui .sidebar .user-avatar {
+  margin: 0;
+}
+body.flow-compact-ui .sidebar .logout-btn {
+  flex-shrink: 0;
+}
+body.flow-compact-ui.layout-top-nav .sidebar-logo span,
+body.flow-compact-ui.layout-top-nav .sidebar .nav-label,
+body.flow-compact-ui.layout-top-nav .sidebar .user-info {
+  display: none;
+}
+body.flow-compact-ui.layout-top-nav .nav-item {
+  justify-content: center;
+  padding: 8px 10px;
+  min-width: 40px;
+}
+body.flow-compact-ui .home-cards {
+  gap: 10px;
+}
+body.flow-compact-ui .home-card {
+  padding: 14px 12px;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+}
+body.flow-compact-ui .home-card-title,
+body.flow-compact-ui .home-card-sub {
+  display: none;
+}
+body.flow-compact-ui .home-card-icon {
+  margin: 0;
+}
+body.flow-compact-ui .my-wave-hero h3,
+body.flow-compact-ui .my-wave-hero > p#my-wave-hint {
+  display: none;
+}
+body.flow-compact-ui .my-wave-hero {
+  gap: 8px;
+}
+body.flow-compact-ui .my-wave-badge {
+  margin-bottom: 0;
+}
+body.flow-compact-ui .settings-cat-hint {
+  display: none;
+}
+body.flow-compact-ui .settings-cat {
+  padding: 10px 12px;
+}
+
+/* Поиск: свёрнутая «лупа», разворачивается по клику / фокусу */
+body.flow-compact-ui #page-search .search-bar {
+  transition:
+    max-width var(--anim-ui) var(--ease-flow),
+    padding var(--anim-ui) var(--ease-flow),
+    gap var(--anim-ui) var(--ease-flow),
+    border-color var(--anim-ui) var(--ease-flow),
+    box-shadow var(--anim-ui) var(--ease-flow);
+  max-width: 100%;
+}
+body.flow-compact-ui #page-search .search-bar.search-bar--peek {
+  max-width: 48px;
+  padding: 10px;
+  gap: 0;
+  justify-content: center;
+  cursor: pointer;
+}
+body.flow-compact-ui #page-search .search-bar.search-bar--peek svg {
+  margin: 0;
+}
+body.flow-compact-ui #page-search .search-bar.search-bar--peek input {
+  flex: 0 0 0;
+  width: 0 !important;
+  min-width: 0 !important;
+  opacity: 0;
+  padding: 0;
+  margin: 0;
+  pointer-events: none;
+}
+body.flow-compact-ui .search-source-row > span:first-child {
+  display: none;
+}
+body.flow-compact-ui .search-source-pill {
+  font-size: 0;
+  color: transparent;
+  gap: 0;
+  padding: 7px 9px;
+}
+body.flow-compact-ui .search-source-pill .pill-dot {
+  opacity: 1;
+}
+body.flow-compact-ui .search-source-pill:hover,
+body.flow-compact-ui .search-source-pill:focus-visible {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.82);
+  gap: 5px;
+}
+body.flow-compact-ui .search-source-pill.active:hover,
+body.flow-compact-ui .search-source-pill.active:focus-visible {
+  color: #ff6eb5;
+}
+
 /* Доступность: убираем тяжёлые декоративные анимации, оставляем короткие переходы */
 @media (prefers-reduced-motion: reduce) {
   :root {

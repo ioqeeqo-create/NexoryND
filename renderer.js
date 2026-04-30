@@ -1362,6 +1362,7 @@ function initVisualSettings() {
     normalizeSettingsSectionsPersistence()
     applySettingsSectionsState()
   } catch (_) {}
+  applyCompactUi()
   // background filter
   const coverBlur = document.getElementById('bg-cover-blur')
   if (coverBlur) coverBlur.style.filter = `blur(${v.blur}px) brightness(${v.bright/100})`
@@ -1888,8 +1889,10 @@ function getSettings() {
   const raw = JSON.parse(localStorage.getItem('flow_settings')) || {
     soundcloudClientId: '', vkToken: '', spotifyToken: '', yandexToken: '', activeSource: 'hybrid',
     discordClientId: '', discordRpcEnabled: false, lastfmApiKey: '', lastfmSharedSecret: '', lastfmSessionKey: '',
-    proxyBaseUrl: FLOW_SERVER_DEFAULT_URL
+    proxyBaseUrl: FLOW_SERVER_DEFAULT_URL,
+    compactUi: false,
   }
+  if (typeof raw.compactUi !== 'boolean') raw.compactUi = false
   raw.proxyBaseUrl = normalizeFlowServerUrl(raw.proxyBaseUrl)
   const prevActive = raw.activeSource
   raw.activeSource = normalizeStoredActiveSource(raw.activeSource)
@@ -1912,6 +1915,81 @@ function saveSettingsRaw(patch) {
   localStorage.setItem('flow_settings', JSON.stringify(updated))
   currentSource = updated.activeSource || 'hybrid'
   updateSourceBadge()
+}
+
+let _compactSearchListenersBound = false
+
+function syncCompactSearchInputTabIndex() {
+  const bar = document.getElementById('search-bar')
+  const input = document.getElementById('search-input')
+  if (!bar || !input) return
+  const peek = document.body.classList.contains('flow-compact-ui') && bar.classList.contains('search-bar--peek')
+  input.tabIndex = peek ? -1 : 0
+}
+
+function syncSearchBarCollapsedState() {
+  const bar = document.getElementById('search-bar')
+  const input = document.getElementById('search-input')
+  if (!bar || !input) return
+  if (!document.body.classList.contains('flow-compact-ui')) {
+    bar.classList.remove('search-bar--peek')
+    syncCompactSearchInputTabIndex()
+    return
+  }
+  if (_activePageId !== 'search') {
+    bar.classList.add('search-bar--peek')
+    syncCompactSearchInputTabIndex()
+    return
+  }
+  if (!String(input.value || '').trim()) bar.classList.add('search-bar--peek')
+  else bar.classList.remove('search-bar--peek')
+  syncCompactSearchInputTabIndex()
+}
+
+function setupCompactSearchListeners() {
+  if (_compactSearchListenersBound) return
+  _compactSearchListenersBound = true
+  const bar = document.getElementById('search-bar')
+  const input = document.getElementById('search-input')
+  if (!bar || !input) return
+  bar.addEventListener('mousedown', (e) => {
+    if (!document.body.classList.contains('flow-compact-ui')) return
+    if (!bar.classList.contains('search-bar--peek')) return
+    e.preventDefault()
+    bar.classList.remove('search-bar--peek')
+    syncCompactSearchInputTabIndex()
+    requestAnimationFrame(() => { input.focus() })
+  })
+  input.addEventListener('focus', () => {
+    if (!document.body.classList.contains('flow-compact-ui')) return
+    bar.classList.remove('search-bar--peek')
+    syncCompactSearchInputTabIndex()
+  })
+  input.addEventListener('blur', () => {
+    setTimeout(() => {
+      syncSearchBarCollapsedState()
+    }, 160)
+  })
+  input.addEventListener('input', () => {
+    syncSearchBarCollapsedState()
+  })
+}
+
+/** Компактный / Zen UI: узкий скелет, иконки в меню, мини-поиск. */
+function applyCompactUi(enabled) {
+  const on = typeof enabled === 'boolean' ? enabled : Boolean(getSettings().compactUi)
+  document.body.classList.toggle('flow-compact-ui', on)
+  const sw = document.getElementById('toggle-compact-ui')
+  if (sw) sw.classList.toggle('active', on)
+  setupCompactSearchListeners()
+  syncSearchBarCollapsedState()
+}
+
+function toggleCompactUi() {
+  const next = !getSettings().compactUi
+  saveSettingsRaw({ compactUi: next })
+  applyCompactUi(next)
+  showToast(next ? 'Компактный режим включён' : 'Компактный режим выключен')
 }
 
 function openUrl(url) {
@@ -2150,6 +2228,7 @@ function loadSettingsPage() {
     syncFontControls()
     syncHomeWidgetUI()
     applyHomeSliderStyle()
+    applyCompactUi()
     switchSettingsCategory(_settingsCategory)
   })
 }
@@ -2456,6 +2535,7 @@ function syncRuntimeCachesAfterPresetImport() {
     currentSource = s.activeSource || 'hybrid'
     updateSourceBadge()
     syncSearchSourcePills()
+    applyCompactUi()
   } catch {}
 }
 
@@ -5743,6 +5823,7 @@ function openPage(id, opts = {}) {
   if (idx >= 0) document.querySelectorAll('.nav-item')[idx]?.classList.add('active')
   _activePageId = id
   try { document.body.setAttribute('data-active-page', id) } catch {}
+  syncSearchBarCollapsedState()
   if (_deferredPageRenderRaf) cancelAnimationFrame(_deferredPageRenderRaf)
   _deferredPageRenderRaf = requestAnimationFrame(() => {
     _deferredPageRenderRaf = 0
