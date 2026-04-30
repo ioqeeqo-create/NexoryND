@@ -1,5 +1,8 @@
 node_modules/
 dist/
+
+# Flow Social: локальная SQLite (на сервере тоже не хранить в git)
+/data/
 *.log
 *.tmp
 *.temp

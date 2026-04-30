@@ -1,20 +1,26 @@
-(() => {
+;(function peerSocialDefine() {
   const STORAGE_KEYS = {
     profiles: 'flow_profiles',
     current: 'flow_current_user',
     friendsPrefix: 'flow_friends_',
-    supabaseUrl: 'flow_supabase_url',
-    supabaseKey: 'flow_supabase_key',
   }
 
-  const DEFAULT_SUPABASE_URL = 'https://cdfwiqgwwxdzznvbpcgj.supabase.co'
-  const DEFAULT_SUPABASE_KEY = 'sb_publishable_fAF9-Qezjp_51olpGfpkYw_K1q1Yzxm'
   const DB_PROFILES = 'flow_profiles'
   const DB_FRIENDS = 'flow_friends'
   const DB_FRIEND_REQUESTS = 'flow_friend_requests'
 
+  function getBackend() {
+    return typeof window.FlowSocialBackend?.isConfigured === 'function' && window.FlowSocialBackend.isConfigured()
+      ? window.FlowSocialBackend
+      : null
+  }
+
   function getProfiles() {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.profiles) || '[]') || [] } catch { return [] }
+    try {
+      return JSON.parse(localStorage.getItem(STORAGE_KEYS.profiles) || '[]') || []
+    } catch {
+      return []
+    }
   }
 
   function saveProfiles(list) {
@@ -29,7 +35,11 @@
   }
 
   function normalizeUsername(value) {
-    return String(value || '').trim().toLowerCase().replace(/[^a-z0-9_\-.]/g, '').slice(0, 32)
+    return String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_\-.]/g, '')
+      .slice(0, 32)
   }
 
   function randomSalt(len = 16) {
@@ -53,30 +63,37 @@
     return btoa(unescape(encodeURIComponent(input))).slice(0, 120)
   }
 
+  async function profileExistsOnServer(username) {
+    const be = getBackend()
+    if (!be) return false
+    try {
+      await be.request('GET', `/flow-api/v1/profile-auth/${encodeURIComponent(username)}`)
+      return true
+    } catch (e) {
+      if (e?.status === 404) return false
+      throw e
+    }
+  }
+
   async function createProfile(rawName, rawPassword = '') {
     const username = normalizeUsername(rawName)
     if (!username || username.length < 3) return { ok: false, error: 'Username: минимум 3 символа [a-z0-9_-.]' }
     const password = String(rawPassword || '')
     if (password.length < 4) return { ok: false, error: 'Пароль: минимум 4 символа' }
-    const sb = getSupabase()
-    if (!sb) return { ok: false, error: 'Сервер недоступен' }
+    const be = getBackend()
+    if (!be) return { ok: false, error: 'Сервер недоступен (задай свой Flow Social API URL в настройках)' }
     try {
-      const { data: existing } = await sb
-        .from(DB_PROFILES)
-        .select('username')
-        .eq('username', username)
-        .maybeSingle()
-      if (existing?.username) return { ok: false, error: 'Такой Username уже занят' }
+      const exists = await profileExistsOnServer(username)
+      if (exists) return { ok: false, error: 'Такой Username уже занят' }
       const salt = randomSalt(24)
       const passHash = await hashPassword(password, salt)
-      const { error } = await sb.from(DB_PROFILES).insert({
+      await be.request('PUT', '/flow-api/v1/profile', {
         username,
-        password_salt: salt,
         password_hash: passHash,
+        password_salt: salt,
         online: true,
         last_seen: new Date().toISOString(),
       })
-      if (error) return { ok: false, error: error.message || 'Не удалось создать аккаунт' }
     } catch (e) {
       return { ok: false, error: e?.message || String(e) }
     }
@@ -94,18 +111,17 @@
     const password = String(rawPassword || '')
     if (!username) return { ok: false, error: 'Введите Username' }
     if (!password) return { ok: false, error: 'Введите пароль' }
-    const sb = getSupabase()
-    if (!sb) return { ok: false, error: 'Сервер недоступен' }
+    const be = getBackend()
+    if (!be) return { ok: false, error: 'Сервер недоступен (задай свой Flow Social API URL в настройках)' }
     let row = null
     try {
-      const { data, error } = await sb
-        .from(DB_PROFILES)
-        .select('username,password_hash,password_salt')
-        .eq('username', username)
-        .maybeSingle()
-      if (error) return { ok: false, error: error.message || 'Ошибка входа' }
-      if (!data?.username) return { ok: false, error: 'Профиль не найден, зарегистрируйся' }
-      row = data
+      row = await be.request('GET', `/flow-api/v1/profile-auth/${encodeURIComponent(username)}`)
+    } catch (e) {
+      if (e?.status === 404) return { ok: false, error: 'Профиль не найден, зарегистрируйся' }
+      return { ok: false, error: e?.message || 'Ошибка входа' }
+    }
+    try {
+      if (!row?.username) return { ok: false, error: 'Профиль не найден, зарегистрируйся' }
       const salt = String(row.password_salt || '')
       const expected = String(row.password_hash || '')
       if (!salt || !expected) {
@@ -131,31 +147,21 @@
     const password = String(rawPassword || '')
     if (!username) return { ok: false, error: 'Введите Username' }
     if (password.length < 4) return { ok: false, error: 'Пароль: минимум 4 символа' }
-    const sb = getSupabase()
-    if (!sb) return { ok: false, error: 'Сервер недоступен' }
+    const be = getBackend()
+    if (!be) return { ok: false, error: 'Сервер недоступен' }
     try {
-      const { data, error } = await sb
-        .from(DB_PROFILES)
-        .select('username,password_hash,password_salt')
-        .eq('username', username)
-        .maybeSingle()
-      if (error) return { ok: false, error: error.message || 'Ошибка миграции' }
-      if (!data?.username) return { ok: false, error: 'Профиль не найден' }
-      const hasPassword = String(data.password_hash || '').trim() && String(data.password_salt || '').trim()
+      const row = await be.request('GET', `/flow-api/v1/profile-auth/${encodeURIComponent(username)}`).catch(() => null)
+      if (!row?.username) return { ok: false, error: 'Профиль не найден' }
+      const hasPassword =
+        String(row.password_hash || '').trim() && String(row.password_salt || '').trim()
       if (hasPassword) return { ok: false, error: 'Аккаунт уже мигрирован. Войди через пароль.' }
       const salt = randomSalt(24)
       const passHash = await hashPassword(password, salt)
-      const { error: upError } = await sb
-        .from(DB_PROFILES)
-        .update({
-          password_hash: passHash,
-          password_salt: salt,
-          last_seen: new Date().toISOString(),
-          online: true,
-        })
-        .eq('username', username)
-        .is('password_hash', null)
-      if (upError) return { ok: false, error: upError.message || 'Не удалось завершить миграцию' }
+      await be.request('PATCH', '/flow-api/v1/profile-password', {
+        username,
+        password_hash: passHash,
+        password_salt: salt,
+      })
       const profiles = getProfiles()
       if (!profiles.some((p) => p.username === username)) {
         profiles.push({ username, createdAt: Date.now() })
@@ -164,6 +170,8 @@
       rememberCurrentUser(username)
       return { ok: true, profile: { username } }
     } catch (e) {
+      if (e?.data?.error === 'already_has_password')
+        return { ok: false, error: 'Аккаунт уже мигрирован. Войди через пароль.' }
       return { ok: false, error: e?.message || String(e) }
     }
   }
@@ -191,7 +199,11 @@
 
   function getFriends(username) {
     if (!username) return []
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.friendsPrefix + username) || '[]') || [] } catch { return [] }
+    try {
+      return JSON.parse(localStorage.getItem(STORAGE_KEYS.friendsPrefix + username) || '[]') || []
+    } catch {
+      return []
+    }
   }
 
   function addFriend(username, friendUsername) {
@@ -214,90 +226,60 @@
     return { ok: true, list }
   }
 
-  function getSupabaseConfig() {
-    const url = String(localStorage.getItem(STORAGE_KEYS.supabaseUrl) || DEFAULT_SUPABASE_URL || '').trim()
-    const key = String(localStorage.getItem(STORAGE_KEYS.supabaseKey) || DEFAULT_SUPABASE_KEY || '').trim()
-    return { url, key }
-  }
-
-  let _supabase = null
-  function getSupabase() {
-    try {
-      if (_supabase) return _supabase
-      const cfg = getSupabaseConfig()
-      const factory = window?.supabase?.createClient
-      if (!factory || !cfg.url || !cfg.key) return null
-      _supabase = factory(cfg.url, cfg.key, { realtime: { params: { eventsPerSecond: 30 } } })
-      return _supabase
-    } catch {
-      return null
-    }
-  }
-
   async function upsertProfileCloud(username) {
     try {
-      const sb = getSupabase()
-      if (!sb || !username) return
-      await sb.from(DB_PROFILES).upsert({
+      const be = getBackend()
+      if (!be || !username) return
+      await be.request('PUT', '/flow-api/v1/profile', {
         username,
         online: true,
         last_seen: new Date().toISOString(),
-      }, { onConflict: 'username' })
+      })
     } catch {}
   }
 
   async function setProfileOfflineCloud(username) {
     try {
-      const sb = getSupabase()
-      if (!sb || !username) return
-      await sb.from(DB_PROFILES).upsert({
+      const be = getBackend()
+      if (!be || !username) return
+      await be.request('PUT', '/flow-api/v1/profile', {
         username,
         online: false,
         last_seen: new Date().toISOString(),
-      }, { onConflict: 'username' })
+      })
     } catch {}
   }
 
   async function pullFriendsFromCloud(username) {
     try {
-      const sb = getSupabase()
-      if (!sb || !username) return
-      const { data } = await sb.from(DB_FRIENDS)
-        .select('friend_username')
-        .eq('owner_username', username)
+      const be = getBackend()
+      if (!be || !username) return
+      const data = await be.request('GET', `/flow-api/v1/friends/${encodeURIComponent(username)}`)
       if (!Array.isArray(data)) return
-      const list = [...new Set(data.map((x) => normalizeUsername(x?.friend_username)).filter(Boolean))]
+      const list = [
+        ...new Set(data.map((x) => normalizeUsername(x?.friend_username)).filter(Boolean)),
+      ]
       localStorage.setItem(STORAGE_KEYS.friendsPrefix + username, JSON.stringify(list))
     } catch {}
   }
 
   async function syncFriendToCloud(ownerUsername, friendUsername) {
     try {
-      const sb = getSupabase()
-      if (!sb || !ownerUsername || !friendUsername) return
-      await sb.from(DB_FRIENDS).upsert({
+      const be = getBackend()
+      if (!be || !ownerUsername || !friendUsername) return
+      await be.request('PUT', '/flow-api/v1/friends/pair', {
         owner_username: ownerUsername,
         friend_username: friendUsername,
-      }, { onConflict: 'owner_username,friend_username' })
-      await sb.from(DB_FRIENDS).upsert({
-        owner_username: friendUsername,
-        friend_username: ownerUsername,
-      }, { onConflict: 'owner_username,friend_username' })
+      })
     } catch {}
   }
 
   async function removeFriendFromCloud(ownerUsername, friendUsername) {
     try {
-      const sb = getSupabase()
-      if (!sb || !ownerUsername || !friendUsername) return
-      await sb.from(DB_FRIENDS)
-        .delete()
-        .eq('owner_username', ownerUsername)
-        .eq('friend_username', friendUsername)
-      await sb.from(DB_FRIENDS)
-        .delete()
-        .eq('owner_username', friendUsername)
-        .eq('friend_username', ownerUsername)
+      const be = getBackend()
+      if (!be || !ownerUsername || !friendUsername) return
+      const qs = `?owner_username=${encodeURIComponent(ownerUsername)}&friend_username=${encodeURIComponent(friendUsername)}`
+      await be.request('DELETE', `/flow-api/v1/friends/pair${qs}`)
     } catch {}
   }
 
@@ -306,21 +288,19 @@
     const to = normalizeUsername(toUsername)
     if (!from || !to || from === to) return { ok: false, error: 'Некорректный запрос' }
     try {
-      const sb = getSupabase()
-      if (!sb) return { ok: false, error: 'Supabase недоступен' }
-      const { data: existing } = await sb.from(DB_FRIENDS)
-        .select('owner_username')
-        .eq('owner_username', from)
-        .eq('friend_username', to)
-        .maybeSingle()
-      if (existing) return { ok: false, error: 'Вы уже друзья' }
-      const { error } = await sb.from(DB_FRIEND_REQUESTS).upsert({
+      const be = getBackend()
+      if (!be) return { ok: false, error: 'Сервер недоступен' }
+      const checking = await be.request(
+        'GET',
+        `/flow-api/v1/friends/${encodeURIComponent(from)}`,
+      ).catch(() => [])
+      const already = Array.isArray(checking) && checking.some((r) => normalizeUsername(r?.friend_username) === to)
+      if (already) return { ok: false, error: 'Вы уже друзья' }
+      await be.request('POST', '/flow-api/v1/friend-requests', {
         from_username: from,
         to_username: to,
         status: 'pending',
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'from_username,to_username' })
-      if (error) return { ok: false, error: error.message || 'Не удалось отправить запрос' }
+      })
       return { ok: true }
     } catch (e) {
       return { ok: false, error: e?.message || String(e) }
@@ -331,13 +311,9 @@
     const safe = normalizeUsername(username)
     if (!safe) return []
     try {
-      const sb = getSupabase()
-      if (!sb) return []
-      const { data } = await sb.from(DB_FRIEND_REQUESTS)
-        .select('from_username,to_username,status,updated_at')
-        .eq('to_username', safe)
-        .eq('status', 'pending')
-        .order('updated_at', { ascending: false })
+      const be = getBackend()
+      if (!be) return []
+      const data = await be.request('GET', `/flow-api/v1/friend-requests/incoming/${encodeURIComponent(safe)}`)
       return Array.isArray(data) ? data : []
     } catch {
       return []
@@ -349,15 +325,14 @@
     const from = normalizeUsername(fromUsername)
     if (!to || !from) return { ok: false, error: 'Некорректные данные' }
     try {
-      const sb = getSupabase()
-      if (!sb) return { ok: false, error: 'Supabase недоступен' }
+      const be = getBackend()
+      if (!be) return { ok: false, error: 'Сервер недоступен' }
       const status = accept ? 'accepted' : 'rejected'
-      const { error } = await sb.from(DB_FRIEND_REQUESTS)
-        .update({ status, updated_at: new Date().toISOString() })
-        .eq('from_username', from)
-        .eq('to_username', to)
-        .eq('status', 'pending')
-      if (error) return { ok: false, error: error.message || 'Ошибка ответа' }
+      await be.request('PATCH', '/flow-api/v1/friend-requests', {
+        from_username: from,
+        to_username: to,
+        status,
+      })
       if (accept) await syncFriendToCloud(to, from)
       return { ok: true }
     } catch (e) {
@@ -375,24 +350,101 @@
       this.onMessage = typeof opts.onMessage === 'function' ? opts.onMessage : () => {}
       this.onStatus = typeof opts.onStatus === 'function' ? opts.onStatus : () => {}
       this.sharedQueue = []
-      this._sb = null
-      this._globalChannel = null
-      this._roomChannel = null
+      this._globalChannel = true
+      this._roomChannel = true
       this._pending = new Map()
       this._knownPeers = new Set()
       this._incomingReqByPeer = new Map()
       this._profileHeartbeatTimer = null
+      this._relayUnsubs = []
+      this._presenceTimer = null
+    }
+
+    _unsubsAll() {
+      while (this._relayUnsubs.length) {
+        const u = this._relayUnsubs.pop()
+        try {
+          if (typeof u === 'function') u()
+        } catch (_) {}
+      }
+    }
+
+    _dispatchRelayEnvelope(payload) {
+      const to = String(payload?.toPeerId || '').trim()
+      const from = String(payload?.fromPeerId || '').trim()
+      const msg = payload?.message
+      if (!to || to !== this.peer?.id || !msg) return
+      if (msg._reqId && !msg._responseTo && from) this._incomingReqByPeer.set(from, msg._reqId)
+      if (msg._responseTo && this._pending.has(msg._responseTo)) {
+        const done = this._pending.get(msg._responseTo)
+        this._pending.delete(msg._responseTo)
+        done({ ok: true, data: msg })
+        return
+      }
+      this.onMessage(msg, from)
+    }
+
+    _onBackendMessage(raw) {
+      if (!this.peer || !window.FlowSocialBackend) return
+
+      if (raw?.t === 'relay_direct') {
+        if (String(raw.to_peer_id || '') !== this.peer?.id) return
+        const from = String(raw.from_peer_id || '').trim()
+        this._dispatchRelayEnvelope({
+          toPeerId: raw.to_peer_id,
+          fromPeerId: from,
+          message: raw.message,
+        })
+        return
+      }
+
+      if (raw?.t === 'relay_room' && String(raw.room_id || '') === String(this.roomId || '')) {
+        const from = String(raw.from_peer_id || '').trim()
+        const msg = raw.message
+        if (!msg || !from || from === this.peer?.id) return
+        this.onMessage(msg, from)
+        return
+      }
+
+      if (raw?.t === 'presence_sync' && String(raw.room_id || '') === String(this.roomId || '')) {
+        const next = new Set()
+        ;(raw.peers || []).forEach((p) => {
+          const pid = String(p?.peer_id || '').trim()
+          if (!pid || pid === this.peer.id) return
+          next.add(pid)
+          if (!this.connections.has(pid)) {
+            this.connections.set(pid, { peer: pid })
+            this.onStatus({ type: 'peer-joined', peerId: pid, incoming: true })
+          }
+        })
+        this._knownPeers.forEach((peerId) => {
+          if (!next.has(peerId)) {
+            this.connections.delete(peerId)
+            this.onStatus({ type: 'peer-left', peerId })
+          }
+        })
+        this._knownPeers = next
+      }
     }
 
     init() {
+      const be = getBackend()
+      if (!be) return { ok: false, error: 'Сервер соц-слоя не задан (URL и секрет в настройках)' }
       if (!this.username) return { ok: false, error: 'Username не задан' }
       this.peer = { id: `flow-${this.username}` }
-      this._sb = getSupabase()
       this.onStatus({ type: 'ready', id: this.peer.id })
+
+      FlowSocialBackend.ensureWs()
+      FlowSocialBackend.bindPeer(this.peer.id, this.username)
+
+      const unsub = FlowSocialBackend.onMessage((msg) => this._onBackendMessage(msg))
+      this._relayUnsubs.push(unsub)
+
       upsertProfileCloud(this.username).catch(() => {})
       this._startProfileHeartbeat()
       pullFriendsFromCloud(this.username).catch(() => {})
-      this._wireGlobalChannel()
+
+      FlowSocialBackend.wsSubscribeTopics([])
       return { ok: true }
     }
 
@@ -403,76 +455,29 @@
       }, 25000)
     }
 
-    _wireGlobalChannel() {
-      if (!this._sb || this._globalChannel) return
-      this._globalChannel = this._sb.channel('flow-global')
-        .on('broadcast', { event: 'direct' }, ({ payload }) => {
-          const to = String(payload?.toPeerId || '').trim()
-          const from = String(payload?.fromPeerId || '').trim()
-          const msg = payload?.message
-          if (!to || to !== this.peer?.id || !msg) return
-          if (msg._reqId && !msg._responseTo && from) this._incomingReqByPeer.set(from, msg._reqId)
-          if (msg._responseTo && this._pending.has(msg._responseTo)) {
-            const done = this._pending.get(msg._responseTo)
-            this._pending.delete(msg._responseTo)
-            done({ ok: true, data: msg })
-            return
-          }
-          this.onMessage(msg, from)
-        })
-        .subscribe(() => {})
-    }
-
     _wireRoomChannel(roomId) {
-      if (!this._sb) return
-      if (this._roomChannel) {
-        try { this._sb.removeChannel(this._roomChannel) } catch {}
+      const rid = String(roomId || '').trim()
+      if (!rid) return
+      if (this._presenceTimer) {
+        clearInterval(this._presenceTimer)
+        this._presenceTimer = null
       }
-      this._roomChannel = this._sb.channel(`flow-room:${roomId}`, { config: { presence: { key: this.peer.id } } })
-        .on('presence', { event: 'sync' }, () => {
-          const state = this._roomChannel.presenceState()
-          const next = new Set()
-          Object.keys(state || {}).forEach((peerId) => {
-            if (!peerId || peerId === this.peer.id) return
-            next.add(peerId)
-            if (!this.connections.has(peerId)) {
-              this.connections.set(peerId, { peer: peerId })
-              this.onStatus({ type: 'peer-joined', peerId, incoming: true })
-            }
-          })
-          this._knownPeers.forEach((peerId) => {
-            if (!next.has(peerId)) {
-              this.connections.delete(peerId)
-              this.onStatus({ type: 'peer-left', peerId })
-            }
-          })
-          this._knownPeers = next
-        })
-        .on('broadcast', { event: 'room-message' }, ({ payload }) => {
-          const from = String(payload?.fromPeerId || '').trim()
-          const msg = payload?.message
-          if (!msg || !from || from === this.peer?.id) return
-          this.onMessage(msg, from)
-        })
-        .subscribe(async (status) => {
-          if (status === 'SUBSCRIBED') {
-            try {
-              await this._roomChannel.track({
-                peerId: this.peer.id,
-                username: this.username,
-                ts: Date.now(),
-              })
-            } catch {}
-          }
-        })
+      FlowSocialBackend.wsSubscribeTopics([
+        `presence:${rid}`,
+        `room_peer:${rid}`,
+      ])
+      FlowSocialBackend.ensureWs()
+      FlowSocialBackend.bindPeer(this.peer?.id || '', this.username)
+
+      FlowSocialBackend.roomPing(rid)
+      this._presenceTimer = setInterval(() => {
+        FlowSocialBackend.roomPing(rid)
+      }, 3400)
     }
 
     destroy() {
       this.leaveRoom()
-      if (this._sb && this._globalChannel) {
-        try { this._sb.removeChannel(this._globalChannel) } catch {}
-      }
-      this._globalChannel = null
+      this._unsubsAll()
       if (this._profileHeartbeatTimer) clearInterval(this._profileHeartbeatTimer)
       this._profileHeartbeatTimer = null
       this.connections.clear()
@@ -499,21 +504,22 @@
 
     probeUser(username, timeoutMs = 3500) {
       return new Promise((resolve) => {
-        const sb = this._sb || getSupabase()
+        const be = getBackend()
         const safe = normalizeUsername(username)
-        if (!sb || !safe) return resolve(false)
+        if (!be || !safe) return resolve(false)
         Promise.race([
-          sb.from(DB_PROFILES).select('online,last_seen').eq('username', safe).maybeSingle(),
-          new Promise((r) => setTimeout(() => r({ data: null }), Math.max(1000, Number(timeoutMs || 0))))
-        ]).then((r) => {
-          const row = r?.data
-          if (!row) return resolve(false)
-          const seen = Date.parse(String(row.last_seen || ''))
-          const seenFresh = !Number.isNaN(seen) && (Date.now() - seen) < 75000
-          if (row.online === true && seenFresh) return resolve(true)
-          if (seenFresh) return resolve(true)
-          resolve(false)
-        }).catch(() => resolve(false))
+          be.request('GET', `/flow-api/v1/profile-public/${encodeURIComponent(safe)}`),
+          new Promise((r) => setTimeout(() => r(null), Math.max(1000, Number(timeoutMs || 0)))),
+        ])
+          .then((row) => {
+            if (!row) return resolve(false)
+            const seen = Date.parse(String(row.last_seen || ''))
+            const seenFresh = !Number.isNaN(seen) && Date.now() - seen < 75000
+            if (row.online === true && seenFresh) return resolve(true)
+            if (seenFresh) return resolve(true)
+            resolve(false)
+          })
+          .catch(() => resolve(false))
       })
     }
 
@@ -537,14 +543,12 @@
 
     send(message) {
       const payload = { ...(message || {}), _ts: Date.now(), _from: this.username, _peerId: this.peer?.id || null }
-      if (!this._roomChannel) return
-      try {
-        this._roomChannel.send({
-          type: 'broadcast',
-          event: 'room-message',
-          payload: { fromPeerId: this.peer?.id || null, message: payload },
-        })
-      } catch {}
+      const rid = this.roomId
+      if (!rid) return
+      FlowSocialBackend.relayRoom({
+        room_id: rid,
+        message: payload,
+      })
     }
 
     sendToPeer(peerId, message) {
@@ -557,18 +561,10 @@
       }
       if (payload._reqId) payload._expectsResponse = true
       if (payload._responseTo) payload._expectsResponse = false
-      if (!this._globalChannel) return
-      try {
-        this._globalChannel.send({
-          type: 'broadcast',
-          event: 'direct',
-          payload: {
-            toPeerId: target,
-            fromPeerId: this.peer?.id || null,
-            message: payload,
-          },
-        })
-      } catch {}
+      FlowSocialBackend.relayDirect({
+        to_peer_id: target,
+        message: payload,
+      })
     }
 
     disconnectPeer(peerId) {
@@ -578,8 +574,9 @@
     }
 
     leaveRoom() {
-      if (this._roomChannel && this._sb) {
-        try { this._sb.removeChannel(this._roomChannel) } catch {}
+      if (this._presenceTimer) {
+        clearInterval(this._presenceTimer)
+        this._presenceTimer = null
       }
       this._roomChannel = null
       this.connections.clear()
@@ -589,25 +586,18 @@
     }
 
     peersCount() {
-      return this.roomId ? (this.connections.size + 1) : 1
+      return this.roomId ? this.connections.size + 1 : 1
     }
   }
 
-  const _origCreateProfile = createProfile
-  const _origLoginProfile = loginProfile
-  const _origLogoutProfile = logoutProfile
-  const _origGetFriends = getFriends
-  const _origAddFriend = addFriend
-  const _origRemoveFriend = removeFriend
-
   async function createProfileCloudAware(rawName, rawPassword = '') {
-    const res = await _origCreateProfile(rawName, rawPassword)
+    const res = await createProfile(rawName, rawPassword)
     if (res?.ok && res?.profile?.username) upsertProfileCloud(res.profile.username).catch(() => {})
     return res
   }
 
   async function loginProfileCloudAware(rawName, rawPassword = '') {
-    const res = await _origLoginProfile(rawName, rawPassword)
+    const res = await loginProfile(rawName, rawPassword)
     if (res?.ok && res?.profile?.username) {
       upsertProfileCloud(res.profile.username).catch(() => {})
       pullFriendsFromCloud(res.profile.username).catch(() => {})
@@ -618,21 +608,21 @@
   function logoutProfileCloudAware() {
     const cur = getCurrentProfile()
     if (cur?.username) setProfileOfflineCloud(cur.username).catch(() => {})
-    _origLogoutProfile()
+    logoutProfile()
   }
 
   function getFriendsCloudAware(username) {
-    const list = _origGetFriends(username)
+    const list = getFriends(username)
     pullFriendsFromCloud(username).catch(() => {})
     return list
   }
 
   function addFriendCloudAware(username, friendUsername) {
-    return _origAddFriend(username, friendUsername)
+    return addFriend(username, friendUsername)
   }
 
   function removeFriendCloudAware(username, friendUsername) {
-    return _origRemoveFriend(username, friendUsername)
+    return removeFriend(username, friendUsername)
   }
 
   window.FlowModules = window.FlowModules || {}
@@ -654,5 +644,11 @@
     getIncomingFriendRequests: getIncomingFriendRequestsCloud,
     respondFriendRequest: respondFriendRequestCloud,
     FlowPeerSocial,
+    getSocialBackendConfigured: () => !!getBackend(),
+    invalidateSocialBackendCaches: () => {
+      try {
+        window.FlowSocialBackend?.invalidate?.()
+      } catch (_) {}
+    },
   }
 })()

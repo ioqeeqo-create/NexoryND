@@ -767,6 +767,17 @@
           <div id="proxy-check-status" class="integration-hint" style="margin-top:4px">Аудио-прокси: не проверено</div>
         </div>
         <div class="glass-card" style="padding:18px;border-radius:18px;margin-top:12px;max-width:760px;">
+          <div class="vs-section-title" style="margin-bottom:8px;">Социальный слой (свой сервер вместо Supabase)</div>
+          <div class="integration-hint" style="margin-bottom:8px">На VPS запусти <code style="font-size:11px;opacity:.85">node server/flow-social-server.js</code> с переменной <code style="font-size:11px;opacity:.85">FLOW_SOCIAL_SECRET</code>. Здесь укажи тот же секрет и базовый URL (https://твой-домен без слэша).</div>
+          <input id="flow-social-api-base" class="token-field flow-input" placeholder="https://social.example.com" />
+          <input id="flow-social-api-secret" class="token-field flow-input" type="password" placeholder="Секрет (Bearer), как FLOW_SOCIAL_SECRET" style="margin-top:8px" />
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+            <button class="btn-small" onclick="saveFlowSocialBackendSettings()">Сохранить социальный сервер</button>
+            <button class="btn-small" onclick="checkFlowSocialBackendStatus()">Проверить API</button>
+          </div>
+          <div id="flow-social-api-status" class="integration-hint" style="margin-top:8px">Статус соц-API не проверен</div>
+        </div>
+        <div class="glass-card" style="padding:18px;border-radius:18px;margin-top:12px;max-width:760px;">
           <div class="vs-section-title" style="margin-bottom:8px;">Last.fm интеграция</div>
           <input id="lastfm-api-key" class="token-field flow-input" placeholder="Last.fm API Key" />
           <input id="lastfm-shared-secret" class="token-field flow-input" placeholder="Last.fm Shared Secret" style="margin-top:8px" />
@@ -1092,7 +1103,7 @@
   </div>
 </div>
 <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="src/modules/network/flow-social-backend.js"></script>
 <script src="src/modules/utils/smart-cleaning.js"></script>
 <script src="src/modules/audio/player-core.js"></script>
 <script src="src/modules/network/peer-social.js"></script>

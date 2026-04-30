@@ -48,9 +48,9 @@ let _socialPeer = null
 let _roomState = { roomId: null, host: false, hostPeerId: null }
 let _lastRoomSyncAt = 0
 let _currentTrackStartedAt = 0
-let _roomServerChannel = null
+let _flowSocialRoomUnsub = null
 let _roomServerHeartbeatTimer = null
-let _profilesRealtimeChannel = null
+let _profilesRealtimeUnsub = null
 let _lastAppliedServerPlaybackTs = 0
 let _lastRoomServerLoadAt = 0
 let _friendPresence = new Map()
@@ -1891,8 +1891,12 @@ function getSettings() {
     discordClientId: '', discordRpcEnabled: false, lastfmApiKey: '', lastfmSharedSecret: '', lastfmSessionKey: '',
     proxyBaseUrl: FLOW_SERVER_DEFAULT_URL,
     compactUi: false,
+    flowSocialApiBase: '',
+    flowSocialApiSecret: '',
   }
   if (typeof raw.compactUi !== 'boolean') raw.compactUi = false
+  if (!Object.prototype.hasOwnProperty.call(raw, 'flowSocialApiBase')) raw.flowSocialApiBase = ''
+  if (!Object.prototype.hasOwnProperty.call(raw, 'flowSocialApiSecret')) raw.flowSocialApiSecret = ''
   raw.proxyBaseUrl = normalizeFlowServerUrl(raw.proxyBaseUrl)
   const prevActive = raw.activeSource
   raw.activeSource = normalizeStoredActiveSource(raw.activeSource)
@@ -2536,6 +2540,12 @@ function syncRuntimeCachesAfterPresetImport() {
     updateSourceBadge()
     syncSearchSourcePills()
     applyCompactUi()
+    try {
+      const s = getSettings()
+      if (s.flowSocialApiBase) localStorage.setItem('flow_social_api_base', String(s.flowSocialApiBase).trim().replace(/\/$/, ''))
+      if (s.flowSocialApiSecret) localStorage.setItem('flow_social_api_secret', String(s.flowSocialApiSecret).trim())
+      window.FlowSocialBackend?.invalidate?.()
+    } catch (_) {}
   } catch {}
 }
 
@@ -2786,21 +2796,24 @@ function getPublicProfilePayload(username = _profile?.username) {
   }
 }
 
-let _supabaseProfileSyncTimer = null
-const DEFAULT_SUPABASE_URL = 'https://cdfwiqgwwxdzznvbpcgj.supabase.co'
-const DEFAULT_SUPABASE_KEY = 'sb_publishable_fAF9-Qezjp_51olpGfpkYw_K1q1Yzxm'
-function getSupabaseClient() {
+let _flowSocialProfileSyncTimer = null
+
+function isFlowSocialReady() {
+  return typeof window.FlowSocialBackend?.isConfigured === 'function' && window.FlowSocialBackend.isConfigured()
+}
+
+async function flowSocialGet(path) {
+  if (!isFlowSocialReady()) return null
   try {
-    const factory = window?.supabase?.createClient
-    if (typeof factory !== 'function') return null
-    const url = String(localStorage.getItem('flow_supabase_url') || DEFAULT_SUPABASE_URL || '').trim()
-    const key = String(localStorage.getItem('flow_supabase_key') || DEFAULT_SUPABASE_KEY || '').trim()
-    if (!url || !key) return null
-    if (!window.__flowSbProfileClient) window.__flowSbProfileClient = factory(url, key)
-    return window.__flowSbProfileClient
+    return await window.FlowSocialBackend.request('GET', path)
   } catch {
     return null
   }
+}
+
+async function flowSocialPut(path, body) {
+  if (!isFlowSocialReady()) throw new Error('no social backend')
+  return window.FlowSocialBackend.request('PUT', path, body)
 }
 
 function ensureActiveProfile() {
@@ -2816,23 +2829,7 @@ async function fetchCloudPublicProfile(username) {
   const safe = String(username || '').trim().toLowerCase()
   if (!safe) return null
   try {
-    const sb = getSupabaseClient()
-    if (!sb) return null
-    let { data, error } = await sb
-      .from('flow_profiles')
-      .select('username,avatar_data,banner_data,bio,profile_color,pinned_tracks,pinned_playlists,total_tracks,total_seconds,last_seen')
-      .eq('username', safe)
-      .maybeSingle()
-    if (error && String(error.message || '').toLowerCase().includes('profile_color')) {
-      const fallback = await sb
-        .from('flow_profiles')
-        .select('username,avatar_data,banner_data,bio,pinned_tracks,pinned_playlists,total_tracks,total_seconds,last_seen')
-        .eq('username', safe)
-        .maybeSingle()
-      data = fallback.data
-      error = fallback.error
-    }
-    if (error) return null
+    const data = await flowSocialGet(`/flow-api/v1/profile-public/${encodeURIComponent(safe)}`)
     if (!data?.username) return null
     return {
       username: String(data.username || safe),
@@ -2856,13 +2853,7 @@ async function fetchCloudFriendsForUser(username) {
   const safe = String(username || '').trim().toLowerCase()
   if (!safe) return []
   try {
-    const sb = getSupabaseClient()
-    if (!sb) return []
-    const { data } = await sb
-      .from('flow_friends')
-      .select('owner_username,friend_username')
-      .eq('owner_username', safe)
-      .limit(200)
+    const data = await flowSocialGet(`/flow-api/v1/friends/${encodeURIComponent(safe)}`)
     if (!Array.isArray(data)) return []
     const out = data
       .map((row) => String(row?.friend_username || '').trim().toLowerCase())
@@ -2898,8 +2889,7 @@ async function refreshFriendProfileFromCloud(username, force = false) {
 async function syncProfileCloudNow() {
   const me = ensureActiveProfile()
   if (!me?.username) return { ok: false, error: 'no profile' }
-  const sb = getSupabaseClient()
-  if (!sb) return { ok: false, error: 'no supabase' }
+  if (!isFlowSocialReady()) return { ok: false, error: 'no social backend' }
   const custom = getProfileCustom()
   const stats = getListenStats()
   const totalTracks = toDbSafeBigint(stats.totalTracks, 0)
@@ -2917,125 +2907,123 @@ async function syncProfileCloudNow() {
     total_tracks: totalTracks,
     total_seconds: totalSeconds,
   }
-  let { error } = await sb.from('flow_profiles').upsert(payload, { onConflict: 'username' })
-  if (error && String(error.message || '').toLowerCase().includes('profile_color')) {
-    const fallbackPayload = Object.assign({}, payload)
-    delete fallbackPayload.profile_color
-    ;({ error } = await sb.from('flow_profiles').upsert(fallbackPayload, { onConflict: 'username' }))
+  try {
+    await flowSocialPut('/flow-api/v1/profile', payload)
+  } catch (e1) {
+    try {
+      const fallbackPayload = Object.assign({}, payload)
+      delete fallbackPayload.profile_color
+      await flowSocialPut('/flow-api/v1/profile', fallbackPayload)
+    } catch (e2) {
+      try {
+        await flowSocialPut(
+          '/flow-api/v1/profile',
+          Object.assign({}, payload, { total_tracks: 0, total_seconds: 0 })
+        )
+      } catch (e3) {
+        return { ok: false, error: e3?.message || e2?.message || e1?.message || String(e1) }
+      }
+    }
   }
-  if (error && /invalid input syntax for type bigint/i.test(String(error.message || ''))) {
-    const fallbackPayload = Object.assign({}, payload, { total_tracks: 0, total_seconds: 0 })
-    ;({ error } = await sb.from('flow_profiles').upsert(fallbackPayload, { onConflict: 'username' }))
-  }
-  if (error) return { ok: false, error: error.message || String(error) }
   return { ok: true }
 }
 
 function scheduleProfileCloudSync() {
   if (!ensureActiveProfile()?.username) return
-  if (_supabaseProfileSyncTimer) clearTimeout(_supabaseProfileSyncTimer)
-  _supabaseProfileSyncTimer = setTimeout(async () => {
-    _supabaseProfileSyncTimer = null
+  if (_flowSocialProfileSyncTimer) clearTimeout(_flowSocialProfileSyncTimer)
+  _flowSocialProfileSyncTimer = setTimeout(async () => {
+    _flowSocialProfileSyncTimer = null
     await syncProfileCloudNow().catch(() => {})
   }, 220)
 }
 
 function stopRoomServerSync() {
   try {
-    const sb = getSupabaseClient()
-    if (sb && _roomServerChannel) sb.removeChannel(_roomServerChannel)
+    if (typeof _flowSocialRoomUnsub === 'function') _flowSocialRoomUnsub()
   } catch {}
-  _roomServerChannel = null
+  _flowSocialRoomUnsub = null
   if (_roomServerHeartbeatTimer) clearInterval(_roomServerHeartbeatTimer)
   _roomServerHeartbeatTimer = null
 }
 
 function stopProfilesRealtimeSync() {
   try {
-    const sb = getSupabaseClient()
-    if (sb && _profilesRealtimeChannel) sb.removeChannel(_profilesRealtimeChannel)
+    if (typeof _profilesRealtimeUnsub === 'function') _profilesRealtimeUnsub()
   } catch {}
-  _profilesRealtimeChannel = null
+  _profilesRealtimeUnsub = null
 }
 
 function startProfilesRealtimeSync() {
   stopProfilesRealtimeSync()
-  if (!_profile?.username) return
-  const sb = getSupabaseClient()
-  if (!sb) return
-  _profilesRealtimeChannel = sb.channel(`flow-profiles-live:${_profile.username}`)
-    .on('postgres_changes', {
-      event: '*',
-      schema: 'public',
-      table: 'flow_profiles',
-    }, ({ new: row }) => {
-      const username = String(row?.username || '').trim().toLowerCase()
-      if (!username) return
-      const self = String(_profile?.username || '').trim().toLowerCase()
-      const friends = (peerSocial.getFriends && self) ? (peerSocial.getFriends(self) || []) : []
-      const watchSet = new Set([self, ...friends.map((x) => String(x || '').trim().toLowerCase()).filter(Boolean)])
-      if (!watchSet.has(username)) return
-      const cloudProfile = {
-        username,
-        avatarData: row?.avatar_data || null,
-        bannerData: row?.banner_data || null,
-        profileColor: row?.profile_color || '',
-        bio: row?.bio || '',
-        pinnedTracks: Array.isArray(row?.pinned_tracks) ? row.pinned_tracks.slice(0, 5) : [],
-        pinnedPlaylists: Array.isArray(row?.pinned_playlists) ? row.pinned_playlists.slice(0, 5) : [],
-        stats: {
-          totalTracks: Number(row?.total_tracks || 0),
-          totalSeconds: Number(row?.total_seconds || 0),
-        },
-      }
-      const peerId = `flow-${username}`
-      const merged = mergeProfileData(
-        _peerProfiles.get(peerId) || getCachedPeerProfile(username),
-        Object.assign({}, cloudProfile, { peerId }),
-        peerId
-      )
-      _peerProfiles.set(peerId, merged)
-      cachePeerProfile(merged, peerId)
-      if (_profile?.username && username === String(_profile.username).trim().toLowerCase()) {
-        syncProfileUi()
-      }
-      renderFriends().catch(() => {})
-      if (_roomState?.roomId) renderRoomMembers()
-    })
-    .subscribe(() => {})
+  if (!_profile?.username || !window.FlowSocialBackend?.isConfigured?.()) return
+  window.FlowSocialBackend.ensureWs()
+  window.FlowSocialBackend.wsSubscribeTopics(['profiles'])
+  _profilesRealtimeUnsub = window.FlowSocialBackend.onMessage((msg) => {
+    if (msg?.table !== 'flow_profiles') return
+    const row = msg.new
+    const username = String(row?.username || '').trim().toLowerCase()
+    if (!username) return
+    const self = String(_profile?.username || '').trim().toLowerCase()
+    const friends =
+      peerSocial.getFriends && self ? peerSocial.getFriends(self) || [] : []
+    const watchSet = new Set([self, ...friends.map((x) => String(x || '').trim().toLowerCase()).filter(Boolean)])
+    if (!watchSet.has(username)) return
+    const cloudProfile = {
+      username,
+      avatarData: row?.avatar_data || null,
+      bannerData: row?.banner_data || null,
+      profileColor: row?.profile_color || '',
+      bio: row?.bio || '',
+      pinnedTracks: Array.isArray(row?.pinned_tracks) ? row.pinned_tracks.slice(0, 5) : [],
+      pinnedPlaylists: Array.isArray(row?.pinned_playlists) ? row.pinned_playlists.slice(0, 5) : [],
+      stats: {
+        totalTracks: Number(row?.total_tracks || 0),
+        totalSeconds: Number(row?.total_seconds || 0),
+      },
+    }
+    const peerId = `flow-${username}`
+    const merged = mergeProfileData(
+      _peerProfiles.get(peerId) || getCachedPeerProfile(username),
+      Object.assign({}, cloudProfile, { peerId }),
+      peerId
+    )
+    _peerProfiles.set(peerId, merged)
+    cachePeerProfile(merged, peerId)
+    if (_profile?.username && username === String(_profile.username).trim().toLowerCase()) {
+      syncProfileUi()
+    }
+    renderFriends().catch(() => {})
+    if (_roomState?.roomId) renderRoomMembers()
+  })
 }
 
 async function upsertRoomMemberPresence() {
   try {
-    if (!_roomState?.roomId || !_profile?.username) return
-    const sb = getSupabaseClient()
-    if (!sb) return
+    if (!_roomState?.roomId || !_profile?.username || !isFlowSocialReady()) return
     const peerId = String(_socialPeer?.peer?.id || `flow-${_profile.username}`)
     const profile = getPublicProfilePayload(_profile.username)
-    await sb.from('flow_room_members').upsert({
+    await flowSocialPut('/flow-api/v1/room-members', {
       room_id: _roomState.roomId,
       peer_id: peerId,
       username: _profile.username,
       profile: profile || {},
       last_seen: new Date().toISOString(),
-    }, { onConflict: 'room_id,peer_id' })
+    })
   } catch {}
 }
 
 async function removeRoomMemberPresence(roomId = _roomState?.roomId) {
   try {
-    const sb = getSupabaseClient()
     const peerId = String(_socialPeer?.peer?.id || '')
-    if (!sb || !roomId || !peerId) return
-    await sb.from('flow_room_members').delete().eq('room_id', roomId).eq('peer_id', peerId)
+    if (!isFlowSocialReady() || !roomId || !peerId) return
+    const qs = `?room_id=${encodeURIComponent(roomId)}&peer_id=${encodeURIComponent(peerId)}`
+    await window.FlowSocialBackend.request('DELETE', `/flow-api/v1/room-members${qs}`)
   } catch {}
 }
 
 async function saveRoomStateToServer(patch = {}) {
   try {
-    if (!_roomState?.roomId || !_profile?.username) return
-    const sb = getSupabaseClient()
-    if (!sb) return
+    if (!_roomState?.roomId || !_profile?.username || !isFlowSocialReady()) return
     const hostPeerId = _roomState.host
       ? String(_socialPeer?.peer?.id || _roomState.roomId)
       : ((_roomState.hostPeerId && _roomState.hostPeerId !== _roomState.roomId) ? String(_roomState.hostPeerId) : null)
@@ -3046,7 +3034,7 @@ async function saveRoomStateToServer(patch = {}) {
       updated_at: new Date().toISOString(),
     }, patch || {})
     if (hostPeerId) payload.host_peer_id = hostPeerId
-    await sb.from('flow_rooms').upsert(payload, { onConflict: 'room_id' })
+    await flowSocialPut('/flow-api/v1/rooms', payload)
   } catch {}
 }
 
@@ -3065,12 +3053,12 @@ async function loadRoomStateFromServer(force = false) {
     const now = Date.now()
     if (!force && (now - _lastRoomServerLoadAt) < 280) return
     _lastRoomServerLoadAt = now
-    const sb = getSupabaseClient()
-    if (!sb) return
+    if (!isFlowSocialReady()) return
+    const rid = encodeURIComponent(_roomState.roomId)
     const nowIso = new Date(Date.now() - 20000).toISOString()
-    const [{ data: room }, { data: members }] = await Promise.all([
-      sb.from('flow_rooms').select('room_id,host_peer_id,shared_queue,now_playing,playback_state,playback_ts').eq('room_id', _roomState.roomId).maybeSingle(),
-      sb.from('flow_room_members').select('peer_id,username,profile,last_seen').eq('room_id', _roomState.roomId).gte('last_seen', nowIso)
+    const [room, members] = await Promise.all([
+      flowSocialGet(`/flow-api/v1/rooms/${rid}`),
+      flowSocialGet(`/flow-api/v1/room-members/${rid}?since=${encodeURIComponent(nowIso)}`),
     ])
     if (room?.host_peer_id) _roomState.hostPeerId = String(room.host_peer_id)
     if (Array.isArray(room?.shared_queue)) {
@@ -3113,17 +3101,15 @@ async function loadRoomStateFromServer(force = false) {
 
 function startRoomServerSync() {
   stopRoomServerSync()
-  if (!_roomState?.roomId) return
-  const sb = getSupabaseClient()
-  if (!sb) return
-  _roomServerChannel = sb.channel(`flow-room-sync:${_roomState.roomId}`)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'flow_rooms', filter: `room_id=eq.${_roomState.roomId}` }, () => {
-      loadRoomStateFromServer(true).catch(() => {})
-    })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'flow_room_members', filter: `room_id=eq.${_roomState.roomId}` }, () => {
-      loadRoomStateFromServer(true).catch(() => {})
-    })
-    .subscribe(() => {})
+  if (!_roomState?.roomId || !window.FlowSocialBackend?.isConfigured?.()) return
+  window.FlowSocialBackend.ensureWs()
+  window.FlowSocialBackend.wsSubscribeTopics([`room:${_roomState.roomId}`])
+  _flowSocialRoomUnsub = window.FlowSocialBackend.onMessage((msg) => {
+    const rid = String(msg?.room_id || '').trim()
+    if (rid !== String(_roomState.roomId || '').trim()) return
+    if (msg?.table !== 'flow_rooms' && msg?.table !== 'flow_room_members') return
+    loadRoomStateFromServer(true).catch(() => {})
+  })
   upsertRoomMemberPresence().catch(() => {})
   loadRoomStateFromServer(true).catch(() => {})
   _roomServerHeartbeatTimer = setInterval(() => {
@@ -3307,10 +3293,12 @@ function enqueueSharedTrack(track) {
   renderRoomQueue()
   ;(async () => {
     try {
-      const sb = getSupabaseClient()
-      if (!sb) return
-      const { data } = await sb.from('flow_rooms').select('shared_queue').eq('room_id', _roomState.roomId).maybeSingle()
-      const nextQueue = Array.isArray(data?.shared_queue) ? data.shared_queue.map((t) => sanitizeTrack(t)).filter(Boolean) : []
+      if (!isFlowSocialReady()) return
+      const rid = encodeURIComponent(_roomState.roomId)
+      const data = await flowSocialGet(`/flow-api/v1/rooms/${rid}`)
+      const nextQueue = Array.isArray(data?.shared_queue)
+        ? data.shared_queue.map((t) => sanitizeTrack(t)).filter(Boolean)
+        : []
       nextQueue.push(cleanTrack)
       await saveRoomStateToServer({ shared_queue: nextQueue })
     } catch {}
@@ -4690,11 +4678,73 @@ function syncIntegrationsUI() {
   const k = document.getElementById('lastfm-api-key')
   const ss = document.getElementById('lastfm-shared-secret')
   const sk = document.getElementById('lastfm-session-key')
+  const fsb = document.getElementById('flow-social-api-base')
+  const fss = document.getElementById('flow-social-api-secret')
   if (d) d.value = s.discordClientId || ''
   if (p) p.value = normalizeFlowServerUrl(s.proxyBaseUrl || FLOW_SERVER_DEFAULT_URL)
   if (k) k.value = s.lastfmApiKey || ''
   if (ss) ss.value = s.lastfmSharedSecret || ''
   if (sk) sk.value = s.lastfmSessionKey || ''
+  if (fsb) fsb.value = String(s.flowSocialApiBase || '').trim().replace(/\/$/, '')
+  if (fss) fss.value = String(s.flowSocialApiSecret || '').trim()
+}
+
+function saveFlowSocialBackendSettings() {
+  const elB = document.getElementById('flow-social-api-base')
+  const elS = document.getElementById('flow-social-api-secret')
+  const base = String(elB?.value || '').trim().replace(/\/$/, '')
+  const secret = String(elS?.value || '').trim()
+  saveSettingsRaw({ flowSocialApiBase: base, flowSocialApiSecret: secret })
+  try {
+    localStorage.setItem('flow_social_api_base', base)
+    localStorage.setItem('flow_social_api_secret', secret)
+  } catch (_) {}
+  try {
+    stopProfilesRealtimeSync()
+    stopRoomServerSync()
+    window.FlowSocialBackend?.invalidate?.()
+    if (_profile?.username) initPeerSocial()
+    if (_roomState?.roomId) startRoomServerSync()
+  } catch (_) {}
+  showToast('Социальный сервер сохранён')
+}
+
+async function checkFlowSocialBackendStatus() {
+  const statusEl = document.getElementById('flow-social-api-status')
+  const setStatus = (text, ok = null) => {
+    if (!statusEl) return
+    statusEl.textContent = text
+    if (ok === true) statusEl.style.color = '#7ee787'
+    else if (ok === false) statusEl.style.color = '#ff9b9b'
+    else statusEl.style.color = ''
+  }
+  const base = String(document.getElementById('flow-social-api-base')?.value || '').trim().replace(/\/$/, '')
+  const secret = String(document.getElementById('flow-social-api-secret')?.value || '').trim()
+  saveSettingsRaw({ flowSocialApiBase: base, flowSocialApiSecret: secret })
+  try {
+    localStorage.setItem('flow_social_api_base', base)
+    localStorage.setItem('flow_social_api_secret', secret)
+  } catch (_) {}
+  if (!base || !secret) {
+    setStatus('Соц-API: укажи URL и секрет', false)
+    return
+  }
+  setStatus('Соц-API: проверяю…')
+  try {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 5500)
+    const r = await fetch(`${base}/flow-api/v1/health`, {
+      method: 'GET',
+      cache: 'no-store',
+      signal: ctrl.signal,
+      headers: { Authorization: `Bearer ${secret}` },
+    })
+    clearTimeout(timer)
+    if (!r.ok) setStatus(`Соц-API: ошибка ${r.status}`, false)
+    else setStatus('Соц-API: OK', true)
+  } catch (_) {
+    setStatus('Соц-API: недоступен (проверь URL, секрет, firewall)', false)
+  }
 }
 
 function saveProxySettings() {
@@ -5482,6 +5532,13 @@ function broadcastPlaybackSync(force = false) {
 
 // в”Ђв”Ђв”Ђ APP START в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 function startApp() {
+  try {
+    const s0 = getSettings()
+    const b = String(s0.flowSocialApiBase || '').trim()
+    const k = String(s0.flowSocialApiSecret || '').trim()
+    if (b) localStorage.setItem('flow_social_api_base', b.replace(/\/$/, ''))
+    if (k) localStorage.setItem('flow_social_api_secret', k)
+  } catch (_) {}
   const profile = typeof peerSocial.getCurrentProfile === 'function' ? peerSocial.getCurrentProfile() : null
   _profile = profile || null
   if (_profile) {
