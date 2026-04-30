@@ -89,7 +89,7 @@ const FLOW_SERVER_DEFAULT_URL = 'http://85.239.34.229:8787'
 const FLOW_SOCIAL_DEFAULT_API_BASE = 'http://85.239.34.229:3847'
 const FLOW_SOCIAL_DEFAULT_API_SECRET = 'ed33640b3cd6ca2418ebb2016d9f234db18fb58a25564a1c889363eb1d997dd4'
 const FRIEND_NOTIFY_COOLDOWN_MS = 90 * 1000
-const PROFILE_CACHE_TTL_MS = 5 * 60 * 1000
+const PROFILE_CACHE_TTL_MS = 60 * 1000
 /** Ленивый API «Моя волна» (реализация в src/modules/wave-engine.js). */
 let _waveEngineApi = null
 function waveEngine() {
@@ -147,10 +147,18 @@ function mergeProfileData(base, incoming, peerId = '') {
   const sameUser = !nextUsername || !prevUsername || nextUsername === prevUsername
   const resolvedPeerId = String(peerId || next.peerId || prev.peerId || '').trim() || null
   const merged = Object.assign({}, prev, next)
+  const hasOwn = Object.prototype.hasOwnProperty
+  const hasAvatarPatch = hasOwn.call(next, 'avatarData')
+  const hasBannerPatch = hasOwn.call(next, 'bannerData')
   merged.username = String(nextUsername || prevUsername || '').trim().toLowerCase()
   merged.peerId = resolvedPeerId
-  merged.avatarData = next.avatarData || (sameUser ? (prev.avatarData || null) : null)
-  merged.bannerData = next.bannerData || (sameUser ? (prev.bannerData || null) : null)
+  // Respect explicit null/avatar removal from server instead of keeping stale cache.
+  merged.avatarData = hasAvatarPatch
+    ? (next.avatarData || null)
+    : (sameUser ? (prev.avatarData || null) : null)
+  merged.bannerData = hasBannerPatch
+    ? (next.bannerData || null)
+    : (sameUser ? (prev.bannerData || null) : null)
   merged.bio = typeof next.bio === 'string' ? next.bio : (prev.bio || '')
   merged.profileColor = typeof next.profileColor === 'string' ? next.profileColor : (prev.profileColor || '')
   if (Array.isArray(next.pinnedTracks)) merged.pinnedTracks = next.pinnedTracks
@@ -2835,17 +2843,20 @@ async function fetchCloudPublicProfile(username) {
   try {
     const data = await flowSocialGet(`/flow-api/v1/profile-public/${encodeURIComponent(safe)}`)
     if (!data?.username) return null
+    const hasOwn = Object.prototype.hasOwnProperty
+    const hasAvatar = hasOwn.call(data, 'avatar_data') || hasOwn.call(data, 'avatarData')
+    const hasBanner = hasOwn.call(data, 'banner_data') || hasOwn.call(data, 'bannerData')
     return {
       username: String(data.username || safe),
-      avatarData: data.avatar_data || null,
-      bannerData: data.banner_data || null,
-      profileColor: data.profile_color || '',
+      avatarData: hasAvatar ? (data.avatar_data ?? data.avatarData ?? null) : null,
+      bannerData: hasBanner ? (data.banner_data ?? data.bannerData ?? null) : null,
+      profileColor: data.profile_color || data.profileColor || '',
       bio: data.bio || '',
-      pinnedTracks: Array.isArray(data.pinned_tracks) ? data.pinned_tracks.slice(0, 5) : [],
-      pinnedPlaylists: Array.isArray(data.pinned_playlists) ? data.pinned_playlists.slice(0, 5) : [],
+      pinnedTracks: Array.isArray(data.pinned_tracks) ? data.pinned_tracks.slice(0, 5) : (Array.isArray(data.pinnedTracks) ? data.pinnedTracks.slice(0, 5) : []),
+      pinnedPlaylists: Array.isArray(data.pinned_playlists) ? data.pinned_playlists.slice(0, 5) : (Array.isArray(data.pinnedPlaylists) ? data.pinnedPlaylists.slice(0, 5) : []),
       stats: {
-        totalTracks: Number(data.total_tracks || 0),
-        totalSeconds: Number(data.total_seconds || 0),
+        totalTracks: Number(data.total_tracks ?? data.totalTracks ?? 0),
+        totalSeconds: Number(data.total_seconds ?? data.totalSeconds ?? 0),
       }
     }
   } catch {
@@ -2972,17 +2983,20 @@ function startProfilesRealtimeSync() {
       peerSocial.getFriends && self ? peerSocial.getFriends(self) || [] : []
     const watchSet = new Set([self, ...friends.map((x) => String(x || '').trim().toLowerCase()).filter(Boolean)])
     if (!watchSet.has(username)) return
+    const hasOwn = Object.prototype.hasOwnProperty
+    const hasAvatar = hasOwn.call(row || {}, 'avatar_data') || hasOwn.call(row || {}, 'avatarData')
+    const hasBanner = hasOwn.call(row || {}, 'banner_data') || hasOwn.call(row || {}, 'bannerData')
     const cloudProfile = {
       username,
-      avatarData: row?.avatar_data || null,
-      bannerData: row?.banner_data || null,
-      profileColor: row?.profile_color || '',
+      avatarData: hasAvatar ? (row?.avatar_data ?? row?.avatarData ?? null) : null,
+      bannerData: hasBanner ? (row?.banner_data ?? row?.bannerData ?? null) : null,
+      profileColor: row?.profile_color || row?.profileColor || '',
       bio: row?.bio || '',
-      pinnedTracks: Array.isArray(row?.pinned_tracks) ? row.pinned_tracks.slice(0, 5) : [],
-      pinnedPlaylists: Array.isArray(row?.pinned_playlists) ? row.pinned_playlists.slice(0, 5) : [],
+      pinnedTracks: Array.isArray(row?.pinned_tracks) ? row.pinned_tracks.slice(0, 5) : (Array.isArray(row?.pinnedTracks) ? row.pinnedTracks.slice(0, 5) : []),
+      pinnedPlaylists: Array.isArray(row?.pinned_playlists) ? row.pinned_playlists.slice(0, 5) : (Array.isArray(row?.pinnedPlaylists) ? row.pinnedPlaylists.slice(0, 5) : []),
       stats: {
-        totalTracks: Number(row?.total_tracks || 0),
-        totalSeconds: Number(row?.total_seconds || 0),
+        totalTracks: Number(row?.total_tracks ?? row?.totalTracks ?? 0),
+        totalSeconds: Number(row?.total_seconds ?? row?.totalSeconds ?? 0),
       },
     }
     const peerId = `flow-${username}`
