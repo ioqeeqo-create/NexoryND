@@ -1879,6 +1879,8 @@ const SETTINGS_SECTION_COLLAPSED_DEFAULTS = {
   scale: true,
   font: true,
   notifications: true,
+  accountYoutube: true,
+  accountSpotify: true,
   accountVk: true,
   accountYandex: true,
   accountSoundcloud: true,
@@ -10280,7 +10282,7 @@ async function importPlaylistFromLink(urlFromUi = '') {
     return
   }
   const settings = getSettings()
-  const isYandexLink = /(^|\/\/)(music\.)?yandex\.[^/]+\/users\/[^/]+\/playlists\/[^/?#]+/i.test(url)
+  const isYandexLink = /(^|\/\/)(music\.)?yandex\.[^/]+/i.test(url)
   if (isYandexLink && !settings.yandexToken) {
     showToast('Для импорта Яндекс Музыки нужен активный OAuth token', true)
     openPage('settings')

@@ -1096,7 +1096,10 @@ function createWindow() {
     frame: false, backgroundColor: '#0a0a0f',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
-      nodeIntegration: false, contextIsolation: true
+      nodeIntegration: false,
+      contextIsolation: true,
+      backgroundThrottling: false,
+      offscreen: false,
     },
     icon: path.join(__dirname, 'assets/icon.ico')
   })
@@ -1650,6 +1653,8 @@ ipcMain.handle('vk-browser-auth', async () => {
       webPreferences: {
         contextIsolation: true,
         nodeIntegration: false,
+        backgroundThrottling: false,
+        offscreen: false,
       },
     })
     let done = false
@@ -1733,6 +1738,68 @@ ipcMain.handle('yandex-search', async (e, { q, token }) => {
     bg: 'linear-gradient(135deg,#fc3f1d,#ff6534)', source: 'yandex', id: String(t.id)
   }))
 })
+
+function resolveYandexHelperCommand() {
+  const envPath = String(process.env.FLOW_YANDEX_HELPER_PATH || '').trim()
+  if (envPath && fs.existsSync(envPath)) return { file: envPath, args: [] }
+
+  const helperRoot = path.join(__dirname, 'tools', 'flow-yandex-helper')
+  const publishedExe = path.join(helperRoot, 'bin', 'Release', 'net8.0', 'win-x64', 'publish', 'FlowYandexMusicHelper.exe')
+  const releaseDll = path.join(helperRoot, 'bin', 'Release', 'net8.0', 'FlowYandexMusicHelper.dll')
+  const debugDll = path.join(helperRoot, 'bin', 'Debug', 'net8.0', 'FlowYandexMusicHelper.dll')
+  if (fs.existsSync(publishedExe)) return { file: publishedExe, args: [] }
+  if (fs.existsSync(releaseDll)) return { file: 'dotnet', args: [releaseDll] }
+  if (fs.existsSync(debugDll)) return { file: 'dotnet', args: [debugDll] }
+
+  const csproj = path.join(helperRoot, 'FlowYandexMusicHelper.csproj')
+  if (process.env.FLOW_YANDEX_HELPER_RUN_SOURCE === '1' && fs.existsSync(csproj)) {
+    return { file: 'dotnet', args: ['run', '--project', helperRoot, '--no-launch-profile', '--'] }
+  }
+  return null
+}
+
+function fetchYandexPlaylistWithHelper(link, token) {
+  const cmd = resolveYandexHelperCommand()
+  if (!cmd) return Promise.resolve(null)
+  return new Promise((resolve, reject) => {
+    execFile(
+      cmd.file,
+      [...cmd.args, '--playlist-url', link],
+      {
+        cwd: __dirname,
+        env: { ...process.env, FLOW_YANDEX_TOKEN: token },
+        timeout: 55000,
+        maxBuffer: 24 * 1024 * 1024,
+        windowsHide: true,
+      },
+      (err, stdout, stderr) => {
+        const raw = String(stdout || '').trim()
+        const jsonLine = raw.split(/\r?\n/).reverse().find((line) => line.trim().startsWith('{'))
+        let parsed = null
+        if (jsonLine) {
+          try { parsed = JSON.parse(jsonLine) } catch (_) {}
+        }
+        if (err && !parsed) return reject(new Error(String(stderr || err.message || err)))
+        if (!parsed?.ok) return reject(new Error(parsed?.error || String(stderr || 'Yandex helper failed')))
+        const rows = Array.isArray(parsed?.playlist?.tracks) ? parsed.playlist.tracks : []
+        const tracks = rows.map((t) => ({
+          title: t?.title || null,
+          artist: t?.artist || '—',
+          duration: Number(t?.duration || 0) || null,
+          original_id: t?.originalId || null,
+          cover: t?.cover || null,
+        })).filter((t) => t.title)
+        if (!tracks.length) return reject(new Error('Yandex helper returned empty playlist'))
+        resolve({
+          ok: true,
+          service: 'yandex',
+          name: String(parsed?.playlist?.name || 'Yandex Playlist'),
+          tracks,
+        })
+      },
+    )
+  })
+}
 
 async function fetchVkPlaylistFromFlowServer(serverBaseUrl, link, token = '') {
   let base = String(serverBaseUrl || '').trim()
@@ -1910,10 +1977,22 @@ ipcMain.handle('import-playlist-link', async (e, { url, tokens = {} }) => {
     }
   }
 
-  const yRef = parseYandexPlaylistRef(link)
-  if (yRef) {
+  const isYandexLink = /(^|\/\/)(music\.)?yandex\.[^/]+/i.test(link) || /(^|\/\/)yandex\.[^/]+/i.test(link)
+  if (isYandexLink) {
     const ymToken = String(tokens?.yandex || '').trim()
     if (!ymToken) return { ok: false, error: 'Yandex token required' }
+    let helperErr = null
+    try {
+      const fromHelper = await fetchYandexPlaylistWithHelper(link, ymToken)
+      if (fromHelper?.tracks?.length) return { ...fromHelper, via: 'flow-yandex-helper' }
+    } catch (err) {
+      helperErr = err
+    }
+    const yRef = parseYandexPlaylistRef(link)
+    if (!yRef) {
+      const helperMsg = helperErr ? ` | helper: ${helperErr?.message || String(helperErr)}` : ''
+      return { ok: false, error: 'Yandex import: не удалось распознать ссылку плейлиста' + helperMsg }
+    }
     try {
       const r = await httpsGetJson(
         'api.music.yandex.net',
@@ -1932,11 +2011,12 @@ ipcMain.handle('import-playlist-link', async (e, { url, tokens = {} }) => {
       }).filter((t) => t.title)
       return { ok: true, service: 'yandex', name: String(pl?.title || 'Yandex Playlist'), tracks: out }
     } catch (err) {
-      return { ok: false, error: 'Yandex import: ' + (err?.message || String(err)) }
+      const helperMsg = helperErr ? ` | helper: ${helperErr?.message || String(helperErr)}` : ''
+      return { ok: false, error: 'Yandex import: ' + (err?.message || String(err)) + helperMsg }
     }
   }
 
-  return { ok: false, error: 'Unsupported playlist URL' }
+  return { ok: false, error: 'Unsupported playlist URL (ожидается Spotify / VK / Яндекс: music.yandex.../users/<user>/playlists/<id>)' }
 })
 
 let _audiusHostCache = { host: null, ts: 0 }
@@ -2338,8 +2418,62 @@ ipcMain.handle('youtube-prefetch-streams', async (e, { ids = [], instance }) => 
 })
 
 // в”Ђв”Ђв”Ђ LYRICS: LRCLIB в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-ipcMain.handle('get-lyrics', async (e, { title, artist, duration }) => {
+ipcMain.handle('get-lyrics', async (e, { title, artist, duration, source, trackId, yandexToken }) => {
   try {
+    const parseTimedFromText = (input = '') => {
+      const text = String(input || '').trim()
+      if (!text) return null
+      const lines = text.split(/\r?\n/).filter(Boolean)
+      const hasLrc = lines.some((ln) => /\[\d{1,2}:\d{2}(?:[.:]\d{1,3})?\]/.test(ln))
+      if (!hasLrc) return null
+      return text
+    }
+
+    const extractYandexLyrics = async () => {
+      const isYandex = String(source || '').toLowerCase() === 'yandex'
+      const id = String(trackId || '').trim()
+      const token = String(yandexToken || '').trim()
+      if (!isYandex || !id || !token) return null
+
+      const headers = {
+        Authorization: `OAuth ${token}`,
+        'X-Yandex-Music-Client': 'WindowsPhone/3.20',
+        'User-Agent': 'Windows 10',
+      }
+      let lyricsId = null
+      try {
+        const meta = await httpsGetJson('api.music.yandex.net', `/tracks/${encodeURIComponent(id)}/lyrics`, headers, 10000)
+        lyricsId = String(meta?.body?.result?.id || '').trim()
+      } catch {}
+      if (!lyricsId) return null
+
+      // Try several API variants and accept synced text when present.
+      const endpoints = [
+        `/tracks/${encodeURIComponent(id)}/lyrics/${encodeURIComponent(lyricsId)}?format=LRC`,
+        `/tracks/${encodeURIComponent(id)}/lyrics/${encodeURIComponent(lyricsId)}`,
+      ]
+      for (const ep of endpoints) {
+        try {
+          const r = await httpsGetJson('api.music.yandex.net', ep, headers, 10000)
+          const result = r?.body?.result || {}
+          const syncedCandidate =
+            parseTimedFromText(result?.lyrics) ||
+            parseTimedFromText(result?.fullLyrics) ||
+            parseTimedFromText(result?.text) ||
+            parseTimedFromText(result?.lrc)
+          const plainCandidate =
+            String(result?.fullLyrics || result?.lyrics || result?.text || '').trim() || null
+          if (syncedCandidate || plainCandidate) {
+            return { ok: true, synced: syncedCandidate || null, plain: plainCandidate }
+          }
+        } catch {}
+      }
+      return null
+    }
+
+    const yandexLyrics = await extractYandexLyrics()
+    if (yandexLyrics) return yandexLyrics
+
     const normalizeLyricsPart = (value) => String(value || '')
       .replace(/\[[^\]]*\]/g, ' ')
       .replace(/\([^)]*\)/g, ' ')

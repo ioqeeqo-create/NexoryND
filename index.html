@@ -6,7 +6,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
   <!-- bump ?v= when profile/CSS/JS layout changes so Electron reloads assets -->
-  <link rel="stylesheet" href="styles.css?v=20260502-2.8.9-player-layout-source-unify">
+  <link rel="stylesheet" href="styles.css?v=20260502-2.8.9-sources-collapsible">
 </head>
 <body>
 
@@ -815,24 +815,56 @@
             </button>
           </div>
 
-          <div style="margin:10px 0 16px;padding:12px;border-radius:14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);">
-            <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">YouTube engine (yt-dlp)</div>
-            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-              <div id="ytdlp-status" style="font-size:13px;color:rgba(255,255,255,0.86);">Проверка...</div>
-              <button class="btn-small" id="ytdlp-update-btn" onclick="updateYtDlpNow()">Обновить yt-dlp</button>
+          <div class="vs-section glass-card vs-collapsible collapsed" data-settings-section="accountYoutube" style="margin:10px 0 16px;">
+            <button type="button" class="vs-section-head" onclick="toggleSettingsSection('accountYoutube')" aria-expanded="false">
+              <span class="vs-section-title">YouTube engine (yt-dlp)</span>
+              <span class="vs-section-chevron">⌄</span>
+            </button>
+            <div class="vs-section-body">
+              <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                <div id="ytdlp-status" style="font-size:13px;color:rgba(255,255,255,0.86);">Проверка...</div>
+                <button class="btn-small" id="ytdlp-update-btn" onclick="updateYtDlpNow()">Обновить yt-dlp</button>
+              </div>
+              <div id="ytdlp-sub" style="font-size:12px;color:var(--muted);margin-top:8px;"></div>
             </div>
-            <div id="ytdlp-sub" style="font-size:12px;color:var(--muted);margin-top:6px;"></div>
           </div>
 
-          <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Spotify Bearer (для поиска метаданных)</div>
-          <div class="token-field-wrap" style="margin-bottom:12px;">
-            <input id="sp-token-val" type="password" class="token-field" placeholder="Вставь Bearer токен Spotify...">
-            <button class="token-field-eye" onclick="toggleToken('sp-token-val')" title="Показать/скрыть">
-              <svg class="ui-icon sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          <div class="vs-section glass-card vs-collapsible collapsed" data-settings-section="accountSpotify" style="margin:10px 0 16px;">
+            <button type="button" class="vs-section-head" onclick="toggleSettingsSection('accountSpotify')" aria-expanded="false">
+              <span class="vs-section-title">Spotify Bearer</span>
+              <span class="vs-section-chevron">⌄</span>
             </button>
-            <button class="token-field-apply" onclick="applySpotifyToken()" title="Сохранить">
-              <svg class="ui-icon sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><polyline points="20 6 9 17 4 12"/></svg>
+            <div class="vs-section-body">
+              <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Для поиска метаданных и связки треков</div>
+              <div class="token-field-wrap" style="margin-bottom:0;">
+                <input id="sp-token-val" type="password" class="token-field" placeholder="Вставь Bearer токен Spotify...">
+                <button class="token-field-eye" onclick="toggleToken('sp-token-val')" title="Показать/скрыть">
+                  <svg class="ui-icon sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+                <button class="token-field-apply" onclick="applySpotifyToken()" title="Сохранить">
+                  <svg class="ui-icon sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><polyline points="20 6 9 17 4 12"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="vs-section glass-card vs-collapsible collapsed" data-settings-section="accountSoundcloud" style="margin:10px 0 16px;">
+            <button type="button" class="vs-section-head" onclick="toggleSettingsSection('accountSoundcloud')" aria-expanded="false">
+              <span class="vs-section-title">SoundCloud Client ID</span>
+              <span class="vs-section-chevron">⌄</span>
             </button>
+            <div class="vs-section-body">
+              <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Для потокового поиска и импорта</div>
+              <div class="token-field-wrap">
+                <input id="sc-custom-val" type="password" class="token-field" placeholder="Вставь SoundCloud Client ID...">
+                <button class="token-field-eye" onclick="toggleToken('sc-custom-val')" title="Показать/скрыть">
+                  <svg class="ui-icon sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+                <button class="token-field-apply" onclick="applyScId()" title="Сохранить">
+                  <svg class="ui-icon sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><polyline points="20 6 9 17 4 12"/></svg>
+                </button>
+              </div>
+            </div>
           </div>
 
           <div class="vs-section glass-card vs-collapsible collapsed" data-settings-section="accountVk" style="margin:10px 0 16px;">
@@ -910,26 +942,6 @@
               <button class="btn-small" onclick="checkYandexToken()">Проверить токен</button>
             </div>
             <div id="ym-msg" class="token-msg" style="display:block"></div>
-          </div>
-
-            </div>
-          </div>
-          <div class="vs-section glass-card vs-collapsible collapsed" data-settings-section="accountSoundcloud" style="margin:10px 0 0;">
-            <button type="button" class="vs-section-head" onclick="toggleSettingsSection('accountSoundcloud')" aria-expanded="false">
-              <span class="vs-section-title">SoundCloud Client ID</span>
-              <span class="vs-section-chevron">⌄</span>
-            </button>
-            <div class="vs-section-body">
-              <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">SoundCloud Client ID (для будущего импорта)</div>
-              <div class="token-field-wrap">
-                <input id="sc-custom-val" type="password" class="token-field" placeholder="Вставь SoundCloud Client ID...">
-                <button class="token-field-eye" onclick="toggleToken('sc-custom-val')" title="Показать/скрыть">
-                  <svg class="ui-icon sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                </button>
-                <button class="token-field-apply" onclick="applyScId()" title="Сохранить">
-                  <svg class="ui-icon sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><polyline points="20 6 9 17 4 12"/></svg>
-                </button>
-              </div>
             </div>
           </div>
         </div>
@@ -1313,7 +1325,7 @@
 <script src="src/modules/network/peer-social.js"></script>
   <script src="src/modules/ui/drag-drop.js"></script>
   <script src="src/modules/wave-engine.js"></script>
-  <script src="renderer.js?v=20260502-2.8.9-player-layout-source-unify"></script>
+  <script src="renderer.js?v=20260502-2.8.9-sources-collapsible"></script>
 </body>
 </html>
 
