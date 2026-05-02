@@ -4493,6 +4493,9 @@ function toggleHomeLayoutEdit() {
 function drawHomeVisualizerFrame() {
   const canvas = document.getElementById('home-visualizer-canvas')
   if (!canvas) return
+  try {
+    if (document.body.classList.contains('flow-opt-bg-sleep')) return
+  } catch (_) {}
   const ctx = canvas.getContext('2d')
   if (!ctx) return
   const v = getVisual()
@@ -4558,6 +4561,12 @@ function startHomeVisualizerLoop() {
       return
     }
     if (_activePageId === 'home') {
+      try {
+        if (document.body.classList.contains('flow-opt-bg-sleep')) {
+          setTimeout(() => requestAnimationFrame(tick), 420)
+          return
+        }
+      } catch (_) {}
       const wrap = document.getElementById('home-visualizer-wrap')
       if (wrap?.classList.contains('hidden')) {
         setTimeout(() => requestAnimationFrame(tick), 350)

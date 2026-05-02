@@ -1106,7 +1106,23 @@ function createWindow() {
   })
   win.loadFile('index.html')
   _mainWindow = win
-  win.webContents.once('did-finish-load', () => { _safeGpuRestartRequested = false })
+  const broadcastWindowPresence = () => {
+    try {
+      if (win.isDestroyed() || !win.webContents || win.webContents.isDestroyed()) return
+      win.webContents.send('flow-window-state', {
+        minimized: Boolean(win.isMinimized()),
+        visible: Boolean(win.isVisible()),
+      })
+    } catch (_) {}
+  }
+  win.on('minimize', broadcastWindowPresence)
+  win.on('restore', broadcastWindowPresence)
+  win.on('show', broadcastWindowPresence)
+  win.on('hide', broadcastWindowPresence)
+  win.webContents.once('did-finish-load', () => {
+    _safeGpuRestartRequested = false
+    broadcastWindowPresence()
+  })
   win.on('unresponsive', () => relaunchInSafeGpuMode('window-unresponsive'))
   win.webContents.on('render-process-gone', (event, details) => {
     const reason = String(details?.reason || 'render-process-gone')

@@ -29,7 +29,14 @@ contextBridge.exposeInMainWorld('api', {
   scSearch: (q, clientId) => ipcRenderer.invoke('sc-search', { q, clientId }),
   scStream: (transcodingUrl, clientId) => ipcRenderer.invoke('sc-stream', { transcodingUrl, clientId }),
   yandexStream: (trackId, token) => ipcRenderer.invoke('yandex-stream', { trackId, token }),
-  getLyrics: (title, artist, duration) => ipcRenderer.invoke('get-lyrics', { title, artist, duration }),
+  getLyrics: (title, artist, duration, options = {}) => ipcRenderer.invoke('get-lyrics', {
+    title,
+    artist,
+    duration,
+    source: options?.source || '',
+    trackId: options?.trackId || '',
+    yandexToken: options?.yandexToken || '',
+  }),
   proxySetUrl: (url) => ipcRenderer.invoke('proxy-set-url', url),
   discordRpcConnect: (clientId) => ipcRenderer.invoke('discord-rpc-connect', { clientId }),
   discordRpcUpdate: (payload) => ipcRenderer.invoke('discord-rpc-update', payload),
@@ -42,4 +49,14 @@ contextBridge.exposeInMainWorld('api', {
   },
   lastfmNowPlaying: (payload) => ipcRenderer.invoke('lastfm-now-playing', payload),
   lastfmScrobble: (payload) => ipcRenderer.invoke('lastfm-scrobble', payload),
+  onFlowWindowState: (cb) => {
+    if (typeof cb !== 'function') return () => {}
+    const handler = (_e, state) => {
+      try {
+        cb(state || {})
+      } catch (_) {}
+    }
+    ipcRenderer.on('flow-window-state', handler)
+    return () => ipcRenderer.removeListener('flow-window-state', handler)
+  },
 })

@@ -1638,6 +1638,10 @@ function initVisualSettings() {
   updateBackground()
   pulseHomeVisualLayoutSync()
   syncAccentSwatchSelection(v.accent, v.accent2)
+  try {
+    setupFlowOptimizationChannel()
+  } catch (_) {}
+  applyOptimizationSettings()
 }
 
 function reorderVisualSettingsSections() {
@@ -1779,7 +1783,7 @@ const SETTINGS_TAB_TO_CATEGORY = {
 }
 
 function switchSettingsCategory(cat) {
-  const allowed = new Set(['appearance', 'playback', 'accounts', 'services'])
+  const allowed = new Set(['appearance', 'playback', 'optimization', 'accounts', 'services'])
   const c = allowed.has(cat) ? cat : 'appearance'
   _settingsCategory = c
   document.querySelectorAll('.settings-cat').forEach((btn) => {
@@ -2203,6 +2207,10 @@ function getSettings() {
   if (!String(raw.flowSocialApiBase || '').trim()) raw.flowSocialApiBase = FLOW_SOCIAL_DEFAULT_API_BASE
   if (!String(raw.flowSocialApiSecret || '').trim()) raw.flowSocialApiSecret = FLOW_SOCIAL_DEFAULT_API_SECRET
   raw.proxyBaseUrl = normalizeFlowServerUrl(raw.proxyBaseUrl)
+  if (typeof raw.optDisableAnimations !== 'boolean') raw.optDisableAnimations = false
+  if (typeof raw.optSimpleGraphics !== 'boolean') raw.optSimpleGraphics = false
+  if (typeof raw.optFreezePlayerWhenMinimized !== 'boolean') raw.optFreezePlayerWhenMinimized = true
+  if (typeof raw.optPauseHeavyBgWhenBackgrounded !== 'boolean') raw.optPauseHeavyBgWhenBackgrounded = true
   const prevActive = raw.activeSource
   raw.activeSource = normalizeStoredActiveSource(raw.activeSource)
   if (!ALLOWED_ACTIVE_SOURCES.has(raw.activeSource)) raw.activeSource = 'hybrid'
@@ -2228,6 +2236,72 @@ function saveSettingsRaw(patch) {
     syncSearchSourceRows?.()
   } catch (_) {}
 }
+
+/** Состояние окна из Electron (свёрнуто и т.д.) — для оптимизаций панели и фона. */
+let _flowElectronMinimized = false
+let _flowOptimizationChannelBound = false
+
+function setupFlowOptimizationChannel() {
+  if (_flowOptimizationChannelBound) return
+  _flowOptimizationChannelBound = true
+  document.addEventListener('visibilitychange', () => {
+    try {
+      refreshOptimizationAmbientClasses()
+    } catch (_) {}
+  }, { passive: true })
+  try {
+    window.api?.onFlowWindowState?.((state) => {
+      _flowElectronMinimized = Boolean(state?.minimized)
+      refreshOptimizationAmbientClasses()
+    })
+  } catch (_) {}
+}
+
+function refreshOptimizationAmbientClasses() {
+  let bgSleep = false
+  let freezePb = false
+  try {
+    const s = getSettings()
+    if (s.optPauseHeavyBgWhenBackgrounded) {
+      if (document.visibilityState === 'hidden') bgSleep = true
+      else if (_flowElectronMinimized) bgSleep = true
+    }
+    freezePb = Boolean(s.optFreezePlayerWhenMinimized && _flowElectronMinimized)
+  } catch (_) {}
+  document.body.classList.toggle('flow-opt-bg-sleep', bgSleep)
+  document.body.classList.toggle('flow-opt-freeze-player', freezePb)
+}
+
+function syncOptimizationPanelToggles() {
+  const s = getSettings()
+  const pairs = [
+    ['toggle-opt-animations', 'optDisableAnimations'],
+    ['toggle-opt-simple-gfx', 'optSimpleGraphics'],
+    ['toggle-opt-freeze-player', 'optFreezePlayerWhenMinimized'],
+    ['toggle-opt-bg-when-away', 'optPauseHeavyBgWhenBackgrounded'],
+  ]
+  pairs.forEach(([id, key]) => {
+    const el = document.getElementById(id)
+    if (el) el.classList.toggle('active', Boolean(s[key]))
+  })
+}
+
+function applyOptimizationSettings() {
+  const s = getSettings()
+  document.body.classList.toggle('flow-opt-no-animations', Boolean(s.optDisableAnimations))
+  document.body.classList.toggle('flow-performance', Boolean(s.optSimpleGraphics))
+  syncOptimizationPanelToggles()
+  refreshOptimizationAmbientClasses()
+}
+
+function toggleOptimizationSetting(key) {
+  const allowed = new Set(['optDisableAnimations', 'optSimpleGraphics', 'optFreezePlayerWhenMinimized', 'optPauseHeavyBgWhenBackgrounded'])
+  if (!allowed.has(key)) return
+  const cur = getSettings()
+  saveSettingsRaw({ [key]: !Boolean(cur[key]) })
+  applyOptimizationSettings()
+}
+window.toggleOptimizationSetting = toggleOptimizationSetting
 
 let _compactSearchListenersBound = false
 
@@ -2552,6 +2626,7 @@ function loadSettingsPage() {
     applyHomeSliderStyle()
     applyCompactUi()
     switchSettingsCategory(_settingsCategory)
+    applyOptimizationSettings()
   })
 }
 
@@ -2858,6 +2933,9 @@ function syncRuntimeCachesAfterPresetImport() {
     updateSourceBadge()
     syncSearchSourcePills()
     applyCompactUi()
+    try {
+      applyOptimizationSettings()
+    } catch (_) {}
     try {
       const s = getSettings()
       if (s.flowSocialApiBase) localStorage.setItem('flow_social_api_base', String(s.flowSocialApiBase).trim().replace(/\/$/, ''))

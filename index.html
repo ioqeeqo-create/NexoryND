@@ -6,7 +6,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
   <!-- bump ?v= when profile/CSS/JS layout changes so Electron reloads assets -->
-  <link rel="stylesheet" href="styles.css?v=20260502-2.3.2-playlist-player-perf">
+  <link rel="stylesheet" href="styles.css?v=20260502-2.3.4-optimization-settings">
 </head>
 <body>
 
@@ -437,6 +437,10 @@
             <span class="settings-cat-title">Плеер</span>
             <span class="settings-cat-hint">Режимы и пресеты Flow</span>
           </button>
+          <button type="button" class="settings-cat" data-settings-cat="optimization" onclick="switchSettingsCategory('optimization')">
+            <span class="settings-cat-title">Оптимизация</span>
+            <span class="settings-cat-hint">Слабый ПК, фон и панель</span>
+          </button>
           <button type="button" class="settings-cat" data-settings-cat="accounts" onclick="switchSettingsCategory('accounts')">
             <span class="settings-cat-title">Аккаунты</span>
             <span class="settings-cat-hint">Токены и источники</span>
@@ -800,6 +804,46 @@
             </div>
           </div>
 
+        </div>
+      </div>
+
+      <div id="settings-panel-optimization" class="settings-category-panel">
+        <div class="visual-settings optimization-settings">
+          <p class="opt-section-lead">Настройки производительности для слабых ПК.</p>
+          <div class="glass-card opt-settings-card">
+            <div class="opt-setting-row">
+              <span class="opt-setting-icon opt-ico-spin" aria-hidden="true"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path stroke-linecap="round" d="M12 3v3M12 18v3M3 12h3M18 12h3M5.64 5.64l2.12 2.12M16.24 16.24l2.12 2.12M5.64 18.36l2.12-2.12M16.24 7.76l2.12-2.12"/></svg></span>
+              <div class="opt-setting-text">
+                <div class="opt-setting-title">Отключить анимации</div>
+                <p class="opt-setting-desc">Отключает плавные переходы и эффекты для ускорения работы.</p>
+              </div>
+              <div class="vs-toggle" id="toggle-opt-animations" onclick="toggleOptimizationSetting('optDisableAnimations')"><div class="vs-toggle-thumb"></div></div>
+            </div>
+            <div class="opt-setting-row">
+              <span class="opt-setting-icon opt-ico-chip" aria-hidden="true"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 13h4v4h-4z"/><path stroke-linecap="round" d="M6 17H4v-4h2M14 21h4v-4h-2M14 9h6V7h-2M10 9V7H6v2"/><path stroke-linecap="round" d="M10 21v-4M6 3v4M22 17h-4M18 3v4"/></svg></span>
+              <div class="opt-setting-text">
+                <div class="opt-setting-title">Упрощённая графика</div>
+                <p class="opt-setting-desc">Отключает сложные эффекты вроде размытия для стабильной работы на старых видеокартах.</p>
+              </div>
+              <div class="vs-toggle" id="toggle-opt-simple-gfx" onclick="toggleOptimizationSetting('optSimpleGraphics')"><div class="vs-toggle-thumb"></div></div>
+            </div>
+            <div class="opt-setting-row">
+              <span class="opt-setting-icon opt-ico-snow" aria-hidden="true"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/><circle cx="12" cy="12" r="2.5"/></svg></span>
+              <div class="opt-setting-text">
+                <div class="opt-setting-title">Заморозка интерфейса</div>
+                <p class="opt-setting-desc">Останавливает тяжёлую отрисовку нижней панели при свёрнутом окне. Музыка продолжает играть.</p>
+              </div>
+              <div class="vs-toggle" id="toggle-opt-freeze-player" onclick="toggleOptimizationSetting('optFreezePlayerWhenMinimized')"><div class="vs-toggle-thumb"></div></div>
+            </div>
+            <div class="opt-setting-row">
+              <span class="opt-setting-icon opt-ico-moon" aria-hidden="true"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 14.8A9 9 0 1111.3 3a7 7 0 009.7 11.8z"/></svg></span>
+              <div class="opt-setting-text">
+                <div class="opt-setting-title">Отключать видео-фоны в фоне</div>
+                <p class="opt-setting-desc">Выключает тяжёлые фоны и визуализатор, пока окно скрыто или свернуто.</p>
+              </div>
+              <div class="vs-toggle" id="toggle-opt-bg-when-away" onclick="toggleOptimizationSetting('optPauseHeavyBgWhenBackgrounded')"><div class="vs-toggle-thumb"></div></div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1333,7 +1377,7 @@
 <script src="src/modules/network/peer-social.js"></script>
   <script src="src/modules/ui/drag-drop.js"></script>
   <script src="src/modules/wave-engine.js"></script>
-  <script src="renderer.js?v=20260502-2.3.2-playlist-player-perf"></script>
+  <script src="renderer.js?v=20260502-2.3.4-optimization-settings"></script>
 </body>
 </html>
 
