@@ -2012,6 +2012,7 @@ function syncPlayerModeUI() {
   const pmBg     = document.getElementById('pm-bg')
   const pmTitle  = document.getElementById('pm-title')
   const pmArtist = document.getElementById('pm-artist')
+  const pmSource = document.getElementById('pm-source-badge')
   const pmLike   = document.getElementById('pm-like-btn')
   const pmCoverLike = document.getElementById('pm-cover-like-btn')
   const pmCoverLyrics = document.getElementById('pm-cover-lyrics-btn')
@@ -2022,6 +2023,12 @@ function syncPlayerModeUI() {
   if (t) {
     pmTitle.textContent  = t.title || 'РќРµРёР·РІРµСЃС‚РЅРѕ'
     pmArtist.textContent = t.artist || 'вЂ”'
+    if (pmSource) {
+      const src = String(t.source || '').toLowerCase()
+      const srcLabel = SRC_LABELS[src] || ''
+      pmSource.textContent = srcLabel || '—'
+      pmSource.className = srcLabel ? `track-source track-source-${src}` : 'track-source hidden'
+    }
     const effectiveCover = getEffectiveCoverUrl(t)
     if (effectiveCover) {
       applyCoverArt(pmCover, effectiveCover, t.bg || 'linear-gradient(135deg,#7c3aed,#a855f7)')
@@ -2045,6 +2052,9 @@ function syncPlayerModeUI() {
     const liked = isLiked(t)
     if (pmLike) { pmLike.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; pmLike.classList.toggle('liked', liked) }
     if (pmCoverLike) { pmCoverLike.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; pmCoverLike.classList.toggle('liked', liked) }
+  } else if (pmSource) {
+    pmSource.textContent = '—'
+    pmSource.className = 'track-source hidden'
   }
   // play/pause icon sync
   const icon = document.getElementById('pm-play-icon')
@@ -4073,6 +4083,9 @@ async function openPeerProfile(username, peerId = '') {
     const rsp = await _socialPeer.requestPeerData(targetPeerId, { type: 'presence-request' }, 1300).catch(() => null)
     const remoteProfile = rsp?.ok ? rsp?.data?.profile : null
     if (remoteProfile) {
+      // Presence payload can be stale/partial; keep fresher avatar/banner from cloud render.
+      if (!remoteProfile.avatarData && data?.avatarData) remoteProfile.avatarData = data.avatarData
+      if (!remoteProfile.bannerData && data?.bannerData) remoteProfile.bannerData = data.bannerData
       data = mergeProfileData(data, remoteProfile, rsp?.data?.peerId || targetPeerId || '')
       if (!Array.isArray(data._friends)) data._friends = profileFriends.slice()
       _peerProfiles.set(data.peerId, data)
@@ -4426,7 +4439,7 @@ function resolvePeerAvatarByUsername(username = '') {
 
 /** Бейдж как на карточках треков: SoundCloud — оранжевый «SC» (совпадает с .track-source-soundcloud). */
 function profileListeningSourcePillHtml(trackHint) {
-  const LABELS = { soundcloud: 'SC', vk: 'VK', hitmo: 'HM', youtube: 'YT', spotify: 'SP', yandex: 'Ya' }
+  const LABELS = { soundcloud: 'SC', vk: 'VK', hitmo: 'HM', youtube: 'YT', spotify: 'SP', yandex: 'YA' }
   const src =
     trackHint && typeof trackHint.source === 'string' && LABELS[trackHint.source] ? trackHint.source : ''
   if (!src) {
@@ -10555,7 +10568,7 @@ function editPlaylistMeta(idx) {
 }
 
 // в”Ђв”Ђв”Ђ TRACK CARD в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-const SRC_LABELS = { soundcloud:'SC', vk:'VK', hitmo:'HM', youtube:'YT', spotify:'SP' }
+const SRC_LABELS = { soundcloud:'SC', vk:'VK', hitmo:'HM', youtube:'YT', spotify:'SP', yandex:'YA' }
 
 function makeTrackEl(track, showPlaylist=false, bindDefaultPlay=true) {
   track = sanitizeTrack(track)

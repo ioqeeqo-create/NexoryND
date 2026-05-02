@@ -11,18 +11,47 @@ function parseSpotifyPlaylistId(input) {
 function parseYandexPlaylistRef(input) {
   const raw = String(input || '').trim()
   if (!raw) return null
+  const decodeSafe = (v) => {
+    try { return decodeURIComponent(String(v || '').trim()) } catch { return String(v || '').trim() }
+  }
   const fromPath = (path = '') => {
-    const m = String(path || '').match(/\/users\/([^/?#]+)\/playlists\/([^/?#]+)/i)
-    if (!m) return null
-    return { user: decodeURIComponent(m[1]), kind: decodeURIComponent(m[2]) }
+    const src = String(path || '')
+    const m1 = src.match(/\/users\/([^/?#]+)\/playlists\/([^/?#]+)/i)
+    if (m1) return { user: decodeSafe(m1[1]), kind: decodeSafe(m1[2]) }
+    // Short form occasionally appears in shared links.
+    const m2 = src.match(/\/playlist\/([^/?#]+)\/([^/?#]+)/i)
+    if (m2) return { user: decodeSafe(m2[1]), kind: decodeSafe(m2[2]) }
+    // Also support compact form: /playlist/user:kind or /playlist/user/kind
+    const m3 = src.match(/\/playlist\/([^/?#]+)/i)
+    if (m3) return fromRawLike(m3[1])
+    return null
+  }
+  const fromRawLike = (value = '') => {
+    const src = String(value || '').trim()
+    if (!src) return null
+    const pair = src.match(/^([a-zA-Z0-9._-]{1,128})[:/]+([a-zA-Z0-9._-]{1,128})$/)
+    if (pair) return { user: decodeSafe(pair[1]), kind: decodeSafe(pair[2]) }
+    return fromPath(src)
   }
   try {
     const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`
     const u = new URL(withScheme)
-    if (!/(^|\.)music\.yandex\./i.test(u.hostname)) return null
-    return fromPath(u.pathname)
+    const host = String(u.hostname || '').toLowerCase()
+    // Accept music.yandex.* and direct yandex.* playlist links.
+    if (!/(^|\.)music\.yandex\./i.test(host) && !/(^|\.)yandex\./i.test(host)) return null
+    const direct = fromPath(u.pathname)
+    if (direct) return direct
+    // Some shared URLs place real target in query params.
+    const qp = ['url', 'target', 'to', 'redirect', 'link']
+    for (const key of qp) {
+      const val = u.searchParams.get(key)
+      if (!val) continue
+      const nested = parseYandexPlaylistRef(val)
+      if (nested) return nested
+    }
+    return fromRawLike(u.pathname)
   } catch {}
-  return fromPath(raw)
+  return fromRawLike(raw)
 }
 
 function parseVkPlaylistRef(input) {
