@@ -10,6 +10,7 @@ const { pathToFileURL, fileURLToPath } = require('url')
 const {
   parseSpotifyPlaylistId,
   parseYandexPlaylistRef,
+  parseYandexAlbumId,
   parseVkPlaylistRef,
 } = require('./src/modules/utils/parsers')
 
@@ -1836,6 +1837,26 @@ async function fetchVkPlaylistFromFlowServer(serverBaseUrl, link, token = '') {
   }
 }
 
+/** Нормализует треклист альбома из ответа /albums/<id>/with-tracks */
+function flattenYandexAlbumTracks(result = {}) {
+  const out = []
+  const push = (item) => {
+    const t = item?.track || item
+    if (!t?.title) return
+    out.push({
+      title: String(t.title || '').trim() || null,
+      artist: Array.isArray(t.artists) ? t.artists.map((a) => a?.name).filter(Boolean).join(', ') : '—',
+    })
+  }
+  const volumes = Array.isArray(result.volumes) ? result.volumes : []
+  for (const vol of volumes) {
+    if (Array.isArray(vol)) vol.forEach(push)
+    else if (vol && typeof vol === 'object' && Array.isArray(vol.tracks)) vol.tracks.forEach(push)
+  }
+  if (!out.length && Array.isArray(result.tracks)) result.tracks.forEach(push)
+  return out.filter((t) => t.title)
+}
+
 ipcMain.handle('import-playlist-link', async (e, { url, tokens = {} }) => {
   const link = String(url || '').trim()
   if (!link) return { ok: false, error: 'empty url' }
@@ -1988,16 +2009,41 @@ ipcMain.handle('import-playlist-link', async (e, { url, tokens = {} }) => {
     } catch (err) {
       helperErr = err
     }
+    const ymHeaders = {
+      Authorization: `OAuth ${ymToken}`,
+      'X-Yandex-Music-Client': 'WindowsPhone/3.20',
+      'User-Agent': 'Windows 10',
+    }
+    const albumId = parseYandexAlbumId(link)
+    if (albumId) {
+      try {
+        const r = await httpsGetJson(
+          'api.music.yandex.net',
+          `/albums/${encodeURIComponent(albumId)}/with-tracks`,
+          ymHeaders,
+          24000,
+        )
+        const result = r?.body?.result || {}
+        const albumTitle = String(result?.title || `Yandex Альбом ${albumId}`)
+        const out = flattenYandexAlbumTracks(result)
+        if (out.length) return { ok: true, service: 'yandex', name: albumTitle, tracks: out }
+        const helperMsg = helperErr ? ` | helper: ${helperErr?.message || String(helperErr)}` : ''
+        return { ok: false, error: 'Yandex import: в альбоме нет треков или API вернул пустой список' + helperMsg }
+      } catch (err) {
+        const helperMsg = helperErr ? ` | helper: ${helperErr?.message || String(helperErr)}` : ''
+        return { ok: false, error: 'Yandex import (альбом): ' + (err?.message || String(err)) + helperMsg }
+      }
+    }
     const yRef = parseYandexPlaylistRef(link)
     if (!yRef) {
       const helperMsg = helperErr ? ` | helper: ${helperErr?.message || String(helperErr)}` : ''
-      return { ok: false, error: 'Yandex import: не удалось распознать ссылку плейлиста' + helperMsg }
+      return { ok: false, error: 'Yandex import: не удалось распознать ссылку (нужен плейлист или album/ID)' + helperMsg }
     }
     try {
       const r = await httpsGetJson(
         'api.music.yandex.net',
         `/users/${encodeURIComponent(yRef.user)}/playlists/${encodeURIComponent(yRef.kind)}`,
-        { Authorization: `OAuth ${ymToken}`, 'X-Yandex-Music-Client': 'WindowsPhone/3.20', 'User-Agent': 'Windows 10' },
+        ymHeaders,
         15000
       )
       const pl = r?.body?.result || {}
@@ -2016,7 +2062,7 @@ ipcMain.handle('import-playlist-link', async (e, { url, tokens = {} }) => {
     }
   }
 
-  return { ok: false, error: 'Unsupported playlist URL (ожидается Spotify / VK / Яндекс: music.yandex.../users/<user>/playlists/<id>)' }
+  return { ok: false, error: 'Unsupported playlist URL (Spotify / VK / Яндекс: плейлист или ссылка music.yandex.../album/<id>)' }
 })
 
 let _audiusHostCache = { host: null, ts: 0 }

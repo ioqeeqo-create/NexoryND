@@ -36,6 +36,7 @@ function parseYandexPlaylistRef(input) {
   const fromRawLike = (value = '') => {
     const src = String(value || '').trim()
     if (!src) return null
+    if (/(?:^|[/\s]|\\)album(?:\/|\\|\/\/)[0-9]{1,22}/i.test(src)) return null
     const pair = src.match(/^([a-zA-Z0-9._-]{1,128})[:/]+([a-zA-Z0-9._-]{1,128})$/)
     if (pair && !/^playlists?$/i.test(pair[1])) return { user: decodeSafe(pair[1]), kind: decodeSafe(pair[2]) }
     const byPath = fromPath(src)
@@ -77,6 +78,7 @@ function parseYandexPlaylistRef(input) {
       const nestedHash = parseYandexPlaylistRef(hash)
       if (nestedHash) return nestedHash
     }
+    if (/\/album\/[0-9]{1,22}/i.test(u.pathname || '')) return null
     return fromRawLike(u.pathname)
   } catch {}
   const embeddedUrl = raw.match(/https?:\/\/[^\s"'<>]+/i)
@@ -85,6 +87,40 @@ function parseYandexPlaylistRef(input) {
     if (nested) return nested
   }
   return fromRawLike(raw)
+}
+
+/** @returns {string|null} numeric album id */
+function parseYandexAlbumId(input) {
+  const raw = String(input || '').trim().replace(/^["']|["']$/g, '')
+  if (!raw) return null
+  const fromPath = (path = '') => {
+    const m = String(path || '').match(/(?:^|\/)album\/([0-9]{1,22})(?:\/|$)/i)
+    return m ? String(m[1]).trim() : null
+  }
+  try {
+    const hasScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw)
+    const u = new URL(hasScheme ? raw : `https://${raw}`)
+    const host = String(u.hostname || '').toLowerCase()
+    if (!host) return fromPath(raw)
+    if (!/(^|\.)music\.yandex\./i.test(host) && !/(^|\.)yandex\./i.test(host)) return hasScheme ? null : fromPath(raw)
+    const direct = fromPath(u.pathname)
+    if (direct) return direct
+    const qp = ['url', 'target', 'to', 'redirect', 'link']
+    for (const key of qp) {
+      const val = u.searchParams.get(key)
+      if (!val) continue
+      const nested = parseYandexAlbumId(val)
+      if (nested) return nested
+    }
+    const hash = String(u.hash || '').replace(/^#/, '').trim()
+    if (hash) {
+      const hid = fromPath(`/${hash.replace(/^\//, '')}`)
+      if (hid) return hid
+    }
+  } catch {}
+  const embedded =
+    raw.match(/music\.yandex\.[^/\s"'<>]+\/album\/([0-9]{1,22})/i) || raw.match(/\/album\/([0-9]{1,22})(?:\?|\/|$)/i)
+  return embedded ? String(embedded[1]).trim() : null
 }
 
 function parseVkPlaylistRef(input) {
@@ -114,5 +150,6 @@ function parseVkPlaylistRef(input) {
 module.exports = {
   parseSpotifyPlaylistId,
   parseYandexPlaylistRef,
+  parseYandexAlbumId,
   parseVkPlaylistRef,
 }
