@@ -4027,7 +4027,7 @@ async function openPeerProfile(username, peerId = '') {
           <div class="peer-profile-cover" style="background-image:${banner};"></div>
           <div class="flow-profile-hero-fill peer-profile-below-cover">
             <section class="flow-profile-main-tile flow-profile-nested-glass">
-              <div class="flow-profile-top-row peer-profile-head-row">
+              <div class="flow-profile-top-row peer-profile-top-row">
                 <div class="flow-profile-avatar-col">
                   <div class="flow-profile-avatar-ring-wrap">
                     <div class="flow-profile-avatar-ring">
@@ -4036,19 +4036,19 @@ async function openPeerProfile(username, peerId = '') {
                     <span class="flow-profile-online-dot ${pres.online ? '' : 'flow-profile-online-dot--offline'}" aria-hidden="true"></span>
                   </div>
                 </div>
-                <div class="flow-profile-identity peer-profile-identity">
-                  <h3 class="flow-profile-display-name">${escapeHtml(uRaw)}</h3>
-                  <p class="flow-profile-handle-line">@${escapeHtml(uRaw)} • custom</p>
-                  <div class="flow-profile-badge-strip">${getFlowProfileBadgeStripHtml()}</div>
-                  <p class="flow-profile-bio">${escapeHtml(profileData.bio || 'Описание отсутствует')}</p>
-                </div>
               </div>
-              <div class="flow-profile-friends-zone peer-profile-friends-zone">
+              <div class="flow-profile-identity">
+                <h3 class="flow-profile-display-name">${escapeHtml(uRaw)}</h3>
+                <p class="flow-profile-handle-line">@${escapeHtml(uRaw)} • custom</p>
+                <div class="flow-profile-badge-strip">${getFlowProfileBadgeStripHtml()}</div>
+                <p class="flow-profile-bio">${escapeHtml(profileData.bio || 'Описание отсутствует')}</p>
+              </div>
+              <div class="flow-profile-friends-zone">
                 <div class="flow-profile-zone-label">Friends</div>
                 <div class="flow-profile-friends-strip">${friendsHtml}</div>
               </div>
-              <div class="flow-profile-listening-slot peer-profile-listening-integrated">${listenHtml}</div>
             </section>
+            <div class="flow-profile-listening-slot">${listenHtml}</div>
           </div>
         </div>
       </div>
