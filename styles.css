@@ -3665,6 +3665,46 @@ input:not([type])::placeholder {
   margin-top: 0;
   padding-top: 0;
 }
+#peer-profile-modal .peer-profile-head-row.flow-profile-top-row {
+  align-items: flex-end;
+  flex-wrap: nowrap;
+  gap: 16px;
+}
+#peer-profile-modal .peer-profile-head-row .flow-profile-avatar-col {
+  margin-top: -48px;
+  margin-left: 0;
+}
+#peer-profile-modal .peer-profile-identity.peer-profile-identity {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px 2px 0;
+  margin: 0;
+}
+#peer-profile-modal .peer-profile-identity .flow-profile-display-name {
+  font-size: clamp(20px, 4.6vw, 25px);
+  word-break: break-word;
+}
+#peer-profile-modal .peer-profile-identity .flow-profile-bio {
+  max-width: none;
+}
+@media (max-width: 440px) {
+  #peer-profile-modal .peer-profile-head-row.flow-profile-top-row {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+}
+#peer-profile-modal .peer-profile-friends-zone.flow-profile-friends-zone {
+  margin-top: 10px;
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--profile-accent, var(--accent2)) 18%, rgba(255, 255, 255, 0.08));
+}
+#peer-profile-modal .flow-profile-friends-strip {
+  justify-content: center;
+  gap: 14px 22px;
+}
+#peer-profile-modal .flow-profile-main-tile.flow-profile-nested-glass {
+  padding-bottom: 48px;
+}
 #peer-profile-modal .peer-profile-stats-grid {
   border-top: 1px solid color-mix(in srgb, var(--profile-accent, var(--accent2)) 22%, rgba(255, 255, 255, 0.08));
 }
@@ -3682,6 +3722,17 @@ input:not([type])::placeholder {
   background:
     linear-gradient(180deg, rgba(18, 22, 30, 0.70), color-mix(in srgb, var(--profile-accent, var(--accent2)) 14%, rgba(38, 22, 48, 0.58))),
     rgba(255, 255, 255, 0.055);
+}
+#peer-profile-modal .peer-profile-listening-integrated.flow-profile-listening-slot {
+  margin-top: 0;
+  margin-bottom: 0;
+  padding-top: 14px;
+  border-top: 1px solid color-mix(in srgb, var(--profile-accent, var(--accent2)) 18%, rgba(255, 255, 255, 0.08));
+  border-radius: 0 0 12px 12px;
+  background: rgba(6, 8, 14, 0.38);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055);
 }
 .flow-progress {
   width: 100%;
