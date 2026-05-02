@@ -4551,6 +4551,7 @@ function drawHomeVisualizerFrame() {
 }
 
 function startHomeVisualizerLoop() {
+  let vizFrame = 0
   const tick = () => {
     if (document.hidden) {
       setTimeout(() => requestAnimationFrame(tick), 750)
@@ -4562,7 +4563,20 @@ function startHomeVisualizerLoop() {
         setTimeout(() => requestAnimationFrame(tick), 350)
         return
       }
-      drawHomeVisualizerFrame()
+      const playing = (() => {
+        try {
+          return audio && !audio.paused && !audio.ended
+        } catch (_) {
+          return false
+        }
+      })()
+      if (playing) {
+        vizFrame++
+        if (vizFrame % 2 === 0) drawHomeVisualizerFrame()
+      } else {
+        vizFrame = 0
+        drawHomeVisualizerFrame()
+      }
       requestAnimationFrame(tick)
     } else {
       setTimeout(() => requestAnimationFrame(tick), 250)
@@ -4758,6 +4772,28 @@ async function playTrackObj(track, opts = {}) {
   const setStage = (text) => { if (artistEl) artistEl.textContent = text }
   setStage('Загрузка…')
   if (playBtn) playBtn.innerHTML = '<svg class="ui-icon spin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9"/><path d="M12 7v5l3 2"/></svg>'
+
+  if (String(track.source || '').toLowerCase() === 'yandex' && !/^https?:\/\//i.test(String(streamUrl || '')) && track.id && window.api?.yandexStream) {
+    const ymTok = String(getSettings()?.yandexToken || '').trim()
+    if (!ymTok) {
+      showToast('Яндекс: укажи токен в настройках', true)
+      if (playBtn) playBtn.innerHTML = ICONS.play
+      setStage('Яндекс: нужен токен')
+      return
+    }
+    setStage('Яндекс: получаю поток…')
+    const ymRes = await window.api.yandexStream(String(track.id), ymTok).catch((e) => ({ ok: false, error: e?.message || String(e) }))
+    if (isStale()) return
+    if (!ymRes?.ok || !ymRes.url) {
+      showToast('Яндекс: ' + (ymRes?.error || 'не удалось получить поток'), true)
+      if (playBtn) playBtn.innerHTML = ICONS.play
+      setStage('Яндекс: ошибка')
+      return
+    }
+    track = Object.assign({}, track, { url: ymRes.url })
+    streamUrl = track.url
+    currentTrack = track
+  }
 
   // SoundCloud transcoding URL -> direct stream URL
   if (track.source === 'soundcloud' && track.scTranscoding && window.api?.scStream) {
@@ -5279,6 +5315,14 @@ async function searchHybridTracks(q, settings) {
   throw new Error('Серверный поиск недоступен в этой версии приложения')
 }
 
+function searchLoadingPlaceholderLine(settings = getSettings()) {
+  const src = String(settings?.activeSource || currentSource || 'hybrid').toLowerCase()
+  if (src === 'yandex' || src === 'ya' || src === 'ym') return 'Поиск: Яндекс Музыка...'
+  if (src === 'hitmo' || src === 'hm') return 'Поиск: HitMo...'
+  if (src === 'youtube' || src === 'yt') return 'Поиск: YouTube...'
+  return 'Поиск: Spotify → SoundCloud → Audius...'
+}
+
 function searchTracks(queryOverride = '') {
   if (typeof queryOverride === 'string' && queryOverride.trim()) {
     return searchTracksDirect(queryOverride.trim(), getSettings())
@@ -5288,7 +5332,7 @@ function searchTracks(queryOverride = '') {
   const container = document.getElementById('search-results')
   if (!q) { container.innerHTML = ''; return }
 
-  container.innerHTML = `<div class="search-loading"><div class="spinner"></div><span>Поиск: Spotify → SoundCloud → Audius...</span></div>`
+  container.innerHTML = `<div class="search-loading"><div class="spinner"></div><span>${searchLoadingPlaceholderLine()}</span></div>`
 
   searchDebounceTimer = setTimeout(async () => {
     const s = getSettings()
@@ -5301,9 +5345,43 @@ function searchTracks(queryOverride = '') {
     }
 
     try {
-      const hybrid = await searchHybridTracks(q, s)
-      const results = sanitizeTrackList(hybrid.tracks || [])
-      _lastSearchMode = hybrid.mode || 'hybrid'
+      const src = String(s.activeSource || currentSource || 'hybrid').toLowerCase()
+      let results = []
+      let mode = 'hybrid'
+      if (src === 'hitmo' || src === 'hm') {
+        results = sanitizeTrackList(await searchHitmo(q))
+        mode = 'hitmo'
+      } else if (src === 'youtube' || src === 'yt') {
+        if (!window.api?.youtubeSearch) throw new Error('YouTube поиск доступен только в Electron')
+        const ytList = await window.api.youtubeSearch(q)
+        if (!Array.isArray(ytList)) throw new Error('YouTube: некорректный ответ')
+        results = sanitizeTrackList(ytList.map((t) => ({
+          title: t?.title || 'Без названия',
+          artist: t?.artist || 'YouTube',
+          ytId: t?.ytId || t?.id || '',
+          url: t?.url || null,
+          cover: t?.cover || null,
+          bg: t?.bg || 'linear-gradient(135deg,#ff0000,#cc0000)',
+          source: 'youtube',
+          id: String(t?.id || t?.ytId || `${t?.title || ''}:${t?.artist || ''}`)
+        }))).filter((t) => t.ytId)
+        mode = 'youtube'
+      } else if (src === 'yandex' || src === 'ya' || src === 'ym') {
+        const token = String(s.yandexToken || '').trim()
+        if (!token) throw new Error('Яндекс: укажи токен Музыки в настройках')
+        if (!window.api?.yandexSearch) throw new Error('Яндекс поиск недоступен в этой сборке')
+        const ymList = await withTimeout(window.api.yandexSearch(q, token), 22000, 'yandex search timeout').catch((e) => {
+          throw new Error(normalizeInvokeError(e) || 'таймаут поиска')
+        })
+        if (!Array.isArray(ymList)) throw new Error('Яндекс: некорректный ответ')
+        results = sanitizeTrackList(ymList)
+        mode = 'yandex'
+      } else {
+        const hybrid = await searchHybridTracks(q, s)
+        results = sanitizeTrackList(hybrid.tracks || [])
+        mode = hybrid.mode || 'hybrid'
+      }
+      _lastSearchMode = mode
       cacheSet(key, { mode: _lastSearchMode, tracks: results })
       renderResults(results)
     } catch (err) {
@@ -5318,6 +5396,17 @@ async function searchTracksDirect(query, settings = getSettings()) {
   if (!q) return []
   const src = String(settings?.activeSource || currentSource || 'hybrid').toLowerCase()
   if (src === 'hitmo' || src === 'hm') return sanitizeTrackList(await searchHitmo(q))
+  if (src === 'yandex' || src === 'ya' || src === 'ym') {
+    const token = String(settings?.yandexToken || '').trim()
+    if (!token) throw new Error('Яндекс: укажи токен Музыки в настройках')
+    if (!window.api?.yandexSearch) throw new Error('Яндекс поиск недоступен в этой сборке')
+    const ymList = await withTimeout(window.api.yandexSearch(q, token), 22000, 'yandex search timeout').catch((e) => {
+      throw new Error(normalizeInvokeError(e) || 'таймаут поиска')
+    })
+    if (!Array.isArray(ymList)) throw new Error('Яндекс: некорректный ответ')
+    _lastSearchMode = 'yandex'
+    return sanitizeTrackList(ymList)
+  }
   if (src === 'youtube' || src === 'yt') {
     if (!window.api?.youtubeSearch) throw new Error('YouTube поиск доступен только в Electron')
     const result = await window.api.youtubeSearch(q)
@@ -5364,6 +5453,8 @@ function getSourceLabel() {
   if (_lastSearchMode === 'soundcloud') return 'SoundCloud'
   if (_lastSearchMode === 'audius') return 'Audius'
   if (_lastSearchMode === 'youtube') return 'YouTube'
+  if (_lastSearchMode === 'yandex') return 'Яндекс Музыка'
+  if (_lastSearchMode === 'hitmo') return 'HitMo'
   return 'Spotify → SoundCloud → Audius'
 }
 
@@ -5763,12 +5854,12 @@ function openPlaylist(idx) {
   openPlaylistIndex = idx
   const pl = normalizePlaylist(getPlaylists()[idx])
   if (!pl) return
+  const playlistCover = sanitizeMediaByGifMode(pl.coverData || '', 'playlist')
   document.getElementById('playlist-view-name').textContent = pl.name
   const metaEl = document.getElementById('playlist-view-meta')
   if (metaEl) metaEl.textContent = pl.description || `${pl.tracks.length} треков`
   const coverEl = document.getElementById('playlist-view-cover')
   if (coverEl) {
-    const playlistCover = sanitizeMediaByGifMode(pl.coverData || '', 'playlist')
     coverEl.style.backgroundImage = playlistCover ? `url(${playlistCover})` : ''
     coverEl.innerHTML = playlistCover ? '' : '<svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'
   }

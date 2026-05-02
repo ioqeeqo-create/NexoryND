@@ -18,6 +18,26 @@ const audio = (audioPlayer.createPlayerAudio || ((onErr) => {
   } catch {}
 })
 
+;(function playbackPerfBackgroundHook() {
+  try {
+    const bump = () => {
+      document.body.classList.toggle('audio-playing', Boolean(audio && !audio.paused && !audio.ended))
+      try {
+        updateBackground()
+      } catch (_) {}
+      try {
+        const v = getVisual?.()
+        if (v) applyVisualBackdropFilters(v.blur, v.bright)
+      } catch (_) {}
+    }
+    audio.addEventListener('play', bump, { passive: true })
+    audio.addEventListener('pause', bump, { passive: true })
+    audio.addEventListener('ended', bump, { passive: true })
+    audio.addEventListener('emptied', bump, { passive: true })
+    bump()
+  } catch (_) {}
+})()
+
 let currentTrack = null
 let queue = []
 let queueIndex = 0
@@ -1157,6 +1177,30 @@ function pulseHomeVisualLayoutSync() {
   })
 }
 
+/** При воспроизведении сильнее уменьшаем blur фона — меньше нагрузка на GPU. */
+function effectiveBackdropBlurPx(baseBlurPx) {
+  const b = Number(baseBlurPx)
+  if (!Number.isFinite(b) || b < 0) return 18
+  try {
+    if (audio && !audio.paused && !audio.ended) {
+      const soft = Math.round(b * 0.38)
+      return Math.max(8, Math.min(b, soft))
+    }
+  } catch (_) {}
+  return b
+}
+
+function applyVisualBackdropFilters(blurPx, brightPercent) {
+  const blur = Number(blurPx)
+  const bright = Number(brightPercent)
+  const eb = effectiveBackdropBlurPx(Number.isFinite(blur) ? blur : 18)
+  const br = Number.isFinite(bright) ? bright : 55
+  const bgBlur = document.getElementById('bg-cover-blur')
+  if (bgBlur) bgBlur.style.filter = `blur(${eb}px) brightness(${br / 100})`
+  const bgLayer = document.getElementById('bg-layer')
+  if (bgLayer) bgLayer.style.filter = `blur(${eb}px) brightness(${br / 100})`
+}
+
 function applyVisualSettings() {
   const blur   = document.getElementById('vs-blur')?.value ?? 40
   const bright = document.getElementById('vs-bright')?.value ?? 50
@@ -1179,11 +1223,7 @@ function applyVisualSettings() {
   syncHomeConstructStackScalePct(+scale || 100)
   applyToastPosition(v.toastPosition || 'default')
 
-  const bgBlur = document.getElementById('bg-cover-blur')
-  if (bgBlur) bgBlur.style.filter = `blur(${blur}px) brightness(${bright/100})`
-
-  const bgLayer = document.getElementById('bg-layer')
-  if (bgLayer) bgLayer.style.filter = `blur(${blur}px) brightness(${bright/100})`
+  applyVisualBackdropFilters(+blur, +bright)
   applyHomeSliderStyle()
   refreshHomeDashboardLayoutAfterContentChange()
   pulseHomeVisualLayoutSync()
@@ -1213,12 +1253,13 @@ function updateBackground() {
   const v = getVisual()
   const coverBlur = document.getElementById('bg-cover-blur')
   const blur = v.blur, bright = v.bright
+  const eb = effectiveBackdropBlurPx(blur)
 
   if (v.bgType === 'custom' && v.customBg) {
     const customBg = sanitizeMediaByGifMode(v.customBg, 'bg')
     coverBlur.style.backgroundImage = customBg ? `url(${customBg})` : ''
     coverBlur.style.opacity = customBg ? '1' : '0'
-    coverBlur.style.filter = `blur(${blur}px) brightness(${bright/100})`
+    coverBlur.style.filter = `blur(${eb}px) brightness(${bright/100})`
   } else if (v.bgType === 'cover' && currentTrack) {
     const coverUrl = sanitizeMediaByGifMode(getEffectiveCoverUrl(currentTrack), 'bg')
     if (!coverUrl) {
@@ -1228,7 +1269,7 @@ function updateBackground() {
     }
     coverBlur.style.backgroundImage = `url(${coverUrl})`
     coverBlur.style.opacity = '1'
-    coverBlur.style.filter = `blur(${blur}px) brightness(${bright/100})`
+    coverBlur.style.filter = `blur(${eb}px) brightness(${bright/100})`
   } else {
     coverBlur.style.opacity = '0'
     coverBlur.style.backgroundImage = ''
@@ -2109,6 +2150,7 @@ function getSearchCacheKey(query, settings = getSettings()) {
     settings?.spotifyToken ? 'sp1' : 'sp0',
     settings?.vkToken ? 'vk1' : 'vk0',
     settings?.soundcloudClientId ? 'sc1' : 'sc0',
+    settings?.yandexToken ? 'ym1' : 'ym0',
     settings?.proxyBaseUrl ? `srv:${String(settings.proxyBaseUrl).trim().toLowerCase()}` : 'srv0',
   ].join(':')
   return `${src}:${q}:${tokenSig}`
@@ -2122,12 +2164,13 @@ const providers = {
 }
 
 /** Активный источник в настройках: гибрид отдельно от одиночных провайдеров в `providers`. */
-const ALLOWED_ACTIVE_SOURCES = new Set(['hybrid', 'spotify', 'soundcloud', 'audius', 'hitmo'])
+const ALLOWED_ACTIVE_SOURCES = new Set(['hybrid', 'spotify', 'soundcloud', 'audius', 'hitmo', 'yandex'])
 
 function normalizeStoredActiveSource(rawSrc) {
   const raw = String(rawSrc || 'hybrid').toLowerCase()
   // Основной рабочий поиск — серверный Spotify → SoundCloud → Audius; YouTube как activeSource не используем.
   if (raw === 'yt' || raw === 'youtube') return 'hybrid'
+  if (raw === 'ya' || raw === 'ym') return 'yandex'
   if (raw === 'sc') return 'soundcloud'
   if (raw === 'hm') return 'hitmo'
   if (ALLOWED_ACTIVE_SOURCES.has(raw)) return raw
@@ -2181,6 +2224,9 @@ function saveSettingsRaw(patch) {
   localStorage.setItem('flow_settings', JSON.stringify(updated))
   currentSource = updated.activeSource || 'hybrid'
   updateSourceBadge()
+  try {
+    syncSearchSourceRows?.()
+  } catch (_) {}
 }
 
 let _compactSearchListenersBound = false
@@ -2476,15 +2522,15 @@ function updateSpotifyStatus(token) {
 }
 
 function setActiveSource(src) {
-  const allowed = new Set(['hybrid', 'spotify', 'soundcloud', 'sc', 'audius', 'hitmo', 'hm'])
   const raw = String(src || '').toLowerCase()
-  const normalized =
+  let normalized =
     raw === 'yt' || raw === 'youtube' ? 'hybrid' :
     raw === 'sc' ? 'soundcloud' :
     raw === 'hm' ? 'hitmo' :
+    raw === 'ya' || raw === 'ym' ? 'yandex' :
     raw
-  const safe = allowed.has(normalized) ? normalized : 'hybrid'
-  saveSettingsRaw({ activeSource: safe })
+  if (!ALLOWED_ACTIVE_SOURCES.has(normalized)) normalized = 'hybrid'
+  saveSettingsRaw({ activeSource: normalized })
   searchCache.clear()
 }
 
@@ -2966,19 +3012,47 @@ function convertDotifyPresetToFlowStorage(preset) {
 }
 
 function updateSourceBadge() {
-  currentSource = 'hybrid'
-  const txt = 'Spotify → SoundCloud → Audius'
+  const raw = normalizeStoredActiveSource(getSettings()?.activeSource || currentSource || 'hybrid')
+  currentSource = raw
+  let txt = 'Spotify → SoundCloud → Audius'
+  if (raw === 'yandex') txt = 'Яндекс Музыка'
+  else if (raw === 'spotify') txt = 'Spotify'
+  else if (raw === 'soundcloud') txt = 'SoundCloud'
+  else if (raw === 'audius') txt = 'Audius'
+  else if (raw === 'hitmo') txt = 'Hitmo'
   const b1 = document.getElementById('source-badge'); if (b1) b1.textContent = txt
   const b2 = document.getElementById('source-badge-search'); if (b2) b2.textContent = txt
 }
 
+function syncSearchSourceRows() {
+  const resolved = normalizeStoredActiveSource(getSettings()?.activeSource || 'hybrid')
+  const ya = resolved === 'yandex'
+  document.querySelectorAll('.source-mode-card[data-src="hybrid"], .source-mode-card[data-src="yandex"]').forEach((btn) => {
+    const ds = String(btn.getAttribute('data-src') || '')
+    btn.classList.toggle('active', (ds === 'yandex' && ya) || (ds === 'hybrid' && !ya))
+  })
+}
+
 function switchSearchSource(src) {
-  showToast('Режим фиксирован: Spotify → SoundCloud → Audius')
+  const normalized = normalizeStoredActiveSource(src === 'yandex' ? 'yandex' : 'hybrid')
+  setActiveSource(normalized === 'yandex' ? 'yandex' : 'hybrid')
+  syncSearchSourceRows()
+  const msg =
+    normalized === 'yandex'
+      ? 'Источник: Яндекс Музыка (нужен токен в Настройках → Источники)'
+      : 'Источник: классический поиск (Spotify → SoundCloud → Audius)'
+  showToast(msg)
+  try {
+    if (typeof searchTracks === 'function' && String(document.getElementById('search-input')?.value || '').trim()) searchTracks()
+  } catch (_) {}
 }
 
 function syncSearchSourcePills() {
+  syncSearchSourceRows()
   document.querySelectorAll('.search-source-pill').forEach(p => {
-    p.classList.toggle('active', p.getAttribute('data-src') === 'hybrid')
+    const resolved = normalizeStoredActiveSource(getSettings()?.activeSource || 'hybrid')
+    const want = resolved === 'yandex' ? 'yandex' : 'hybrid'
+    p.classList.toggle('active', p.getAttribute('data-src') === want)
   })
 }
 

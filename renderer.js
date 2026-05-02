@@ -18,6 +18,26 @@ const audio = (audioPlayer.createPlayerAudio || ((onErr) => {
   } catch {}
 })
 
+;(function playbackPerfBackgroundHook() {
+  try {
+    const bump = () => {
+      document.body.classList.toggle('audio-playing', Boolean(audio && !audio.paused && !audio.ended))
+      try {
+        updateBackground()
+      } catch (_) {}
+      try {
+        const v = getVisual?.()
+        if (v) applyVisualBackdropFilters(v.blur, v.bright)
+      } catch (_) {}
+    }
+    audio.addEventListener('play', bump, { passive: true })
+    audio.addEventListener('pause', bump, { passive: true })
+    audio.addEventListener('ended', bump, { passive: true })
+    audio.addEventListener('emptied', bump, { passive: true })
+    bump()
+  } catch (_) {}
+})()
+
 let currentTrack = null
 let queue = []
 let queueIndex = 0
@@ -30,32 +50,6 @@ let _lastSearchMode = 'hybrid'
 let _playRequestSeq = 0
 const _ytPrewarmAt = new Map()
 const _coverLoadState = new Map()
-const _coverAccentCache = new Map()
-const _coverAccentPending = new Set()
-const _vizFallbackData = new Uint8Array(128)
-let _vizSmoothData = null
-let _vizTimeData = null
-let _vizEnergySmooth = 0
-let _vizLastFrameAt = 0
-let _vizLastEnergySampleAt = 0
-let _homeVizCanvasEl = null
-let _homeVizCtx2d = null
-const HOME_VIZ_ACTIVE_FRAME_MS = 9
-let _homeVizMode = 'bars'
-let _homeVizEnabled = true
-const FLOW_FAST_START_STREAMS = true
-let _progressRafId = 0
-let _lastProgressPaintAt = 0
-let _lastHomeCloneProfileSyncAt = 0
-let _progressAnchorPerf = 0
-let _progressAnchorAudioTime = 0
-let _visualSettingsReflowTimer = 0
-let _lastBgPickKind = 'image'
-let _lastCoverPickKind = 'image'
-let _lastPlayBtnPausedState = null
-let _lastProgressTextPaintAt = 0
-let _listenSecondsAccum = 0
-let _listenLastFlushAt = 0
 
 const defaultPlayback = { shuffle: false, repeat: 'off' } // repeat: off | all | one
 let playbackMode = (() => {
@@ -445,37 +439,22 @@ const defaultVisual = {
   customBg: null,
   homeSliderStyle: 'line',
   homeWidget: { enabled: true, mode: 'bars', image: null },
-  effects: { orbs: true, glow: true, dyncolor: true, accentFromCover: true },
+  effects: { orbs: false, glow: true, dyncolor: false, accentFromCover: false },
   navActiveHighlight: false,
   sidebarPosition: 'left',
   cardDensity: 'comfort',
   toastPosition: 'default',
   gifMode: { bg: true, track: true, playlist: true },
-  lyrics: { scrollMode: 'smooth', align: 'left', size: 16, blur: 4 },
+  lyrics: { scrollMode: 'smooth', align: 'left', size: 16, blur: 4 }
 }
 
 /** Кэш parse localStorage — getVisual() вызывается очень часто (в т.ч. каждый кадр домашнего визуализатора). */
 let _flowVisualMemo = null
-let _flowVisualMemoAt = 0
-const FLOW_FONT_LIBRARY_LS = 'flow_font_library'
-
-function normalizeGifMode(raw) {
-  const mode = Object.assign({ bg: true, track: true, playlist: true }, raw || {})
-  mode.bg = true
-  mode.track = true
-  mode.playlist = true
-  return mode
-}
 
 function getVisual() {
   try {
-    const now = Date.now()
-    if (_flowVisualMemo && now - _flowVisualMemoAt < 1200) {
-      return Object.assign({}, _flowVisualMemo.out)
-    }
     let rawStr = localStorage.getItem('flow_visual') || '{}'
     if (_flowVisualMemo && _flowVisualMemo.s === rawStr) {
-      _flowVisualMemoAt = now
       return Object.assign({}, _flowVisualMemo.out)
     }
     let raw = {}
@@ -489,10 +468,7 @@ function getVisual() {
       try { raw = JSON.parse(rawStr) } catch (_) { raw = {} }
     }
     const out = Object.assign({}, defaultVisual, raw)
-    out.effects = Object.assign({}, defaultVisual.effects, raw.effects || {})
-    out.gifMode = normalizeGifMode(raw.gifMode || {})
     _flowVisualMemo = { s: rawStr, out }
-    _flowVisualMemoAt = now
     return Object.assign({}, out)
   } catch {
     return { ...defaultVisual }
@@ -501,11 +477,8 @@ function getVisual() {
 
 function saveVisual(patch) {
   _flowVisualMemo = null
-  _flowVisualMemoAt = 0
   const v = getVisual()
   const updated = Object.assign(v, patch)
-  updated.effects = Object.assign({}, defaultVisual.effects, updated.effects || {})
-  updated.gifMode = normalizeGifMode(updated.gifMode || {})
   localStorage.setItem('flow_visual', JSON.stringify(updated))
   return updated
 }
@@ -539,45 +512,6 @@ function toggleSettingsFold(id) {
   if (btn) btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true')
 }
 
-function getFontLibrary() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(FLOW_FONT_LIBRARY_LS) || '[]')
-    if (!Array.isArray(raw)) return []
-    return raw.filter((x) => x && typeof x === 'object' && x.data && x.name).slice(0, 18)
-  } catch {
-    return []
-  }
-}
-
-function saveFontLibrary(list) {
-  try { localStorage.setItem(FLOW_FONT_LIBRARY_LS, JSON.stringify(Array.isArray(list) ? list : [])) } catch {}
-}
-
-function putFontToLibrary(name, data) {
-  const next = [{ name, data }, ...getFontLibrary().filter((x) => x.data !== data && x.name !== name)]
-  saveFontLibrary(next.slice(0, 18))
-}
-
-function renderFontLibrary() {
-  const host = document.getElementById('font-library-list')
-  if (!host) return
-  const v = getVisual()
-  const activeData = String(v.customFontData || '')
-  const list = getFontLibrary()
-  let styleEl = document.getElementById('font-library-style')
-  if (!styleEl) {
-    styleEl = document.createElement('style')
-    styleEl.id = 'font-library-style'
-    document.head.appendChild(styleEl)
-  }
-  styleEl.textContent = list.map((entry, idx) => `@font-face{font-family:"FlowLibFont${idx}";src:url("${entry.data}");font-display:swap;}`).join('\n')
-  host.innerHTML = list.map((entry, idx) => {
-    const isActive = activeData && activeData === entry.data
-    const safeName = sanitizeDisplayText(entry.name || `Font ${idx + 1}`)
-    return `<button type="button" class="vs-font-card${isActive ? ' active' : ''}" onclick="selectCustomFontFromLibrary(${idx})"><span class="sample" style="font-family:'FlowLibFont${idx}', var(--font-ui)">Aa123</span><span class="name">${safeName}</span></button>`
-  }).join('')
-}
-
 function syncFontControls() {
   const v = getVisual()
   const mode = v.fontMode === 'custom' ? 'custom' : 'default'
@@ -592,7 +526,6 @@ function syncFontControls() {
     if (mode === 'custom' && v.customFontName) status.textContent = `Свой шрифт: ${v.customFontName}`
     else status.textContent = 'Используется системный шрифт'
   }
-  renderFontLibrary()
 }
 
 function applyFontSettings(silent = true) {
@@ -658,20 +591,11 @@ function setCustomFont(input) {
     const data = e.target?.result || null
     if (!data) return
     _customFontLoadedKey = ''
-    putFontToLibrary(file.name || 'Custom Font', data)
     saveVisual({ customFontData: data, customFontName: file.name, fontMode: 'custom' })
     applyFontSettings(false)
     input.value = ''
   }
   reader.readAsDataURL(file)
-}
-
-function selectCustomFontFromLibrary(index) {
-  const entry = getFontLibrary()[Number(index) || 0]
-  if (!entry) return
-  _customFontLoadedKey = ''
-  saveVisual({ customFontData: entry.data, customFontName: entry.name || 'Custom Font', fontMode: 'custom' })
-  applyFontSettings(false)
 }
 
 function clearCustomFont() {
@@ -700,25 +624,14 @@ function isVisualFloatedLayout() {
 
 function applyVisualMode(mode) {
   const safe = normalizeVisualThemeMode(mode)
-  document.body.classList.remove('visual-minimal', 'visual-premium', 'visual-floated', 'visual-yandex', 'visual-brand')
-  if (safe === 'floated') {
-    document.body.classList.add('visual-floated')
-  } else if (safe === 'yandex') {
-    document.body.classList.add('visual-yandex')
-  } else {
-    document.body.classList.add('visual-minimal')
-  }
+  document.body.classList.remove('visual-minimal', 'visual-premium', 'visual-floated', 'visual-yandex')
+  document.body.classList.add(safe === 'floated' ? 'visual-floated' : (safe === 'yandex' ? 'visual-yandex' : 'visual-minimal'))
   const minimalBtn = document.getElementById('vm-minimal')
   const floatedBtn = document.getElementById('vm-floated')
   const yandexBtn = document.getElementById('vm-yandex')
   if (minimalBtn) minimalBtn.classList.toggle('active', safe === 'minimal')
   if (floatedBtn) floatedBtn.classList.toggle('active', safe === 'floated')
   if (yandexBtn) yandexBtn.classList.toggle('active', safe === 'yandex')
-  if (safe === 'yandex') {
-    _lastYandexThemeCover = ''
-    _lastYandexThemeFallback = ''
-    updateYandexPlayerTheme(currentTrack)
-  }
 }
 
 function syncHomeLayoutConstructorUi() {
@@ -825,13 +738,7 @@ function setVisualMode(mode) {
       window.flowFloatedMainPaneDrag?.refreshFromStorage?.()
     } catch (_) {}
   })
-  showToast(
-    safe === 'yandex'
-      ? 'Режим: Яндекс'
-      : safe === 'floated'
-        ? 'Режим: минимал'
-        : 'Режим: минимализм',
-  )
+  showToast(safe === 'yandex' ? 'Режим: Яндекс' : (safe === 'floated' ? 'Режим: минимал' : 'Режим: минимализм'))
 }
 
 async function toggleWindowMaximize() {
@@ -1270,20 +1177,42 @@ function pulseHomeVisualLayoutSync() {
   })
 }
 
+/** При воспроизведении сильнее уменьшаем blur фона — меньше нагрузка на GPU. */
+function effectiveBackdropBlurPx(baseBlurPx) {
+  const b = Number(baseBlurPx)
+  if (!Number.isFinite(b) || b < 0) return 18
+  try {
+    if (audio && !audio.paused && !audio.ended) {
+      const soft = Math.round(b * 0.38)
+      return Math.max(8, Math.min(b, soft))
+    }
+  } catch (_) {}
+  return b
+}
+
+function applyVisualBackdropFilters(blurPx, brightPercent) {
+  const blur = Number(blurPx)
+  const bright = Number(brightPercent)
+  const eb = effectiveBackdropBlurPx(Number.isFinite(blur) ? blur : 18)
+  const br = Number.isFinite(bright) ? bright : 55
+  const bgBlur = document.getElementById('bg-cover-blur')
+  if (bgBlur) bgBlur.style.filter = `blur(${eb}px) brightness(${br / 100})`
+  const bgLayer = document.getElementById('bg-layer')
+  if (bgLayer) bgLayer.style.filter = `blur(${eb}px) brightness(${br / 100})`
+}
+
 function applyVisualSettings() {
   const blur   = document.getElementById('vs-blur')?.value ?? 40
   const bright = document.getElementById('vs-bright')?.value ?? 50
   const glass  = document.getElementById('vs-glass')?.value ?? 8
   const pb     = document.getElementById('vs-panel-blur')?.value ?? 30
-  const scaleRawInput = Number(document.getElementById('vs-scale')?.value ?? 100)
-  const scaleRaw = Number.isFinite(scaleRawInput) ? scaleRawInput : 100
-  const scale  = Math.max(75, Math.min(130, Math.round((100 + (scaleRaw - 100) * 1.12) * 10) / 10))
+  const scale  = document.getElementById('vs-scale')?.value ?? 100
 
   document.getElementById('vs-blur-val').textContent   = blur + 'px'
   document.getElementById('vs-bright-val').textContent = bright + '%'
   document.getElementById('vs-glass-val').textContent  = glass + '%'
   document.getElementById('vs-panel-blur-val').textContent = pb + 'px'
-  if (document.getElementById('vs-scale-val')) document.getElementById('vs-scale-val').textContent = `${Math.round(scale)}%`
+  if (document.getElementById('vs-scale-val')) document.getElementById('vs-scale-val').textContent = scale + '%'
 
   const v = getVisual()
   saveVisual({ blur:+blur, bright:+bright, glass:+glass, panelBlur:+pb, uiScale:+scale })
@@ -1294,20 +1223,10 @@ function applyVisualSettings() {
   syncHomeConstructStackScalePct(+scale || 100)
   applyToastPosition(v.toastPosition || 'default')
 
-  const bgBlur = document.getElementById('bg-cover-blur')
-  if (bgBlur) bgBlur.style.filter = `blur(${blur}px) brightness(${bright/100})`
-
-  const bgLayer = document.getElementById('bg-layer')
-  if (bgLayer) bgLayer.style.filter = `blur(${blur}px) brightness(${bright/100})`
+  applyVisualBackdropFilters(+blur, +bright)
   applyHomeSliderStyle()
-  clearTimeout(_visualSettingsReflowTimer)
-  const isHomeActive = document.body?.getAttribute('data-active-page') === 'home' || document.getElementById('page-home')?.classList.contains('active')
-  if (isVisualFloatedLayout() && isHomeActive) {
-    _visualSettingsReflowTimer = setTimeout(() => {
-      refreshHomeDashboardLayoutAfterContentChange()
-      pulseHomeVisualLayoutSync()
-    }, 90)
-  }
+  refreshHomeDashboardLayoutAfterContentChange()
+  pulseHomeVisualLayoutSync()
 }
 
 function setBgType(type) {
@@ -1320,15 +1239,9 @@ function setBgType(type) {
 }
 
 function toggleGifMode(category) {
-  if (category === 'track' || category === 'playlist') {
-    showToast('GIF для треков и плейлистов всегда включен')
-    return
-  }
   const v = getVisual()
-  const gifMode = normalizeGifMode(v.gifMode || {})
+  const gifMode = Object.assign({ bg: true, track: true, playlist: true }, v.gifMode || {})
   gifMode[category] = !Boolean(gifMode[category])
-  gifMode.track = true
-  gifMode.playlist = true
   saveVisual({ gifMode })
   initVisualSettings()
   syncPlayerUIFromTrack()
@@ -1340,12 +1253,13 @@ function updateBackground() {
   const v = getVisual()
   const coverBlur = document.getElementById('bg-cover-blur')
   const blur = v.blur, bright = v.bright
+  const eb = effectiveBackdropBlurPx(blur)
 
   if (v.bgType === 'custom' && v.customBg) {
     const customBg = sanitizeMediaByGifMode(v.customBg, 'bg')
     coverBlur.style.backgroundImage = customBg ? `url(${customBg})` : ''
     coverBlur.style.opacity = customBg ? '1' : '0'
-    coverBlur.style.filter = `blur(${blur}px) brightness(${bright/100})`
+    coverBlur.style.filter = `blur(${eb}px) brightness(${bright/100})`
   } else if (v.bgType === 'cover' && currentTrack) {
     const coverUrl = sanitizeMediaByGifMode(getEffectiveCoverUrl(currentTrack), 'bg')
     if (!coverUrl) {
@@ -1355,7 +1269,7 @@ function updateBackground() {
     }
     coverBlur.style.backgroundImage = `url(${coverUrl})`
     coverBlur.style.opacity = '1'
-    coverBlur.style.filter = `blur(${blur}px) brightness(${bright/100})`
+    coverBlur.style.filter = `blur(${eb}px) brightness(${bright/100})`
   } else {
     coverBlur.style.opacity = '0'
     coverBlur.style.backgroundImage = ''
@@ -1381,15 +1295,12 @@ async function loadCustomBg(input) {
 function pickCustomBgMedia(kind = 'image') {
   const input = document.getElementById('custom-bg-input')
   if (!input) return
-  _lastBgPickKind = kind === 'gif' ? 'gif' : 'image'
-  input.accept = _lastBgPickKind === 'gif' ? '.gif,image/gif' : 'image/*'
-  syncMediaPickButtons()
+  input.accept = kind === 'gif' ? '.gif,image/gif' : 'image/*'
   input.click()
 }
 
 function clearCustomBg() {
   saveVisual({ customBg: null })
-  _lastBgPickKind = 'image'
   refreshCustomBgPreview()
   updateBackground()
   showToast('Фон убран')
@@ -1409,10 +1320,8 @@ function setMediaPreviewBox(prefix, mediaUrl, text, keepVisible = false) {
 function refreshCustomBgPreview(fileName = '') {
   const v = getVisual()
   const media = v.customBg || ''
-  if (media) _lastBgPickKind = /\.gif(?:$|[?#])/i.test(media) ? 'gif' : 'image'
   const label = fileName || (media ? 'Текущий пользовательский фон' : 'Ничего не выбрано')
   setMediaPreviewBox('custom-bg', media, label)
-  syncMediaPickButtons()
 }
 
 function setHomeSliderStyle(style) {
@@ -1480,8 +1389,6 @@ function clearHomeWidgetImage() {
 function syncHomeWidgetUI() {
   const v = getVisual()
   const hw = Object.assign({ enabled: true, mode: 'bars', image: null }, v.homeWidget || {})
-  _homeVizMode = hw.mode || 'bars'
-  _homeVizEnabled = Boolean(hw.enabled)
   const wrap = document.getElementById('home-visualizer-wrap')
   const img = document.getElementById('home-visualizer-image')
   const canvas = document.getElementById('home-visualizer-canvas')
@@ -1519,55 +1426,10 @@ function syncAccentSwatchSelection(a1, a2) {
   })
 }
 
-function parseColorToRgb(color) {
-  const src = String(color || '').trim()
-  if (!src) return null
-  const hex = src.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i)
-  if (hex) {
-    const raw = hex[1]
-    const norm = raw.length === 3 ? raw.split('').map((x) => x + x).join('') : raw
-    return {
-      r: parseInt(norm.slice(0, 2), 16),
-      g: parseInt(norm.slice(2, 4), 16),
-      b: parseInt(norm.slice(4, 6), 16),
-    }
-  }
-  const rgb = src.match(/^rgba?\(\s*(\d{1,3})[\s,]+(\d{1,3})[\s,]+(\d{1,3})/i)
-  if (!rgb) return null
-  const clamp = (v) => Math.max(0, Math.min(255, Number(v) || 0))
-  return { r: clamp(rgb[1]), g: clamp(rgb[2]), b: clamp(rgb[3]) }
-}
-
-function syncPlayButtonContrast(a1, a2 = a1) {
-  const c1 = parseColorToRgb(a1)
-  const c2 = parseColorToRgb(a2) || c1
-  if (!c1 || !c2) return
-  const r = Math.round((c1.r + c2.r) / 2)
-  const g = Math.round((c1.g + c2.g) / 2)
-  const b = Math.round((c1.b + c2.b) / 2)
-  const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b
-  const clamp = (v) => Math.max(0, Math.min(255, Math.round(v)))
-  const boost = luma > 176 ? 0.46 : 0.14
-  const bg1 = `rgb(${clamp(c1.r * (1 - boost))},${clamp(c1.g * (1 - boost))},${clamp(c1.b * (1 - boost))})`
-  const bg2 = `rgb(${clamp(c2.r * (1 - boost))},${clamp(c2.g * (1 - boost))},${clamp(c2.b * (1 - boost))})`
-  const fg = luma > 168 ? '#121212' : '#ffffff'
-  const outline = luma > 168 ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.28)'
-  const root = document.documentElement
-  root.style.setProperty('--play-btn-bg1', bg1)
-  root.style.setProperty('--play-btn-bg2', bg2)
-  root.style.setProperty('--play-btn-fg', fg)
-  root.style.setProperty('--play-btn-outline', outline)
-}
-
-function applyAccentVariables(a1, a2) {
-  document.documentElement.style.setProperty('--accent', a1)
-  document.documentElement.style.setProperty('--accent2', a2)
-  syncPlayButtonContrast(a1, a2)
-}
-
 function setAccent(a1, a2) {
   saveVisual({ accent: a1, accent2: a2, orb1Color: a1, orb2Color: a2 })
-  applyAccentVariables(a1, a2)
+  document.documentElement.style.setProperty('--accent', a1)
+  document.documentElement.style.setProperty('--accent2', a2)
   syncAccentSwatchSelection(a1, a2)
   // update gorb colors
   document.getElementById('gorb1').style.background = `radial-gradient(circle,${a1},transparent 70%)`
@@ -1603,7 +1465,8 @@ function toggleEffect(name) {
       const cover = getEffectiveCoverUrl(currentTrack)
       if (cover) updateOrbsFromCover(cover)
     } else {
-      applyAccentVariables(v.accent || defaultVisual.accent, v.accent2 || defaultVisual.accent2)
+      document.documentElement.style.setProperty('--accent', v.accent || defaultVisual.accent)
+      document.documentElement.style.setProperty('--accent2', v.accent2 || defaultVisual.accent2)
     }
   }
 }
@@ -1617,58 +1480,36 @@ function updateOrbsFromCover(coverUrl) {
   const v = getVisual()
   const effects = Object.assign({ dyncolor: false, accentFromCover: false }, v.effects || {})
   if ((!effects.dyncolor && !effects.accentFromCover) || !coverUrl) return
-  const cached = _coverAccentCache.get(coverUrl)
-  if (cached) {
-    const { c1, c2 } = cached
-    if (effects.dyncolor) {
-      const g1 = document.getElementById('gorb1')
-      const g2 = document.getElementById('gorb2')
-      if (g1) g1.style.background = `radial-gradient(circle,${c1},transparent 70%)`
-      if (g2) g2.style.background = `radial-gradient(circle,${c2},transparent 70%)`
-    }
-    if (effects.accentFromCover) applyAccentVariables(c1, c2)
-    const glow = document.getElementById('pm-cover-glow')
-    if (glow) glow.style.background = `radial-gradient(circle,${c1},transparent 70%)`
-    if (v.bgType === 'cover') updateBackground()
-    return
-  }
-  if (_coverAccentPending.has(coverUrl)) return
-  _coverAccentPending.add(coverUrl)
+  // Extract color via canvas pixel sampling
   const img = new Image()
   img.crossOrigin = 'anonymous'
   img.onload = () => {
     try {
       const c = document.createElement('canvas')
-      c.width = 8
-      c.height = 8
-      const ctx = c.getContext('2d', { willReadFrequently: true })
+      c.width = 8; c.height = 8
+      const ctx = c.getContext('2d')
       ctx.drawImage(img, 0, 0, 8, 8)
       const d = ctx.getImageData(0, 0, 8, 8).data
+      // Average color from corners
       const r = Math.round((d[0] + d[28] + d[224] + d[252]) / 4)
       const g = Math.round((d[1] + d[29] + d[225] + d[253]) / 4)
       const b = Math.round((d[2] + d[30] + d[226] + d[254]) / 4)
       const c1 = `rgb(${r},${g},${b})`
-      const c2 = `rgb(${Math.min(255, r + 60)},${Math.min(255, g + 30)},${Math.min(255, b + 80)})`
-      _coverAccentCache.set(coverUrl, { c1, c2 })
+      const c2 = `rgb(${Math.min(255,r+60)},${Math.min(255,g+30)},${Math.min(255,b+80)})`
       if (effects.dyncolor) {
-        const g1 = document.getElementById('gorb1')
-        const g2 = document.getElementById('gorb2')
-        if (g1) g1.style.background = `radial-gradient(circle,${c1},transparent 70%)`
-        if (g2) g2.style.background = `radial-gradient(circle,${c2},transparent 70%)`
+        document.getElementById('gorb1').style.background = `radial-gradient(circle,${c1},transparent 70%)`
+        document.getElementById('gorb2').style.background = `radial-gradient(circle,${c2},transparent 70%)`
       }
       if (effects.accentFromCover) {
-        applyAccentVariables(c1, c2)
+        document.documentElement.style.setProperty('--accent', c1)
+        document.documentElement.style.setProperty('--accent2', c2)
       }
-      const glow = document.getElementById('pm-cover-glow')
-      if (glow) glow.style.background = `radial-gradient(circle,${c1},transparent 70%)`
+      if (document.getElementById('pm-cover-glow')) {
+        document.getElementById('pm-cover-glow').style.background = `radial-gradient(circle,${c1},transparent 70%)`
+      }
       if (v.bgType === 'cover') updateBackground()
-    } catch (e) {
-      console.warn('accent extract failed', e)
-    } finally {
-      _coverAccentPending.delete(coverUrl)
-    }
+    } catch(e) {}
   }
-  img.onerror = () => { _coverAccentPending.delete(coverUrl) }
   img.src = coverUrl
 }
 
@@ -1683,18 +1524,9 @@ function setYandexPlayerThemeFromRgb(r, g, b) {
   root.style.setProperty('--yandex-player-glow', `rgba(${clamp(r)}, ${clamp(g)}, ${clamp(b)}, 0.26)`)
 }
 
-let _lastYandexThemeCover = ''
-let _lastYandexThemeFallback = ''
-
 function updateYandexPlayerTheme(track = currentTrack) {
-  // Не прогружаем/не пересчитываем тему Yandex, если интерфейс сейчас не активен.
-  if (!document.body?.classList?.contains('visual-yandex')) return
   const fallback = String(track?.bg || '').trim()
   const coverUrl = getEffectiveCoverUrl(track)
-  if (coverUrl && coverUrl === _lastYandexThemeCover) return
-  if (!coverUrl && fallback && fallback === _lastYandexThemeFallback) return
-  _lastYandexThemeCover = coverUrl || ''
-  _lastYandexThemeFallback = (!coverUrl && fallback) ? fallback : ''
   if (!coverUrl) {
     if (fallback && /^linear-gradient|^radial-gradient/i.test(fallback)) {
       document.documentElement.style.setProperty('--yandex-player-bg', fallback)
@@ -1745,7 +1577,8 @@ function initVisualSettings() {
   if (document.getElementById('vs-panel-blur-val')) document.getElementById('vs-panel-blur-val').textContent = v.panelBlur + 'px'
   if (document.getElementById('vs-scale-val')) document.getElementById('vs-scale-val').textContent = (v.uiScale || 100) + '%'
   // CSS vars
-  applyAccentVariables(v.accent, v.accent2)
+  document.documentElement.style.setProperty('--accent', v.accent)
+  document.documentElement.style.setProperty('--accent2', v.accent2)
   document.documentElement.style.setProperty('--glass-blur', v.panelBlur + 'px')
   document.documentElement.style.setProperty('--glass-bg', `rgba(255,255,255,${v.glass/100})`)
   document.documentElement.style.setProperty('--ui-scale', String((v.uiScale || 100) / 100))
@@ -1789,7 +1622,6 @@ function initVisualSettings() {
   if (gifBg) gifBg.classList.toggle('active', Boolean(gifMode.bg))
   if (gifTrack) gifTrack.classList.toggle('active', Boolean(gifMode.track))
   if (gifPlaylist) gifPlaylist.classList.toggle('active', Boolean(gifMode.playlist))
-  syncMediaPickButtons()
   applyToastPosition(v.toastPosition || 'default')
   refreshCustomBgPreview()
   refreshTrackCoverPreview()
@@ -2014,7 +1846,6 @@ function syncPlayerModeUI() {
   const pmBg     = document.getElementById('pm-bg')
   const pmTitle  = document.getElementById('pm-title')
   const pmArtist = document.getElementById('pm-artist')
-  const pmSource = document.getElementById('pm-source-badge')
   const pmLike   = document.getElementById('pm-like-btn')
   const pmCoverLike = document.getElementById('pm-cover-like-btn')
   const pmCoverLyrics = document.getElementById('pm-cover-lyrics-btn')
@@ -2025,12 +1856,6 @@ function syncPlayerModeUI() {
   if (t) {
     pmTitle.textContent  = t.title || 'РќРµРёР·РІРµСЃС‚РЅРѕ'
     pmArtist.textContent = t.artist || 'вЂ”'
-    if (pmSource) {
-      const src = String(t.source || '').toLowerCase()
-      const srcLabel = SRC_LABELS[src] || ''
-      pmSource.textContent = srcLabel || '—'
-      pmSource.className = srcLabel ? `track-source track-source-${src}` : 'track-source hidden'
-    }
     const effectiveCover = getEffectiveCoverUrl(t)
     if (effectiveCover) {
       applyCoverArt(pmCover, effectiveCover, t.bg || 'linear-gradient(135deg,#7c3aed,#a855f7)')
@@ -2054,9 +1879,6 @@ function syncPlayerModeUI() {
     const liked = isLiked(t)
     if (pmLike) { pmLike.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; pmLike.classList.toggle('liked', liked) }
     if (pmCoverLike) { pmCoverLike.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; pmCoverLike.classList.toggle('liked', liked) }
-  } else if (pmSource) {
-    pmSource.textContent = '—'
-    pmSource.className = 'track-source hidden'
   }
   // play/pause icon sync
   const icon = document.getElementById('pm-play-icon')
@@ -2342,12 +2164,13 @@ const providers = {
 }
 
 /** Активный источник в настройках: гибрид отдельно от одиночных провайдеров в `providers`. */
-const ALLOWED_ACTIVE_SOURCES = new Set(['hybrid', 'yandex', 'spotify', 'soundcloud', 'audius', 'hitmo'])
+const ALLOWED_ACTIVE_SOURCES = new Set(['hybrid', 'spotify', 'soundcloud', 'audius', 'hitmo', 'yandex'])
 
 function normalizeStoredActiveSource(rawSrc) {
   const raw = String(rawSrc || 'hybrid').toLowerCase()
   // Основной рабочий поиск — серверный Spotify → SoundCloud → Audius; YouTube как activeSource не используем.
   if (raw === 'yt' || raw === 'youtube') return 'hybrid'
+  if (raw === 'ya' || raw === 'ym') return 'yandex'
   if (raw === 'sc') return 'soundcloud'
   if (raw === 'hm') return 'hitmo'
   if (ALLOWED_ACTIVE_SOURCES.has(raw)) return raw
@@ -2375,7 +2198,6 @@ function getSettings() {
     flowSocialApiSecret: FLOW_SOCIAL_DEFAULT_API_SECRET,
   }
   if (typeof raw.compactUi !== 'boolean') raw.compactUi = false
-  raw.compactUi = false
   if (!Object.prototype.hasOwnProperty.call(raw, 'flowSocialApiBase')) raw.flowSocialApiBase = FLOW_SOCIAL_DEFAULT_API_BASE
   if (!Object.prototype.hasOwnProperty.call(raw, 'flowSocialApiSecret')) raw.flowSocialApiSecret = FLOW_SOCIAL_DEFAULT_API_SECRET
   if (!String(raw.flowSocialApiBase || '').trim()) raw.flowSocialApiBase = FLOW_SOCIAL_DEFAULT_API_BASE
@@ -2402,6 +2224,9 @@ function saveSettingsRaw(patch) {
   localStorage.setItem('flow_settings', JSON.stringify(updated))
   currentSource = updated.activeSource || 'hybrid'
   updateSourceBadge()
+  try {
+    syncSearchSourceRows?.()
+  } catch (_) {}
 }
 
 let _compactSearchListenersBound = false
@@ -2653,43 +2478,6 @@ function applyYandexToken() {
   showToast('Токен Яндекс Музыки сохранен')
 }
 
-async function checkYandexToken() {
-  const msg = document.getElementById('ym-msg')
-  let token = String(document.getElementById('ym-token-val')?.value || getSettings().yandexToken || '').trim()
-  const m = token.match(/access_token=([^&#]+)/)
-  if (m) token = decodeURIComponent(m[1])
-  if (!token) {
-    if (msg) {
-      msg.textContent = 'Сначала вставь OAuth token Яндекс Музыки'
-      msg.className = 'token-msg token-msg-err'
-    }
-    showToast('Нет токена для проверки', true)
-    return
-  }
-  if (msg) {
-    msg.textContent = 'Проверка токена...'
-    msg.className = 'token-msg'
-  }
-  try {
-    const probe = await withTimeout(window.api?.yandexSearch?.('flow', token), 12000, 'yandex check timeout')
-    const ok = Array.isArray(probe)
-    if (!ok) throw new Error('некорректный ответ API')
-    saveSettingsRaw({ yandexToken: token })
-    updateYandexStatus(token)
-    if (msg) {
-      msg.textContent = 'Токен рабочий: поиск Яндекс доступен'
-      msg.className = 'token-msg token-msg-ok'
-    }
-    showToast('Yandex token рабочий')
-  } catch (err) {
-    if (msg) {
-      msg.textContent = `Токен не прошел проверку: ${sanitizeDisplayText(normalizeInvokeError(err) || err?.message || err)}`
-      msg.className = 'token-msg token-msg-err'
-    }
-    showToast('Yandex token невалиден', true)
-  }
-}
-
 function openYandexTokenGuide() {
   openUrl(YANDEX_MUSIC_TOKEN_GUIDE_URL)
 }
@@ -2734,18 +2522,16 @@ function updateSpotifyStatus(token) {
 }
 
 function setActiveSource(src) {
-  const allowed = new Set(['hybrid', 'yandex', 'spotify', 'soundcloud', 'sc', 'audius', 'hitmo', 'hm'])
   const raw = String(src || '').toLowerCase()
-  const normalized =
+  let normalized =
     raw === 'yt' || raw === 'youtube' ? 'hybrid' :
     raw === 'sc' ? 'soundcloud' :
     raw === 'hm' ? 'hitmo' :
+    raw === 'ya' || raw === 'ym' ? 'yandex' :
     raw
-  const safe = allowed.has(normalized) ? normalized : 'hybrid'
-  saveSettingsRaw({ activeSource: safe })
+  if (!ALLOWED_ACTIVE_SOURCES.has(normalized)) normalized = 'hybrid'
+  saveSettingsRaw({ activeSource: normalized })
   searchCache.clear()
-  syncSearchSourcePills()
-  if (_activePageId === 'search') searchTracks()
 }
 
 function loadSettingsPage() {
@@ -2851,6 +2637,7 @@ async function setCustomTrackCover(input) {
     saveCustomCoverMap(map)
     _coverLoadState.clear()
     syncPlayerUIFromTrack()
+    renderQueue()
     renderPlaylists()
     renderLiked()
     renderRoomQueue()
@@ -2867,9 +2654,7 @@ async function setCustomTrackCover(input) {
 function pickCustomTrackCover(kind = 'image') {
   const input = document.getElementById('track-cover-input')
   if (!input) return
-  _lastCoverPickKind = kind === 'gif' ? 'gif' : 'image'
-  input.accept = _lastCoverPickKind === 'gif' ? '.gif,image/gif' : 'image/*'
-  syncMediaPickButtons()
+  input.accept = kind === 'gif' ? '.gif,image/gif' : 'image/*'
   input.click()
 }
 
@@ -2887,10 +2672,10 @@ function clearCustomTrackCover() {
   saveCustomCoverMap(map)
   const input = document.getElementById('track-cover-input')
   if (input) input.value = ''
-  _lastCoverPickKind = 'image'
   restoreSourceCoversInCollections()
   _coverLoadState.clear()
   syncPlayerUIFromTrack()
+  renderQueue()
   renderPlaylists()
   renderLiked()
   renderRoomQueue()
@@ -2903,10 +2688,8 @@ function refreshTrackCoverPreview(fileName = '') {
   const map = getCustomCoverMap()
   const globalCustom = getGlobalCustomCover(map)
   if (globalCustom) {
-    _lastCoverPickKind = /\.gif(?:$|[?#])/i.test(globalCustom) ? 'gif' : 'image'
     const label = fileName || 'Кастомная обложка плеера'
     setMediaPreviewBox('track-cover', globalCustom, label, true)
-    syncMediaPickButtons()
     return
   }
   if (!currentTrack) {
@@ -2914,21 +2697,8 @@ function refreshTrackCoverPreview(fileName = '') {
     return
   }
   const custom = getTrackCoverKeys(currentTrack).map((k) => map[k]).find(Boolean) || ''
-  if (custom) _lastCoverPickKind = /\.gif(?:$|[?#])/i.test(custom) ? 'gif' : 'image'
   const label = fileName || (custom ? `Текущий трек: ${currentTrack.title || 'Без названия'}` : 'Для этого трека обложка не задана')
   setMediaPreviewBox('track-cover', custom, label, true)
-  syncMediaPickButtons()
-}
-
-function syncMediaPickButtons() {
-  const bgImage = document.getElementById('bg-pick-image-btn')
-  const bgGif = document.getElementById('bg-pick-gif-btn')
-  if (bgImage) bgImage.classList.toggle('active', _lastBgPickKind === 'image')
-  if (bgGif) bgGif.classList.toggle('active', _lastBgPickKind === 'gif')
-  const coverImage = document.getElementById('cover-pick-image-btn')
-  const coverGif = document.getElementById('cover-pick-gif-btn')
-  if (coverImage) coverImage.classList.toggle('active', _lastCoverPickKind === 'image')
-  if (coverGif) coverGif.classList.toggle('active', _lastCoverPickKind === 'gif')
 }
 
 function setFlowConfigStatus(text, isError = false) {
@@ -3242,24 +3012,47 @@ function convertDotifyPresetToFlowStorage(preset) {
 }
 
 function updateSourceBadge() {
-  currentSource = normalizeStoredActiveSource(getSettings().activeSource || currentSource || 'hybrid')
-  const txt = currentSource === 'yandex' ? 'Yandex Music' : 'Spotify → SoundCloud → Audius'
+  const raw = normalizeStoredActiveSource(getSettings()?.activeSource || currentSource || 'hybrid')
+  currentSource = raw
+  let txt = 'Spotify → SoundCloud → Audius'
+  if (raw === 'yandex') txt = 'Яндекс Музыка'
+  else if (raw === 'spotify') txt = 'Spotify'
+  else if (raw === 'soundcloud') txt = 'SoundCloud'
+  else if (raw === 'audius') txt = 'Audius'
+  else if (raw === 'hitmo') txt = 'Hitmo'
   const b1 = document.getElementById('source-badge'); if (b1) b1.textContent = txt
   const b2 = document.getElementById('source-badge-search'); if (b2) b2.textContent = txt
 }
 
+function syncSearchSourceRows() {
+  const resolved = normalizeStoredActiveSource(getSettings()?.activeSource || 'hybrid')
+  const ya = resolved === 'yandex'
+  document.querySelectorAll('.source-mode-card[data-src="hybrid"], .source-mode-card[data-src="yandex"]').forEach((btn) => {
+    const ds = String(btn.getAttribute('data-src') || '')
+    btn.classList.toggle('active', (ds === 'yandex' && ya) || (ds === 'hybrid' && !ya))
+  })
+}
+
 function switchSearchSource(src) {
-  setActiveSource(src)
-  showToast(getSettings().activeSource === 'yandex' ? 'Источник: Yandex' : 'Источник: Flow classic')
+  const normalized = normalizeStoredActiveSource(src === 'yandex' ? 'yandex' : 'hybrid')
+  setActiveSource(normalized === 'yandex' ? 'yandex' : 'hybrid')
+  syncSearchSourceRows()
+  const msg =
+    normalized === 'yandex'
+      ? 'Источник: Яндекс Музыка (нужен токен в Настройках → Источники)'
+      : 'Источник: классический поиск (Spotify → SoundCloud → Audius)'
+  showToast(msg)
+  try {
+    if (typeof searchTracks === 'function' && String(document.getElementById('search-input')?.value || '').trim()) searchTracks()
+  } catch (_) {}
 }
 
 function syncSearchSourcePills() {
-  const active = normalizeStoredActiveSource(getSettings().activeSource || currentSource || 'hybrid')
-  document.querySelectorAll('.search-source-pill').forEach((p) => {
-    p.classList.toggle('active', p.getAttribute('data-src') === active)
-  })
-  document.querySelectorAll('.source-mode-card').forEach((card) => {
-    card.classList.toggle('active', card.getAttribute('data-src') === active)
+  syncSearchSourceRows()
+  document.querySelectorAll('.search-source-pill').forEach(p => {
+    const resolved = normalizeStoredActiveSource(getSettings()?.activeSource || 'hybrid')
+    const want = resolved === 'yandex' ? 'yandex' : 'hybrid'
+    p.classList.toggle('active', p.getAttribute('data-src') === want)
   })
 }
 
@@ -4085,9 +3878,6 @@ async function openPeerProfile(username, peerId = '') {
     const rsp = await _socialPeer.requestPeerData(targetPeerId, { type: 'presence-request' }, 1300).catch(() => null)
     const remoteProfile = rsp?.ok ? rsp?.data?.profile : null
     if (remoteProfile) {
-      // Presence payload can be stale/partial; keep fresher avatar/banner from cloud render.
-      if (!remoteProfile.avatarData && data?.avatarData) remoteProfile.avatarData = data.avatarData
-      if (!remoteProfile.bannerData && data?.bannerData) remoteProfile.bannerData = data.bannerData
       data = mergeProfileData(data, remoteProfile, rsp?.data?.peerId || targetPeerId || '')
       if (!Array.isArray(data._friends)) data._friends = profileFriends.slice()
       _peerProfiles.set(data.peerId, data)
@@ -4157,10 +3947,8 @@ function setMyWaveMode(mode) {
   _myWaveMode = WE?.MY_WAVE_MODES?.[mode] ? mode : 'default'
   try { localStorage.setItem('flow_my_wave_mode', _myWaveMode) } catch {}
   renderMyWave()
-  if (document.body?.classList?.contains('visual-yandex')) {
-    renderYandexWaveModes()
-    syncYandexWaveSettingsLabel()
-  }
+  renderYandexWaveModes()
+  syncYandexWaveSettingsLabel()
 }
 
 function syncYandexWaveSettingsLabel() {
@@ -4190,7 +3978,6 @@ function renderYandexWaveModes() {
 }
 
 function toggleYandexWaveModes(force) {
-  if (!document.body?.classList?.contains('visual-yandex')) return
   const pop = document.getElementById('yandex-wave-mode-pop')
   if (!pop) return
   renderYandexWaveModes()
@@ -4219,6 +4006,7 @@ async function maybePreloadMyWave(force = false) {
     if (fresh.length) {
       queue.push(...fresh)
       _myWaveRenderedTracks = queue.slice()
+      renderQueue()
       showToast(`Моя волна дозагрузила ${fresh.length} треков`)
       if (force && queueIndex >= startLength - 1 && queue[queueIndex + 1]) {
         queueIndex++
@@ -4441,7 +4229,7 @@ function resolvePeerAvatarByUsername(username = '') {
 
 /** Бейдж как на карточках треков: SoundCloud — оранжевый «SC» (совпадает с .track-source-soundcloud). */
 function profileListeningSourcePillHtml(trackHint) {
-  const LABELS = { soundcloud: 'SC', vk: 'VK', hitmo: 'HM', youtube: 'YT', spotify: 'SP', yandex: 'YA' }
+  const LABELS = { soundcloud: 'SC', vk: 'VK', hitmo: 'HM', youtube: 'YT', spotify: 'SP' }
   const src =
     trackHint && typeof trackHint.source === 'string' && LABELS[trackHint.source] ? trackHint.source : ''
   if (!src) {
@@ -6887,9 +6675,9 @@ function setupFloatedMainPaneDrag() {
     const offX = parseVar('--floated-right-pane-offset-x', 0)
     const mainShift = parseVar('--main-shift-x', 0)
     const insetEnd = parseVar('--main-inset-end', 22)
-    // Reserve left sidebar lane so the right pane cannot overlap it.
-    const minLeft = insetStart + paneStack + offX + Math.max(0, mainShift) + pad
-    const maxRight = vw - insetEnd - pad
+    /* Барьер правой панели поменян местами: резерв уходит на правый край. */
+    const minLeft = insetStart + pad
+    const maxRight = vw - insetEnd - (paneStack + offX + Math.max(0, mainShift)) - pad
     const minTop = titleH + mainPt + offY + 4
     const maxBottom = vh - (playerH + playerBottom + 6)
     for (let iter = 0; iter < 8; iter++) {
@@ -7007,6 +6795,7 @@ function setupFloatedMainPaneDrag() {
     const rawY = oy + (ev.clientY - sy)
     const c = clampDrag(rawX, rawY)
     applyDragVars(c.x, c.y)
+    persistDrag(c.x, c.y)
   }
 
   /** @param {PointerEvent} e @param {HTMLElement} captureTarget */
@@ -7051,15 +6840,6 @@ function setupFloatedMainPaneDrag() {
       (e) => onHitPointerDown(e, /** @type {HTMLElement} */ (el)),
       true,
     ),
-  )
-  paneEl?.addEventListener(
-    'pointerdown',
-    (e) => {
-      if (!(e.target instanceof Element)) return
-      if (e.target.closest('button, input, textarea, a, select, .vs-toggle, .content-corner-resize')) return
-      onHitPointerDown(e, paneEl)
-    },
-    true,
   )
 
   window.flowFloatedMainPaneDrag = {
@@ -7773,7 +7553,6 @@ function setupMainPaneShift() {
 }
 
 function setupCardTilt() {
-  if (document.body?.classList?.contains('flow-performance')) return
   const selector = '.track-card, .playlist-card, .social-friend-card, .profile-card, .home-card'
   let activeCard = null
   let rafId = 0
@@ -7849,82 +7628,7 @@ function syncHomeCloneUI() {
   prog.value = audio.duration ? (audio.currentTime / audio.duration) : 0
   const fill = (audio.duration ? (audio.currentTime / audio.duration) : 0) * 100
   prog.style.setProperty('--progress-fill', `${Math.max(0, Math.min(100, fill))}%`)
-  const homePlayBtn = document.getElementById('home-play-btn')
-  if (homePlayBtn) homePlayBtn.innerHTML = audio.paused ? ICONS.play : ICONS.pause
   renderProfileNowPlaying()
-}
-
-function syncHomeCloneProgressOnly() {
-  const cur = document.getElementById('home-clone-time-cur')
-  const tot = document.getElementById('home-clone-time-total')
-  const prog = document.getElementById('home-clone-progress')
-  if (!cur || !tot || !prog) return
-  const ratio = audio.duration ? (audio.currentTime / audio.duration) : 0
-  cur.textContent = fmtTime(audio.currentTime)
-  tot.textContent = fmtTime(audio.duration)
-  prog.value = ratio
-  prog.style.setProperty('--progress-fill', `${Math.max(0, Math.min(100, ratio * 100))}%`)
-}
-
-function updateProgressAnchor(now = performance.now()) {
-  _progressAnchorPerf = now
-  _progressAnchorAudioTime = Number(audio.currentTime || 0)
-}
-
-function paintPlaybackProgress(now = performance.now(), force = false) {
-  if (!force && now - _lastProgressPaintAt < 52) return
-  _lastProgressPaintAt = now
-  let displayTime = Number(audio.currentTime || 0)
-  if (!audio.paused && audio.duration > 0 && _progressAnchorPerf > 0) {
-    const elapsed = Math.max(0, (now - _progressAnchorPerf) / 1000)
-    const predicted = _progressAnchorAudioTime + elapsed
-    const ceiling = Math.min(Number(audio.duration || 0), displayTime + 0.45)
-    displayTime = Math.max(displayTime, Math.min(predicted, ceiling))
-  }
-  const ratio = audio.duration ? Math.max(0, Math.min(1, displayTime / audio.duration)) : 0
-  const p = document.getElementById('progress')
-  if (p) p.value = ratio
-  const pmp = document.getElementById('pm-progress')
-  if (pmp) pmp.value = ratio
-  if (force || now - _lastProgressTextPaintAt >= 120) {
-    _lastProgressTextPaintAt = now
-    const cur = fmtTime(displayTime)
-    const tot = fmtTime(audio.duration)
-    const el1 = document.getElementById('time-current'); if (el1) el1.textContent = cur
-    const el2 = document.getElementById('time-total'); if (el2) el2.textContent = tot
-    const el3 = document.getElementById('pm-time-current'); if (el3) el3.textContent = cur
-    const el4 = document.getElementById('pm-time-total'); if (el4) el4.textContent = tot
-  }
-  const homePlayBtn = document.getElementById('home-play-btn')
-  const paused = Boolean(audio.paused)
-  if (homePlayBtn && _lastPlayBtnPausedState !== paused) {
-    homePlayBtn.innerHTML = paused ? ICONS.play : ICONS.pause
-    _lastPlayBtnPausedState = paused
-  }
-  if (_activePageId === 'home') syncHomeCloneProgressOnly()
-  if (_activePageId === 'profile' && now - _lastHomeCloneProfileSyncAt >= 380) {
-    _lastHomeCloneProfileSyncAt = now
-    renderProfileNowPlaying()
-  }
-}
-
-function startSmoothProgressLoop() {
-  if (_progressRafId) return
-  const tick = (ts) => {
-    paintPlaybackProgress(ts, false)
-    if (audio.paused || audio.ended || !audio.src) {
-      _progressRafId = 0
-      return
-    }
-    _progressRafId = requestAnimationFrame(tick)
-  }
-  _progressRafId = requestAnimationFrame(tick)
-}
-
-function stopSmoothProgressLoop(forcePaint = false) {
-  if (_progressRafId) cancelAnimationFrame(_progressRafId)
-  _progressRafId = 0
-  if (forcePaint) paintPlaybackProgress(performance.now(), true)
 }
 
 function alignHomeHeaderToPlay() {
@@ -8560,54 +8264,26 @@ function toggleHomeLayoutEdit() {
 function drawHomeVisualizerFrame() {
   const canvas = document.getElementById('home-visualizer-canvas')
   if (!canvas) return
-  if (_homeVizCanvasEl !== canvas) {
-    _homeVizCanvasEl = canvas
-    _homeVizCtx2d = canvas.getContext('2d')
-  }
-  const ctx = _homeVizCtx2d
+  const ctx = canvas.getContext('2d')
   if (!ctx) return
-  if (!_homeVizEnabled || _homeVizMode === 'image') return
+  const v = getVisual()
+  const hw = Object.assign({ enabled: true, mode: 'bars' }, v.homeWidget || {})
+  if (!hw.enabled || hw.mode === 'image') return
   const w = canvas.width
   const h = canvas.height
   ctx.clearRect(0, 0, w, h)
   const canAnalyze = ensureAudioAnalyzer() && !audio.paused && !audio.ended
-  const now = performance.now()
-  if (canAnalyze) {
-    _analyser.getByteFrequencyData(_freqData)
-    if (now - _vizLastEnergySampleAt >= 48) {
-      _vizLastEnergySampleAt = now
-      if (!_vizTimeData || _vizTimeData.length !== _analyser.fftSize) {
-        _vizTimeData = new Uint8Array(_analyser.fftSize)
-      }
-      _analyser.getByteTimeDomainData(_vizTimeData)
-    }
-  }
-  const data = _freqData || _vizFallbackData
-  if (!_vizSmoothData || _vizSmoothData.length !== data.length) _vizSmoothData = new Float32Array(data.length)
-  let energy = 0
-  if (canAnalyze && _vizTimeData) {
-    for (let i = 0; i < _vizTimeData.length; i++) {
-      const n = (_vizTimeData[i] - 128) / 128
-      energy += n * n
-    }
-    energy = Math.sqrt(energy / _vizTimeData.length)
-  }
-  _vizEnergySmooth += (energy - _vizEnergySmooth) * (canAnalyze ? 0.45 : 0.12)
-  const amp = canAnalyze ? Math.max(0.65, Math.min(1.85, 0.85 + _vizEnergySmooth * 6.4)) : 0.55
-  const smoothK = canAnalyze ? 0.46 : 0.16
-  for (let i = 0; i < data.length; i++) {
-    _vizSmoothData[i] += (data[i] * amp - _vizSmoothData[i]) * smoothK
-  }
-  const viz = _vizSmoothData
-  const baseColor = getVisual().accent2 || '#9ca3af'
+  if (canAnalyze) _analyser.getByteFrequencyData(_freqData)
+  const data = _freqData || new Uint8Array(128)
+  const baseColor = v.accent2 || '#9ca3af'
   ctx.strokeStyle = baseColor
   ctx.fillStyle = baseColor
   ctx.globalAlpha = 0.9
-  if (_homeVizMode === 'wave') {
+  if (hw.mode === 'wave') {
     ctx.beginPath()
-    const step = Math.max(1, Math.floor(viz.length / 52))
+    const step = Math.max(1, Math.floor(data.length / 52))
     for (let i = 0; i < 52; i++) {
-      const val = viz[i * step] || 0
+      const val = data[i * step] || 0
       const y = h - (val / 255) * (h - 18) - 9
       const x = (i / 51) * w
       if (i === 0) ctx.moveTo(x, y)
@@ -8617,11 +8293,11 @@ function drawHomeVisualizerFrame() {
     ctx.stroke()
     return
   }
-  if (_homeVizMode === 'dots') {
+  if (hw.mode === 'dots') {
     const cols = 44
-    const step = Math.max(1, Math.floor(viz.length / cols))
+    const step = Math.max(1, Math.floor(data.length / cols))
     for (let i = 0; i < cols; i++) {
-      const val = viz[i * step] || 0
+      const val = data[i * step] || 0
       const dots = Math.max(2, Math.round((val / 255) * 8))
       const x = 10 + (i / cols) * (w - 20)
       for (let d = 0; d < dots; d++) {
@@ -8633,11 +8309,11 @@ function drawHomeVisualizerFrame() {
     }
     return
   }
-  const bars = 44
-  const step = Math.max(1, Math.floor(viz.length / bars))
+  const bars = 56
+  const step = Math.max(1, Math.floor(data.length / bars))
   const bw = (w - 20) / bars
   for (let i = 0; i < bars; i++) {
-    const val = viz[i * step] || 0
+    const val = data[i * step] || 0
     const bh = 8 + (val / 255) * (h - 24)
     const x = 10 + i * bw
     const y = h - bh - 6
@@ -8646,7 +8322,8 @@ function drawHomeVisualizerFrame() {
 }
 
 function startHomeVisualizerLoop() {
-  const tick = (ts) => {
+  let vizFrame = 0
+  const tick = () => {
     if (document.hidden) {
       setTimeout(() => requestAnimationFrame(tick), 750)
       return
@@ -8657,12 +8334,18 @@ function startHomeVisualizerLoop() {
         setTimeout(() => requestAnimationFrame(tick), 350)
         return
       }
-      if (audio.paused) {
-        setTimeout(() => requestAnimationFrame(tick), 120)
-        return
-      }
-      if (ts - _vizLastFrameAt >= HOME_VIZ_ACTIVE_FRAME_MS) {
-        _vizLastFrameAt = ts
+      const playing = (() => {
+        try {
+          return audio && !audio.paused && !audio.ended
+        } catch (_) {
+          return false
+        }
+      })()
+      if (playing) {
+        vizFrame++
+        if (vizFrame % 2 === 0) drawHomeVisualizerFrame()
+      } else {
+        vizFrame = 0
         drawHomeVisualizerFrame()
       }
       requestAnimationFrame(tick)
@@ -8812,10 +8495,9 @@ async function playTrackObj(track, opts = {}) {
       return false
     }
   }
-  // Spotify/Yandex playback fallback through SoundCloud/Audius first.
-  if ((track.source === 'spotify' || track.source === 'yandex') && !track.url) {
-    const srcName = track.source === 'yandex' ? 'Yandex' : 'Spotify'
-    showToast(`\uD83C\uDFB5 ${srcName}: ищу в SoundCloud/Audius...`)
+  // Spotify playback fallback through SoundCloud/Audius first.
+  if (track.source === 'spotify' && !track.url) {
+    showToast('\uD83C\uDFB5 Ищу в SoundCloud/Audius...')
     try {
       const query = `${track.title} ${track.artist}`.trim()
       if (isStale()) return
@@ -8838,10 +8520,10 @@ async function playTrackObj(track, opts = {}) {
           cover: getEffectiveCoverUrl(track) || track.cover || audResults[0].cover
         }))
       }
-      showToast(`${srcName}: не найдено в SoundCloud/Audius`, true)
+      showToast('Spotify: не найдено в SoundCloud/Audius', true)
       return
     } catch (e) {
-      showToast(`${srcName}: ` + e.message, true)
+      showToast('Spotify: ' + e.message, true)
       return
     }
   }
@@ -8861,6 +8543,28 @@ async function playTrackObj(track, opts = {}) {
   const setStage = (text) => { if (artistEl) artistEl.textContent = text }
   setStage('Загрузка…')
   if (playBtn) playBtn.innerHTML = '<svg class="ui-icon spin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9"/><path d="M12 7v5l3 2"/></svg>'
+
+  if (String(track.source || '').toLowerCase() === 'yandex' && !/^https?:\/\//i.test(String(streamUrl || '')) && track.id && window.api?.yandexStream) {
+    const ymTok = String(getSettings()?.yandexToken || '').trim()
+    if (!ymTok) {
+      showToast('Яндекс: укажи токен в настройках', true)
+      if (playBtn) playBtn.innerHTML = ICONS.play
+      setStage('Яндекс: нужен токен')
+      return
+    }
+    setStage('Яндекс: получаю поток…')
+    const ymRes = await window.api.yandexStream(String(track.id), ymTok).catch((e) => ({ ok: false, error: e?.message || String(e) }))
+    if (isStale()) return
+    if (!ymRes?.ok || !ymRes.url) {
+      showToast('Яндекс: ' + (ymRes?.error || 'не удалось получить поток'), true)
+      if (playBtn) playBtn.innerHTML = ICONS.play
+      setStage('Яндекс: ошибка')
+      return
+    }
+    track = Object.assign({}, track, { url: ymRes.url })
+    streamUrl = track.url
+    currentTrack = track
+  }
 
   // SoundCloud transcoding URL -> direct stream URL
   if (track.source === 'soundcloud' && track.scTranscoding && window.api?.scStream) {
@@ -8939,14 +8643,8 @@ async function playTrackObj(track, opts = {}) {
   const streamCacheKey = getStreamCacheKey(track)
   let remoteUrlForCache = streamUrl
   let finalUrl = streamUrl
-  const canTryProxyAlternate =
-    track.source !== 'youtube' &&
-    window.api?.proxySetUrl &&
-    /^https?:\/\//i.test(streamUrl) &&
-    streamEngine !== 'yt-dlp'
 
   if (
-    !FLOW_FAST_START_STREAMS &&
     streamCacheKey &&
     window.api?.streamCacheLookup &&
     track.source !== 'youtube' &&
@@ -8978,7 +8676,7 @@ async function playTrackObj(track, opts = {}) {
     console.log('PLAY URL:', finalUrl)
 
     // Quick probe: helps decide if URL is dead/403 before we even try audio.
-    if (track.source === 'youtube' && window.api?.probeStreamUrl && /^https?:\/\//i.test(streamUrl) && streamEngine !== 'yt-dlp') {
+    if (window.api?.probeStreamUrl && /^https?:\/\//i.test(streamUrl) && streamEngine !== 'yt-dlp') {
       try {
         setStage('Проверка потока…')
         const p = await withTimeout(window.api.probeStreamUrl(streamUrl), 9000, 'probe timeout').catch(() => null)
@@ -9013,7 +8711,7 @@ async function playTrackObj(track, opts = {}) {
     console.log('PLAY URL (offline cache):', finalUrl)
   }
 
-  const waitForPlaybackProgress = (ms = 3500) => new Promise((resolve) => {
+  const waitForPlaybackProgress = (ms = 10000) => new Promise((resolve) => {
     const startedAt = audio.currentTime || 0
     const finish = (ok) => {
       clearTimeout(t)
@@ -9049,7 +8747,7 @@ async function playTrackObj(track, opts = {}) {
     audio.src = url
     await audio.play()
     // If nothing starts within ~5s, treat it as a dead stream and switch strategy.
-    return waitForPlaybackProgress(2200)
+    return waitForPlaybackProgress(5200)
   }
 
   let started = false
@@ -9098,21 +8796,6 @@ async function playTrackObj(track, opts = {}) {
           return
         }
       }
-    } else if (canTryProxyAlternate) {
-      try {
-        const alternateUrl = finalUrl === streamUrl
-          ? await window.api.proxySetUrl(streamUrl)
-          : streamUrl
-        if (!alternateUrl || alternateUrl === finalUrl) throw new Error('alternate stream unavailable')
-        started = await tryStartPlayback(alternateUrl)
-        if (!started) throw new Error('alternate playback timeout')
-        finalUrl = alternateUrl
-      } catch (e2) {
-        if (String(e2?.message || '').includes('stale playback request')) return
-        showToast('Ошибка воспроизведения: ' + (e2?.message || e?.message || 'unknown'), true)
-        if (playBtn) playBtn.innerHTML = ICONS.play
-        return
-      }
     } else {
       showToast('Ошибка воспроизведения: ' + (e?.message || 'unknown'), true)
       if (playBtn) playBtn.innerHTML = ICONS.play
@@ -9141,8 +8824,6 @@ async function playTrackObj(track, opts = {}) {
   if (playBtn) playBtn.innerHTML = ICONS.pause
   const pmIcon = document.getElementById('pm-play-icon')
   if (pmIcon) pmIcon.innerHTML = PM_PAUSE_INNER
-  paintPlaybackProgress(performance.now(), true)
-  startSmoothProgressLoop()
   updatePlayerLikeBtn()
   // РћР±РЅРѕРІР»СЏРµРј titlebar
   const tinfo = document.getElementById('titlebar-track-info')
@@ -9196,14 +8877,11 @@ function togglePlay() {
     if (playBtn) playBtn.innerHTML = ICONS.pause
     const icon = document.getElementById('pm-play-icon')
     if (icon) icon.innerHTML = PM_PAUSE_INNER
-    paintPlaybackProgress(performance.now(), true)
-    startSmoothProgressLoop()
   } else {
     audio.pause()
     if (playBtn) playBtn.innerHTML = ICONS.play
     const icon = document.getElementById('pm-play-icon')
     if (icon) icon.innerHTML = PM_PLAY_INNER
-    stopSmoothProgressLoop(true)
   }
   if (isRoomParticipant) {
     _socialPeer?.send?.({
@@ -9323,12 +9001,25 @@ function nextTrack(autoEnded = false) {
 }
 
 audio.ontimeupdate = () => {
-  updateProgressAnchor(performance.now())
-  const shouldSyncUi = (performance.now() - _lastUiSyncAt) >= 260
+  // Keep general UI updates lightweight, but make lyrics sync feel tighter.
+  const shouldSyncUi = (performance.now() - _lastUiSyncAt) >= 90
   if (_lyricsOpen && _lyricsData.length) syncLyrics(getLyricsSmoothedTime())
   if (shouldSyncUi) {
     _lastUiSyncAt = performance.now()
-    paintPlaybackProgress(performance.now(), true)
+    const p = document.getElementById('progress')
+    if (p && audio.duration) p.value = audio.currentTime / audio.duration
+
+    const pmp = document.getElementById('pm-progress')
+    if (pmp && audio.duration) pmp.value = audio.currentTime / audio.duration
+
+    const cur = fmtTime(audio.currentTime)
+    const tot = fmtTime(audio.duration)
+    const el1 = document.getElementById('time-current'); if (el1) el1.textContent = cur
+    const el2 = document.getElementById('time-total');   if (el2) el2.textContent = tot
+    const el3 = document.getElementById('pm-time-current'); if (el3) el3.textContent = cur
+    const el4 = document.getElementById('pm-time-total');   if (el4) el4.textContent = tot
+
+    syncHomeCloneUI()
   }
   if (queueScope === 'myWave' && !audio.paused && queue.length - queueIndex - 1 <= 3) maybePreloadMyWave(false)
   broadcastPlaybackSync(false)
@@ -9338,43 +9029,13 @@ audio.ontimeupdate = () => {
   const delta = Math.max(0, now - _listenTickAt) / 1000
   _listenTickAt = now
   if (delta > 0 && delta < 4) {
-    _listenSecondsAccum += delta
-    if (!_listenLastFlushAt) _listenLastFlushAt = now
-    if (_listenSecondsAccum >= 4 || now - _listenLastFlushAt >= 5500) {
-      const st = getListenStats()
-      saveListenStats({ totalSeconds: Number(st.totalSeconds || 0) + _listenSecondsAccum })
-      _listenSecondsAccum = 0
-      _listenLastFlushAt = now
-    }
-  }
-}
-audio.onplay = () => {
-  updateProgressAnchor(performance.now())
-  paintPlaybackProgress(performance.now(), true)
-  startSmoothProgressLoop()
-}
-audio.onpause = () => {
-  if (_listenSecondsAccum > 0 && _profile?.username) {
     const st = getListenStats()
-    saveListenStats({ totalSeconds: Number(st.totalSeconds || 0) + _listenSecondsAccum })
-    _listenSecondsAccum = 0
+    saveListenStats({ totalSeconds: Number(st.totalSeconds || 0) + delta })
   }
-  stopSmoothProgressLoop(true)
-}
-audio.onseeked = () => {
-  updateProgressAnchor(performance.now())
-  paintPlaybackProgress(performance.now(), true)
 }
 audio.onended = () => {
-  if (_listenSecondsAccum > 0 && _profile?.username) {
-    const st = getListenStats()
-    saveListenStats({ totalSeconds: Number(st.totalSeconds || 0) + _listenSecondsAccum })
-    _listenSecondsAccum = 0
-  }
-  stopSmoothProgressLoop(true)
   stopLyricsSyncLoop()
   _listenTickAt = 0
-  _listenLastFlushAt = 0
   const playBtn = document.getElementById('play-btn')
   if (playBtn) playBtn.innerHTML = ICONS.play
   if (currentTrack) scrobbleLastFm(currentTrack)
@@ -9425,13 +9086,12 @@ async function searchHybridTracks(q, settings) {
   throw new Error('Серверный поиск недоступен в этой версии приложения')
 }
 
-async function searchYandexTracks(q, settings = getSettings()) {
-  const token = String(settings?.yandexToken || '').trim()
-  if (!token) throw new Error('Yandex token required')
-  if (!window.api?.yandexSearch) throw new Error('Yandex поиск доступен только в Electron приложении')
-  const result = await window.api.yandexSearch(q, token)
-  if (!Array.isArray(result)) throw new Error('Yandex: некорректный ответ')
-  return sanitizeTrackList(result)
+function searchLoadingPlaceholderLine(settings = getSettings()) {
+  const src = String(settings?.activeSource || currentSource || 'hybrid').toLowerCase()
+  if (src === 'yandex' || src === 'ya' || src === 'ym') return 'Поиск: Яндекс Музыка...'
+  if (src === 'hitmo' || src === 'hm') return 'Поиск: HitMo...'
+  if (src === 'youtube' || src === 'yt') return 'Поиск: YouTube...'
+  return 'Поиск: Spotify → SoundCloud → Audius...'
 }
 
 function searchTracks(queryOverride = '') {
@@ -9443,8 +9103,7 @@ function searchTracks(queryOverride = '') {
   const container = document.getElementById('search-results')
   if (!q) { container.innerHTML = ''; return }
 
-  const src = normalizeStoredActiveSource(getSettings().activeSource || currentSource || 'hybrid')
-  container.innerHTML = `<div class="search-loading"><div class="spinner"></div><span>${src === 'yandex' ? 'Поиск: Yandex Music...' : 'Поиск: Spotify → SoundCloud → Audius...'}</span></div>`
+  container.innerHTML = `<div class="search-loading"><div class="spinner"></div><span>${searchLoadingPlaceholderLine()}</span></div>`
 
   searchDebounceTimer = setTimeout(async () => {
     const s = getSettings()
@@ -9457,15 +9116,43 @@ function searchTracks(queryOverride = '') {
     }
 
     try {
+      const src = String(s.activeSource || currentSource || 'hybrid').toLowerCase()
       let results = []
-      if (src === 'yandex') {
-        results = await searchYandexTracks(q, s)
-        _lastSearchMode = 'yandex'
+      let mode = 'hybrid'
+      if (src === 'hitmo' || src === 'hm') {
+        results = sanitizeTrackList(await searchHitmo(q))
+        mode = 'hitmo'
+      } else if (src === 'youtube' || src === 'yt') {
+        if (!window.api?.youtubeSearch) throw new Error('YouTube поиск доступен только в Electron')
+        const ytList = await window.api.youtubeSearch(q)
+        if (!Array.isArray(ytList)) throw new Error('YouTube: некорректный ответ')
+        results = sanitizeTrackList(ytList.map((t) => ({
+          title: t?.title || 'Без названия',
+          artist: t?.artist || 'YouTube',
+          ytId: t?.ytId || t?.id || '',
+          url: t?.url || null,
+          cover: t?.cover || null,
+          bg: t?.bg || 'linear-gradient(135deg,#ff0000,#cc0000)',
+          source: 'youtube',
+          id: String(t?.id || t?.ytId || `${t?.title || ''}:${t?.artist || ''}`)
+        }))).filter((t) => t.ytId)
+        mode = 'youtube'
+      } else if (src === 'yandex' || src === 'ya' || src === 'ym') {
+        const token = String(s.yandexToken || '').trim()
+        if (!token) throw new Error('Яндекс: укажи токен Музыки в настройках')
+        if (!window.api?.yandexSearch) throw new Error('Яндекс поиск недоступен в этой сборке')
+        const ymList = await withTimeout(window.api.yandexSearch(q, token), 22000, 'yandex search timeout').catch((e) => {
+          throw new Error(normalizeInvokeError(e) || 'таймаут поиска')
+        })
+        if (!Array.isArray(ymList)) throw new Error('Яндекс: некорректный ответ')
+        results = sanitizeTrackList(ymList)
+        mode = 'yandex'
       } else {
         const hybrid = await searchHybridTracks(q, s)
         results = sanitizeTrackList(hybrid.tracks || [])
-        _lastSearchMode = hybrid.mode || 'hybrid'
+        mode = hybrid.mode || 'hybrid'
       }
+      _lastSearchMode = mode
       cacheSet(key, { mode: _lastSearchMode, tracks: results })
       renderResults(results)
     } catch (err) {
@@ -9479,8 +9166,18 @@ async function searchTracksDirect(query, settings = getSettings()) {
   const q = String(query || '').trim()
   if (!q) return []
   const src = String(settings?.activeSource || currentSource || 'hybrid').toLowerCase()
-  if (src === 'yandex') return await searchYandexTracks(q, settings)
   if (src === 'hitmo' || src === 'hm') return sanitizeTrackList(await searchHitmo(q))
+  if (src === 'yandex' || src === 'ya' || src === 'ym') {
+    const token = String(settings?.yandexToken || '').trim()
+    if (!token) throw new Error('Яндекс: укажи токен Музыки в настройках')
+    if (!window.api?.yandexSearch) throw new Error('Яндекс поиск недоступен в этой сборке')
+    const ymList = await withTimeout(window.api.yandexSearch(q, token), 22000, 'yandex search timeout').catch((e) => {
+      throw new Error(normalizeInvokeError(e) || 'таймаут поиска')
+    })
+    if (!Array.isArray(ymList)) throw new Error('Яндекс: некорректный ответ')
+    _lastSearchMode = 'yandex'
+    return sanitizeTrackList(ymList)
+  }
   if (src === 'youtube' || src === 'yt') {
     if (!window.api?.youtubeSearch) throw new Error('YouTube поиск доступен только в Electron')
     const result = await window.api.youtubeSearch(q)
@@ -9523,11 +9220,12 @@ function renderResults(results) {
 }
 
 function getSourceLabel() {
-  if (_lastSearchMode === 'yandex') return 'Yandex'
   if (_lastSearchMode === 'spotify') return 'Spotify'
   if (_lastSearchMode === 'soundcloud') return 'SoundCloud'
   if (_lastSearchMode === 'audius') return 'Audius'
   if (_lastSearchMode === 'youtube') return 'YouTube'
+  if (_lastSearchMode === 'yandex') return 'Яндекс Музыка'
+  if (_lastSearchMode === 'hitmo') return 'HitMo'
   return 'Spotify → SoundCloud → Audius'
 }
 
@@ -9927,12 +9625,12 @@ function openPlaylist(idx) {
   openPlaylistIndex = idx
   const pl = normalizePlaylist(getPlaylists()[idx])
   if (!pl) return
+  const playlistCover = sanitizeMediaByGifMode(pl.coverData || '', 'playlist')
   document.getElementById('playlist-view-name').textContent = pl.name
   const metaEl = document.getElementById('playlist-view-meta')
   if (metaEl) metaEl.textContent = pl.description || `${pl.tracks.length} треков`
   const coverEl = document.getElementById('playlist-view-cover')
   if (coverEl) {
-    const playlistCover = sanitizeMediaByGifMode(pl.coverData || '', 'playlist')
     coverEl.style.backgroundImage = playlistCover ? `url(${playlistCover})` : ''
     coverEl.innerHTML = playlistCover ? '' : '<svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'
   }
@@ -10282,7 +9980,7 @@ async function importPlaylistFromLink(urlFromUi = '') {
     return
   }
   const settings = getSettings()
-  const isYandexLink = /(^|\/\/)(music\.)?yandex\.[^/]+/i.test(url)
+  const isYandexLink = /(^|\/\/)(music\.)?yandex\.[^/]+\/users\/[^/]+\/playlists\/[^/?#]+/i.test(url)
   if (isYandexLink && !settings.yandexToken) {
     showToast('Для импорта Яндекс Музыки нужен активный OAuth token', true)
     openPage('settings')
@@ -10570,7 +10268,7 @@ function editPlaylistMeta(idx) {
 }
 
 // в”Ђв”Ђв”Ђ TRACK CARD в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-const SRC_LABELS = { soundcloud:'SC', vk:'VK', hitmo:'HM', youtube:'YT', spotify:'SP', yandex:'YA' }
+const SRC_LABELS = { soundcloud:'SC', vk:'VK', hitmo:'HM', youtube:'YT', spotify:'SP' }
 
 function makeTrackEl(track, showPlaylist=false, bindDefaultPlay=true) {
   track = sanitizeTrack(track)
@@ -10905,12 +10603,7 @@ async function loadLyrics(track) {
     if (pmContainer) pmContainer.innerHTML = '<div class="lyrics-empty">Текст доступен только в Electron</div>'
     return
   }
-  const yandexToken = String(getSettings().yandexToken || '').trim()
-  const res = await window.api.getLyrics(track.title, track.artist || '', audio.duration || 0, {
-    source: String(track?.source || ''),
-    trackId: String(track?.id || track?.spotifyId || ''),
-    yandexToken,
-  })
+  const res = await window.api.getLyrics(track.title, track.artist || '', audio.duration || 0)
   if (!res.ok) {
     if (container) container.innerHTML = '<div class="lyrics-empty">Текст не найден</div>'
     if (pmContainer) pmContainer.innerHTML = '<div class="lyrics-empty">Текст не найден</div>'
@@ -11112,7 +10805,6 @@ window.addEventListener('DOMContentLoaded', () => {
   try {
     syncFlowLayoutCoords()
   } catch (_) {}
-  document.body.classList.add('flow-performance')
   setupCardTilt()
   const savedSlider = Number(localStorage.getItem('flow_volume_slider') || '0.8')
   setVolume(Number.isFinite(savedSlider) ? savedSlider : 0.8)
