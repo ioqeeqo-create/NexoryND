@@ -1,4 +1,4 @@
-﻿const { audioPlayer = {}, smartCleaning = {}, dragDrop = {}, peerSocial = {}, waveEngine: WE } = window.FlowModules || {}
+const { audioPlayer = {}, smartCleaning = {}, dragDrop = {}, peerSocial = {}, waveEngine: WE } = window.FlowModules || {}
 const audio = (audioPlayer.createPlayerAudio || ((onErr) => {
   const el = new Audio()
   el.volume = 0.8
@@ -30,6 +30,32 @@ let _lastSearchMode = 'hybrid'
 let _playRequestSeq = 0
 const _ytPrewarmAt = new Map()
 const _coverLoadState = new Map()
+const _coverAccentCache = new Map()
+const _coverAccentPending = new Set()
+const _vizFallbackData = new Uint8Array(128)
+let _vizSmoothData = null
+let _vizTimeData = null
+let _vizEnergySmooth = 0
+let _vizLastFrameAt = 0
+let _vizLastEnergySampleAt = 0
+let _homeVizCanvasEl = null
+let _homeVizCtx2d = null
+const HOME_VIZ_ACTIVE_FRAME_MS = 9
+let _homeVizMode = 'bars'
+let _homeVizEnabled = true
+const FLOW_FAST_START_STREAMS = true
+let _progressRafId = 0
+let _lastProgressPaintAt = 0
+let _lastHomeCloneProfileSyncAt = 0
+let _progressAnchorPerf = 0
+let _progressAnchorAudioTime = 0
+let _visualSettingsReflowTimer = 0
+let _lastBgPickKind = 'image'
+let _lastCoverPickKind = 'image'
+let _lastPlayBtnPausedState = null
+let _lastProgressTextPaintAt = 0
+let _listenSecondsAccum = 0
+let _listenLastFlushAt = 0
 
 const defaultPlayback = { shuffle: false, repeat: 'off' } // repeat: off | all | one
 let playbackMode = (() => {
@@ -181,6 +207,14 @@ function withImageCacheBust(url) {
   if (!src || /^data:/i.test(src) || /^blob:/i.test(src)) return src
   const sep = src.includes('?') ? '&' : '?'
   return `${src}${sep}t=${Date.now()}`
+}
+
+function escapeHtml(text) {
+  return String(text ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
 }
 
 function cachePeerProfile(profile, peerId = '') {
@@ -402,7 +436,7 @@ const defaultVisual = {
   accent: '#4b5563', accent2: '#9ca3af',
   orb1Color: '#4b5563',
   orb2Color: '#9ca3af',
-  visualMode: 'minimal',   // 'minimal' | 'floated'
+  visualMode: 'minimal',   // 'minimal' | 'floated' | 'yandex'
   fontMode: 'default',
   customFontName: null,
   customFontData: null,
@@ -411,18 +445,39 @@ const defaultVisual = {
   customBg: null,
   homeSliderStyle: 'line',
   homeWidget: { enabled: true, mode: 'bars', image: null },
-  effects: { orbs: false, glow: true, dyncolor: false, accentFromCover: false },
+  effects: { orbs: true, glow: true, dyncolor: true, accentFromCover: true },
   navActiveHighlight: false,
   sidebarPosition: 'left',
   cardDensity: 'comfort',
   toastPosition: 'default',
   gifMode: { bg: true, track: true, playlist: true },
-  lyrics: { scrollMode: 'smooth', align: 'left', size: 16, blur: 4 }
+  lyrics: { scrollMode: 'smooth', align: 'left', size: 16, blur: 4 },
+}
+
+/** Кэш parse localStorage — getVisual() вызывается очень часто (в т.ч. каждый кадр домашнего визуализатора). */
+let _flowVisualMemo = null
+let _flowVisualMemoAt = 0
+const FLOW_FONT_LIBRARY_LS = 'flow_font_library'
+
+function normalizeGifMode(raw) {
+  const mode = Object.assign({ bg: true, track: true, playlist: true }, raw || {})
+  mode.bg = true
+  mode.track = true
+  mode.playlist = true
+  return mode
 }
 
 function getVisual() {
   try {
-    const rawStr = localStorage.getItem('flow_visual') || '{}'
+    const now = Date.now()
+    if (_flowVisualMemo && now - _flowVisualMemoAt < 1200) {
+      return Object.assign({}, _flowVisualMemo.out)
+    }
+    let rawStr = localStorage.getItem('flow_visual') || '{}'
+    if (_flowVisualMemo && _flowVisualMemo.s === rawStr) {
+      _flowVisualMemoAt = now
+      return Object.assign({}, _flowVisualMemo.out)
+    }
     let raw = {}
     try { raw = JSON.parse(rawStr) } catch (_) { raw = {} }
     if (raw.visualMode === 'premium') {
@@ -430,16 +485,27 @@ function getVisual() {
       try {
         localStorage.setItem('flow_visual', JSON.stringify(raw))
       } catch (_) {}
+      rawStr = localStorage.getItem('flow_visual') || '{}'
+      try { raw = JSON.parse(rawStr) } catch (_) { raw = {} }
     }
-    return Object.assign({}, defaultVisual, raw)
+    const out = Object.assign({}, defaultVisual, raw)
+    out.effects = Object.assign({}, defaultVisual.effects, raw.effects || {})
+    out.gifMode = normalizeGifMode(raw.gifMode || {})
+    _flowVisualMemo = { s: rawStr, out }
+    _flowVisualMemoAt = now
+    return Object.assign({}, out)
   } catch {
     return { ...defaultVisual }
   }
 }
 
 function saveVisual(patch) {
+  _flowVisualMemo = null
+  _flowVisualMemoAt = 0
   const v = getVisual()
   const updated = Object.assign(v, patch)
+  updated.effects = Object.assign({}, defaultVisual.effects, updated.effects || {})
+  updated.gifMode = normalizeGifMode(updated.gifMode || {})
   localStorage.setItem('flow_visual', JSON.stringify(updated))
   return updated
 }
@@ -473,6 +539,45 @@ function toggleSettingsFold(id) {
   if (btn) btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true')
 }
 
+function getFontLibrary() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(FLOW_FONT_LIBRARY_LS) || '[]')
+    if (!Array.isArray(raw)) return []
+    return raw.filter((x) => x && typeof x === 'object' && x.data && x.name).slice(0, 18)
+  } catch {
+    return []
+  }
+}
+
+function saveFontLibrary(list) {
+  try { localStorage.setItem(FLOW_FONT_LIBRARY_LS, JSON.stringify(Array.isArray(list) ? list : [])) } catch {}
+}
+
+function putFontToLibrary(name, data) {
+  const next = [{ name, data }, ...getFontLibrary().filter((x) => x.data !== data && x.name !== name)]
+  saveFontLibrary(next.slice(0, 18))
+}
+
+function renderFontLibrary() {
+  const host = document.getElementById('font-library-list')
+  if (!host) return
+  const v = getVisual()
+  const activeData = String(v.customFontData || '')
+  const list = getFontLibrary()
+  let styleEl = document.getElementById('font-library-style')
+  if (!styleEl) {
+    styleEl = document.createElement('style')
+    styleEl.id = 'font-library-style'
+    document.head.appendChild(styleEl)
+  }
+  styleEl.textContent = list.map((entry, idx) => `@font-face{font-family:"FlowLibFont${idx}";src:url("${entry.data}");font-display:swap;}`).join('\n')
+  host.innerHTML = list.map((entry, idx) => {
+    const isActive = activeData && activeData === entry.data
+    const safeName = sanitizeDisplayText(entry.name || `Font ${idx + 1}`)
+    return `<button type="button" class="vs-font-card${isActive ? ' active' : ''}" onclick="selectCustomFontFromLibrary(${idx})"><span class="sample" style="font-family:'FlowLibFont${idx}', var(--font-ui)">Aa123</span><span class="name">${safeName}</span></button>`
+  }).join('')
+}
+
 function syncFontControls() {
   const v = getVisual()
   const mode = v.fontMode === 'custom' ? 'custom' : 'default'
@@ -487,6 +592,7 @@ function syncFontControls() {
     if (mode === 'custom' && v.customFontName) status.textContent = `Свой шрифт: ${v.customFontName}`
     else status.textContent = 'Используется системный шрифт'
   }
+  renderFontLibrary()
 }
 
 function applyFontSettings(silent = true) {
@@ -552,11 +658,20 @@ function setCustomFont(input) {
     const data = e.target?.result || null
     if (!data) return
     _customFontLoadedKey = ''
+    putFontToLibrary(file.name || 'Custom Font', data)
     saveVisual({ customFontData: data, customFontName: file.name, fontMode: 'custom' })
     applyFontSettings(false)
     input.value = ''
   }
   reader.readAsDataURL(file)
+}
+
+function selectCustomFontFromLibrary(index) {
+  const entry = getFontLibrary()[Number(index) || 0]
+  if (!entry) return
+  _customFontLoadedKey = ''
+  saveVisual({ customFontData: entry.data, customFontName: entry.name || 'Custom Font', fontMode: 'custom' })
+  applyFontSettings(false)
 }
 
 function clearCustomFont() {
@@ -573,25 +688,150 @@ function toggleCustomFontTitle() {
 
 function normalizeVisualThemeMode(mode) {
   const m = String(mode || '')
+  if (m === 'yandex') return 'yandex'
   if (m === 'premium' || m === 'floated') return 'floated'
   return 'minimal'
 }
 
+/** Свободная геометрия блоков главной и конструктор — только в теме UI «Минимал» (floated). */
+function isVisualFloatedLayout() {
+  return normalizeVisualThemeMode(getVisual().visualMode) === 'floated'
+}
+
 function applyVisualMode(mode) {
   const safe = normalizeVisualThemeMode(mode)
-  document.body.classList.remove('visual-minimal', 'visual-premium', 'visual-floated')
-  document.body.classList.add(safe === 'floated' ? 'visual-floated' : 'visual-minimal')
+  document.body.classList.remove('visual-minimal', 'visual-premium', 'visual-floated', 'visual-yandex', 'visual-brand')
+  if (safe === 'floated') {
+    document.body.classList.add('visual-floated')
+  } else if (safe === 'yandex') {
+    document.body.classList.add('visual-yandex')
+  } else {
+    document.body.classList.add('visual-minimal')
+  }
   const minimalBtn = document.getElementById('vm-minimal')
   const floatedBtn = document.getElementById('vm-floated')
+  const yandexBtn = document.getElementById('vm-yandex')
   if (minimalBtn) minimalBtn.classList.toggle('active', safe === 'minimal')
   if (floatedBtn) floatedBtn.classList.toggle('active', safe === 'floated')
+  if (yandexBtn) yandexBtn.classList.toggle('active', safe === 'yandex')
+  if (safe === 'yandex') {
+    _lastYandexThemeCover = ''
+    _lastYandexThemeFallback = ''
+    updateYandexPlayerTheme(currentTrack)
+  }
+}
+
+function syncHomeLayoutConstructorUi() {
+  const wrap = document.getElementById('sidebar-layout-constructor')
+  if (wrap) wrap.style.display = isVisualFloatedLayout() ? '' : 'none'
+}
+
+/** После смены темы UI: статичная главная в минимализме или восстановление макета в минимале. */
+function syncDashboardLayoutToVisualMode() {
+  syncHomeLayoutConstructorUi()
+  if (!isVisualFloatedLayout()) {
+    try {
+      window.flowMainPaneResize?.clearDom?.()
+    } catch (_) {}
+    document.body.classList.remove('home-layout-edit', 'flow-edit-enabled')
+    syncHomeLayoutEditButton()
+    teardownHomeDashboardDrag(true)
+    try {
+      _teardownSidebarPanelDrag()
+    } catch (_) {}
+    applyStaticHomeDashboardOrder()
+    applyHomeBlockGeometry(null)
+    applyHomeEditorZoom(1)
+    clearMainPaneShiftForClassicLayout()
+    try {
+      document.documentElement.style.removeProperty('--sidebar-panel-height')
+    } catch (_) {}
+    try {
+      document.documentElement.style.removeProperty('--flow-floated-pane-drag-x')
+      document.documentElement.style.removeProperty('--flow-floated-pane-drag-y')
+    } catch (_) {}
+    queueMicrotask(() => {
+      try {
+        resizeHomeVisualizerCanvas()
+      } catch (_) {}
+      try {
+        alignHomeHeaderToPlay()
+      } catch (_) {}
+      scheduleMainShiftRemeasure()
+    })
+    return
+  }
+  syncHomeEditorZoomFromStorage()
+  refreshHomeDashboardLayoutAfterContentChange()
+}
+
+/** Тихий сброс главной после «Минимализм» → «Минимал», без тоста (убирает «кашу» из старых координат). */
+function quietResetHomeDashboardAfterMinimalismSwitch() {
+  try {
+    localStorage.removeItem(FLOW_HOME_BLOCK_GEOMETRY_LS)
+    localStorage.removeItem(FLOW_HOME_BLOCK_ORDER_LS)
+    localStorage.removeItem(FLOW_LAYOUT_COORDS_LS)
+    localStorage.removeItem(FLOW_HOME_EDITOR_ZOOM_LS)
+    localStorage.removeItem(FLOW_SIDEBAR_PANEL_H_LS)
+  } catch (_) {}
+  try {
+    document.documentElement.style.removeProperty('--sidebar-panel-height')
+  } catch (_) {}
+  document.body.classList.remove('home-layout-edit', 'flow-edit-enabled')
+  syncHomeLayoutEditButton()
+  teardownHomeDashboardDrag(true)
+  try {
+    _teardownSidebarPanelDrag()
+  } catch (_) {}
+  applyHomeEditorZoom(1)
+  clearMainPaneShiftForClassicLayout()
+  const stack = document.getElementById('home-dashboard-stack')
+  if (stack) {
+    const map = {}
+    stack.querySelectorAll(':scope > .home-dash-block[data-home-block]').forEach((el) => {
+      map[el.dataset.homeBlock] = el
+    })
+    DEFAULT_HOME_BLOCK_ORDER.forEach((id) => {
+      const el = map[id]
+      if (el) stack.appendChild(el)
+    })
+  }
+  applyHomeBlockGeometry(null)
+  queueMicrotask(() => {
+    try {
+      syncFlowLayoutCoords()
+    } catch (_) {}
+    scheduleMainShiftRemeasure()
+  })
 }
 
 function setVisualMode(mode) {
+  const prev = normalizeVisualThemeMode(getVisual().visualMode)
   const safe = normalizeVisualThemeMode(mode)
   saveVisual({ visualMode: safe })
   applyVisualMode(safe)
-  showToast(safe === 'floated' ? 'Режим: минимал' : 'Режим: минимализм')
+  if (prev === 'minimal' && safe === 'floated') {
+    quietResetHomeDashboardAfterMinimalismSwitch()
+  }
+  syncDashboardLayoutToVisualMode()
+  queueMicrotask(() => {
+    try {
+      window.flowMainPaneResize?.refreshMode?.()
+    } catch (_) {}
+    try {
+      window.flowFloatedMainPaneDrag?.refreshFrameShellGeometry?.()
+    } catch (_) {}
+    try {
+      window.flowFloatedMainPaneDrag?.refreshFromStorage?.()
+    } catch (_) {}
+  })
+  showToast(
+    safe === 'yandex'
+      ? 'Режим: Яндекс'
+      : safe === 'floated'
+        ? 'Режим: минимал'
+        : 'Режим: минимализм',
+  )
 }
 
 async function toggleWindowMaximize() {
@@ -1009,18 +1249,41 @@ function applyCoverArt(el, coverUrl, fallbackBg) {
   })
 }
 
+/** То же число, что `--ui-scale` и слайдер «Масштаб UI»; на стеке конструктора задаёт `--home-construct-zoom` (без transform). */
+function syncHomeConstructStackScalePct(pctRaw) {
+  const pct = Number(pctRaw)
+  const clamped = Number.isFinite(pct) ? Math.max(80, Math.min(130, pct)) : 100
+  const z = clamped / 100
+  document.getElementById('home-dashboard-stack')?.style.setProperty('--home-construct-zoom', String(z))
+}
+
+function pulseHomeVisualLayoutSync() {
+  if (_activePageId !== 'home') return
+  requestAnimationFrame(() => {
+    try {
+      resizeHomeVisualizerCanvas()
+    } catch (_) {}
+    try {
+      alignHomeHeaderToPlay()
+    } catch (_) {}
+    scheduleMainShiftRemeasure()
+  })
+}
+
 function applyVisualSettings() {
   const blur   = document.getElementById('vs-blur')?.value ?? 40
   const bright = document.getElementById('vs-bright')?.value ?? 50
   const glass  = document.getElementById('vs-glass')?.value ?? 8
   const pb     = document.getElementById('vs-panel-blur')?.value ?? 30
-  const scale  = document.getElementById('vs-scale')?.value ?? 100
+  const scaleRawInput = Number(document.getElementById('vs-scale')?.value ?? 100)
+  const scaleRaw = Number.isFinite(scaleRawInput) ? scaleRawInput : 100
+  const scale  = Math.max(75, Math.min(130, Math.round((100 + (scaleRaw - 100) * 1.12) * 10) / 10))
 
   document.getElementById('vs-blur-val').textContent   = blur + 'px'
   document.getElementById('vs-bright-val').textContent = bright + '%'
   document.getElementById('vs-glass-val').textContent  = glass + '%'
   document.getElementById('vs-panel-blur-val').textContent = pb + 'px'
-  if (document.getElementById('vs-scale-val')) document.getElementById('vs-scale-val').textContent = scale + '%'
+  if (document.getElementById('vs-scale-val')) document.getElementById('vs-scale-val').textContent = `${Math.round(scale)}%`
 
   const v = getVisual()
   saveVisual({ blur:+blur, bright:+bright, glass:+glass, panelBlur:+pb, uiScale:+scale })
@@ -1028,6 +1291,7 @@ function applyVisualSettings() {
   document.documentElement.style.setProperty('--glass-blur', pb + 'px')
   document.documentElement.style.setProperty('--glass-bg', `rgba(255,255,255,${glass/100})`)
   document.documentElement.style.setProperty('--ui-scale', String((+scale || 100) / 100))
+  syncHomeConstructStackScalePct(+scale || 100)
   applyToastPosition(v.toastPosition || 'default')
 
   const bgBlur = document.getElementById('bg-cover-blur')
@@ -1036,6 +1300,14 @@ function applyVisualSettings() {
   const bgLayer = document.getElementById('bg-layer')
   if (bgLayer) bgLayer.style.filter = `blur(${blur}px) brightness(${bright/100})`
   applyHomeSliderStyle()
+  clearTimeout(_visualSettingsReflowTimer)
+  const isHomeActive = document.body?.getAttribute('data-active-page') === 'home' || document.getElementById('page-home')?.classList.contains('active')
+  if (isVisualFloatedLayout() && isHomeActive) {
+    _visualSettingsReflowTimer = setTimeout(() => {
+      refreshHomeDashboardLayoutAfterContentChange()
+      pulseHomeVisualLayoutSync()
+    }, 90)
+  }
 }
 
 function setBgType(type) {
@@ -1048,9 +1320,15 @@ function setBgType(type) {
 }
 
 function toggleGifMode(category) {
+  if (category === 'track' || category === 'playlist') {
+    showToast('GIF для треков и плейлистов всегда включен')
+    return
+  }
   const v = getVisual()
-  const gifMode = Object.assign({ bg: true, track: true, playlist: true }, v.gifMode || {})
+  const gifMode = normalizeGifMode(v.gifMode || {})
   gifMode[category] = !Boolean(gifMode[category])
+  gifMode.track = true
+  gifMode.playlist = true
   saveVisual({ gifMode })
   initVisualSettings()
   syncPlayerUIFromTrack()
@@ -1103,12 +1381,15 @@ async function loadCustomBg(input) {
 function pickCustomBgMedia(kind = 'image') {
   const input = document.getElementById('custom-bg-input')
   if (!input) return
-  input.accept = kind === 'gif' ? '.gif,image/gif' : 'image/*'
+  _lastBgPickKind = kind === 'gif' ? 'gif' : 'image'
+  input.accept = _lastBgPickKind === 'gif' ? '.gif,image/gif' : 'image/*'
+  syncMediaPickButtons()
   input.click()
 }
 
 function clearCustomBg() {
   saveVisual({ customBg: null })
+  _lastBgPickKind = 'image'
   refreshCustomBgPreview()
   updateBackground()
   showToast('Фон убран')
@@ -1128,8 +1409,10 @@ function setMediaPreviewBox(prefix, mediaUrl, text, keepVisible = false) {
 function refreshCustomBgPreview(fileName = '') {
   const v = getVisual()
   const media = v.customBg || ''
+  if (media) _lastBgPickKind = /\.gif(?:$|[?#])/i.test(media) ? 'gif' : 'image'
   const label = fileName || (media ? 'Текущий пользовательский фон' : 'Ничего не выбрано')
   setMediaPreviewBox('custom-bg', media, label)
+  syncMediaPickButtons()
 }
 
 function setHomeSliderStyle(style) {
@@ -1197,6 +1480,8 @@ function clearHomeWidgetImage() {
 function syncHomeWidgetUI() {
   const v = getVisual()
   const hw = Object.assign({ enabled: true, mode: 'bars', image: null }, v.homeWidget || {})
+  _homeVizMode = hw.mode || 'bars'
+  _homeVizEnabled = Boolean(hw.enabled)
   const wrap = document.getElementById('home-visualizer-wrap')
   const img = document.getElementById('home-visualizer-image')
   const canvas = document.getElementById('home-visualizer-canvas')
@@ -1216,15 +1501,74 @@ function syncHomeWidgetUI() {
   if (imageRow) imageRow.style.display = hw.mode === 'image' ? 'flex' : 'none'
 }
 
-function setAccent(a1, a2) {
-  saveVisual({ accent: a1, accent2: a2, orb1Color: a1, orb2Color: a2 })
+function normalizeAccentHex(c) {
+  const s = String(c || '').trim().toLowerCase()
+  if (!s.startsWith('#')) return s
+  if (s.length === 4) return `#${s[1]}${s[1]}${s[2]}${s[2]}${s[3]}${s[3]}`
+  return s
+}
+
+function syncAccentSwatchSelection(a1, a2) {
+  const h1 = normalizeAccentHex(a1)
+  const h2 = normalizeAccentHex(a2)
+  document.querySelectorAll('.vscol').forEach((b) => {
+    const d1 = normalizeAccentHex(b.getAttribute('data-a1') || '')
+    const d2 = normalizeAccentHex(b.getAttribute('data-a2') || '')
+    const match = Boolean(d1 && d2 && d1 === h1 && d2 === h2)
+    b.classList.toggle('active', match)
+  })
+}
+
+function parseColorToRgb(color) {
+  const src = String(color || '').trim()
+  if (!src) return null
+  const hex = src.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i)
+  if (hex) {
+    const raw = hex[1]
+    const norm = raw.length === 3 ? raw.split('').map((x) => x + x).join('') : raw
+    return {
+      r: parseInt(norm.slice(0, 2), 16),
+      g: parseInt(norm.slice(2, 4), 16),
+      b: parseInt(norm.slice(4, 6), 16),
+    }
+  }
+  const rgb = src.match(/^rgba?\(\s*(\d{1,3})[\s,]+(\d{1,3})[\s,]+(\d{1,3})/i)
+  if (!rgb) return null
+  const clamp = (v) => Math.max(0, Math.min(255, Number(v) || 0))
+  return { r: clamp(rgb[1]), g: clamp(rgb[2]), b: clamp(rgb[3]) }
+}
+
+function syncPlayButtonContrast(a1, a2 = a1) {
+  const c1 = parseColorToRgb(a1)
+  const c2 = parseColorToRgb(a2) || c1
+  if (!c1 || !c2) return
+  const r = Math.round((c1.r + c2.r) / 2)
+  const g = Math.round((c1.g + c2.g) / 2)
+  const b = Math.round((c1.b + c2.b) / 2)
+  const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b
+  const clamp = (v) => Math.max(0, Math.min(255, Math.round(v)))
+  const boost = luma > 176 ? 0.46 : 0.14
+  const bg1 = `rgb(${clamp(c1.r * (1 - boost))},${clamp(c1.g * (1 - boost))},${clamp(c1.b * (1 - boost))})`
+  const bg2 = `rgb(${clamp(c2.r * (1 - boost))},${clamp(c2.g * (1 - boost))},${clamp(c2.b * (1 - boost))})`
+  const fg = luma > 168 ? '#121212' : '#ffffff'
+  const outline = luma > 168 ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.28)'
+  const root = document.documentElement
+  root.style.setProperty('--play-btn-bg1', bg1)
+  root.style.setProperty('--play-btn-bg2', bg2)
+  root.style.setProperty('--play-btn-fg', fg)
+  root.style.setProperty('--play-btn-outline', outline)
+}
+
+function applyAccentVariables(a1, a2) {
   document.documentElement.style.setProperty('--accent', a1)
   document.documentElement.style.setProperty('--accent2', a2)
-  document.querySelectorAll('.vscol').forEach(b => b.classList.remove('active'))
-  // highlight active
-  document.querySelectorAll('.vscol').forEach(b => {
-    if (b.title && b.style.background.includes(a1.replace('#',''))) b.classList.add('active')
-  })
+  syncPlayButtonContrast(a1, a2)
+}
+
+function setAccent(a1, a2) {
+  saveVisual({ accent: a1, accent2: a2, orb1Color: a1, orb2Color: a2 })
+  applyAccentVariables(a1, a2)
+  syncAccentSwatchSelection(a1, a2)
   // update gorb colors
   document.getElementById('gorb1').style.background = `radial-gradient(circle,${a1},transparent 70%)`
   document.getElementById('gorb2').style.background = `radial-gradient(circle,${a2},transparent 70%)`
@@ -1259,8 +1603,7 @@ function toggleEffect(name) {
       const cover = getEffectiveCoverUrl(currentTrack)
       if (cover) updateOrbsFromCover(cover)
     } else {
-      document.documentElement.style.setProperty('--accent', v.accent || defaultVisual.accent)
-      document.documentElement.style.setProperty('--accent2', v.accent2 || defaultVisual.accent2)
+      applyAccentVariables(v.accent || defaultVisual.accent, v.accent2 || defaultVisual.accent2)
     }
   }
 }
@@ -1274,36 +1617,115 @@ function updateOrbsFromCover(coverUrl) {
   const v = getVisual()
   const effects = Object.assign({ dyncolor: false, accentFromCover: false }, v.effects || {})
   if ((!effects.dyncolor && !effects.accentFromCover) || !coverUrl) return
-  // Extract color via canvas pixel sampling
+  const cached = _coverAccentCache.get(coverUrl)
+  if (cached) {
+    const { c1, c2 } = cached
+    if (effects.dyncolor) {
+      const g1 = document.getElementById('gorb1')
+      const g2 = document.getElementById('gorb2')
+      if (g1) g1.style.background = `radial-gradient(circle,${c1},transparent 70%)`
+      if (g2) g2.style.background = `radial-gradient(circle,${c2},transparent 70%)`
+    }
+    if (effects.accentFromCover) applyAccentVariables(c1, c2)
+    const glow = document.getElementById('pm-cover-glow')
+    if (glow) glow.style.background = `radial-gradient(circle,${c1},transparent 70%)`
+    if (v.bgType === 'cover') updateBackground()
+    return
+  }
+  if (_coverAccentPending.has(coverUrl)) return
+  _coverAccentPending.add(coverUrl)
   const img = new Image()
   img.crossOrigin = 'anonymous'
   img.onload = () => {
     try {
       const c = document.createElement('canvas')
-      c.width = 8; c.height = 8
-      const ctx = c.getContext('2d')
+      c.width = 8
+      c.height = 8
+      const ctx = c.getContext('2d', { willReadFrequently: true })
       ctx.drawImage(img, 0, 0, 8, 8)
       const d = ctx.getImageData(0, 0, 8, 8).data
-      // Average color from corners
       const r = Math.round((d[0] + d[28] + d[224] + d[252]) / 4)
       const g = Math.round((d[1] + d[29] + d[225] + d[253]) / 4)
       const b = Math.round((d[2] + d[30] + d[226] + d[254]) / 4)
       const c1 = `rgb(${r},${g},${b})`
-      const c2 = `rgb(${Math.min(255,r+60)},${Math.min(255,g+30)},${Math.min(255,b+80)})`
+      const c2 = `rgb(${Math.min(255, r + 60)},${Math.min(255, g + 30)},${Math.min(255, b + 80)})`
+      _coverAccentCache.set(coverUrl, { c1, c2 })
       if (effects.dyncolor) {
-        document.getElementById('gorb1').style.background = `radial-gradient(circle,${c1},transparent 70%)`
-        document.getElementById('gorb2').style.background = `radial-gradient(circle,${c2},transparent 70%)`
+        const g1 = document.getElementById('gorb1')
+        const g2 = document.getElementById('gorb2')
+        if (g1) g1.style.background = `radial-gradient(circle,${c1},transparent 70%)`
+        if (g2) g2.style.background = `radial-gradient(circle,${c2},transparent 70%)`
       }
       if (effects.accentFromCover) {
-        document.documentElement.style.setProperty('--accent', c1)
-        document.documentElement.style.setProperty('--accent2', c2)
+        applyAccentVariables(c1, c2)
       }
-      if (document.getElementById('pm-cover-glow')) {
-        document.getElementById('pm-cover-glow').style.background = `radial-gradient(circle,${c1},transparent 70%)`
-      }
+      const glow = document.getElementById('pm-cover-glow')
+      if (glow) glow.style.background = `radial-gradient(circle,${c1},transparent 70%)`
       if (v.bgType === 'cover') updateBackground()
-    } catch(e) {}
+    } catch (e) {
+      console.warn('accent extract failed', e)
+    } finally {
+      _coverAccentPending.delete(coverUrl)
+    }
   }
+  img.onerror = () => { _coverAccentPending.delete(coverUrl) }
+  img.src = coverUrl
+}
+
+function setYandexPlayerThemeFromRgb(r, g, b) {
+  const root = document.documentElement
+  const clamp = (n) => Math.max(0, Math.min(255, Math.round(n)))
+  const base = `rgb(${clamp(r * 0.72)}, ${clamp(g * 0.66)}, ${clamp(b * 0.6)})`
+  const hi = `rgb(${clamp(r * 0.9 + 46)}, ${clamp(g * 0.84 + 40)}, ${clamp(b * 0.78 + 34)})`
+  const lo = `rgb(${clamp(r * 0.38)}, ${clamp(g * 0.34)}, ${clamp(b * 0.32)})`
+  root.style.setProperty('--yandex-player-bg', `linear-gradient(90deg, ${lo}, ${base} 32%, ${hi} 64%, ${base})`)
+  root.style.setProperty('--yandex-player-card', `rgba(${clamp(r * 0.26)}, ${clamp(g * 0.24)}, ${clamp(b * 0.23)}, 0.58)`)
+  root.style.setProperty('--yandex-player-glow', `rgba(${clamp(r)}, ${clamp(g)}, ${clamp(b)}, 0.26)`)
+}
+
+let _lastYandexThemeCover = ''
+let _lastYandexThemeFallback = ''
+
+function updateYandexPlayerTheme(track = currentTrack) {
+  // Не прогружаем/не пересчитываем тему Yandex, если интерфейс сейчас не активен.
+  if (!document.body?.classList?.contains('visual-yandex')) return
+  const fallback = String(track?.bg || '').trim()
+  const coverUrl = getEffectiveCoverUrl(track)
+  if (coverUrl && coverUrl === _lastYandexThemeCover) return
+  if (!coverUrl && fallback && fallback === _lastYandexThemeFallback) return
+  _lastYandexThemeCover = coverUrl || ''
+  _lastYandexThemeFallback = (!coverUrl && fallback) ? fallback : ''
+  if (!coverUrl) {
+    if (fallback && /^linear-gradient|^radial-gradient/i.test(fallback)) {
+      document.documentElement.style.setProperty('--yandex-player-bg', fallback)
+    } else {
+      document.documentElement.style.setProperty('--yandex-player-bg', 'linear-gradient(90deg, #3b1d12, #6b2f14 52%, #8a411c)')
+    }
+    document.documentElement.style.setProperty('--yandex-player-card', 'rgba(31, 18, 14, 0.5)')
+    document.documentElement.style.setProperty('--yandex-player-glow', 'rgba(251, 255, 40, 0.12)')
+    return
+  }
+  const img = new Image()
+  img.crossOrigin = 'anonymous'
+  img.onload = () => {
+    try {
+      const c = document.createElement('canvas')
+      c.width = 10
+      c.height = 10
+      const ctx = c.getContext('2d', { willReadFrequently: true })
+      ctx.drawImage(img, 0, 0, 10, 10)
+      const d = ctx.getImageData(0, 0, 10, 10).data
+      let r = 0, g = 0, b = 0, n = 0
+      for (let i = 0; i < d.length; i += 4) {
+        const max = Math.max(d[i], d[i + 1], d[i + 2])
+        const min = Math.min(d[i], d[i + 1], d[i + 2])
+        if (max < 18 || (max - min < 8 && max > 225)) continue
+        r += d[i]; g += d[i + 1]; b += d[i + 2]; n++
+      }
+      if (n) setYandexPlayerThemeFromRgb(r / n, g / n, b / n)
+    } catch {}
+  }
+  img.onerror = () => {}
   img.src = coverUrl
 }
 
@@ -1323,12 +1745,14 @@ function initVisualSettings() {
   if (document.getElementById('vs-panel-blur-val')) document.getElementById('vs-panel-blur-val').textContent = v.panelBlur + 'px'
   if (document.getElementById('vs-scale-val')) document.getElementById('vs-scale-val').textContent = (v.uiScale || 100) + '%'
   // CSS vars
-  document.documentElement.style.setProperty('--accent', v.accent)
-  document.documentElement.style.setProperty('--accent2', v.accent2)
+  applyAccentVariables(v.accent, v.accent2)
   document.documentElement.style.setProperty('--glass-blur', v.panelBlur + 'px')
   document.documentElement.style.setProperty('--glass-bg', `rgba(255,255,255,${v.glass/100})`)
   document.documentElement.style.setProperty('--ui-scale', String((v.uiScale || 100) / 100))
+  syncHomeConstructStackScalePct(v.uiScale || 100)
   applyVisualMode(v.visualMode || 'minimal')
+  syncHomeLayoutConstructorUi()
+  syncHomeEditorZoomFromStorage()
   // BG type buttons
   document.querySelectorAll('[id^="bgt-"]').forEach(b => b.classList.remove('active'))
   document.getElementById('bgt-' + (v.bgType || 'gradient'))?.classList.add('active')
@@ -1365,6 +1789,7 @@ function initVisualSettings() {
   if (gifBg) gifBg.classList.toggle('active', Boolean(gifMode.bg))
   if (gifTrack) gifTrack.classList.toggle('active', Boolean(gifMode.track))
   if (gifPlaylist) gifPlaylist.classList.toggle('active', Boolean(gifMode.playlist))
+  syncMediaPickButtons()
   applyToastPosition(v.toastPosition || 'default')
   refreshCustomBgPreview()
   refreshTrackCoverPreview()
@@ -1379,6 +1804,8 @@ function initVisualSettings() {
   const coverBlur = document.getElementById('bg-cover-blur')
   if (coverBlur) coverBlur.style.filter = `blur(${v.blur}px) brightness(${v.bright/100})`
   updateBackground()
+  pulseHomeVisualLayoutSync()
+  syncAccentSwatchSelection(v.accent, v.accent2)
 }
 
 function reorderVisualSettingsSections() {
@@ -1396,6 +1823,18 @@ function applySidebarPosition(position) {
   document.body.classList.toggle('layout-top-nav', safe === 'top')
   const sidebar = document.getElementById('sidebar')
   if (sidebar && safe === 'top') sidebar.classList.remove('collapsed')
+  if (safe === 'top') {
+    document.documentElement.style.setProperty('--sidebar-shift', '0px')
+  } else {
+    try {
+      const sv = parseInt(localStorage.getItem('flow_sidebar_shift') || '0', 10)
+      const px = Number.isFinite(sv) ? Math.max(0, sv) : 0
+      document.documentElement.style.setProperty('--sidebar-shift', px + 'px')
+    } catch (_) {}
+    queueMicrotask(() => {
+      try { window.dispatchEvent(new Event('resize')) } catch (_) {}
+    })
+  }
   const leftBtn = document.getElementById('layout-left')
   const topBtn = document.getElementById('layout-top')
   if (leftBtn) leftBtn.classList.toggle('active', safe === 'left')
@@ -1812,6 +2251,17 @@ function enableMojibakeAutoFix() {
   fixNodeTextMojibake(document.body)
   const observer = new MutationObserver((mutations) => {
     for (const m of mutations) {
+      if (m.type === 'attributes' && m.target && m.target.nodeType === Node.ELEMENT_NODE) {
+        const el = /** @type {Element} */ (m.target)
+        const attr = m.attributeName
+        if (attr === 'placeholder' || attr === 'title' || attr === 'aria-label') {
+          const src = el.getAttribute(attr)
+          if (!src || (!looksLikeMojibake(src) && !hasCommonMojibakeToken(src))) continue
+          const fixed = sanitizeDisplayText(src)
+          if (fixed && fixed !== src) el.setAttribute(attr, fixed)
+        }
+        continue
+      }
       if (m.type === 'characterData' && m.target?.nodeValue) {
         const src = m.target.nodeValue
         if (looksLikeMojibake(src) || hasCommonMojibakeToken(src)) {
@@ -1830,8 +2280,13 @@ function enableMojibakeAutoFix() {
       }
     }
   })
-  observer.observe(document.body, { childList: true, subtree: true, characterData: true })
-  setInterval(() => fixNodeTextMojibake(document.body), 2000)
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: ['placeholder', 'title', 'aria-label'],
+  })
 }
 
 
@@ -1861,6 +2316,7 @@ function getSearchCacheKey(query, settings = getSettings()) {
     settings?.spotifyToken ? 'sp1' : 'sp0',
     settings?.vkToken ? 'vk1' : 'vk0',
     settings?.soundcloudClientId ? 'sc1' : 'sc0',
+    settings?.yandexToken ? 'ym1' : 'ym0',
     settings?.proxyBaseUrl ? `srv:${String(settings.proxyBaseUrl).trim().toLowerCase()}` : 'srv0',
   ].join(':')
   return `${src}:${q}:${tokenSig}`
@@ -1874,7 +2330,7 @@ const providers = {
 }
 
 /** Активный источник в настройках: гибрид отдельно от одиночных провайдеров в `providers`. */
-const ALLOWED_ACTIVE_SOURCES = new Set(['hybrid', 'spotify', 'soundcloud', 'audius', 'hitmo'])
+const ALLOWED_ACTIVE_SOURCES = new Set(['hybrid', 'yandex', 'spotify', 'soundcloud', 'audius', 'hitmo'])
 
 function normalizeStoredActiveSource(rawSrc) {
   const raw = String(rawSrc || 'hybrid').toLowerCase()
@@ -1907,6 +2363,7 @@ function getSettings() {
     flowSocialApiSecret: FLOW_SOCIAL_DEFAULT_API_SECRET,
   }
   if (typeof raw.compactUi !== 'boolean') raw.compactUi = false
+  raw.compactUi = false
   if (!Object.prototype.hasOwnProperty.call(raw, 'flowSocialApiBase')) raw.flowSocialApiBase = FLOW_SOCIAL_DEFAULT_API_BASE
   if (!Object.prototype.hasOwnProperty.call(raw, 'flowSocialApiSecret')) raw.flowSocialApiSecret = FLOW_SOCIAL_DEFAULT_API_SECRET
   if (!String(raw.flowSocialApiBase || '').trim()) raw.flowSocialApiBase = FLOW_SOCIAL_DEFAULT_API_BASE
@@ -2001,6 +2458,16 @@ function applyCompactUi(enabled) {
   if (sw) sw.classList.toggle('active', on)
   setupCompactSearchListeners()
   syncSearchBarCollapsedState()
+  scheduleMainShiftRemeasure()
+  try {
+    window.dispatchEvent(new Event('resize'))
+  } catch (_) {}
+  requestAnimationFrame(() => {
+    resizeHomeVisualizerCanvas()
+    try {
+      alignHomeHeaderToPlay()
+    } catch (_) {}
+  })
 }
 
 function toggleCompactUi() {
@@ -2174,6 +2641,43 @@ function applyYandexToken() {
   showToast('Токен Яндекс Музыки сохранен')
 }
 
+async function checkYandexToken() {
+  const msg = document.getElementById('ym-msg')
+  let token = String(document.getElementById('ym-token-val')?.value || getSettings().yandexToken || '').trim()
+  const m = token.match(/access_token=([^&#]+)/)
+  if (m) token = decodeURIComponent(m[1])
+  if (!token) {
+    if (msg) {
+      msg.textContent = 'Сначала вставь OAuth token Яндекс Музыки'
+      msg.className = 'token-msg token-msg-err'
+    }
+    showToast('Нет токена для проверки', true)
+    return
+  }
+  if (msg) {
+    msg.textContent = 'Проверка токена...'
+    msg.className = 'token-msg'
+  }
+  try {
+    const probe = await withTimeout(window.api?.yandexSearch?.('flow', token), 12000, 'yandex check timeout')
+    const ok = Array.isArray(probe)
+    if (!ok) throw new Error('некорректный ответ API')
+    saveSettingsRaw({ yandexToken: token })
+    updateYandexStatus(token)
+    if (msg) {
+      msg.textContent = 'Токен рабочий: поиск Яндекс доступен'
+      msg.className = 'token-msg token-msg-ok'
+    }
+    showToast('Yandex token рабочий')
+  } catch (err) {
+    if (msg) {
+      msg.textContent = `Токен не прошел проверку: ${sanitizeDisplayText(normalizeInvokeError(err) || err?.message || err)}`
+      msg.className = 'token-msg token-msg-err'
+    }
+    showToast('Yandex token невалиден', true)
+  }
+}
+
 function openYandexTokenGuide() {
   openUrl(YANDEX_MUSIC_TOKEN_GUIDE_URL)
 }
@@ -2218,7 +2722,7 @@ function updateSpotifyStatus(token) {
 }
 
 function setActiveSource(src) {
-  const allowed = new Set(['hybrid', 'spotify', 'soundcloud', 'sc', 'audius', 'hitmo', 'hm'])
+  const allowed = new Set(['hybrid', 'yandex', 'spotify', 'soundcloud', 'sc', 'audius', 'hitmo', 'hm'])
   const raw = String(src || '').toLowerCase()
   const normalized =
     raw === 'yt' || raw === 'youtube' ? 'hybrid' :
@@ -2228,6 +2732,8 @@ function setActiveSource(src) {
   const safe = allowed.has(normalized) ? normalized : 'hybrid'
   saveSettingsRaw({ activeSource: safe })
   searchCache.clear()
+  syncSearchSourcePills()
+  if (_activePageId === 'search') searchTracks()
 }
 
 function loadSettingsPage() {
@@ -2333,7 +2839,6 @@ async function setCustomTrackCover(input) {
     saveCustomCoverMap(map)
     _coverLoadState.clear()
     syncPlayerUIFromTrack()
-    renderQueue()
     renderPlaylists()
     renderLiked()
     renderRoomQueue()
@@ -2350,7 +2855,9 @@ async function setCustomTrackCover(input) {
 function pickCustomTrackCover(kind = 'image') {
   const input = document.getElementById('track-cover-input')
   if (!input) return
-  input.accept = kind === 'gif' ? '.gif,image/gif' : 'image/*'
+  _lastCoverPickKind = kind === 'gif' ? 'gif' : 'image'
+  input.accept = _lastCoverPickKind === 'gif' ? '.gif,image/gif' : 'image/*'
+  syncMediaPickButtons()
   input.click()
 }
 
@@ -2368,10 +2875,10 @@ function clearCustomTrackCover() {
   saveCustomCoverMap(map)
   const input = document.getElementById('track-cover-input')
   if (input) input.value = ''
+  _lastCoverPickKind = 'image'
   restoreSourceCoversInCollections()
   _coverLoadState.clear()
   syncPlayerUIFromTrack()
-  renderQueue()
   renderPlaylists()
   renderLiked()
   renderRoomQueue()
@@ -2384,8 +2891,10 @@ function refreshTrackCoverPreview(fileName = '') {
   const map = getCustomCoverMap()
   const globalCustom = getGlobalCustomCover(map)
   if (globalCustom) {
+    _lastCoverPickKind = /\.gif(?:$|[?#])/i.test(globalCustom) ? 'gif' : 'image'
     const label = fileName || 'Кастомная обложка плеера'
     setMediaPreviewBox('track-cover', globalCustom, label, true)
+    syncMediaPickButtons()
     return
   }
   if (!currentTrack) {
@@ -2393,8 +2902,21 @@ function refreshTrackCoverPreview(fileName = '') {
     return
   }
   const custom = getTrackCoverKeys(currentTrack).map((k) => map[k]).find(Boolean) || ''
+  if (custom) _lastCoverPickKind = /\.gif(?:$|[?#])/i.test(custom) ? 'gif' : 'image'
   const label = fileName || (custom ? `Текущий трек: ${currentTrack.title || 'Без названия'}` : 'Для этого трека обложка не задана')
   setMediaPreviewBox('track-cover', custom, label, true)
+  syncMediaPickButtons()
+}
+
+function syncMediaPickButtons() {
+  const bgImage = document.getElementById('bg-pick-image-btn')
+  const bgGif = document.getElementById('bg-pick-gif-btn')
+  if (bgImage) bgImage.classList.toggle('active', _lastBgPickKind === 'image')
+  if (bgGif) bgGif.classList.toggle('active', _lastBgPickKind === 'gif')
+  const coverImage = document.getElementById('cover-pick-image-btn')
+  const coverGif = document.getElementById('cover-pick-gif-btn')
+  if (coverImage) coverImage.classList.toggle('active', _lastCoverPickKind === 'image')
+  if (coverGif) coverGif.classList.toggle('active', _lastCoverPickKind === 'gif')
 }
 
 function setFlowConfigStatus(text, isError = false) {
@@ -2708,19 +3230,24 @@ function convertDotifyPresetToFlowStorage(preset) {
 }
 
 function updateSourceBadge() {
-  currentSource = 'hybrid'
-  const txt = 'Spotify → SoundCloud → Audius'
+  currentSource = normalizeStoredActiveSource(getSettings().activeSource || currentSource || 'hybrid')
+  const txt = currentSource === 'yandex' ? 'Yandex Music' : 'Spotify → SoundCloud → Audius'
   const b1 = document.getElementById('source-badge'); if (b1) b1.textContent = txt
   const b2 = document.getElementById('source-badge-search'); if (b2) b2.textContent = txt
 }
 
 function switchSearchSource(src) {
-  showToast('Режим фиксирован: Spotify → SoundCloud → Audius')
+  setActiveSource(src)
+  showToast(getSettings().activeSource === 'yandex' ? 'Источник: Yandex' : 'Источник: Flow classic')
 }
 
 function syncSearchSourcePills() {
-  document.querySelectorAll('.search-source-pill').forEach(p => {
-    p.classList.toggle('active', p.getAttribute('data-src') === 'hybrid')
+  const active = normalizeStoredActiveSource(getSettings().activeSource || currentSource || 'hybrid')
+  document.querySelectorAll('.search-source-pill').forEach((p) => {
+    p.classList.toggle('active', p.getAttribute('data-src') === active)
+  })
+  document.querySelectorAll('.source-mode-card').forEach((card) => {
+    card.classList.toggle('active', card.getAttribute('data-src') === active)
   })
 }
 
@@ -2756,6 +3283,7 @@ function setAuthScreensAuthorized(isAuthorized) {
   document.getElementById('screen-main')?.classList.toggle('hidden', !loggedIn)
   // Hide the bottom player panel before login/register.
   document.getElementById('player-bar')?.classList.toggle('hidden', !loggedIn)
+  if (loggedIn) queueMicrotask(() => scheduleMainShiftRemeasure())
 }
 
 function syncProfileUi() {
@@ -2781,7 +3309,7 @@ function syncProfileUi() {
 }
 
 function getProfileCustom() {
-  const defaults = { bio: '', avatarData: null, bannerData: null, profileColor: '', pinnedTracks: [], pinnedPlaylists: [] }
+  const defaults = { bio: '', avatarData: null, bannerData: null, profileColor: '', thoughtBubble: '', pinnedTracks: [], pinnedPlaylists: [] }
   if (!_profile?.username) return defaults
   const key = `flow_profile_custom_${_profile.username}`
   try {
@@ -3447,46 +3975,86 @@ async function openPeerProfile(username, peerId = '') {
   let data = byPeer || byName || { username }
   let profileFriends = []
   const cached = getCachedPeerProfile(username)
-  if (cached) data = Object.assign({}, cached, data)
+  if (cached) data = mergeProfileData(data, cached, peerId || data?.peerId || '')
   data._friends = Array.isArray(data?._friends) ? data._friends : []
   const renderModal = (profileData) => {
+    const uRaw = profileData.username || username || 'user'
+    const unameKey = String(uRaw).trim().toLowerCase()
     const avatarSrc = withImageCacheBust(profileData.avatarData)
     const bannerSrc = withImageCacheBust(profileData.bannerData)
-    const avatar = avatarSrc
-      ? `<div class="profile-avatar" style="background-image:url(${avatarSrc});background-size:cover;background-position:center;background-repeat:no-repeat"></div>`
-      : `<div class="profile-avatar">${String(profileData.username || '?').slice(0,1).toUpperCase()}</div>`
+    const safeColor = normalizeProfileColor(profileData.profileColor || '')
+    const colorRgb = hexToRgb(safeColor)
+    const accent = safeColor || 'var(--accent2)'
+    const bannerC1 = colorRgb ? `rgba(${colorRgb.r},${colorRgb.g},${colorRgb.b},0.34)` : 'rgba(124,58,237,0.24)'
+    const bannerC2 = colorRgb
+      ? `rgba(${Math.min(255, Math.round(colorRgb.r * 0.7 + 48))},${Math.min(255, Math.round(colorRgb.g * 0.7 + 48))},${Math.min(255, Math.round(colorRgb.b * 0.7 + 70))},0.24)`
+      : 'rgba(59,130,246,0.2)'
+    const peerThemeStyle = `--profile-accent:${accent};--profile-banner-c1:${bannerC1};--profile-banner-c2:${bannerC2};`
     const banner = bannerSrc
-      ? `linear-gradient(0deg, rgba(8,10,16,.35), rgba(8,10,16,.35)), url(${bannerSrc})`
-      : 'linear-gradient(135deg,#1f2937,#111827)'
-    const pinnedTracks = Array.isArray(profileData.pinnedTracks) ? profileData.pinnedTracks : []
+      ? `linear-gradient(0deg, rgba(8,10,16,.42), rgba(8,10,16,.42)), url(${bannerSrc})`
+      : `linear-gradient(135deg, ${bannerC1}, ${bannerC2}), linear-gradient(180deg,#1a1f2e,#10131c)`
+    const avatarInner = avatarSrc
+      ? `<div class="profile-avatar profile-avatar--disc flow-profile-avatar-face" style="background-image:url(${avatarSrc});background-size:cover;background-position:center;"></div>`
+      : `<div class="profile-avatar profile-avatar--disc flow-profile-avatar-face">${escapeHtml(String(uRaw).slice(0, 1).toUpperCase())}</div>`
+    const pres = _friendPresence.get(unameKey) || {}
     const friends = Array.isArray(profileData._friends) ? profileData._friends.slice(0, 24) : []
+    const friendsHtml = friends.length ? buildFlowProfileFriendsStripHtml(friends) : '<div class="flow-profile-friends-empty">Нет данных</div>'
+    const listenTrack =
+      pres.online && pres.track?.title
+        ? {
+            title: pres.track.title,
+            artist: pres.track.artist || '',
+            source: pres.track.source || 'soundcloud',
+          }
+        : null
+    const listenCoverId = 'peer-flow-listening-cover'
+    const listenHtml = stringifyFlowProfileListeningPanel(listenTrack, listenTrack ? 38 : 0, listenTrack ? listenCoverId : null)
     body.innerHTML = `
-      <div class="profile-shell peer-profile-shell" style="padding:0">
-        <div class="profile-hero glass-card">
-          <div class="profile-banner" style="background-image:${banner}"></div>
-          <div class="profile-avatar-wrap">${avatar}</div>
-          <div class="profile-main-meta">
-            <h3>${profileData.username || 'user'}</h3>
-            <p>${profileData.bio || 'Описание отсутствует'}</p>
-          </div>
-        </div>
-        <div class="profile-grid">
-          <div class="glass-card profile-card">
-            <div class="profile-card-head"><strong>Закрепленные треки</strong></div>
-            ${pinnedTracks.length ? pinnedTracks.map((t) => `<div class="profile-row"><span>${t.title} — ${t.artist || '—'}</span></div>`).join('') : '<div class="social-empty">Нет данных</div>'}
-          </div>
-          <div class="glass-card profile-card">
-            <div class="profile-card-head"><strong>Отслеживание</strong></div>
-            <div class="profile-stat-line"><strong>${((Number(profileData?.stats?.totalSeconds || 0))/3600).toFixed(1)}ч</strong> прослушивания</div>
-            <div class="profile-stat-line"><strong>${Number(profileData?.stats?.totalTracks || 0)}</strong> треков</div>
-          </div>
-          <div class="glass-card profile-card">
-            <div class="profile-card-head"><strong>Друзья</strong></div>
-            ${friends.length ? friends.map((f) => `<div class="profile-row"><span>${f}</span></div>`).join('') : '<div class="social-empty">Нет данных</div>'}
+      <div class="profile-shell peer-profile-shell profile-unified flow-profile-card peer-profile-card-bleed" style="${peerThemeStyle}">
+        <div class="peer-profile-cover-wrap">
+          <div class="peer-profile-cover" style="background-image:${banner};"></div>
+          <div class="flow-profile-hero-fill peer-profile-below-cover">
+            <section class="flow-profile-main-tile flow-profile-nested-glass">
+              <div class="flow-profile-top-row peer-profile-top-row">
+                <div class="flow-profile-avatar-col">
+                  <div class="flow-profile-avatar-ring-wrap">
+                    <div class="flow-profile-avatar-ring">
+                      ${avatarInner}
+                    </div>
+                    <span class="flow-profile-online-dot ${pres.online ? '' : 'flow-profile-online-dot--offline'}" aria-hidden="true"></span>
+                  </div>
+                </div>
+              </div>
+              <div class="flow-profile-identity">
+                <h3 class="flow-profile-display-name">${escapeHtml(uRaw)}</h3>
+                <p class="flow-profile-handle-line">@${escapeHtml(uRaw)} • custom</p>
+                <div class="flow-profile-badge-strip">${getFlowProfileBadgeStripHtml()}</div>
+                <p class="flow-profile-bio">${escapeHtml(profileData.bio || 'Описание отсутствует')}</p>
+              </div>
+              <div class="flow-profile-friends-zone">
+                <div class="flow-profile-zone-label">Friends</div>
+                <div class="flow-profile-friends-strip">${friendsHtml}</div>
+              </div>
+            </section>
+            <div class="flow-profile-listening-slot">${listenHtml}</div>
           </div>
         </div>
       </div>
     `
+    if (listenTrack) {
+      queueMicrotask(() => {
+        const c = document.getElementById(listenCoverId)
+        if (!c) return
+        c.textContent = '♪'
+        c.style.display = 'flex'
+        c.style.alignItems = 'center'
+        c.style.justifyContent = 'center'
+        c.style.fontSize = '20px'
+        c.style.color = 'rgba(255,255,255,0.78)'
+        c.style.backgroundImage = 'none'
+        c.style.background = 'linear-gradient(135deg, rgba(124,58,237,0.58), rgba(59,130,246,0.48))'
+      })
+    }
     modal.classList.remove('hidden')
   }
   renderModal(data)
@@ -3574,6 +4142,45 @@ function setMyWaveMode(mode) {
   _myWaveMode = WE?.MY_WAVE_MODES?.[mode] ? mode : 'default'
   try { localStorage.setItem('flow_my_wave_mode', _myWaveMode) } catch {}
   renderMyWave()
+  if (document.body?.classList?.contains('visual-yandex')) {
+    renderYandexWaveModes()
+    syncYandexWaveSettingsLabel()
+  }
+}
+
+function syncYandexWaveSettingsLabel() {
+  const btn = document.querySelector('.yandex-wave-settings')
+  if (!btn) return
+  const mode = getMyWaveMode()
+  const cfg = WE?.MY_WAVE_MODES?.[mode]
+  const label = sanitizeDisplayText(cfg?.label || 'Настроить')
+  btn.textContent = `☰ ${label}`
+  btn.title = 'Настроить Мою волну'
+}
+
+function renderYandexWaveModes() {
+  const pop = document.getElementById('yandex-wave-mode-pop')
+  if (!pop) return
+  const mode = getMyWaveMode()
+  const modes = Object.entries(WE?.MY_WAVE_MODES || {})
+  pop.innerHTML = `
+    <div class="yandex-wave-mode-title">Режим Моей волны</div>
+    <div class="yandex-wave-mode-grid">
+      ${modes.map(([id, cfg]) => (
+        `<button type="button" class="yandex-wave-mode-btn ${id === mode ? 'active' : ''}" data-wave-mode="${escapeHtml(id)}" onclick="setMyWaveMode('${escapeHtml(id)}'); toggleYandexWaveModes(false)">${escapeHtml(sanitizeDisplayText(cfg.label || id))}</button>`
+      )).join('')}
+    </div>
+  `
+  syncYandexWaveSettingsLabel()
+}
+
+function toggleYandexWaveModes(force) {
+  if (!document.body?.classList?.contains('visual-yandex')) return
+  const pop = document.getElementById('yandex-wave-mode-pop')
+  if (!pop) return
+  renderYandexWaveModes()
+  const shouldOpen = typeof force === 'boolean' ? force : pop.classList.contains('hidden')
+  pop.classList.toggle('hidden', !shouldOpen)
 }
 
 
@@ -3597,7 +4204,6 @@ async function maybePreloadMyWave(force = false) {
     if (fresh.length) {
       queue.push(...fresh)
       _myWaveRenderedTracks = queue.slice()
-      renderQueue()
       showToast(`Моя волна дозагрузила ${fresh.length} треков`)
       if (force && queueIndex >= startLength - 1 && queue[queueIndex + 1]) {
         queueIndex++
@@ -3665,6 +4271,7 @@ function renderMyWave() {
     </div>
   `
   renderRoomsMyWave()
+  refreshHomeDashboardLayoutAfterContentChange()
 }
 
 function renderRoomsMyWave() {
@@ -3801,19 +4408,149 @@ async function applyProfileBannerTheme(bannerData, profileColor = '') {
   } catch {}
 }
 
+function resolvePeerAvatarByUsername(username = '') {
+  const safe = String(username || '').trim().toLowerCase()
+  if (!safe) return null
+  const remote = Array.from(_peerProfiles.values()).find((p) => String(p?.username || '').trim().toLowerCase() === safe)
+  if (remote?.avatarData) return remote.avatarData
+  const cached = getCachedPeerProfile(safe)
+  if (cached?.avatarData) return cached.avatarData
+  const key = `flow_profile_custom_${safe}`
+  try {
+    const data = JSON.parse(localStorage.getItem(key) || '{}')
+    return data?.avatarData || null
+  } catch {
+    return null
+  }
+}
+
+/** Бейдж как на карточках треков: SoundCloud — оранжевый «SC» (совпадает с .track-source-soundcloud). */
+function profileListeningSourcePillHtml(trackHint) {
+  const LABELS = { soundcloud: 'SC', vk: 'VK', hitmo: 'HM', youtube: 'YT', spotify: 'SP', yandex: 'Ya' }
+  const src =
+    trackHint && typeof trackHint.source === 'string' && LABELS[trackHint.source] ? trackHint.source : ''
+  if (!src) {
+    return '<span class="flow-profile-src-badge flow-profile-src-badge--muted">SC</span>'
+  }
+  return `<span class="track-source track-source-${src} flow-profile-src-badge">${LABELS[src]}</span>`
+}
+
+/** @param {object|null} trackHint — нужен ли source для бейджа (плеер без трека → приглушённый SC). */
+function flowProfileListeningBrandHtml(trackHint) {
+  const pill = profileListeningSourcePillHtml(trackHint)
+  return `<div class="flow-profile-listening-head">
+    <span class="flow-profile-listening-brand-slot">${pill}</span>
+    <span class="flow-profile-listening-caption">LISTENING TO FLOW</span>
+  </div>`
+}
+
+/** Карточка «Listening to Flow» (аналог отдельного UI-компонента): обложка, прогресс, индикатор в углу. */
+function buildProfileActivityCardHtml(track, progressPct, coverDomId) {
+  const pct = Math.max(0, Math.min(100, Number(progressPct) || 0))
+  const corner = '<span class="flow-profile-activity-corner-dot" aria-hidden="true"></span>'
+  if (!track || !track.title) {
+    return `${corner}${flowProfileListeningBrandHtml(null)}<div class="flow-profile-listening-empty"><span class="flow-profile-listening-dot"></span><span>Сейчас ничего не играет</span></div>`
+  }
+  const idAttr = coverDomId ? ` id="${coverDomId}"` : ''
+  return `${corner}${flowProfileListeningBrandHtml(track)}
+    <div class="flow-profile-listening-body">
+      <div class="flow-profile-listening-cover"${idAttr}></div>
+      <div class="flow-profile-listening-meta">
+        <p class="flow-profile-listening-title">${escapeHtml(track.title)}</p>
+        <span class="flow-profile-listening-artist">${escapeHtml(track.artist || '—')}</span>
+        <div class="flow-profile-listening-bar">
+          <span class="flow-profile-listening-bar-fill" style="width:${pct}%"></span>
+          <span class="flow-profile-listening-knob" style="left:${pct}%"></span>
+        </div>
+      </div>
+    </div>`
+}
+
+function stringifyFlowProfileListeningPanel(track, progressPct, coverDomId) {
+  return buildProfileActivityCardHtml(track, progressPct, coverDomId)
+}
+
+/** @param {object|null} track @param {{ panel?: boolean }} [opts] */
+function formatFlowProfileFavoriteSongHtml(track, opts = {}) {
+  const usePanel = opts.panel !== false
+  const pc = usePanel ? ' flow-profile-favorite--panel' : ''
+  if (!track || !track.title) {
+    return `<div class="flow-profile-favorite flow-profile-favorite--empty${pc}"><span class="flow-profile-favorite-label">Favorite song</span><span class="flow-profile-favorite-empty-note">—</span></div>`
+  }
+  const cover = getListCoverUrl(track) || getEffectiveCoverUrl(track) || ''
+  const thumb = cover
+    ? `<div class="flow-profile-favorite-thumb" style="background-image:url(${cover})"></div>`
+    : `<div class="flow-profile-favorite-thumb flow-profile-favorite-thumb--ph">♪</div>`
+  return `<div class="flow-profile-favorite${pc}"><span class="flow-profile-favorite-label">Favorite song</span><div class="flow-profile-favorite-row">${thumb}<div class="flow-profile-favorite-meta"><span class="flow-profile-favorite-title">${escapeHtml(track.title)}</span><span class="flow-profile-favorite-artist">${escapeHtml(track.artist || '—')}</span></div></div></div>`
+}
+
+function buildFlowProfileFriendsStripHtml(usernames) {
+  const list = Array.isArray(usernames) ? usernames.map((x) => String(x || '').trim()).filter(Boolean) : []
+  if (!list.length) return '<div class="flow-profile-friends-empty">Пока нет друзей</div>'
+  return list
+    .map((f) => {
+      const av = resolvePeerAvatarByUsername(f)
+      const face = av
+        ? `<div class="flow-profile-friend-face" style="background-image:url(${av})"></div>`
+        : `<div class="flow-profile-friend-face">${escapeHtml(f.slice(0, 1).toUpperCase())}</div>`
+      return `<button type="button" class="flow-profile-friend-chip" onclick="openPeerProfile(${JSON.stringify(f)},'')">${face}<span>${escapeHtml(f)}</span></button>`
+    })
+    .join('')
+}
+
+function getFlowProfileBadgeStripHtml() {
+  const flowIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 2l2.2 6.8H21l-5.5 4 2.1 6.5L12 15.2 6.4 19.3l2.1-6.5L3 8.8h6.8L12 2z"/></svg>`
+  const trophyIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 21h8M12 17v4M6 3h12v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V3z"/><path d="M6 5H4a2 2 0 0 0 0 4h2M18 5h2a2 2 0 0 1 0 4h-2"/></svg>`
+  const gemIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3l8 9-8 9-8-9 8-9z"/><path d="M4 12h16"/></svg>`
+  const gearIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>`
+  return `<span class="flow-profile-badge-chip" title="Flow">${flowIcon}</span><span class="flow-profile-badge-chip">${trophyIcon}</span><span class="flow-profile-badge-chip">${gemIcon}</span><span class="flow-profile-badge-chip">${gearIcon}</span>`
+}
+
+function injectFlowProfileBadgeRow(el) {
+  if (!el) return
+  el.innerHTML = getFlowProfileBadgeStripHtml()
+}
+
+function renderProfileNowPlaying() {
+  const box = document.getElementById('profile-now-playing')
+  if (!box) return
+  const duration = Number(audio?.duration || 0)
+  const current = Number(audio?.currentTime || 0)
+  const progress = duration > 0 ? (current / duration) * 100 : 0
+  const coverId = 'profile-flow-listening-cover'
+  const hasTrack = Boolean(currentTrack?.title)
+  box.classList.toggle('flow-profile-activity-idle', !hasTrack)
+  box.innerHTML = buildProfileActivityCardHtml(currentTrack, progress, hasTrack ? coverId : null)
+  if (currentTrack && hasTrack) {
+    const coverEl = document.getElementById(coverId)
+    if (coverEl) {
+      applyCoverArt(
+        coverEl,
+        getEffectiveCoverUrl(currentTrack),
+        currentTrack.bg || 'linear-gradient(135deg,#7c3aed,#a855f7)',
+      )
+    }
+  }
+}
+
 function renderProfilePage() {
   if (!_profile?.username) return
   const custom = getProfileCustom()
   const banner = document.getElementById('profile-banner')
   const avatar = document.getElementById('profile-avatar-large')
   const displayName = document.getElementById('profile-display-name')
+  const handleLine = document.getElementById('profile-handle-line')
+  const badgeRow = document.getElementById('profile-badge-row')
+  const favSlot = document.getElementById('profile-favorite-song')
   const bio = document.getElementById('profile-bio')
-  const stats = document.getElementById('profile-stats')
   const friendsEl = document.getElementById('profile-friends-list')
   if (banner) {
-    banner.style.backgroundImage = custom.bannerData
-      ? `linear-gradient(0deg, rgba(8,10,16,.35), rgba(8,10,16,.35)), url(${custom.bannerData})`
-      : 'linear-gradient(135deg, rgba(59,130,246,.3), rgba(139,92,246,.25))'
+    if (custom.bannerData) {
+      banner.style.backgroundImage = `linear-gradient(0deg, rgba(8,10,16,.32), rgba(8,10,16,.28)), url(${custom.bannerData})`
+    } else {
+      banner.style.backgroundImage =
+        'linear-gradient(135deg, rgba(124,58,237,0.42), rgba(59,130,246,0.32)), linear-gradient(180deg, rgba(12,14,22,0.05) 0%, rgba(8,10,16,0.82) 100%)'
+    }
     banner.style.backgroundSize = 'cover'
     banner.style.backgroundPosition = 'center'
   }
@@ -3828,27 +4565,35 @@ function renderProfilePage() {
       avatar.textContent = (_profile.username || '?').slice(0, 1).toUpperCase()
     }
   }
-  if (displayName) displayName.textContent = _profile.username
-  if (bio) bio.textContent = custom.bio || 'Добавь описание профиля'
-  applyProfileBannerTheme(custom.bannerData, custom.profileColor).catch?.(() => {})
-  if (stats) {
-    const st = getListenStats()
-    const hours = (Number(st.totalSeconds || 0) / 3600).toFixed(1)
-    const playlistsCount = getPlaylists().map(normalizePlaylist).length
-    const likedCount = getLiked().length
-    stats.innerHTML = `
-      <div class="profile-stat-line"><strong>${hours}ч</strong> прослушивания</div>
-      <div class="profile-stat-line"><strong>${Number(st.totalTracks || 0)}</strong> треков прослушано</div>
-      <div class="profile-stat-line"><strong>${likedCount}</strong> лайков • <strong>${playlistsCount}</strong> плейлистов</div>
-    `
+  const bubbleEl = document.getElementById('profile-thought-bubble')
+  if (bubbleEl) {
+    const tb = String(custom.thoughtBubble || '').trim()
+    if (tb) {
+      bubbleEl.textContent = tb
+      bubbleEl.classList.remove('flow-profile-thought-bubble--hidden')
+      bubbleEl.setAttribute('aria-hidden', 'false')
+    } else {
+      bubbleEl.textContent = ''
+      bubbleEl.classList.add('flow-profile-thought-bubble--hidden')
+      bubbleEl.setAttribute('aria-hidden', 'true')
+    }
   }
+  const presDot = document.getElementById('profile-avatar-presence-dot')
+  if (presDot) {
+    const selfOnline = Boolean(_socialPeer)
+    presDot.classList.toggle('flow-profile-online-dot--offline', !selfOnline)
+  }
+  if (displayName) displayName.textContent = _profile.username
+  if (handleLine) handleLine.textContent = `@${_profile.username} • custom`
+  injectFlowProfileBadgeRow(badgeRow)
+  if (favSlot) favSlot.innerHTML = formatFlowProfileFavoriteSongHtml(custom.pinnedTracks?.[0] || null)
+  if (bio) bio.textContent = custom.bio || 'Описание отсутствует'
+  applyProfileBannerTheme(custom.bannerData, custom.profileColor).catch?.(() => {})
+  renderProfileNowPlaying()
   if (friendsEl) {
     const friends = typeof peerSocial.getFriends === 'function' ? peerSocial.getFriends(_profile.username) : []
-    friendsEl.innerHTML = friends.length
-      ? friends.map((f) => `<div class="profile-chip">${f}</div>`).join('')
-      : '<span style="opacity:.75">Пока нет друзей</span>'
+    friendsEl.innerHTML = buildFlowProfileFriendsStripHtml(friends)
   }
-  renderPinnedTracks()
   syncProfileEditModal()
 }
 
@@ -3859,6 +4604,7 @@ function syncProfileEditModal() {
   const avatar = document.getElementById('profile-edit-avatar-preview')
   const banner = document.getElementById('profile-edit-banner-preview')
   const bio = document.getElementById('profile-edit-bio')
+  const thoughtBubbleInp = document.getElementById('profile-edit-thought-bubble')
   const colorPreview = document.getElementById('profile-edit-color-preview')
   const colorText = document.getElementById('profile-edit-color-text')
   const safeColor = normalizeProfileColor(draft.profileColor || '') || '#9ca3af'
@@ -3873,6 +4619,7 @@ function syncProfileEditModal() {
       : 'linear-gradient(135deg, rgba(59,130,246,.24), rgba(139,92,246,.22))'
   }
   if (bio && document.activeElement !== bio) bio.value = draft.bio || ''
+  if (thoughtBubbleInp && document.activeElement !== thoughtBubbleInp) thoughtBubbleInp.value = draft.thoughtBubble || ''
   if (colorPreview) colorPreview.style.setProperty('--profile-edit-accent', safeColor)
   if (colorText && document.activeElement !== colorText) colorText.value = normalizeProfileColor(draft.profileColor || '')
   document.querySelectorAll('.profile-color-swatch').forEach((btn) => {
@@ -3929,9 +4676,11 @@ function setProfileEditColor(value) {
 async function submitProfileEditModal() {
   if (!_profile?.username) return
   const bio = document.getElementById('profile-edit-bio')
+  const thoughtBubbleInp = document.getElementById('profile-edit-thought-bubble')
   const colorText = document.getElementById('profile-edit-color-text')
   const draft = Object.assign({}, _profileEditDraft || getProfileCustom(), {
     bio: String(bio?.value || '').trim().slice(0, 180),
+    thoughtBubble: String(thoughtBubbleInp?.value || '').trim().slice(0, 48),
     profileColor: normalizeProfileColor(colorText?.value || _profileEditDraft?.profileColor || ''),
   })
   saveProfileCustom(draft)
@@ -4126,8 +4875,11 @@ function submitPlaylistPicker(selectedId) {
     if (track) {
       const custom = getProfileCustom()
       const key = `${track.source}:${track.id}`
-      if (!custom.pinnedTracks.some((t) => `${t.source}:${t.id}` === key)) custom.pinnedTracks.push(track)
-      saveProfileCustom({ pinnedTracks: custom.pinnedTracks.slice(0, 8) })
+      const rest = (Array.isArray(custom.pinnedTracks) ? custom.pinnedTracks : []).filter(
+        (t) => `${t.source}:${t.id}` !== key,
+      )
+      const next = [track, ...rest].slice(0, 8)
+      saveProfileCustom({ pinnedTracks: next })
       renderProfilePage()
     }
   } else if (ctx.mode === 'profile-playlist') {
@@ -4649,21 +5401,8 @@ async function renderFriends() {
     if (state.online) online.push({ name, state })
     else offline.push({ name, state })
   })
-  const resolveAvatar = (username) => {
-    const remote = Array.from(_peerProfiles.values()).find((p) => p?.username === username)
-    if (remote?.avatarData) return remote.avatarData
-    const cached = getCachedPeerProfile(username)
-    if (cached?.avatarData) return cached.avatarData
-    const key = `flow_profile_custom_${username}`
-    try {
-      const data = JSON.parse(localStorage.getItem(key) || '{}')
-      return data?.avatarData || null
-    } catch {
-      return null
-    }
-  }
   const fmtFriendCard = (item, onlineMode) => {
-    const avatar = resolveAvatar(item.name)
+    const avatar = resolvePeerAvatarByUsername(item.name)
     const roomId = item.state.roomId || ''
     const nowPlaying = onlineMode && item.state.track?.title
       ? `слушает: ${item.state.track.title}${item.state.track.artist ? ` — ${item.state.track.artist}` : ''}`
@@ -5678,31 +6417,1348 @@ function applyUiTextOverrides() {
   })
 }
 
+let scheduleMainShiftRemeasure = () => {}
+
+const FLOW_SIDEBAR_FLOAT_Y_LS = 'flow_sidebar_float_y'
+
+/** Slack L/T/R/B (px): «кусок» правой карточки от максимального прямоугольника в UI «Минимал». */
+const FLOW_MAIN_CARD_SLACK_LS = 'flow_main_card_slack_v1'
+
+/** Сохранённое смещение правой карточки («окна» контента) в UI «Минимал», px. */
+const FLOW_MAIN_PANE_DRAG_LS = 'flow_floated_pane_drag_v1'
+
+function setupFloatedMainContentResize() {
+  const root = document.documentElement
+  const MAIN_MIN_W = 360
+  const MAIN_MIN_H = 240
+  /** Дополнительное «вырастание» карточки у углов: отрицательный slack; общий модуль ограничен. */
+  const SLACK_NEG_CAP = 72
+
+  const modeOk = () =>
+    document.body.classList.contains('visual-floated') &&
+    !document.body.classList.contains('visual-minimal') &&
+    !document.body.classList.contains('layout-top-nav')
+
+  /** @typedef {{ l: number, t: number, r: number, b: number }} Slack */
+
+  /** @returns {{ baseMl: number, baseMt: number, maxW: number, maxH: number }} */
+  function readMaxBox() {
+    try {
+      const gcs = getComputedStyle(root)
+      const mis = parseFloat(gcs.getPropertyValue('--main-inset-start')) || 22
+      const mie = parseFloat(gcs.getPropertyValue('--main-inset-end')) || 22
+      const pans = parseFloat(gcs.getPropertyValue('--floated-pane-stack-start')) || 300
+      const offx = parseFloat(gcs.getPropertyValue('--floated-right-pane-offset-x') || '') || 0
+      const offy = parseFloat(gcs.getPropertyValue('--floated-right-pane-offset-y') || '') || 0
+      const smpt = parseFloat(gcs.getPropertyValue('--screen-main-pt')) || 18
+      const tb = parseFloat(gcs.getPropertyValue('--titlebar-h')) || 32
+      const ph = parseFloat(gcs.getPropertyValue('--player-h')) || 88
+      const psb = parseFloat(gcs.getPropertyValue('--player-stack-bottom')) || 22
+      const iw = typeof window !== 'undefined' ? window.innerWidth : 1100
+      const ih = typeof window !== 'undefined' ? window.innerHeight : 700
+      const nominalStart = mis + pans + offx
+      let baseMl = nominalStart
+      try {
+        const sb = typeof document !== 'undefined' ? document.getElementById('sidebar') : null
+        if (sb && document.body?.classList?.contains?.('visual-floated')) {
+          const br = sb.getBoundingClientRect()
+          const guardStr = gcs.getPropertyValue('--floated-content-overlap-guard').trim()
+          const guard = parseFloat(guardStr) || 44
+          if (br.width > 4 && br.height > 4) {
+            const dyn = br.right + guard
+            baseMl = Math.max(nominalStart, dyn)
+          }
+        }
+      } catch (_) {}
+      const baseMt = smpt + offy
+      const maxW = Math.max(MAIN_MIN_W, Math.floor(iw - baseMl - mie))
+      const maxH = Math.max(MAIN_MIN_H, Math.floor(ih - tb - smpt - offy - ph - psb + 10))
+      return { baseMl, baseMt, maxW, maxH }
+    } catch (_) {
+      return { baseMl: 22, baseMt: 18, maxW: 800, maxH: 600 }
+    }
+  }
+
+  function clampSlacks(s) {
+    const { maxW, maxH } = readMaxBox()
+    const clampH = (v) => Math.max(-SLACK_NEG_CAP, Math.min(Math.round(v), maxW))
+    const clampV = (v) => Math.max(-SLACK_NEG_CAP, Math.min(Math.round(v), maxH))
+    let L = clampH(s.l)
+    let T = clampV(s.t)
+    let R = clampH(s.r)
+    let B = clampV(s.b)
+
+    const shrinkHoriz = () => {
+      let wAvail = maxW - L - R
+      if (wAvail >= MAIN_MIN_W) return
+      let need = MAIN_MIN_W - wAvail
+      const eatNeg = () => {
+        while (need > 0 && L < 0) {
+          const t = Math.min(need, -L)
+          L += t
+          need -= t
+        }
+        while (need > 0 && R < 0) {
+          const t = Math.min(need, -R)
+          R += t
+          need -= t
+        }
+      }
+      eatNeg()
+      let guard = 0
+      while (need > 0 && guard < 5600) {
+        guard++
+        if (L >= R && L > 0) {
+          L--
+          need--
+        } else if (R > 0) {
+          R--
+          need--
+        } else if (L < 0) {
+          L++
+          need--
+        } else if (R < 0) {
+          R++
+          need--
+        } else break
+      }
+    }
+
+    const shrinkVert = () => {
+      let hAvail = maxH - T - B
+      if (hAvail >= MAIN_MIN_H) return
+      let need = MAIN_MIN_H - hAvail
+      const eatNeg = () => {
+        while (need > 0 && T < 0) {
+          const t = Math.min(need, -T)
+          T += t
+          need -= t
+        }
+        while (need > 0 && B < 0) {
+          const t = Math.min(need, -B)
+          B += t
+          need -= t
+        }
+      }
+      eatNeg()
+      let guard = 0
+      while (need > 0 && guard < 5600) {
+        guard++
+        if (T >= B && T > 0) {
+          T--
+          need--
+        } else if (B > 0) {
+          B--
+          need--
+        } else if (T < 0) {
+          T++
+          need--
+        } else if (B < 0) {
+          B++
+          need--
+        } else break
+      }
+    }
+
+    shrinkHoriz()
+    shrinkVert()
+    return { l: L, t: T, r: R, b: B }
+  }
+
+  /** @returns {Slack}
+   */
+  function readStoredSlacks() {
+    try {
+      const raw = localStorage.getItem(FLOW_MAIN_CARD_SLACK_LS)
+      if (!raw) return { l: 0, t: 0, r: 0, b: 0 }
+      const p = JSON.parse(raw)
+      if (!p || typeof p !== 'object') return { l: 0, t: 0, r: 0, b: 0 }
+      return clampSlacks({
+        l: +p.l || 0,
+        t: +p.t || 0,
+        r: +p.r || 0,
+        b: +p.b || 0,
+      })
+    } catch (_) {
+      return { l: 0, t: 0, r: 0, b: 0 }
+    }
+  }
+
+  /** @type {Slack}
+   */
+  let liveSlacks = readStoredSlacks()
+
+  function clearDomSlacks() {
+    try {
+      ;['--flow-main-card-sl-l', '--flow-main-card-sl-t', '--flow-main-card-sl-r', '--flow-main-card-sl-b'].forEach(
+        (prop) => {
+          root.style.removeProperty(prop)
+        },
+      )
+    } catch (_) {}
+    try {
+      document.body.classList.remove('has-flow-main-pane-slack')
+    } catch (_) {}
+  }
+
+  function persistSlacks() {
+    try {
+      localStorage.setItem(FLOW_MAIN_CARD_SLACK_LS, JSON.stringify(liveSlacks))
+    } catch (_) {}
+  }
+
+  function syncSlacksToDom(slack) {
+    if (!modeOk()) return
+    try {
+      root.style.setProperty('--flow-main-card-sl-l', `${slack.l}px`)
+      root.style.setProperty('--flow-main-card-sl-t', `${slack.t}px`)
+      root.style.setProperty('--flow-main-card-sl-r', `${slack.r}px`)
+      root.style.setProperty('--flow-main-card-sl-b', `${slack.b}px`)
+    } catch (_) {}
+  }
+
+  function applySlacks(s) {
+    liveSlacks = clampSlacks(s)
+    if (!modeOk()) {
+      clearDomSlacks()
+      return
+    }
+    const flat =
+      Math.abs(liveSlacks.l) +
+        Math.abs(liveSlacks.t) +
+        Math.abs(liveSlacks.r) +
+        Math.abs(liveSlacks.b) <
+      0.25
+    if (flat) {
+      clearDomSlacks()
+      liveSlacks = { l: 0, t: 0, r: 0, b: 0 }
+      return
+    }
+    syncSlacksToDom(liveSlacks)
+    try {
+      document.body.classList.add('has-flow-main-pane-slack')
+    } catch (_) {}
+  }
+
+  /** @returns {Slack}
+   */
+  function applyStoredOrClear() {
+    if (!modeOk()) {
+      clearDomSlacks()
+      return liveSlacks
+    }
+    const rd = readStoredSlacks()
+    const sumAbs =
+      Math.abs(rd.l) +
+      Math.abs(rd.t) +
+      Math.abs(rd.r) +
+      Math.abs(rd.b)
+    if (sumAbs <= 0.25) {
+      clearDomSlacks()
+      liveSlacks = { l: 0, t: 0, r: 0, b: 0 }
+      return liveSlacks
+    }
+    liveSlacks = rd
+    syncSlacksToDom(liveSlacks)
+    try {
+      document.body.classList.add('has-flow-main-pane-slack')
+    } catch (_) {}
+    return liveSlacks
+  }
+
+  let cornerDragging = false
+  /** @type {null | { corner: string, cx: number, cy: number, s: Slack }} */
+  let anchor = null
+  /** @type {null | Element} */
+  let captureEl = null
+  let capPid = /** @type {null | number} */ (null)
+
+  function finishCorner() {
+    if (!cornerDragging) return
+    cornerDragging = false
+    anchor = null
+    document.body.style.cursor = ''
+    try {
+      document.body.classList.remove('flow-main-pane-resizing')
+    } catch (_) {}
+    window.removeEventListener('pointermove', onMv, true)
+    window.removeEventListener('pointerup', finishCorner, true)
+    window.removeEventListener('pointercancel', finishCorner, true)
+    if (captureEl && capPid != null) {
+      try {
+        captureEl.releasePointerCapture(capPid)
+      } catch (_) {}
+    }
+    captureEl = null
+    capPid = null
+    persistSlacks()
+    try {
+      scheduleMainShiftRemeasure()
+    } catch (_) {}
+    try {
+      syncFlowLayoutCoords()
+    } catch (_) {}
+  }
+
+  /** @param {PointerEvent} e */
+  function onMv(e) {
+    if (!cornerDragging || !anchor) return
+    const { corner, cx: sx, cy: sy, s: startSlack } = anchor
+    const cx = e.clientX
+    const cy = e.clientY
+    const dx = cx - sx
+    const dy = cy - sy
+    const ns = { ...startSlack }
+    if (corner === 'br') {
+      ns.r = startSlack.r - dx
+      ns.b = startSlack.b - dy
+    } else if (corner === 'tr') {
+      ns.r = startSlack.r - dx
+      ns.t = startSlack.t + dy
+    } else if (corner === 'bl') {
+      ns.l = startSlack.l + dx
+      ns.b = startSlack.b - dy
+    } else if (corner === 'tl') {
+      ns.l = startSlack.l + dx
+      ns.t = startSlack.t + dy
+    }
+    applySlacks(ns)
+  }
+
+  /** @param {string} corner @param {PointerEvent} e @param {Element} el */
+  function beginCorner(corner, e, el) {
+    if (!modeOk()) return
+    if (!e.isPrimary || e.button !== 0) return
+    e.preventDefault()
+    e.stopPropagation()
+    anchor = { corner, cx: e.clientX, cy: e.clientY, s: { ...liveSlacks } }
+    cornerDragging = true
+    try {
+      document.body.classList.add('flow-main-pane-resizing')
+    } catch (_) {}
+    document.body.style.cursor = corner === 'tl' || corner === 'br' ? 'nwse-resize' : 'nesw-resize'
+    captureEl = el
+    capPid = e.pointerId
+    window.addEventListener('pointermove', onMv, true)
+    window.addEventListener('pointerup', finishCorner, true)
+    window.addEventListener('pointercancel', finishCorner, true)
+    try {
+      el.setPointerCapture(e.pointerId)
+    } catch (_) {}
+  }
+
+  const pane = document.getElementById('main-content-pane')
+  document.querySelectorAll('[data-main-pane-corner]').forEach((btn) => {
+    const corner = String(btn.getAttribute('data-main-pane-corner') || '')
+    if (!['tl', 'tr', 'bl', 'br'].includes(corner)) return
+    btn.addEventListener('pointerdown', (e) => beginCorner(corner, e, btn))
+  })
+
+  let rt = 0
+  window.addEventListener(
+    'resize',
+    () => {
+      clearTimeout(rt)
+      rt = setTimeout(() => {
+        try {
+          if (!pane || !modeOk()) return
+          liveSlacks = clampSlacks(liveSlacks)
+          applySlacks(liveSlacks)
+          persistSlacks()
+        } catch (_) {}
+      }, 140)
+    },
+    { passive: true },
+  )
+
+  window.flowMainPaneResize = {
+    reclamp() {
+      applySlacks(clampSlacks(liveSlacks))
+    },
+    reset() {
+      try {
+        localStorage.removeItem(FLOW_MAIN_CARD_SLACK_LS)
+      } catch (_) {}
+      liveSlacks = { l: 0, t: 0, r: 0, b: 0 }
+      clearDomSlacks()
+    },
+    clearDom() {
+      clearDomSlacks()
+    },
+    refreshMode() {
+      if (!pane) return
+      if (!modeOk()) {
+        clearDomSlacks()
+        return
+      }
+      applyStoredOrClear()
+    },
+  }
+
+  if (pane && modeOk()) applyStoredOrClear()
+}
+
+/** Рамки по периметру карточки: перетаскивание только из полос (уголки освобождены под ресайз). */
+function setupFloatedMainPaneDrag() {
+  const paneEl = document.getElementById('main-content-pane')
+  const hits = paneEl?.querySelectorAll('.main-pane-frame-hit') ?? []
+  if (!paneEl || hits.length === 0) return
+
+  const modeOkDrag = () =>
+    document.body.classList.contains('visual-floated') &&
+    !document.body.classList.contains('visual-minimal') &&
+    !document.body.classList.contains('layout-top-nav')
+
+  /** Высота sticky-shell = видимая область панели, чтобы рамки не «уплывали» при прокрутке контента. */
+  function refreshFrameShellGeometry() {
+    try {
+      if (!modeOkDrag()) return
+      const ph = paneEl.clientHeight
+      paneEl.style.setProperty('--main-pane-frame-shell-h', `${Math.max(64, Math.round(ph))}px`)
+    } catch (_) {}
+  }
+
+  function readDragLs() {
+    try {
+      const raw = localStorage.getItem(FLOW_MAIN_PANE_DRAG_LS)
+      if (!raw) return { x: 0, y: 0 }
+      const p = JSON.parse(raw)
+      return { x: +p.x || 0, y: +p.y || 0 }
+    } catch (_) {
+      return { x: 0, y: 0 }
+    }
+  }
+
+  function applyDragVars(x, y) {
+    try {
+      document.documentElement.style.setProperty('--flow-floated-pane-drag-x', `${Math.round(x)}px`)
+      document.documentElement.style.setProperty('--flow-floated-pane-drag-y', `${Math.round(y)}px`)
+    } catch (_) {}
+  }
+
+  function persistDrag(x, y) {
+    try {
+      localStorage.setItem(
+        FLOW_MAIN_PANE_DRAG_LS,
+        JSON.stringify({ x: Math.round(x), y: Math.round(y) }),
+      )
+    } catch (_) {}
+    try {
+      syncFlowLayoutCoords()
+    } catch (_) {}
+  }
+
+  /** @returns {{ x: number, y: number }} */
+  function clampDrag(x, y) {
+    const content = document.getElementById('main-content-pane')
+    const pad = 8
+    let cx = x
+    let cy = y
+    if (!content || !modeOkDrag()) return { x: cx, y: cy }
+    const vw = typeof window !== 'undefined' ? window.innerWidth : 1200
+    const vh = typeof window !== 'undefined' ? window.innerHeight : 800
+    const gcs = getComputedStyle(document.documentElement)
+    const parseVar = (name, fallback) => {
+      const n = parseFloat(gcs.getPropertyValue(name))
+      return Number.isFinite(n) ? n : fallback
+    }
+    const titleH = parseVar('--titlebar-h', 32)
+    const mainPt = parseVar('--screen-main-pt', 18)
+    const offY = parseVar('--floated-right-pane-offset-y', 0)
+    const playerH = parseVar('--player-h', 88)
+    const playerBottom = parseVar('--player-stack-bottom', 12)
+    const insetStart = parseVar('--main-inset-start', 22)
+    const paneStack = parseVar('--floated-pane-stack-start', 300)
+    const offX = parseVar('--floated-right-pane-offset-x', 0)
+    const mainShift = parseVar('--main-shift-x', 0)
+    const insetEnd = parseVar('--main-inset-end', 22)
+    // Reserve left sidebar lane so the right pane cannot overlap it.
+    const minLeft = insetStart + paneStack + offX + Math.max(0, mainShift) + pad
+    const maxRight = vw - insetEnd - pad
+    const minTop = titleH + mainPt + offY + 4
+    const maxBottom = vh - (playerH + playerBottom + 6)
+    for (let iter = 0; iter < 8; iter++) {
+      applyDragVars(cx, cy)
+      const cr = content.getBoundingClientRect()
+      const prevCx = cx
+      const prevCy = cy
+      if (cr.left < minLeft) cx += minLeft - cr.left
+      if (cr.right > maxRight) cx -= cr.right - maxRight
+      if (cr.top < minTop) cy += minTop - cr.top
+      if (cr.bottom > maxBottom) cy -= cr.bottom - maxBottom
+
+      if (Math.abs(cx - prevCx) < 0.25 && Math.abs(cy - prevCy) < 0.25) break
+    }
+    return { x: Math.round(cx), y: Math.round(cy) }
+  }
+
+  function refreshFromStorage() {
+    if (!modeOkDrag()) return
+    const saved = readDragLs()
+    const c = clampDrag(saved.x, saved.y)
+    applyDragVars(c.x, c.y)
+    if (Math.abs(c.x - saved.x) > 0.6 || Math.abs(c.y - saved.y) > 0.6) persistDrag(c.x, c.y)
+    try {
+      scheduleMainShiftRemeasure()
+    } catch (_) {}
+  }
+
+  queueMicrotask(() => {
+    refreshFrameShellGeometry()
+    refreshFromStorage()
+  })
+
+  try {
+    let roRaf = 0
+    const ro =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(() => {
+            if (roRaf) return
+            roRaf = requestAnimationFrame(() => {
+              roRaf = 0
+              try {
+                refreshFrameShellGeometry()
+              } catch (_) {}
+            })
+          })
+        : null
+    ro?.observe(paneEl)
+  } catch (_) {}
+
+  let resizeRaf = 0
+  window.addEventListener(
+    'resize',
+    () => {
+      if (resizeRaf) return
+      resizeRaf = requestAnimationFrame(() => {
+        resizeRaf = 0
+        try {
+          refreshFrameShellGeometry()
+          refreshFromStorage()
+        } catch (_) {}
+      })
+    },
+    { passive: true },
+  )
+
+  let dragging = false
+  let sx = 0
+  let sy = 0
+  let ox = 0
+  let oy = 0
+  /** @type {null | HTMLElement} */
+  let capEl = null
+  let capId = /** @type {null | number} */ (null)
+
+  const fin = () => {
+    if (!dragging) return
+    dragging = false
+    document.body.classList.remove('flow-floated-main-pane-dragging')
+    window.removeEventListener('pointermove', mv, true)
+    window.removeEventListener('pointerup', fin, true)
+    window.removeEventListener('pointercancel', fin, true)
+    try {
+      if (capEl) capEl.releasePointerCapture(capId ?? -1)
+    } catch (_) {}
+    capEl = null
+    capId = null
+    try {
+      let xPx = 0
+      let yPx = 0
+      try {
+        xPx = parseFloat(
+          getComputedStyle(document.documentElement).getPropertyValue('--flow-floated-pane-drag-x'),
+        ) || 0
+      } catch (_) {}
+      try {
+        yPx = parseFloat(
+          getComputedStyle(document.documentElement).getPropertyValue('--flow-floated-pane-drag-y'),
+        ) || 0
+      } catch (_) {}
+      persistDrag(xPx, yPx)
+    } catch (_) {}
+    try {
+      window.flowMainPaneResize?.reclamp?.()
+    } catch (_) {}
+    try {
+      scheduleMainShiftRemeasure()
+    } catch (_) {}
+  }
+
+  /** @param {PointerEvent} ev */
+  function mv(ev) {
+    if (!dragging) return
+    const rawX = ox + (ev.clientX - sx)
+    const rawY = oy + (ev.clientY - sy)
+    const c = clampDrag(rawX, rawY)
+    applyDragVars(c.x, c.y)
+  }
+
+  /** @param {PointerEvent} e @param {HTMLElement} captureTarget */
+  function onHitPointerDown(e, captureTarget) {
+    if (!modeOkDrag()) return
+    if (document.body.classList.contains('home-layout-edit')) return
+    if (!e.isPrimary || e.button !== 0) return
+    if (e.target instanceof Element && e.target.closest('.content-corner-resize')) return
+    e.preventDefault()
+    e.stopPropagation()
+    dragging = true
+    document.body.classList.add('flow-floated-main-pane-dragging')
+    sx = e.clientX
+    sy = e.clientY
+    capEl = captureTarget
+    try {
+      ox = parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue('--flow-floated-pane-drag-x'),
+      ) || 0
+    } catch (_) {
+      ox = 0
+    }
+    try {
+      oy = parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue('--flow-floated-pane-drag-y'),
+      ) || 0
+    } catch (_) {
+      oy = 0
+    }
+    capId = e.pointerId
+    window.addEventListener('pointermove', mv, true)
+    window.addEventListener('pointerup', fin, true)
+    window.addEventListener('pointercancel', fin, true)
+    try {
+      captureTarget.setPointerCapture(e.pointerId)
+    } catch (_) {}
+  }
+
+  hits.forEach((el) =>
+    el.addEventListener(
+      'pointerdown',
+      (e) => onHitPointerDown(e, /** @type {HTMLElement} */ (el)),
+      true,
+    ),
+  )
+  paneEl?.addEventListener(
+    'pointerdown',
+    (e) => {
+      if (!(e.target instanceof Element)) return
+      if (e.target.closest('button, input, textarea, a, select, .vs-toggle, .content-corner-resize')) return
+      onHitPointerDown(e, paneEl)
+    },
+    true,
+  )
+
+  window.flowFloatedMainPaneDrag = {
+    refreshFromStorage,
+    refreshFrameShellGeometry,
+    clear: () => {
+      applyDragVars(0, 0)
+      persistDrag(0, 0)
+    },
+  }
+}
+
+function applySidebarFloatYPx(px) {
+  let maxY = 320
+  try {
+    if (typeof window !== 'undefined') {
+      const ih = window.innerHeight
+      const root = document.documentElement
+      const gcs = getComputedStyle(root)
+      const tb = parseFloat(gcs.getPropertyValue('--titlebar-h')) || 32
+      const ph = parseFloat(gcs.getPropertyValue('--player-h')) || 88
+      const psb = parseFloat(gcs.getPropertyValue('--player-stack-bottom')) || 0
+      const smpt = parseFloat(gcs.getPropertyValue('--screen-main-pt')) || 0
+      /* Симметрия вверх/вниз: одинаковый модуль, clamp ниже в [-maxY, +maxY]. */
+      maxY = Math.max(160, Math.min(560, Math.floor(ih - tb - ph - psb - smpt - 180)))
+    }
+  } catch (_) {
+    maxY = 320
+  }
+  const c = Math.max(-maxY, Math.min(maxY, Math.round(px)))
+  try {
+    document.documentElement.style.setProperty('--sidebar-float-y', `${c}px`)
+  } catch (_) {}
+  try {
+    localStorage.setItem(FLOW_SIDEBAR_FLOAT_Y_LS, String(c))
+  } catch (_) {}
+  try {
+    syncFlowLayoutCoords()
+  } catch (_) {}
+}
+
+/** Сброс перетаскивания сайдбара ( Escape / смена страницы ). */
+let _teardownSidebarPanelDrag = () => {}
+
 function setupSidebarResize() {
+  const MIN_W = 72
+  const MAX_W = 320
+  const MIN_CONTENT_TAIL = 260
   const sidebar = document.getElementById('sidebar')
-  const resizer = document.getElementById('sidebar-resizer')
-  if (!sidebar || !resizer) return
-  const saved = parseInt(localStorage.getItem('flow_sidebar_w') || '210', 10)
-  const applyW = (w) => {
-    const clamped = Math.max(72, Math.min(320, w))
-    document.documentElement.style.setProperty('--sidebar-w', clamped + 'px')
+  const gutters = [
+    ['left', document.getElementById('sidebar-resize-gutter-left')],
+    ['right', document.getElementById('sidebar-resize-gutter')],
+  ].filter(([, el]) => el)
+  if (!sidebar || gutters.length === 0) return
+
+  const root = document.documentElement
+
+  const getSidebarGapPx = () => {
+    const raw = String(getComputedStyle(root).getPropertyValue('--sidebar-gap') || '').trim()
+    const n = parseFloat(raw)
+    return Number.isFinite(n) ? n : 12
+  }
+  const getMainInsetLeft = () => {
+    const main = document.getElementById('screen-main')
+    if (!main) return 0
+    let inset = 0
+    try {
+      inset = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--main-inset-start')) || 0
+    } catch (_) {}
+    const pl = parseFloat(getComputedStyle(main).paddingLeft) || 0
+    return main.getBoundingClientRect().left + pl + inset
+  }
+  const computeMaxShift = (sidebarWidthPx) => {
+    const main = document.getElementById('screen-main')
+    if (!main) return 0
+    const r = main.getBoundingClientRect()
+    const pcs = getComputedStyle(main)
+    const pl = parseFloat(pcs.paddingLeft) || 0
+    const pr = parseFloat(pcs.paddingRight) || 0
+    const usable = Math.max(0, r.width - pl - pr)
+    const gap = getSidebarGapPx()
+    /* «Минимал»: сдвиг только в пределах окна — не от ширины flex-контейнера (иначе панель «дрожит» при ресайзе). */
+    if (document.body.classList.contains('visual-floated') && !document.body.classList.contains('layout-top-nav')) {
+      let insetStart = 0
+      let insetEnd = 0
+      let paneStack = 300
+      let offX = 0
+      let mainShift = 0
+      let nudge = 0
+      try {
+        insetStart = parseFloat(getComputedStyle(root).getPropertyValue('--main-inset-start')) || 0
+        insetEnd = parseFloat(getComputedStyle(root).getPropertyValue('--main-inset-end')) || 0
+        paneStack = parseFloat(getComputedStyle(root).getPropertyValue('--floated-pane-stack-start')) || 300
+        offX = parseFloat(getComputedStyle(root).getPropertyValue('--floated-right-pane-offset-x')) || 0
+        mainShift = parseFloat(getComputedStyle(root).getPropertyValue('--main-shift-x')) || 0
+        nudge = parseFloat(getComputedStyle(root).getPropertyValue('--floated-sidebar-nudge-x')) || 0
+      } catch (_) {}
+      const vw = typeof window !== 'undefined' ? window.innerWidth : 1200
+      const w = Math.max(MIN_W, Math.min(MAX_W, Math.round(sidebarWidthPx)))
+      let maxShift = Math.max(0, Math.floor(vw - insetEnd - w - insetStart - 10))
+      /* Невидимый фиолетовый барьер: sb.right не может перейти в старт жёлтой зоны контента. */
+      try {
+        const barrier = insetStart + paneStack + offX + mainShift - 12
+        const byBarrier = Math.floor(barrier - insetStart - nudge - w)
+        if (Number.isFinite(byBarrier)) maxShift = Math.min(maxShift, Math.max(0, byBarrier))
+      } catch (_) {}
+      return maxShift
+    }
+    return Math.max(0, usable - sidebarWidthPx - gap - MIN_CONTENT_TAIL)
+  }
+  const readShiftStored = () => {
+    const s = parseInt(localStorage.getItem('flow_sidebar_shift') || '0', 10)
+    return Number.isFinite(s) ? Math.max(0, s) : 0
+  }
+  const clampShiftForWidth = (wPx, shiftPx) =>
+    Math.max(0, Math.min(computeMaxShift(wPx), shiftPx))
+
+  const setWidthCss = (w) => {
+    const clamped = Math.max(MIN_W, Math.min(MAX_W, Math.round(w)))
+    root.style.setProperty('--sidebar-w', clamped + 'px')
     localStorage.setItem('flow_sidebar_w', String(clamped))
     sidebar.classList.toggle('collapsed', clamped <= 92)
+    return clamped
   }
-  applyW(Number.isFinite(saved) ? saved : 210)
+  const setShiftCss = (shiftPx) => {
+    const s = Math.max(0, Math.round(shiftPx))
+    root.style.setProperty('--sidebar-shift', s + 'px')
+    localStorage.setItem('flow_sidebar_shift', String(s))
+  }
+
+  const sidebarWidthEffectivePx = () => {
+    try {
+      if (!document.body.classList.contains('layout-top-nav')) {
+        const bw = sidebar.getBoundingClientRect().width
+        if (Number.isFinite(bw) && bw >= 48) return Math.round(bw)
+      }
+    } catch (_) {}
+    let wParsed = NaN
+    try { wParsed = parseFloat(getComputedStyle(root).getPropertyValue('--sidebar-w')) || NaN } catch (_) {}
+    const wPx = Number.isFinite(wParsed) ? Math.round(wParsed) : 210
+    return Math.max(MIN_W, Math.min(MAX_W, wPx))
+  }
+
+  const syncShiftToWidth = () => {
+    let wPx = sidebarWidthEffectivePx()
+    wPx = Math.max(MIN_W, Math.min(MAX_W, wPx))
+    let shParsed = 0
+    try { shParsed = parseFloat(getComputedStyle(root).getPropertyValue('--sidebar-shift')) || 0 } catch (_) {}
+    const sh = clampShiftForWidth(wPx, shParsed)
+    if (Math.abs(sh - shParsed) > 0.5) setShiftCss(sh)
+  }
+
+  /** Якорь — левая координата сайдбара в момент захвата (правый грип). */
+  let anchorLeftPx = 0
+  /** Якорь — правая координата сайдбара в момент захвата (левый грип): стык с основной областью. */
+  let anchorRightPx = 0
+
+  const applyRightDrag = (clientX) => {
+    setWidthCss(clientX - anchorLeftPx)
+    syncShiftToWidth()
+  }
+  /** Левый грип: двигаем левую сторону, правая (у меню контента) остаётся на месте до отпускания. */
+  const applyLeftDrag = (clientX) => {
+    const wReq = anchorRightPx - clientX
+    const clampedW = Math.max(MIN_W, Math.min(MAX_W, Math.round(wReq)))
+    const leftDesired = anchorRightPx - clampedW
+    const innerL = getMainInsetLeft()
+    let shiftReq = leftDesired - innerL
+    shiftReq = clampShiftForWidth(clampedW, shiftReq)
+    setWidthCss(clampedW)
+    setShiftCss(shiftReq)
+  }
+
+  const SIDEBAR_H_MIN = 196
+
+  const applySidebarPanelHeightFromStorage = () => {
+    if (!document.body.classList.contains('visual-floated')) {
+      root.style.removeProperty('--sidebar-panel-height')
+      return
+    }
+    try {
+      const n = parseInt(localStorage.getItem(FLOW_SIDEBAR_PANEL_H_LS) || '', 10)
+      if (Number.isFinite(n) && n >= SIDEBAR_H_MIN) {
+        root.style.setProperty('--sidebar-panel-height', `${n}px`)
+      }
+    } catch (_) {}
+  }
+
+  /** @param {number} h @param {{ fixedHMax?: number, lockSidebarTopPx?: number, lockPlayerTopPx?: number }} [opts] */
+  const setPanelHeightClamped = (h, opts = {}) => {
+    let hMax
+    if (opts.fixedHMax != null && Number.isFinite(opts.fixedHMax)) {
+      hMax = opts.fixedHMax
+    } else {
+      const sidebarTop =
+        opts.lockSidebarTopPx != null ? opts.lockSidebarTopPx : sidebar.getBoundingClientRect().top
+      const playerBar = document.getElementById('player-bar')
+      const pt =
+        opts.lockPlayerTopPx != null
+          ? opts.lockPlayerTopPx
+          : playerBar
+            ? playerBar.getBoundingClientRect().top
+            : window.innerHeight - 88
+      hMax = Math.max(SIDEBAR_H_MIN + 40, Math.floor(pt - sidebarTop - 8))
+    }
+    const clamped = Math.max(SIDEBAR_H_MIN, Math.min(hMax, Math.round(h)))
+    root.style.setProperty('--sidebar-panel-height', `${clamped}px`)
+    return clamped
+  }
+
   let dragging = false
-  resizer.addEventListener('mousedown', () => { dragging = true; document.body.style.cursor = 'ew-resize' })
-  window.addEventListener('mousemove', (e) => {
+  let dragEdge = 'right'
+  let activePointerId = null
+  let captureEl = null
+
+  let cornerDragging = false
+  let cornerCaptureEl = null
+  let cornerPointerId = null
+  /** @type {{ corner: string, freezeL: number, freezeR: number, freezeT: number, freezeB: number, innerL: number, fixedHMax: number, startCx: number, startCy: number, startW: number, startShift: number, startPanelH: number } | null} */
+  let cornerAnchor = null
+
+  const winPointerMove = (e) => {
+    if (!dragging || document.body.classList.contains('layout-top-nav')) return
+    if (dragEdge === 'left') applyLeftDrag(e.clientX)
+    else applyRightDrag(e.clientX)
+  }
+  const winPointerUp = () => {
     if (!dragging) return
-    applyW(e.clientX)
-  })
-  window.addEventListener('mouseup', () => {
     dragging = false
     document.body.style.cursor = ''
+    document.body.classList.remove('is-resizing-sidebar')
+    window.removeEventListener('pointermove', winPointerMove, true)
+    window.removeEventListener('pointerup', winPointerUp, true)
+    window.removeEventListener('pointercancel', winPointerUp, true)
+    if (captureEl != null && activePointerId != null) {
+      try { captureEl.releasePointerCapture(activePointerId) } catch (_) {}
+    }
+    captureEl = null
+    activePointerId = null
+    scheduleMainShiftRemeasure()
+    try {
+      syncFlowLayoutCoords()
+    } catch (_) {}
+  }
+
+  const finishCornerDrag = () => {
+    if (!cornerDragging) return
+    cornerDragging = false
+    document.body.style.cursor = ''
+    document.body.classList.remove('is-resizing-sidebar')
+    window.removeEventListener('pointermove', winCornerMove, true)
+    window.removeEventListener('pointerup', finishCornerDrag, true)
+    window.removeEventListener('pointercancel', finishCornerDrag, true)
+    if (cornerCaptureEl != null && cornerPointerId != null) {
+      try {
+        cornerCaptureEl.releasePointerCapture(cornerPointerId)
+      } catch (_) {}
+    }
+    cornerCaptureEl = null
+    cornerPointerId = null
+    cornerAnchor = null
+    try {
+      const raw = getComputedStyle(root).getPropertyValue('--sidebar-panel-height').trim()
+      const n = parseFloat(raw)
+      if (Number.isFinite(n) && n >= SIDEBAR_H_MIN) {
+        localStorage.setItem(FLOW_SIDEBAR_PANEL_H_LS, String(Math.round(n)))
+      }
+    } catch (_) {}
+    scheduleMainShiftRemeasure()
+    try {
+      syncFlowLayoutCoords()
+    } catch (_) {}
+  }
+
+  const winCornerMove = (e) => {
+    if (!cornerDragging || !cornerAnchor) return
+    const a = cornerAnchor
+    const { corner, fixedHMax, startCx, startCy, startW, startShift, startPanelH } = a
+    const cx = e.clientX
+    const cy = e.clientY
+    const hOpts = { fixedHMax }
+    /* Дельты от точки захвата для всех углов — freezeL/freezeR при драге «плывут» и правые углы дёргались. */
+    if (corner === 'br') {
+      const nw = Math.max(MIN_W, Math.min(MAX_W, Math.round(startW + (cx - startCx))))
+      const nh = Math.max(SIDEBAR_H_MIN, Math.min(fixedHMax, Math.round(startPanelH + (cy - startCy))))
+      setWidthCss(nw)
+      setPanelHeightClamped(nh, hOpts)
+    } else if (corner === 'tl') {
+      /* Левый верх: ширина/сдвиг от дельты — фиксируем правый край (innerL+shift+w), иначе cx-innerL даёт «схлопывание». */
+      const newW = Math.max(MIN_W, Math.min(MAX_W, Math.round(startW + (startCx - cx))))
+      const newH = Math.max(SIDEBAR_H_MIN, Math.min(fixedHMax, Math.round(startPanelH + (startCy - cy))))
+      const sh = clampShiftForWidth(newW, startShift + startW - newW)
+      setWidthCss(newW)
+      setShiftCss(sh)
+      setPanelHeightClamped(newH, hOpts)
+    } else if (corner === 'tr') {
+      const nw = Math.max(MIN_W, Math.min(MAX_W, Math.round(startW + (cx - startCx))))
+      const nh = Math.max(SIDEBAR_H_MIN, Math.min(fixedHMax, Math.round(startPanelH + (startCy - cy))))
+      setWidthCss(nw)
+      setPanelHeightClamped(nh, hOpts)
+    } else if (corner === 'bl') {
+      const newW = Math.max(MIN_W, Math.min(MAX_W, Math.round(startW + (startCx - cx))))
+      const newH = Math.max(SIDEBAR_H_MIN, Math.min(fixedHMax, Math.round(startPanelH + (cy - startCy))))
+      const sh = clampShiftForWidth(newW, startShift + startW - newW)
+      setWidthCss(newW)
+      setShiftCss(sh)
+      setPanelHeightClamped(newH, hOpts)
+    }
+  }
+
+  const startSidebarCornerDrag = (corner, e, capEl) => {
+    if (!document.body.classList.contains('visual-floated')) return
+    if (document.body.classList.contains('layout-top-nav')) return
+    if (
+      !document.body.classList.contains('flow-edit-enabled') ||
+      !document.body.classList.contains('home-layout-edit')
+    ) {
+      return
+    }
+    if (!e.isPrimary || e.button !== 0) return
+    e.preventDefault()
+    e.stopPropagation()
+    winPointerUp()
+    const rect = sidebar.getBoundingClientRect()
+    const playerBar = document.getElementById('player-bar')
+    const startPlayerTop = playerBar ? playerBar.getBoundingClientRect().top : window.innerHeight - 88
+    const fixedHMax = Math.max(SIDEBAR_H_MIN + 40, Math.floor(startPlayerTop - rect.top - 8))
+    let wParsed = NaN
+    try {
+      wParsed = parseFloat(String(getComputedStyle(root).getPropertyValue('--sidebar-w') || '').trim())
+    } catch (_) {}
+    const startW = Math.max(
+      MIN_W,
+      Math.min(MAX_W, Number.isFinite(wParsed) ? Math.round(wParsed) : sidebarWidthEffectivePx()),
+    )
+    let shParsed = 0
+    try {
+      shParsed = parseFloat(getComputedStyle(root).getPropertyValue('--sidebar-shift')) || 0
+    } catch (_) {}
+    const startShift = clampShiftForWidth(startW, shParsed)
+    let ph0 = NaN
+    try {
+      ph0 = parseFloat(getComputedStyle(root).getPropertyValue('--sidebar-panel-height').trim())
+    } catch (_) {}
+    const startPanelH =
+      Number.isFinite(ph0) && ph0 >= SIDEBAR_H_MIN ? ph0 : Math.max(SIDEBAR_H_MIN, rect.height)
+    cornerDragging = true
+    cornerAnchor = {
+      corner,
+      freezeL: rect.left,
+      freezeR: rect.right,
+      freezeT: rect.top,
+      freezeB: rect.bottom,
+      innerL: getMainInsetLeft(),
+      fixedHMax,
+      startCx: e.clientX,
+      startCy: e.clientY,
+      startW,
+      startShift,
+      startPanelH,
+    }
+    cornerCaptureEl = capEl
+    cornerPointerId = e.pointerId
+    document.body.classList.add('is-resizing-sidebar')
+    document.body.style.cursor = corner === 'tl' || corner === 'br' ? 'nwse-resize' : 'nesw-resize'
+    window.addEventListener('pointermove', winCornerMove, true)
+    window.addEventListener('pointerup', finishCornerDrag, true)
+    window.addEventListener('pointercancel', finishCornerDrag, true)
+    try {
+      capEl.setPointerCapture(e.pointerId)
+    } catch (_) {}
+  }
+
+  const startEdgeDrag = (edge, e, capEl) => {
+    if (document.body.classList.contains('layout-top-nav')) return
+    if (!e.isPrimary) return
+    e.preventDefault()
+    e.stopPropagation()
+    const rect = sidebar.getBoundingClientRect()
+    if (edge === 'left') anchorRightPx = rect.right
+    else anchorLeftPx = rect.left
+    dragging = true
+    dragEdge = edge
+    captureEl = capEl
+    activePointerId = e.pointerId
+    document.body.style.cursor = 'ew-resize'
+    document.body.classList.add('is-resizing-sidebar')
+    window.addEventListener('pointermove', winPointerMove, true)
+    window.addEventListener('pointerup', winPointerUp, true)
+    window.addEventListener('pointercancel', winPointerUp, true)
+    try { capEl.setPointerCapture(e.pointerId) } catch (_) {}
+  }
+
+  gutters.forEach(([edge, gutter]) => {
+    gutter.addEventListener('pointerdown', (e) => startEdgeDrag(edge, e, gutter))
   })
+
+  document.querySelectorAll('.sidebar-corner-resize[data-sidebar-corner]').forEach((btn) => {
+    const corner = String(btn.getAttribute('data-sidebar-corner') || '')
+    if (!['tl', 'tr', 'bl', 'br'].includes(corner)) return
+    btn.addEventListener('pointerdown', (e) => startSidebarCornerDrag(corner, e, btn))
+  })
+
+  const saved = parseInt(localStorage.getItem('flow_sidebar_w') || '210', 10)
+  const wInit = Number.isFinite(saved) ? saved : 210
+  const cw = setWidthCss(wInit)
+  setShiftCss(clampShiftForWidth(cw, readShiftStored()))
+  applySidebarPanelHeightFromStorage()
+
+  const rebalanceSidebarAfterResize = () => {
+    const floated = document.body.classList.contains('visual-floated') && !document.body.classList.contains('layout-top-nav')
+    if (floated) {
+      try {
+        const raw = getComputedStyle(root).getPropertyValue('--sidebar-panel-height').trim()
+        const n = parseFloat(raw)
+        if (Number.isFinite(n)) setPanelHeightClamped(n)
+      } catch (_) {}
+      /* Не вызываем syncShiftToWidth: он привязывает сдвиг к ширине #screen-main и даёт «резину» при ресайзе. */
+      let wPx = NaN
+      try {
+        wPx = parseFloat(getComputedStyle(root).getPropertyValue('--sidebar-w')) || NaN
+      } catch (_) {}
+      wPx = Math.max(MIN_W, Math.min(MAX_W, Number.isFinite(wPx) ? Math.round(wPx) : 210))
+      let shParsed = 0
+      try {
+        shParsed = parseFloat(getComputedStyle(root).getPropertyValue('--sidebar-shift')) || 0
+      } catch (_) {}
+      const cap = Math.max(0, Math.min(computeMaxShift(wPx), Math.round(shParsed)))
+      if (Math.abs(cap - shParsed) > 0.5) setShiftCss(cap)
+      return
+    }
+    syncShiftToWidth()
+    try {
+      const raw = getComputedStyle(root).getPropertyValue('--sidebar-panel-height').trim()
+      const n = parseFloat(raw)
+      if (Number.isFinite(n)) setPanelHeightClamped(n)
+    } catch (_) {}
+  }
+  window.addEventListener(
+    'resize',
+    debounceSidebarLayoutSync(rebalanceSidebarAfterResize, 160),
+    { passive: true },
+  )
+  window.addEventListener('blur', () => {
+    winPointerUp()
+    finishCornerDrag()
+  })
+
+  window.flowSidebarPanel = {
+    clampShiftForWidth,
+    setShiftCss,
+    sidebarWidthEffectivePx,
+    syncShiftToWidth,
+  }
+}
+
+function setupSidebarPanelEditDrag() {
+  const sidebar = document.getElementById('sidebar')
+  if (!sidebar) return
+
+  const isExcludedDragSurface = (t) => {
+    try {
+      if (!t || typeof t.closest !== 'function') return true
+      return !!(
+        t.closest('a.nav-item') ||
+        t.closest('.sidebar-user') ||
+        t.closest('.sidebar-logo') ||
+        t.closest('#sidebar-layout-constructor') ||
+        t.closest('.sidebar-corner-resize') ||
+        t.closest('.sidebar-resize-gutter') ||
+        t.closest('#sidebar-edit-drag-strip')
+      )
+    } catch (_) {
+      return true
+    }
+  }
+
+  const readShiftPx = () => {
+    try {
+      const v = getComputedStyle(document.documentElement).getPropertyValue('--sidebar-shift').trim()
+      const n = parseFloat(v)
+      return Number.isFinite(n) ? n : 0
+    } catch (_) {
+      return 0
+    }
+  }
+  const readFloatYPx = () => {
+    try {
+      const v = getComputedStyle(document.documentElement).getPropertyValue('--sidebar-float-y').trim()
+      const n = parseFloat(v)
+      return Number.isFinite(n) ? n : 0
+    } catch (_) {
+      return 0
+    }
+  }
+
+  let dragging = false
+  let startX = 0
+  let startY = 0
+  let originShift = 0
+  let originFloat = 0
+  let pid = null
+  let capEl = null
+
+  const mv = (e) => {
+    if (!dragging) return
+    const api = window.flowSidebarPanel
+    if (!api) return
+    const wPx = api.sidebarWidthEffectivePx()
+    let nextShift = originShift + (e.clientX - startX)
+    nextShift = api.clampShiftForWidth(wPx, nextShift)
+    api.setShiftCss(nextShift)
+    applySidebarFloatYPx(originFloat + (e.clientY - startY))
+  }
+
+  const fin = () => {
+    if (!dragging) return
+    dragging = false
+    document.body.classList.remove('sidebar-panel-dragging')
+    window.removeEventListener('pointermove', mv, true)
+    window.removeEventListener('pointerup', fin, true)
+    window.removeEventListener('pointercancel', fin, true)
+    if (capEl != null && pid != null) {
+      try {
+        capEl.releasePointerCapture(pid)
+      } catch (_) {}
+    }
+    capEl = null
+    pid = null
+    scheduleMainShiftRemeasure()
+    try {
+      reclampHomeGeometryOnResize()
+    } catch (_) {}
+    try {
+      syncFlowLayoutCoords()
+    } catch (_) {}
+  }
+
+  _teardownSidebarPanelDrag = () => {
+    fin()
+  }
+
+  sidebar.addEventListener(
+    'pointerdown',
+    (e) => {
+      if (!document.body.classList.contains('visual-floated')) return
+      if (document.body.classList.contains('layout-top-nav')) return
+      if (!e.isPrimary || e.button !== 0) return
+      const t = e.target
+      if (!sidebar.contains(t)) return
+      if (isExcludedDragSurface(t)) return
+      e.preventDefault()
+      e.stopPropagation()
+      dragging = true
+      document.body.classList.add('sidebar-panel-dragging')
+      startX = e.clientX
+      startY = e.clientY
+      originShift = readShiftPx()
+      originFloat = readFloatYPx()
+      capEl = sidebar
+      pid = e.pointerId
+      window.addEventListener('pointermove', mv, true)
+      window.addEventListener('pointerup', fin, true)
+      window.addEventListener('pointercancel', fin, true)
+      try {
+        sidebar.setPointerCapture(e.pointerId)
+      } catch (_) {}
+    },
+    true,
+  )
+}
+
+function debounceSidebarLayoutSync(fn, ms = 140) {
+  let t = 0
+  return () => {
+    if (document.body?.classList?.contains('layout-top-nav')) return
+    clearTimeout(t)
+    t = setTimeout(fn, ms)
+  }
+}
+
+const FLOW_MAIN_SHIFT_LS = 'flow_main_shift_px'
+const FLOW_SIDEBAR_PANEL_H_LS = 'flow_sidebar_panel_h'
+
+/** Сброс горизонтального сдвига (классический «Минимализм» без оффсета). */
+function clearMainPaneShiftForClassicLayout() {
+  try {
+    document.documentElement.style.setProperty('--main-shift-x', '0px')
+    localStorage.setItem(FLOW_MAIN_SHIFT_LS, '0')
+    const sl = document.getElementById('main-shift-slider')
+    if (sl) sl.value = '0'
+  } catch (_) {}
+}
+
+/** Горизонтальный сдвиг основной области (.content + нижний плеер + текстовая панель) в границах окна. */
+function setupMainPaneShift() {
+  const slider = document.getElementById('main-shift-slider')
+  const btn = document.getElementById('main-shift-reset')
+  if (!slider || !btn) return
+
+  const root = document.documentElement.style
+  /** @type {{ min: number, max: number }} */
+  let limits = { min: -280, max: 280 }
+
+  const applyShiftPx = (px) => {
+    root.setProperty('--main-shift-x', `${Math.round(px)}px`)
+  }
+
+  const clampAndPersist = (px) => {
+    const c = Math.max(limits.min, Math.min(limits.max, Math.round(px)))
+    applyShiftPx(c)
+    try { localStorage.setItem(FLOW_MAIN_SHIFT_LS, String(c)) } catch (_) {}
+    slider.value = String(c)
+    return c
+  }
+
+  const recomputeLimits = () => {
+    const scr = document.getElementById('screen-main')
+    const content = document.querySelector('#screen-main .content')
+    const player = document.getElementById('player-bar')
+    if (!scr || scr.classList.contains('hidden') || !content) return
+
+    applyShiftPx(0)
+    requestAnimationFrame(() => {
+      const vw = window.innerWidth
+      const margin = 12
+      const cr = content.getBoundingClientRect()
+      const pr = player ? player.getBoundingClientRect() : cr
+      const unionL = Math.min(cr.left, pr.left)
+      const unionR = Math.max(cr.right, pr.right)
+
+      const winMin = Math.floor(margin - unionL)
+      const winMax = Math.floor(vw - margin - unionR)
+
+      let rawMin = winMin
+      let rawMax = winMax
+
+      const topNav = document.body.classList.contains('layout-top-nav')
+      /* «Минимал»: колонка контента не привязана к sb.right — лимиты сдвига только от окна. */
+      if (!topNav && !document.body.classList.contains('visual-floated')) {
+        const sidebar = document.getElementById('sidebar')
+        let gapPx = 12
+        try {
+          gapPx = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-gap')) || 12
+        } catch (_) {}
+        if (sidebar) {
+          const sb = sidebar.getBoundingClientRect()
+          const boundary = sb.right + gapPx + 2
+          const needContent = Math.ceil(boundary - cr.left)
+          const needPlayer = Math.ceil(boundary - pr.left)
+          rawMin = Math.max(rawMin, needContent, needPlayer)
+        }
+      }
+
+      rawMin = Math.max(-520, rawMin)
+      rawMax = Math.min(520, rawMax)
+      if (rawMin >= rawMax - 6) {
+        rawMin = -120
+        rawMax = 120
+      }
+      limits = { min: rawMin, max: rawMax }
+
+      slider.min = String(limits.min)
+      slider.max = String(limits.max)
+      slider.step = Math.abs(limits.max - limits.min) > 420 ? '4' : '2'
+
+      let saved = 0
+      try { saved = parseInt(localStorage.getItem(FLOW_MAIN_SHIFT_LS) || '0', 10) } catch (_) {}
+      clampAndPersist(Number.isFinite(saved) ? saved : 0)
+    })
+  }
+
+  slider.addEventListener('input', () => {
+    clampAndPersist(parseFloat(slider.value || '0'))
+  })
+  btn.addEventListener('click', (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    try {
+      localStorage.setItem('flow_sidebar_shift', '0')
+      document.documentElement.style.setProperty('--sidebar-shift', '0px')
+    } catch (_) {}
+    try {
+      localStorage.setItem(FLOW_MAIN_SHIFT_LS, '0')
+    } catch (_) {}
+    applyShiftPx(0)
+    slider.value = '0'
+    requestAnimationFrame(() => {
+      recomputeLimits()
+      try { window.dispatchEvent(new Event('resize')) } catch (_) {}
+    })
+  })
+
+  let rt = 0
+  window.addEventListener(
+    'resize',
+    () => {
+      clearTimeout(rt)
+      rt = setTimeout(recomputeLimits, 100)
+    },
+    { passive: true },
+  )
+
+  let rSched = 0
+  scheduleMainShiftRemeasure = () => {
+    clearTimeout(rSched)
+    rSched = setTimeout(recomputeLimits, 70)
+  }
+
+  queueMicrotask(recomputeLimits)
 }
 
 function setupCardTilt() {
+  if (document.body?.classList?.contains('flow-performance')) return
   const selector = '.track-card, .playlist-card, .social-friend-card, .profile-card, .home-card'
   let activeCard = null
   let rafId = 0
@@ -5778,6 +7834,82 @@ function syncHomeCloneUI() {
   prog.value = audio.duration ? (audio.currentTime / audio.duration) : 0
   const fill = (audio.duration ? (audio.currentTime / audio.duration) : 0) * 100
   prog.style.setProperty('--progress-fill', `${Math.max(0, Math.min(100, fill))}%`)
+  const homePlayBtn = document.getElementById('home-play-btn')
+  if (homePlayBtn) homePlayBtn.innerHTML = audio.paused ? ICONS.play : ICONS.pause
+  renderProfileNowPlaying()
+}
+
+function syncHomeCloneProgressOnly() {
+  const cur = document.getElementById('home-clone-time-cur')
+  const tot = document.getElementById('home-clone-time-total')
+  const prog = document.getElementById('home-clone-progress')
+  if (!cur || !tot || !prog) return
+  const ratio = audio.duration ? (audio.currentTime / audio.duration) : 0
+  cur.textContent = fmtTime(audio.currentTime)
+  tot.textContent = fmtTime(audio.duration)
+  prog.value = ratio
+  prog.style.setProperty('--progress-fill', `${Math.max(0, Math.min(100, ratio * 100))}%`)
+}
+
+function updateProgressAnchor(now = performance.now()) {
+  _progressAnchorPerf = now
+  _progressAnchorAudioTime = Number(audio.currentTime || 0)
+}
+
+function paintPlaybackProgress(now = performance.now(), force = false) {
+  if (!force && now - _lastProgressPaintAt < 52) return
+  _lastProgressPaintAt = now
+  let displayTime = Number(audio.currentTime || 0)
+  if (!audio.paused && audio.duration > 0 && _progressAnchorPerf > 0) {
+    const elapsed = Math.max(0, (now - _progressAnchorPerf) / 1000)
+    const predicted = _progressAnchorAudioTime + elapsed
+    const ceiling = Math.min(Number(audio.duration || 0), displayTime + 0.45)
+    displayTime = Math.max(displayTime, Math.min(predicted, ceiling))
+  }
+  const ratio = audio.duration ? Math.max(0, Math.min(1, displayTime / audio.duration)) : 0
+  const p = document.getElementById('progress')
+  if (p) p.value = ratio
+  const pmp = document.getElementById('pm-progress')
+  if (pmp) pmp.value = ratio
+  if (force || now - _lastProgressTextPaintAt >= 120) {
+    _lastProgressTextPaintAt = now
+    const cur = fmtTime(displayTime)
+    const tot = fmtTime(audio.duration)
+    const el1 = document.getElementById('time-current'); if (el1) el1.textContent = cur
+    const el2 = document.getElementById('time-total'); if (el2) el2.textContent = tot
+    const el3 = document.getElementById('pm-time-current'); if (el3) el3.textContent = cur
+    const el4 = document.getElementById('pm-time-total'); if (el4) el4.textContent = tot
+  }
+  const homePlayBtn = document.getElementById('home-play-btn')
+  const paused = Boolean(audio.paused)
+  if (homePlayBtn && _lastPlayBtnPausedState !== paused) {
+    homePlayBtn.innerHTML = paused ? ICONS.play : ICONS.pause
+    _lastPlayBtnPausedState = paused
+  }
+  if (_activePageId === 'home') syncHomeCloneProgressOnly()
+  if (_activePageId === 'profile' && now - _lastHomeCloneProfileSyncAt >= 380) {
+    _lastHomeCloneProfileSyncAt = now
+    renderProfileNowPlaying()
+  }
+}
+
+function startSmoothProgressLoop() {
+  if (_progressRafId) return
+  const tick = (ts) => {
+    paintPlaybackProgress(ts, false)
+    if (audio.paused || audio.ended || !audio.src) {
+      _progressRafId = 0
+      return
+    }
+    _progressRafId = requestAnimationFrame(tick)
+  }
+  _progressRafId = requestAnimationFrame(tick)
+}
+
+function stopSmoothProgressLoop(forcePaint = false) {
+  if (_progressRafId) cancelAnimationFrame(_progressRafId)
+  _progressRafId = 0
+  if (forcePaint) paintPlaybackProgress(performance.now(), true)
 }
 
 function alignHomeHeaderToPlay() {
@@ -5808,29 +7940,659 @@ function ensureAudioAnalyzer() {
   return true
 }
 
+function resizeHomeVisualizerCanvas() {
+  const canvas = document.getElementById('home-visualizer-canvas')
+  const wrap = document.getElementById('home-visualizer-wrap')
+  if (!canvas || !wrap || wrap.classList.contains('hidden')) return
+  const r = wrap.getBoundingClientRect()
+  const rw = Math.max(1, Math.round(r.width))
+  const rh = Math.max(1, Math.round(r.height))
+  if (canvas.width !== rw || canvas.height !== rh) {
+    canvas.width = rw
+    canvas.height = rh
+  }
+}
+
+const FLOW_HOME_BLOCK_ORDER_LS = 'flow_home_block_order'
+const FLOW_HOME_BLOCK_GEOMETRY_LS = 'flow_home_block_geometry'
+/** Агрегат макета (блоки главной + снимок сайдбара) — дублирует геометрию блоков для обмена/бэкапа. */
+const FLOW_LAYOUT_COORDS_LS = 'flow_layout_coords'
+/** Масштаб блоков главной в «Минимал» (число 0.72–1.38, умножение zoom на стек). */
+const FLOW_HOME_EDITOR_ZOOM_LS = 'flow_home_editor_zoom'
+
+function loadHomeEditorZoomValue() {
+  try {
+    const z = parseFloat(localStorage.getItem(FLOW_HOME_EDITOR_ZOOM_LS) || '')
+    if (!Number.isFinite(z)) return 1
+    return Math.max(0.72, Math.min(1.38, z))
+  } catch (_) {
+    return 1
+  }
+}
+
+function applyHomeEditorZoom(_z) {
+  const stack = document.getElementById('home-dashboard-stack')
+  if (!stack) return
+  stack.style.removeProperty('--home-editor-zoom')
+}
+
+function persistHomeEditorZoom(z) {
+  try {
+    localStorage.setItem(FLOW_HOME_EDITOR_ZOOM_LS, String(z))
+  } catch (_) {}
+}
+
+function syncHomeEditorZoomFromStorage() {
+  if (!isVisualFloatedLayout()) {
+    applyHomeEditorZoom(1)
+    return
+  }
+  applyHomeEditorZoom(loadHomeEditorZoomValue())
+}
+
+const DEFAULT_HOME_BLOCK_ORDER = Object.freeze(['welcome', 'clone', 'cards', 'wave'])
+
+function snapshotSidebarLayoutForCoords() {
+  try {
+    const cs = getComputedStyle(document.documentElement)
+    const phRaw = cs.getPropertyValue('--sidebar-panel-height').trim()
+    const ph = parseFloat(phRaw)
+    return {
+      shift: Math.round(parseFloat(cs.getPropertyValue('--sidebar-shift')) || 0),
+      floatY: Math.round(parseFloat(cs.getPropertyValue('--sidebar-float-y')) || 0),
+      width: Math.round(parseFloat(cs.getPropertyValue('--sidebar-w')) || 210),
+      mainInsetStart: Math.round(parseFloat(cs.getPropertyValue('--main-inset-start')) || 0),
+      panelHeight: Number.isFinite(ph) ? Math.round(ph) : null,
+    }
+  } catch (_) {
+    return {}
+  }
+}
+
+/** Сохранить единый снимок `flow_layout_coords` из текущего LS геометрии блоков + CSS-сайдбара. */
+function syncFlowLayoutCoords() {
+  try {
+    let blocks = {}
+    const rawLegacy = localStorage.getItem(FLOW_HOME_BLOCK_GEOMETRY_LS)
+    if (rawLegacy) {
+      const p = JSON.parse(rawLegacy)
+      if (p && typeof p === 'object' && !Array.isArray(p)) blocks = p
+    }
+    localStorage.setItem(
+      FLOW_LAYOUT_COORDS_LS,
+      JSON.stringify({
+        v: 1,
+        blocks,
+        sidebar: snapshotSidebarLayoutForCoords(),
+        updatedAt: Date.now(),
+      }),
+    )
+  } catch (_) {}
+}
+
+function loadHomeBlockGeometryRaw() {
+  try {
+    let legacy = null
+    const rawLegacy = localStorage.getItem(FLOW_HOME_BLOCK_GEOMETRY_LS)
+    if (rawLegacy) {
+      const p = JSON.parse(rawLegacy)
+      if (p && typeof p === 'object' && !Array.isArray(p)) legacy = p
+    }
+    const legacyKeys = legacy ? Object.keys(legacy).filter((k) => legacy[k] && typeof legacy[k] === 'object') : []
+    let fromCoords = null
+    try {
+      const rawU = localStorage.getItem(FLOW_LAYOUT_COORDS_LS)
+      if (rawU) {
+        const u = JSON.parse(rawU)
+        if (u?.blocks && typeof u.blocks === 'object' && !Array.isArray(u.blocks)) fromCoords = u.blocks
+      }
+    } catch (_) {}
+    const coordKeys = fromCoords ? Object.keys(fromCoords) : []
+
+    if (legacyKeys.length > 0) return legacy
+
+    if (coordKeys.length > 0 && fromCoords) {
+      const g = cloneHomeGeometry(fromCoords)
+      try {
+        localStorage.setItem(FLOW_HOME_BLOCK_GEOMETRY_LS, JSON.stringify(g))
+      } catch (_) {}
+      syncFlowLayoutCoords()
+      return g
+    }
+  } catch (_) {}
+  return null
+}
+
+function cloneHomeGeometry(geom) {
+  const o = {}
+  if (!geom) return o
+  for (const k of Object.keys(geom)) {
+    const v = geom[k]
+    if (!v || typeof v !== 'object') continue
+    const x = +v.x
+    const y = +v.y
+    const w = +v.w
+    const h = +v.h
+    if (![x, y, w, h].every(Number.isFinite)) continue
+    o[k] = { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) }
+  }
+  return o
+}
+
+function homeGeomRectValid(rect) {
+  return !!(rect && rect.width >= 48 && rect.height >= 48)
+}
+
+/** Одна запись для отрисовки position:absolute блока. */
+function homeGeomQuadValid(g) {
+  return !!(
+    g &&
+    Number.isFinite(g.x) &&
+    Number.isFinite(g.y) &&
+    Number.isFinite(g.w) &&
+    Number.isFinite(g.h) &&
+    g.w >= 48 &&
+    g.h >= 48
+  )
+}
+
+/** Главная не скрыта — иначе getBoundingClientRect даёт «нулевой» контур и затрёт сохранённые координаты. */
+function isHomePageActiveForDashboardMeasure() {
+  const pageHome = document.getElementById('page-home')
+  return !!(pageHome && pageHome.classList.contains('active'))
+}
+
+function readHomeBlockGeometryFromDom() {
+  const stack = document.getElementById('home-dashboard-stack')
+  if (!stack || !isHomePageActiveForDashboardMeasure()) return {}
+  const sr = stack.getBoundingClientRect()
+  if (!homeGeomRectValid(sr)) return {}
+  const g = {}
+  stack.querySelectorAll(':scope > .home-dash-block[data-home-block]').forEach((el) => {
+    const id = el.dataset.homeBlock
+    const r = el.getBoundingClientRect()
+    const w = Math.round(r.width)
+    const h = Math.round(r.height)
+    if (!Number.isFinite(w) || !Number.isFinite(h) || !homeGeomQuadValid({ x: 0, y: 0, w, h })) return
+    const x = Math.round(r.left - sr.left)
+    const y = Math.round(r.top - sr.top)
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return
+    g[id] = { x, y, w, h }
+  })
+  return g
+}
+
+function saveHomeBlockGeometry(geom) {
+  try {
+    const payload = geom && typeof geom === 'object' && !Array.isArray(geom) ? geom : {}
+    localStorage.setItem(FLOW_HOME_BLOCK_GEOMETRY_LS, JSON.stringify(payload))
+    syncFlowLayoutCoords()
+  } catch (_) {}
+}
+
+const _HOME_BLOCK_MIN = Object.freeze({
+  welcome: [200, 96],
+  clone: [300, 200],
+  cards: [240, 130],
+  wave: [240, 160],
+})
+
+function clampHomeBlockInStack(stack, id, geom) {
+  const g = geom[id]
+  if (!g || !stack) return
+  const sw = Math.max(stack.clientWidth, 200)
+  const [minW, minH] = _HOME_BLOCK_MIN[id] || [200, 120]
+  g.w = Math.max(minW, Math.min(Math.round(g.w), sw - 8))
+  g.h = Math.max(minH, Math.round(g.h))
+  g.x = Math.max(4, Math.min(Math.round(g.x), Math.max(sw - g.w - 4, 4)))
+  g.y = Math.max(4, Math.round(g.y))
+}
+
+function applyHomeBlockGeometry(geom) {
+  const stack = document.getElementById('home-dashboard-stack')
+  if (!stack) return
+  const ids = [...stack.querySelectorAll(':scope > .home-dash-block[data-home-block]')].map((el) => el.dataset.homeBlock)
+  const g0 = cloneHomeGeometry(geom)
+  const has = ids.some((id) => g0[id] && homeGeomQuadValid(g0[id]))
+  stack.classList.toggle('home-dashboard-stack--geometry', Boolean(has))
+  if (!has) {
+    stack.querySelectorAll(':scope > .home-dash-block').forEach((el) => {
+      el.style.left = el.style.top = el.style.width = el.style.height = ''
+      el.style.zIndex = ''
+    })
+    stack.style.minHeight = ''
+    return
+  }
+  let maxB = 0
+  ids.forEach((id) => {
+    const el = stack.querySelector(`:scope > .home-dash-block[data-home-block="${id}"]`)
+    const g = g0[id]
+    if (!el || !g || !homeGeomQuadValid(g)) return
+    el.style.left = `${Math.round(g.x)}px`
+    el.style.top = `${Math.round(g.y)}px`
+    el.style.width = `${Math.round(g.w)}px`
+    el.style.height = `${Math.round(g.h)}px`
+    maxB = Math.max(maxB, g.y + g.h)
+  })
+  stack.style.minHeight = `${Math.max(Math.ceil(maxB + 24), 240)}px`
+}
+
+function persistHomeDashboardLayoutFromDom() {
+  if (!isVisualFloatedLayout()) return
+  const stack = document.getElementById('home-dashboard-stack')
+  if (!stack) return
+  const hasGeoClass = stack.classList.contains('home-dashboard-stack--geometry')
+  const hasInlineGeom = [...stack.querySelectorAll(':scope > .home-dash-block[data-home-block]')].some(
+    (el) =>
+      el.style.left &&
+      el.style.top &&
+      el.style.width &&
+      el.style.height,
+  )
+  if (!hasGeoClass && !hasInlineGeom) return
+  const g = readHomeBlockGeometryFromDom()
+  const sanitized = {}
+  for (const id of Object.keys(g)) {
+    if (homeGeomQuadValid(g[id])) sanitized[id] = g[id]
+  }
+  if (Object.keys(sanitized).length === 0) return
+  saveHomeBlockGeometry(sanitized)
+  try {
+    stack.classList.add('home-dashboard-stack--geometry')
+  } catch (_) {}
+}
+
+let _homeDashGeomReflowT = null
+/** После show главной один проход clamp+paint (двойная отрисовка — стабильные clientWidth/stack). */
+function scheduleHomeDashboardGeometryReflow() {
+  if (!isVisualFloatedLayout()) return
+  clearTimeout(_homeDashGeomReflowT)
+  _homeDashGeomReflowT = setTimeout(() => {
+    _homeDashGeomReflowT = null
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const stack = document.getElementById('home-dashboard-stack')
+        if (_activePageId !== 'home' || !isHomePageActiveForDashboardMeasure()) return
+        if (!stack?.classList.contains('home-dashboard-stack--geometry')) return
+        if (!homeGeomRectValid(stack.getBoundingClientRect())) return
+        const g = cloneHomeGeometry(loadHomeBlockGeometryRaw())
+        if (!Object.keys(g).length) return
+        getHomeBlockIdsFromStack(stack).forEach((id) => clampHomeBlockInStack(stack, id, g))
+        applyHomeBlockGeometry(g)
+        try {
+          saveHomeBlockGeometry(g)
+        } catch (_) {}
+        try {
+          resizeHomeVisualizerCanvas()
+        } catch (_) {}
+        try {
+          alignHomeHeaderToPlay()
+        } catch (_) {}
+        scheduleMainShiftRemeasure()
+      })
+    })
+  }, 0)
+}
+
+function reclampHomeGeometryOnResize() {
+  scheduleHomeDashboardGeometryReflow()
+}
+
+function refreshHomeDashboardLayoutAfterContentChange() {
+  if (!isVisualFloatedLayout()) {
+    applyStaticHomeDashboardOrder()
+    applyHomeBlockGeometry(null)
+    applyHomeEditorZoom(1)
+    return
+  }
+  applyHomeDashboardOrder()
+  const raw = loadHomeBlockGeometryRaw()
+  const cloned = cloneHomeGeometry(raw)
+  if (cloned && Object.keys(cloned).some((id) => homeGeomQuadValid(cloned[id]))) {
+    applyHomeBlockGeometry(cloned)
+    scheduleHomeDashboardGeometryReflow()
+  } else applyHomeBlockGeometry(null)
+  syncHomeEditorZoomFromStorage()
+}
+
+/** Сайдбар: сброс раскладки — только в теме «Минимал» (floated). */
+function resetHomeDashboardLayoutPressed() {
+  if (!isVisualFloatedLayout()) {
+    showToast('Сброс раскладки доступен только в интерфейсе «Минимал»')
+    return
+  }
+  resetHomeDashboardLayout()
+}
+
+/** Сброс сохранённого макета главной (конструктор + порядок). Без интерact.js — чистые LS + DOM. */
+function resetHomeDashboardLayout() {
+  try {
+    localStorage.removeItem(FLOW_HOME_BLOCK_GEOMETRY_LS)
+    localStorage.removeItem(FLOW_HOME_BLOCK_ORDER_LS)
+    localStorage.removeItem(FLOW_LAYOUT_COORDS_LS)
+    localStorage.removeItem(FLOW_HOME_EDITOR_ZOOM_LS)
+  } catch (_) {}
+  applyHomeEditorZoom(1)
+  document.body.classList.remove('home-layout-edit', 'flow-edit-enabled')
+  syncHomeLayoutEditButton()
+  teardownHomeDashboardDrag(true)
+  try {
+    _teardownSidebarPanelDrag()
+  } catch (_) {}
+  const stack = document.getElementById('home-dashboard-stack')
+  if (stack) {
+    const map = {}
+    stack.querySelectorAll(':scope > .home-dash-block[data-home-block]').forEach((el) => {
+      map[el.dataset.homeBlock] = el
+    })
+    DEFAULT_HOME_BLOCK_ORDER.forEach((id) => {
+      const el = map[id]
+      if (el) stack.appendChild(el)
+    })
+  }
+  applyHomeBlockGeometry(null)
+  if (_activePageId === 'home') {
+    requestAnimationFrame(() => {
+      resizeHomeVisualizerCanvas()
+      try {
+        alignHomeHeaderToPlay()
+      } catch (_) {}
+      scheduleMainShiftRemeasure()
+    })
+  }
+  showToast('Раскладка главной сброшена')
+  queueMicrotask(() => scheduleMainShiftRemeasure())
+}
+
+/** Прямые потомки `#home-dashboard-stack` — порядок узла = порядок в конструкторе. */
+function getHomeBlockIdsFromStack(stack) {
+  if (!stack) return []
+  return [...stack.children]
+    .filter((c) => c?.classList?.contains?.('home-dash-block') && c?.dataset?.homeBlock)
+    .map((c) => String(c.dataset.homeBlock))
+}
+
+/** Только id из DOM по сохранённому порядку; отсутствовавшие ранее блоки — в конец. */
+function mergeSavedHomeOrderWithDom(saved, domOrderedIds) {
+  const domSet = new Set(domOrderedIds)
+  const seen = new Set()
+  const out = []
+  if (Array.isArray(saved)) {
+    for (const id of saved) {
+      const sid = typeof id === 'string' ? id : ''
+      if (sid && domSet.has(sid) && !seen.has(sid)) {
+        seen.add(sid)
+        out.push(sid)
+      }
+    }
+  }
+  for (const id of domOrderedIds) {
+    if (id && !seen.has(id)) {
+      seen.add(id)
+      out.push(id)
+    }
+  }
+  return out
+}
+
+/** Статичный порядок блоков главной («Минимализм») — всегда как в разметке по умолчанию. */
+function applyStaticHomeDashboardOrder() {
+  const stack = document.getElementById('home-dashboard-stack')
+  if (!stack) return
+  const map = {}
+  stack.querySelectorAll(':scope > .home-dash-block[data-home-block]').forEach((el) => {
+    map[el.dataset.homeBlock] = el
+  })
+  DEFAULT_HOME_BLOCK_ORDER.forEach((id) => {
+    const el = map[id]
+    if (el) stack.appendChild(el)
+  })
+}
+
+function applyHomeDashboardOrder() {
+  const stack = document.getElementById('home-dashboard-stack')
+  if (!stack) return
+  const domIds = getHomeBlockIdsFromStack(stack)
+  if (!domIds.length) return
+  let saved = []
+  try {
+    const p = JSON.parse(localStorage.getItem(FLOW_HOME_BLOCK_ORDER_LS) || 'null')
+    if (Array.isArray(p)) saved = p
+  } catch (_) {}
+  const order = mergeSavedHomeOrderWithDom(saved, domIds)
+  try {
+    if (JSON.stringify(saved) !== JSON.stringify(order)) {
+      localStorage.setItem(FLOW_HOME_BLOCK_ORDER_LS, JSON.stringify(order))
+    }
+  } catch (_) {}
+
+  const map = {}
+  stack.querySelectorAll(':scope > .home-dash-block[data-home-block]').forEach((el) => {
+    map[el.dataset.homeBlock] = el
+  })
+  order.forEach((id) => {
+    const el = map[id]
+    if (el) stack.appendChild(el)
+  })
+}
+
+let _homeDashDragState = null
+
+function teardownHomeDashboardDrag(force = false) {
+  const st = _homeDashDragState
+  if (!st) return
+  window.removeEventListener('pointermove', st.mv, true)
+  window.removeEventListener('pointerup', st.fin, true)
+  window.removeEventListener('pointercancel', st.fin, true)
+  if (st.block) {
+    st.block.classList.remove('home-dash-block--dragging')
+    st.block.style.zIndex = ''
+  }
+  document.body.classList.remove('home-dash-dragging', 'home-dash-sizing')
+  try {
+    st.captureEl?.releasePointerCapture?.(st.pointerId)
+  } catch (_) {}
+  _homeDashDragState = null
+  if (!force) {
+    persistHomeDashboardLayoutFromDom()
+    requestAnimationFrame(() => {
+      resizeHomeVisualizerCanvas()
+      try {
+        alignHomeHeaderToPlay()
+      } catch (_) {}
+      scheduleMainShiftRemeasure()
+    })
+  }
+}
+
+function setupHomeDashboardDragAndDrop() {
+  const stack = document.getElementById('home-dashboard-stack')
+  if (!stack || stack.dataset.homeDndReady === '1') return
+  stack.dataset.homeDndReady = '1'
+
+  stack.addEventListener(
+    'pointerdown',
+    (e) => {
+      if (!document.body.classList.contains('flow-edit-enabled')) return
+      if (!stack.classList.contains('home-dashboard-stack--geometry')) return
+      const block = e.target.closest('.home-dash-block[data-home-block]')
+      if (!block || !stack.contains(block)) return
+      const id = block.dataset.homeBlock
+      const resizeGrip = e.target.closest('.home-dash-resize, .resizer-corner')
+      const dragGrip = e.target.closest('.home-dash-drag, .home-dash-handle')
+      const isResize = resizeGrip && block.contains(resizeGrip)
+      if (!isResize) {
+        if (!dragGrip || !block.contains(dragGrip)) return
+      }
+
+      e.preventDefault()
+      e.stopPropagation()
+      teardownHomeDashboardDrag(true)
+
+      const domG = readHomeBlockGeometryFromDom()
+      const geom = cloneHomeGeometry(loadHomeBlockGeometryRaw())
+      Object.keys(domG).forEach((k) => {
+        if (!geom[k]) geom[k] = domG[k]
+      })
+      if (!geom[id]) geom[id] = domG[id]
+      const origin = { ...geom[id] }
+      block.classList.add('home-dash-block--dragging')
+      document.body.classList.add(isResize ? 'home-dash-sizing' : 'home-dash-dragging')
+      block.style.zIndex = '60'
+
+      const startX = e.clientX
+      const startY = e.clientY
+      const captureEl = isResize ? resizeGrip : dragGrip
+
+      const mv = (ev) => {
+        if (isResize) {
+          geom[id].w = Math.round(origin.w + ev.clientX - startX)
+          geom[id].h = Math.round(origin.h + ev.clientY - startY)
+        } else {
+          geom[id].x = Math.round(origin.x + ev.clientX - startX)
+          geom[id].y = Math.round(origin.y + ev.clientY - startY)
+        }
+        clampHomeBlockInStack(stack, id, geom)
+        applyHomeBlockGeometry(geom)
+      }
+      const fin = () => {
+        teardownHomeDashboardDrag(false)
+      }
+      window.addEventListener('pointermove', mv, true)
+      window.addEventListener('pointerup', fin, true)
+      window.addEventListener('pointercancel', fin, true)
+      try {
+        captureEl.setPointerCapture(e.pointerId)
+      } catch (_) {}
+      _homeDashDragState = { mv, fin, stack, block, captureEl, pointerId: e.pointerId }
+    },
+    true,
+  )
+}
+
+/** API из плана «свободных блоков»: элемент уже обслуживается делегированием со стека. */
+function makeBlockDynamic(sectionEl) {
+  return !!(sectionEl && typeof sectionEl.matches === 'function' && sectionEl.matches('.home-dash-block[data-home-block]'))
+}
+
+/** Повторно применить порядок/геометрию из хранилища и обновить flow_layout_coords. */
+function initFloatingHomeWorkspace() {
+  refreshHomeDashboardLayoutAfterContentChange()
+  syncFlowLayoutCoords()
+}
+
+function syncHomeLayoutEditButton() {
+  const btn = document.getElementById('btn-home-layout-edit')
+  const label = document.getElementById('btn-home-layout-edit-label')
+  if (!btn) return
+  const on = document.body.classList.contains('home-layout-edit')
+  btn.classList.toggle('active', on)
+  btn.setAttribute('aria-pressed', on ? 'true' : 'false')
+  if (label) label.textContent = on ? 'Сохранить' : 'Изменить'
+  btn.title = on ? 'Сохранить расположение блоков главной' : 'Изменить расположение блоков главной'
+  btn.setAttribute('aria-label', on ? 'Сохранить макет главной' : 'Редактировать макет главной')
+}
+
+/** Конструктор главной: классы body + сохранённая геометрия в LS (flow_home_block_geometry). */
+function toggleHomeLayoutEdit() {
+  if (!isVisualFloatedLayout()) {
+    showToast('Конструктор главной доступен только в интерфейсе «Минимал»')
+    return
+  }
+  const on = !document.body.classList.contains('home-layout-edit')
+  document.body.classList.toggle('home-layout-edit', on)
+  document.body.classList.toggle('flow-edit-enabled', on)
+  syncHomeLayoutEditButton()
+  if (on) syncHomeEditorZoomFromStorage()
+  const stack = document.getElementById('home-dashboard-stack')
+  if (on) {
+    let geom = cloneHomeGeometry(loadHomeBlockGeometryRaw())
+    if (!Object.keys(geom).length) {
+      applyHomeBlockGeometry(null)
+      requestAnimationFrame(() => {
+        geom = readHomeBlockGeometryFromDom()
+        if (Object.keys(geom).length) {
+          saveHomeBlockGeometry(geom)
+          applyHomeBlockGeometry(cloneHomeGeometry(geom))
+        }
+        scheduleHomeDashboardGeometryReflow()
+        showToast('Редактор: зона под контентом — перенос, уголок — размер')
+        pulseHomeVisualLayoutSync()
+      })
+    } else {
+      const snap = readHomeBlockGeometryFromDom()
+      Object.keys(snap).forEach((id) => {
+        if (!geom[id] && homeGeomQuadValid(snap[id])) geom[id] = snap[id]
+      })
+      saveHomeBlockGeometry(geom)
+      applyHomeBlockGeometry(cloneHomeGeometry(geom))
+      scheduleHomeDashboardGeometryReflow()
+      showToast('Редактор: зона под контентом — перенос, уголок — размер')
+      pulseHomeVisualLayoutSync()
+    }
+  } else {
+    try {
+      _teardownSidebarPanelDrag()
+    } catch (_) {}
+    persistHomeDashboardLayoutFromDom()
+    applyHomeBlockGeometry(cloneHomeGeometry(loadHomeBlockGeometryRaw()))
+    showToast('Макет главной сохранён')
+    pulseHomeVisualLayoutSync()
+  }
+  queueMicrotask(() => scheduleMainShiftRemeasure())
+}
+
 function drawHomeVisualizerFrame() {
   const canvas = document.getElementById('home-visualizer-canvas')
   if (!canvas) return
-  const ctx = canvas.getContext('2d')
+  if (_homeVizCanvasEl !== canvas) {
+    _homeVizCanvasEl = canvas
+    _homeVizCtx2d = canvas.getContext('2d')
+  }
+  const ctx = _homeVizCtx2d
   if (!ctx) return
-  const v = getVisual()
-  const hw = Object.assign({ enabled: true, mode: 'bars' }, v.homeWidget || {})
-  if (!hw.enabled || hw.mode === 'image') return
+  if (!_homeVizEnabled || _homeVizMode === 'image') return
   const w = canvas.width
   const h = canvas.height
   ctx.clearRect(0, 0, w, h)
   const canAnalyze = ensureAudioAnalyzer() && !audio.paused && !audio.ended
-  if (canAnalyze) _analyser.getByteFrequencyData(_freqData)
-  const data = _freqData || new Uint8Array(128)
-  const baseColor = v.accent2 || '#9ca3af'
+  const now = performance.now()
+  if (canAnalyze) {
+    _analyser.getByteFrequencyData(_freqData)
+    if (now - _vizLastEnergySampleAt >= 48) {
+      _vizLastEnergySampleAt = now
+      if (!_vizTimeData || _vizTimeData.length !== _analyser.fftSize) {
+        _vizTimeData = new Uint8Array(_analyser.fftSize)
+      }
+      _analyser.getByteTimeDomainData(_vizTimeData)
+    }
+  }
+  const data = _freqData || _vizFallbackData
+  if (!_vizSmoothData || _vizSmoothData.length !== data.length) _vizSmoothData = new Float32Array(data.length)
+  let energy = 0
+  if (canAnalyze && _vizTimeData) {
+    for (let i = 0; i < _vizTimeData.length; i++) {
+      const n = (_vizTimeData[i] - 128) / 128
+      energy += n * n
+    }
+    energy = Math.sqrt(energy / _vizTimeData.length)
+  }
+  _vizEnergySmooth += (energy - _vizEnergySmooth) * (canAnalyze ? 0.45 : 0.12)
+  const amp = canAnalyze ? Math.max(0.65, Math.min(1.85, 0.85 + _vizEnergySmooth * 6.4)) : 0.55
+  const smoothK = canAnalyze ? 0.46 : 0.16
+  for (let i = 0; i < data.length; i++) {
+    _vizSmoothData[i] += (data[i] * amp - _vizSmoothData[i]) * smoothK
+  }
+  const viz = _vizSmoothData
+  const baseColor = getVisual().accent2 || '#9ca3af'
   ctx.strokeStyle = baseColor
   ctx.fillStyle = baseColor
   ctx.globalAlpha = 0.9
-  if (hw.mode === 'wave') {
+  if (_homeVizMode === 'wave') {
     ctx.beginPath()
-    const step = Math.max(1, Math.floor(data.length / 52))
+    const step = Math.max(1, Math.floor(viz.length / 52))
     for (let i = 0; i < 52; i++) {
-      const val = data[i * step] || 0
+      const val = viz[i * step] || 0
       const y = h - (val / 255) * (h - 18) - 9
       const x = (i / 51) * w
       if (i === 0) ctx.moveTo(x, y)
@@ -5840,11 +8602,11 @@ function drawHomeVisualizerFrame() {
     ctx.stroke()
     return
   }
-  if (hw.mode === 'dots') {
+  if (_homeVizMode === 'dots') {
     const cols = 44
-    const step = Math.max(1, Math.floor(data.length / cols))
+    const step = Math.max(1, Math.floor(viz.length / cols))
     for (let i = 0; i < cols; i++) {
-      const val = data[i * step] || 0
+      const val = viz[i * step] || 0
       const dots = Math.max(2, Math.round((val / 255) * 8))
       const x = 10 + (i / cols) * (w - 20)
       for (let d = 0; d < dots; d++) {
@@ -5856,11 +8618,11 @@ function drawHomeVisualizerFrame() {
     }
     return
   }
-  const bars = 56
-  const step = Math.max(1, Math.floor(data.length / bars))
+  const bars = 44
+  const step = Math.max(1, Math.floor(viz.length / bars))
   const bw = (w - 20) / bars
   for (let i = 0; i < bars; i++) {
-    const val = data[i * step] || 0
+    const val = viz[i * step] || 0
     const bh = 8 + (val / 255) * (h - 24)
     const x = 10 + i * bw
     const y = h - bh - 6
@@ -5869,14 +8631,37 @@ function drawHomeVisualizerFrame() {
 }
 
 function startHomeVisualizerLoop() {
-  const tick = () => {
+  const tick = (ts) => {
+    if (document.hidden) {
+      setTimeout(() => requestAnimationFrame(tick), 750)
+      return
+    }
     if (_activePageId === 'home') {
-      drawHomeVisualizerFrame()
+      const wrap = document.getElementById('home-visualizer-wrap')
+      if (wrap?.classList.contains('hidden')) {
+        setTimeout(() => requestAnimationFrame(tick), 350)
+        return
+      }
+      if (audio.paused) {
+        setTimeout(() => requestAnimationFrame(tick), 120)
+        return
+      }
+      if (ts - _vizLastFrameAt >= HOME_VIZ_ACTIVE_FRAME_MS) {
+        _vizLastFrameAt = ts
+        drawHomeVisualizerFrame()
+      }
       requestAnimationFrame(tick)
     } else {
       setTimeout(() => requestAnimationFrame(tick), 250)
     }
   }
+  document.addEventListener(
+    'visibilitychange',
+    () => {
+      if (!document.hidden && _activePageId === 'home') requestAnimationFrame(tick)
+    },
+    { passive: true },
+  )
   requestAnimationFrame(tick)
 }
 
@@ -5888,6 +8673,7 @@ function syncPlayerUIFromTrack() {
   const coverUrl = getEffectiveCoverUrl(track)
   applyCoverArt(cover, coverUrl, fallbackBg)
   applyCoverArt(homeCover, coverUrl, fallbackBg)
+  updateYandexPlayerTheme(track)
   if (_playerModeActive) syncPlayerModeUI()
 }
 
@@ -5906,8 +8692,24 @@ function runDeferredPageRender(id) {
 }
 
 function openPage(id, opts = {}) {
+  toggleYandexWaveModes(false)
   const force = Boolean(opts && opts.force)
   if (!force && id === _activePageId) return
+  const prevPage = _activePageId
+  if (prevPage === 'home' && id !== 'home') {
+    if (
+      isVisualFloatedLayout() &&
+      document.getElementById('home-dashboard-stack')?.classList.contains('home-dashboard-stack--geometry')
+    ) {
+      persistHomeDashboardLayoutFromDom()
+    }
+    document.body.classList.remove('home-layout-edit', 'flow-edit-enabled')
+    syncHomeLayoutEditButton()
+    teardownHomeDashboardDrag(true)
+    try {
+      _teardownSidebarPanelDrag()
+    } catch (_) {}
+  }
   if (id === 'social') ensureSocialUI()
   if (id === 'rooms') ensureRoomsUI()
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'))
@@ -5924,6 +8726,26 @@ function openPage(id, opts = {}) {
     _deferredPageRenderRaf = 0
     runDeferredPageRender(id)
   })
+  if (id === 'home') {
+    queueMicrotask(() => {
+      try {
+        if (isVisualFloatedLayout()) {
+          refreshHomeDashboardLayoutAfterContentChange()
+        }
+      } catch (_) {}
+      requestAnimationFrame(() => {
+        try {
+          resizeHomeVisualizerCanvas()
+        } catch (_) {}
+        try {
+          alignHomeHeaderToPlay()
+        } catch (_) {}
+        try {
+          scheduleMainShiftRemeasure()
+        } catch (_) {}
+      })
+    })
+  }
 }
 
 // в”Ђв”Ђв”Ђ PLAYER в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
@@ -5975,9 +8797,10 @@ async function playTrackObj(track, opts = {}) {
       return false
     }
   }
-  // Spotify playback fallback through SoundCloud/Audius first.
-  if (track.source === 'spotify' && !track.url) {
-    showToast('\uD83C\uDFB5 Ищу в SoundCloud/Audius...')
+  // Spotify/Yandex playback fallback through SoundCloud/Audius first.
+  if ((track.source === 'spotify' || track.source === 'yandex') && !track.url) {
+    const srcName = track.source === 'yandex' ? 'Yandex' : 'Spotify'
+    showToast(`\uD83C\uDFB5 ${srcName}: ищу в SoundCloud/Audius...`)
     try {
       const query = `${track.title} ${track.artist}`.trim()
       if (isStale()) return
@@ -6000,10 +8823,10 @@ async function playTrackObj(track, opts = {}) {
           cover: getEffectiveCoverUrl(track) || track.cover || audResults[0].cover
         }))
       }
-      showToast('Spotify: не найдено в SoundCloud/Audius', true)
+      showToast(`${srcName}: не найдено в SoundCloud/Audius`, true)
       return
     } catch (e) {
-      showToast('Spotify: ' + e.message, true)
+      showToast(`${srcName}: ` + e.message, true)
       return
     }
   }
@@ -6101,8 +8924,14 @@ async function playTrackObj(track, opts = {}) {
   const streamCacheKey = getStreamCacheKey(track)
   let remoteUrlForCache = streamUrl
   let finalUrl = streamUrl
+  const canTryProxyAlternate =
+    track.source !== 'youtube' &&
+    window.api?.proxySetUrl &&
+    /^https?:\/\//i.test(streamUrl) &&
+    streamEngine !== 'yt-dlp'
 
   if (
+    !FLOW_FAST_START_STREAMS &&
     streamCacheKey &&
     window.api?.streamCacheLookup &&
     track.source !== 'youtube' &&
@@ -6134,7 +8963,7 @@ async function playTrackObj(track, opts = {}) {
     console.log('PLAY URL:', finalUrl)
 
     // Quick probe: helps decide if URL is dead/403 before we even try audio.
-    if (window.api?.probeStreamUrl && /^https?:\/\//i.test(streamUrl) && streamEngine !== 'yt-dlp') {
+    if (track.source === 'youtube' && window.api?.probeStreamUrl && /^https?:\/\//i.test(streamUrl) && streamEngine !== 'yt-dlp') {
       try {
         setStage('Проверка потока…')
         const p = await withTimeout(window.api.probeStreamUrl(streamUrl), 9000, 'probe timeout').catch(() => null)
@@ -6169,7 +8998,7 @@ async function playTrackObj(track, opts = {}) {
     console.log('PLAY URL (offline cache):', finalUrl)
   }
 
-  const waitForPlaybackProgress = (ms = 10000) => new Promise((resolve) => {
+  const waitForPlaybackProgress = (ms = 3500) => new Promise((resolve) => {
     const startedAt = audio.currentTime || 0
     const finish = (ok) => {
       clearTimeout(t)
@@ -6205,7 +9034,7 @@ async function playTrackObj(track, opts = {}) {
     audio.src = url
     await audio.play()
     // If nothing starts within ~5s, treat it as a dead stream and switch strategy.
-    return waitForPlaybackProgress(5200)
+    return waitForPlaybackProgress(2200)
   }
 
   let started = false
@@ -6254,6 +9083,21 @@ async function playTrackObj(track, opts = {}) {
           return
         }
       }
+    } else if (canTryProxyAlternate) {
+      try {
+        const alternateUrl = finalUrl === streamUrl
+          ? await window.api.proxySetUrl(streamUrl)
+          : streamUrl
+        if (!alternateUrl || alternateUrl === finalUrl) throw new Error('alternate stream unavailable')
+        started = await tryStartPlayback(alternateUrl)
+        if (!started) throw new Error('alternate playback timeout')
+        finalUrl = alternateUrl
+      } catch (e2) {
+        if (String(e2?.message || '').includes('stale playback request')) return
+        showToast('Ошибка воспроизведения: ' + (e2?.message || e?.message || 'unknown'), true)
+        if (playBtn) playBtn.innerHTML = ICONS.play
+        return
+      }
     } else {
       showToast('Ошибка воспроизведения: ' + (e?.message || 'unknown'), true)
       if (playBtn) playBtn.innerHTML = ICONS.play
@@ -6278,9 +9122,12 @@ async function playTrackObj(track, opts = {}) {
   const cover = document.getElementById('player-cover')
   const effectiveCover = getEffectiveCoverUrl(track)
   applyCoverArt(cover, effectiveCover, track.bg || 'linear-gradient(135deg,#7c3aed,#a855f7)')
+  updateYandexPlayerTheme(track)
   if (playBtn) playBtn.innerHTML = ICONS.pause
   const pmIcon = document.getElementById('pm-play-icon')
   if (pmIcon) pmIcon.innerHTML = PM_PAUSE_INNER
+  paintPlaybackProgress(performance.now(), true)
+  startSmoothProgressLoop()
   updatePlayerLikeBtn()
   // РћР±РЅРѕРІР»СЏРµРј titlebar
   const tinfo = document.getElementById('titlebar-track-info')
@@ -6334,11 +9181,14 @@ function togglePlay() {
     if (playBtn) playBtn.innerHTML = ICONS.pause
     const icon = document.getElementById('pm-play-icon')
     if (icon) icon.innerHTML = PM_PAUSE_INNER
+    paintPlaybackProgress(performance.now(), true)
+    startSmoothProgressLoop()
   } else {
     audio.pause()
     if (playBtn) playBtn.innerHTML = ICONS.play
     const icon = document.getElementById('pm-play-icon')
     if (icon) icon.innerHTML = PM_PLAY_INNER
+    stopSmoothProgressLoop(true)
   }
   if (isRoomParticipant) {
     _socialPeer?.send?.({
@@ -6458,25 +9308,12 @@ function nextTrack(autoEnded = false) {
 }
 
 audio.ontimeupdate = () => {
-  // Keep general UI updates lightweight, but make lyrics sync feel tighter.
-  const shouldSyncUi = (performance.now() - _lastUiSyncAt) >= 90
+  updateProgressAnchor(performance.now())
+  const shouldSyncUi = (performance.now() - _lastUiSyncAt) >= 260
   if (_lyricsOpen && _lyricsData.length) syncLyrics(getLyricsSmoothedTime())
   if (shouldSyncUi) {
     _lastUiSyncAt = performance.now()
-    const p = document.getElementById('progress')
-    if (p && audio.duration) p.value = audio.currentTime / audio.duration
-
-    const pmp = document.getElementById('pm-progress')
-    if (pmp && audio.duration) pmp.value = audio.currentTime / audio.duration
-
-    const cur = fmtTime(audio.currentTime)
-    const tot = fmtTime(audio.duration)
-    const el1 = document.getElementById('time-current'); if (el1) el1.textContent = cur
-    const el2 = document.getElementById('time-total');   if (el2) el2.textContent = tot
-    const el3 = document.getElementById('pm-time-current'); if (el3) el3.textContent = cur
-    const el4 = document.getElementById('pm-time-total');   if (el4) el4.textContent = tot
-
-    syncHomeCloneUI()
+    paintPlaybackProgress(performance.now(), true)
   }
   if (queueScope === 'myWave' && !audio.paused && queue.length - queueIndex - 1 <= 3) maybePreloadMyWave(false)
   broadcastPlaybackSync(false)
@@ -6486,13 +9323,43 @@ audio.ontimeupdate = () => {
   const delta = Math.max(0, now - _listenTickAt) / 1000
   _listenTickAt = now
   if (delta > 0 && delta < 4) {
-    const st = getListenStats()
-    saveListenStats({ totalSeconds: Number(st.totalSeconds || 0) + delta })
+    _listenSecondsAccum += delta
+    if (!_listenLastFlushAt) _listenLastFlushAt = now
+    if (_listenSecondsAccum >= 4 || now - _listenLastFlushAt >= 5500) {
+      const st = getListenStats()
+      saveListenStats({ totalSeconds: Number(st.totalSeconds || 0) + _listenSecondsAccum })
+      _listenSecondsAccum = 0
+      _listenLastFlushAt = now
+    }
   }
 }
+audio.onplay = () => {
+  updateProgressAnchor(performance.now())
+  paintPlaybackProgress(performance.now(), true)
+  startSmoothProgressLoop()
+}
+audio.onpause = () => {
+  if (_listenSecondsAccum > 0 && _profile?.username) {
+    const st = getListenStats()
+    saveListenStats({ totalSeconds: Number(st.totalSeconds || 0) + _listenSecondsAccum })
+    _listenSecondsAccum = 0
+  }
+  stopSmoothProgressLoop(true)
+}
+audio.onseeked = () => {
+  updateProgressAnchor(performance.now())
+  paintPlaybackProgress(performance.now(), true)
+}
 audio.onended = () => {
+  if (_listenSecondsAccum > 0 && _profile?.username) {
+    const st = getListenStats()
+    saveListenStats({ totalSeconds: Number(st.totalSeconds || 0) + _listenSecondsAccum })
+    _listenSecondsAccum = 0
+  }
+  stopSmoothProgressLoop(true)
   stopLyricsSyncLoop()
   _listenTickAt = 0
+  _listenLastFlushAt = 0
   const playBtn = document.getElementById('play-btn')
   if (playBtn) playBtn.innerHTML = ICONS.play
   if (currentTrack) scrobbleLastFm(currentTrack)
@@ -6543,6 +9410,15 @@ async function searchHybridTracks(q, settings) {
   throw new Error('Серверный поиск недоступен в этой версии приложения')
 }
 
+async function searchYandexTracks(q, settings = getSettings()) {
+  const token = String(settings?.yandexToken || '').trim()
+  if (!token) throw new Error('Yandex token required')
+  if (!window.api?.yandexSearch) throw new Error('Yandex поиск доступен только в Electron приложении')
+  const result = await window.api.yandexSearch(q, token)
+  if (!Array.isArray(result)) throw new Error('Yandex: некорректный ответ')
+  return sanitizeTrackList(result)
+}
+
 function searchTracks(queryOverride = '') {
   if (typeof queryOverride === 'string' && queryOverride.trim()) {
     return searchTracksDirect(queryOverride.trim(), getSettings())
@@ -6552,7 +9428,8 @@ function searchTracks(queryOverride = '') {
   const container = document.getElementById('search-results')
   if (!q) { container.innerHTML = ''; return }
 
-  container.innerHTML = `<div class="search-loading"><div class="spinner"></div><span>Поиск: Spotify → SoundCloud → Audius...</span></div>`
+  const src = normalizeStoredActiveSource(getSettings().activeSource || currentSource || 'hybrid')
+  container.innerHTML = `<div class="search-loading"><div class="spinner"></div><span>${src === 'yandex' ? 'Поиск: Yandex Music...' : 'Поиск: Spotify → SoundCloud → Audius...'}</span></div>`
 
   searchDebounceTimer = setTimeout(async () => {
     const s = getSettings()
@@ -6565,9 +9442,15 @@ function searchTracks(queryOverride = '') {
     }
 
     try {
-      const hybrid = await searchHybridTracks(q, s)
-      const results = sanitizeTrackList(hybrid.tracks || [])
-      _lastSearchMode = hybrid.mode || 'hybrid'
+      let results = []
+      if (src === 'yandex') {
+        results = await searchYandexTracks(q, s)
+        _lastSearchMode = 'yandex'
+      } else {
+        const hybrid = await searchHybridTracks(q, s)
+        results = sanitizeTrackList(hybrid.tracks || [])
+        _lastSearchMode = hybrid.mode || 'hybrid'
+      }
       cacheSet(key, { mode: _lastSearchMode, tracks: results })
       renderResults(results)
     } catch (err) {
@@ -6581,6 +9464,7 @@ async function searchTracksDirect(query, settings = getSettings()) {
   const q = String(query || '').trim()
   if (!q) return []
   const src = String(settings?.activeSource || currentSource || 'hybrid').toLowerCase()
+  if (src === 'yandex') return await searchYandexTracks(q, settings)
   if (src === 'hitmo' || src === 'hm') return sanitizeTrackList(await searchHitmo(q))
   if (src === 'youtube' || src === 'yt') {
     if (!window.api?.youtubeSearch) throw new Error('YouTube поиск доступен только в Electron')
@@ -6624,6 +9508,7 @@ function renderResults(results) {
 }
 
 function getSourceLabel() {
+  if (_lastSearchMode === 'yandex') return 'Yandex'
   if (_lastSearchMode === 'spotify') return 'Spotify'
   if (_lastSearchMode === 'soundcloud') return 'SoundCloud'
   if (_lastSearchMode === 'audius') return 'Audius'
@@ -8005,7 +10890,12 @@ async function loadLyrics(track) {
     if (pmContainer) pmContainer.innerHTML = '<div class="lyrics-empty">Текст доступен только в Electron</div>'
     return
   }
-  const res = await window.api.getLyrics(track.title, track.artist || '', audio.duration || 0)
+  const yandexToken = String(getSettings().yandexToken || '').trim()
+  const res = await window.api.getLyrics(track.title, track.artist || '', audio.duration || 0, {
+    source: String(track?.source || ''),
+    trackId: String(track?.id || track?.spotifyId || ''),
+    yandexToken,
+  })
   if (!res.ok) {
     if (container) container.innerHTML = '<div class="lyrics-empty">Текст не найден</div>'
     if (pmContainer) pmContainer.innerHTML = '<div class="lyrics-empty">Текст не найден</div>'
@@ -8178,7 +11068,36 @@ window.addEventListener('DOMContentLoaded', () => {
   startApp()
   try { document.body.setAttribute('data-active-page', _activePageId || 'home') } catch {}
   applyUiTextOverrides()
+  refreshHomeDashboardLayoutAfterContentChange()
+  setupHomeDashboardDragAndDrop()
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || !document.body.classList.contains('home-layout-edit')) return
+    try {
+      _teardownSidebarPanelDrag()
+    } catch (_) {}
+    document.body.classList.remove('home-layout-edit', 'flow-edit-enabled')
+    syncHomeLayoutEditButton()
+    teardownHomeDashboardDrag(true)
+    persistHomeDashboardLayoutFromDom()
+    if (isVisualFloatedLayout()) {
+      applyHomeBlockGeometry(cloneHomeGeometry(loadHomeBlockGeometryRaw()))
+    }
+    pulseHomeVisualLayoutSync()
+    queueMicrotask(() => scheduleMainShiftRemeasure())
+  })
+  {
+    const fySaved = parseInt(localStorage.getItem(FLOW_SIDEBAR_FLOAT_Y_LS) || '0', 10)
+    applySidebarFloatYPx(Number.isFinite(fySaved) ? fySaved : 0)
+  }
   setupSidebarResize()
+  setupFloatedMainContentResize()
+  setupFloatedMainPaneDrag()
+  setupSidebarPanelEditDrag()
+  setupMainPaneShift()
+  try {
+    syncFlowLayoutCoords()
+  } catch (_) {}
+  document.body.classList.add('flow-performance')
   setupCardTilt()
   const savedSlider = Number(localStorage.getItem('flow_volume_slider') || '0.8')
   setVolume(Number.isFinite(savedSlider) ? savedSlider : 0.8)
@@ -8187,7 +11106,11 @@ window.addEventListener('DOMContentLoaded', () => {
   applyHomeSliderStyle()
   startHomeVisualizerLoop()
   alignHomeHeaderToPlay()
-  window.addEventListener('resize', () => { alignHomeHeaderToPlay() })
+  window.addEventListener('resize', () => {
+    reclampHomeGeometryOnResize()
+    alignHomeHeaderToPlay()
+    resizeHomeVisualizerCanvas()
+  })
   fixNodeTextMojibake(document.body)
   setTimeout(applyUiTextOverrides, 300)
   setTimeout(applyUiTextOverrides, 1200)
@@ -8250,7 +11173,7 @@ window.addEventListener('DOMContentLoaded', () => {
     window.api.appVersion().then((r) => {
       if (!r?.ok || !r?.version) return
       const logo = document.getElementById('titlebar-logo')
-      if (logo) logo.textContent = `⬢ Flow v${r.version}`
+      if (logo) logo.textContent = `Flow v${r.version}`
       const welcomeSub = document.querySelector('#page-home .content-sub')
       if (welcomeSub) welcomeSub.textContent = `Выбери источник и начни слушать • билд ${r.version}`
       showToast(`Запущен билд v${r.version}`)

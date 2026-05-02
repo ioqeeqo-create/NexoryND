@@ -1,6 +1,6 @@
 {
   "name": "flow",
-  "version": "2.2.7",
+  "version": "2.2.68",
   "description": "Flow — десктопный музыкальный плеер: поиск, плейлисты, SoundCloud, комнаты и персональная «Моя волна».",
   "author": "ioqeeqo-create",
   "license": "MIT",
@@ -11,10 +11,14 @@
   },
   "main": "main.js",
   "scripts": {
+    "merge-renderer": "node scripts/merge-renderer.js",
+    "prestart": "node scripts/merge-renderer.js",
+    "prebuild": "node scripts/merge-renderer.js",
     "start": "electron .",
     "start:vk-server": "node server/flow-vk-server.js",
     "social-server": "node server/flow-social-server.js",
     "social-migrate": "node server/migrate-supabase-export-to-sqlite.js",
+    "build:yandex-helper": "dotnet publish tools/flow-yandex-helper -c Release -r win-x64 --self-contained false",
     "build": "electron-builder",
     "build:win": "electron-builder --win"
   },
