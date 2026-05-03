@@ -3472,6 +3472,19 @@ input:not([type])::placeholder {
    TRACK CARDS
 ═══════════════════════════════ */
 .tracks { display:flex; flex-direction:column; gap:4px; }
+.tracks > .track-card,
+#liked-list > .track-card,
+#playlist-tracks > .playlist-track-row {
+  content-visibility: auto;
+  contain: layout paint style;
+}
+.tracks > .track-card,
+#liked-list > .track-card {
+  contain-intrinsic-size: 72px;
+}
+#playlist-tracks > .playlist-track-row {
+  contain-intrinsic-size: 84px;
+}
 .track-card {
   display:flex; align-items:center; gap:12px;
   padding:10px 14px; border-radius:14px;
@@ -3692,6 +3705,17 @@ input:not([type])::placeholder {
 .playlist-track-action { background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); color:var(--muted); cursor:pointer; width:28px; height:28px; border-radius:8px; font-size:12px; }
 .playlist-track-action:hover { color:var(--text); background:rgba(255,255,255,0.12); }
 .playlist-track-action.danger:hover { color:#ef4444; border-color:rgba(239,68,68,0.45); background:rgba(239,68,68,0.12); }
+body.flow-heavy-liked #liked-list .track-card,
+body.flow-heavy-playlist #playlist-tracks .track-card,
+body.flow-heavy-playlist #playlist-tracks .playlist-track-row {
+  transition: none !important;
+  animation: none !important;
+}
+body.flow-heavy-liked #liked-list .track-card:hover,
+body.flow-heavy-playlist #playlist-tracks .track-card:hover {
+  transform: none !important;
+  box-shadow: none !important;
+}
 .room-role-badge { display:inline-flex; align-items:center; padding:2px 8px; border-radius:999px; font-size:11px; letter-spacing:0.04em; font-weight:700; }
 .room-role-solo { color:#cbd5e1; background:rgba(148,163,184,0.2); border:1px solid rgba(148,163,184,0.35); }
 .room-role-host { color:#86efac; background:rgba(34,197,94,0.18); border:1px solid rgba(34,197,94,0.38); }

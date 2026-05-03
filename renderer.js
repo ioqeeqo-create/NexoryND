@@ -8993,14 +8993,44 @@ async function playTrackObj(track, opts = {}) {
     }
     setStage('Яндекс: получаю поток…')
     const ymRes = await window.api.yandexStream(String(track.id), ymTok).catch((e) => ({ ok: false, error: e?.message || String(e) }))
+    let resolvedYmUrl = ymRes?.ok && ymRes?.url ? String(ymRes.url) : ''
     if (isStale()) return
     if (!ymRes?.ok || !ymRes.url) {
-      showToast('Яндекс: ' + (ymRes?.error || 'не удалось получить поток'), true)
-      if (playBtn) playBtn.innerHTML = ICONS.play
-      setStage('Яндекс: ошибка')
-      return
+      const ymFallbackQuery = `${track.artist || ''} ${track.title || ''}`.trim()
+      const ymFallbackList = ymFallbackQuery && window.api?.yandexSearch
+        ? await window.api.yandexSearch(ymFallbackQuery, ymTok).catch(() => [])
+        : []
+      const ymFallback = Array.isArray(ymFallbackList)
+        ? ymFallbackList.find((item) => String(item?.id || '').trim())
+        : null
+      const fallbackId = String(ymFallback?.id || '').trim()
+      if (fallbackId && fallbackId !== String(track.id || '').trim()) {
+        setStage('Яндекс: пробую альтернативный трек…')
+        const ymRetry = await window.api.yandexStream(fallbackId, ymTok).catch((e) => ({ ok: false, error: e?.message || String(e) }))
+        if (isStale()) return
+        if (ymRetry?.ok && ymRetry?.url) {
+          resolvedYmUrl = String(ymRetry.url)
+          track = Object.assign({}, track, {
+            id: fallbackId,
+            url: resolvedYmUrl,
+            cover: track.cover || ymFallback?.cover || null,
+          })
+          streamUrl = track.url
+          currentTrack = track
+        } else {
+          showToast('Яндекс: ' + (ymRetry?.error || ymRes?.error || 'не удалось получить поток'), true)
+          if (playBtn) playBtn.innerHTML = ICONS.play
+          setStage('Яндекс: ошибка')
+          return
+        }
+      } else {
+        showToast('Яндекс: ' + (ymRes?.error || 'не удалось получить поток'), true)
+        if (playBtn) playBtn.innerHTML = ICONS.play
+        setStage('Яндекс: ошибка')
+        return
+      }
     }
-    track = Object.assign({}, track, { url: ymRes.url })
+    track = Object.assign({}, track, { url: resolvedYmUrl })
     streamUrl = track.url
     currentTrack = track
   }
@@ -10039,6 +10069,7 @@ let _likedRenderToken = 0
 function renderLiked() {
   const token = ++_likedRenderToken
   const liked = getLiked()
+  document.body.classList.toggle('flow-heavy-liked', liked.length >= 220)
   const container = document.getElementById('liked-list'); if (!container) return
   if (!liked.length) { container.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.35-9.5-8A5.5 5.5 0 0 1 12 5.1 5.5 5.5 0 0 1 21.5 13c-2.5 3.65-9.5 8-9.5 8Z"/></svg></div><p>Ты еще не лайкнул ни одного трека</p></div>`; return }
   container.innerHTML = ''
@@ -10131,6 +10162,7 @@ function openPlaylist(idx) {
   openPlaylistIndex = idx
   const pl = normalizePlaylist(getPlaylists()[idx])
   if (!pl) return
+  document.body.classList.toggle('flow-heavy-playlist', (pl.tracks || []).length >= 180)
   const playlistCover = sanitizeMediaByGifMode(pl.coverData || '', 'playlist')
   document.getElementById('playlist-view-name').textContent = pl.name
   const metaEl = document.getElementById('playlist-view-meta')
@@ -10223,6 +10255,7 @@ function openPlaylist(idx) {
 
 function closePlaylist() {
   openPlaylistIndex=null
+  document.body.classList.remove('flow-heavy-playlist')
   _openPlaylistTrackRenderToken++
   const viewEl = document.getElementById('playlist-view')
   if (viewEl) {
@@ -10322,9 +10355,26 @@ async function processPlaylistImport(trackList, imported = {}) {
   try {
     for (let i = 0; i < maxTracks; i++) {
       const it = srcTracks[i] || {}
+      const directOriginalId = String(it?.original_id || it?.originalId || '').trim()
       const queries = buildImportQueries(it.title, it.artist)
       const query = queries[0] || ''
       updateImportProgress(i, maxTracks, `Ищу: ${it.artist || '—'} - ${it.title || '—'}${notFound.length ? ` | не найдено: ${notFound.slice(-3).join('; ')}` : ''}`)
+      if (preferredSource === 'yandex' && directOriginalId) {
+        const directYandex = {
+          title: it.title || 'Без названия',
+          artist: it.artist || '—',
+          duration: Number(it?.duration || 0) || null,
+          cover: it?.cover || null,
+          source: 'yandex',
+          id: directOriginalId,
+        }
+        if (isTrackPlayableCandidate(directYandex)) {
+          collected.push(directYandex)
+          updateImportProgress(i + 1, maxTracks, `Импорт: ${i + 1} из ${maxTracks}${notFound.length ? ` | не найдено: ${notFound.slice(-3).join('; ')}` : ''}`)
+          await importDelay(180)
+          continue
+        }
+      }
       if (!query) {
         notFound.push(`Track ${i + 1}`)
         continue
@@ -10354,6 +10404,11 @@ async function processPlaylistImport(trackList, imported = {}) {
             title: it.title || first.title,
             artist: it.artist || first.artist
           })
+          if (preferredSource === 'yandex' && directOriginalId && String(picked.source || '').toLowerCase() === 'yandex') {
+            picked.id = directOriginalId
+            if (!picked.duration && it?.duration) picked.duration = Number(it.duration) || null
+            if (!picked.cover && it?.cover) picked.cover = it.cover
+          }
           if (!isTrackPlayableCandidate(picked)) {
             skippedUnplayable.push(`${picked.artist || '—'} - ${picked.title || '—'}`)
             continue

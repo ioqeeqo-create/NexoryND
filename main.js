@@ -2268,6 +2268,15 @@ async function fetchVkPlaylistFromFlowServer(serverBaseUrl, link, token = '') {
   }
 }
 
+function extractYandexTrackOriginalId(track = {}, row = {}) {
+  const rawId = track?.id != null ? track.id : (row?.trackId != null ? row.trackId : row?.id)
+  const value = String(rawId ?? '').trim()
+  if (!value) return null
+  if (!value.includes(':')) return value
+  const head = value.split(':')[0]?.trim()
+  return head || value
+}
+
 /** Нормализует треклист альбома из ответа /albums/<id>/with-tracks */
 function flattenYandexAlbumTracks(result = {}) {
   const out = []
@@ -2277,6 +2286,9 @@ function flattenYandexAlbumTracks(result = {}) {
     out.push({
       title: String(t.title || '').trim() || null,
       artist: Array.isArray(t.artists) ? t.artists.map((a) => a?.name).filter(Boolean).join(', ') : '—',
+      duration: Number(t.durationMs || 0) > 0 ? Math.max(1, Math.floor(Number(t.durationMs) / 1000)) : null,
+      original_id: extractYandexTrackOriginalId(t, item),
+      cover: t.coverUri ? 'https://' + String(t.coverUri).replace('%%', '300x300') : null,
     })
   }
   const volumes = Array.isArray(result.volumes) ? result.volumes : []
@@ -2307,6 +2319,9 @@ function mapYandexPlaylistTrackRowsToImport(tracks = []) {
     out.push({
       title: t.title,
       artist: Array.isArray(t.artists) ? t.artists.map((a) => a?.name).filter(Boolean).join(', ') : '—',
+      duration: Number(t.durationMs || 0) > 0 ? Math.max(1, Math.floor(Number(t.durationMs) / 1000)) : null,
+      original_id: extractYandexTrackOriginalId(t, row),
+      cover: t.coverUri ? 'https://' + String(t.coverUri).replace('%%', '300x300') : null,
     })
   }
   return out.filter((x) => x.title)
@@ -2321,6 +2336,9 @@ function mapYandexTrackObjectsToImport(tracks = []) {
     out.push({
       title: t.title,
       artist: Array.isArray(t.artists) ? t.artists.map((a) => a?.name).filter(Boolean).join(', ') : '—',
+      duration: Number(t.durationMs || 0) > 0 ? Math.max(1, Math.floor(Number(t.durationMs) / 1000)) : null,
+      original_id: extractYandexTrackOriginalId(t, t),
+      cover: t.coverUri ? 'https://' + String(t.coverUri).replace('%%', '300x300') : null,
     })
   }
   return out.filter((x) => x.title)
