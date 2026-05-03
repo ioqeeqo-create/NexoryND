@@ -1,11 +1,12 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
   <title>Flow</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <!-- bump ?v= when profile/CSS/JS layout changes so Electron reloads assets -->
+  <link rel="stylesheet" href="styles.css?v=20260503-vk-source">
 </head>
 <body>
 
@@ -22,11 +23,17 @@
 
 <!-- TITLEBAR -->
 <div class="titlebar">
-  <span class="titlebar-logo" id="titlebar-logo">⬢ Flow</span>
+  <span class="titlebar-logo" id="titlebar-logo">Flow</span>
   <div class="titlebar-center" id="titlebar-track-info"></div>
   <div class="titlebar-btns">
-    <button onclick="window.api.minimize()" title="Свернуть"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
-    <button onclick="window.api.close()" title="Закрыть"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+    <button type="button" onclick="window.api.minimize()" title="Свернуть" aria-label="Свернуть"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+    <button type="button" onclick="toggleWindowMaximize()" title="Развернуть" aria-label="Развернуть">
+      <span class="tb-max-slot">
+      <svg id="titlebar-ico-expand" class="ui-icon tb-ico-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"><rect x="5.75" y="5.75" width="12.5" height="12.5" rx="2.25"/></svg>
+      <svg id="titlebar-ico-restore" class="ui-icon tb-ico-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linejoin="round" style="display:none"><path d="M11 16.5v-9h11v11h-9v2"/><path d="M3 17.5v-13h13v13h-13z"/></svg>
+      </span>
+    </button>
+    <button type="button" onclick="window.api.close()" title="Закрыть" aria-label="Закрыть"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
   </div>
 </div>
 
@@ -35,7 +42,7 @@
   <div class="auth-box glass">
     <div class="auth-header">
       <div class="auth-logo-wrap">
-        <span class="auth-logo-hex">⬢</span>
+        <span class="auth-logo-hex" aria-label="Flow"></span>
         <div class="auth-logo-glow"></div>
       </div>
       <h1>Flow</h1>
@@ -51,7 +58,7 @@
         <input id="auth-login" type="text" placeholder="логин" autocomplete="off">
       </div>
       <div class="input-wrap">
-        <span class="input-icon">••</span>
+        <span class="input-icon">🔒</span>
         <input id="auth-password" type="password" placeholder="пароль">
       </div>
       <button class="btn-main" onclick="submitAuth()"><span id="btn-label">Войти</span></button>
@@ -64,49 +71,160 @@
 <div class="screen hidden" id="screen-main">
 
   <div class="sidebar glass-sidebar" id="sidebar">
-    <div class="sidebar-logo">⬢ <span>Flow</span></div>
+    <div class="sidebar-resize-gutter sidebar-resize-gutter--left" id="sidebar-resize-gutter-left" role="separator" aria-orientation="vertical" aria-label="Левый край: изменить ширину панели" title="Потяни для изменения ширины (левый край)"></div>
+    <div class="sidebar-resize-gutter sidebar-resize-gutter--right" id="sidebar-resize-gutter" role="separator" aria-orientation="vertical" aria-label="Правый край: изменить ширину панели" title="Потяни для изменения ширины (правый край)"></div>
+    <div class="sidebar-head-row">
+      <div class="sidebar-logo"><span>Flow</span></div>
+      <div
+        class="sidebar-head-drag-hit"
+        id="sidebar-head-drag-hit"
+        role="presentation"
+        aria-hidden="true"
+        title="Потяни, чтобы сдвинуть панель"
+      ></div>
+    </div>
+    <div class="sidebar-nav-shell">
     <nav class="sidebar-nav">
-      <a class="nav-item active" onclick="openPage('home')" href="#">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg><span class="nav-label">Главная</span>
+      <div class="nav-group nav-group-split">
+      <a class="nav-item active" onclick="openPage('home')" href="#" title="Главная" aria-label="Главная">
+        <svg class="nav-icon flow-ref-nav" viewBox="0 0 24 24" fill="none"><path d="M4 10.2L12 4l8 6.2V19.25a1.25 1.25 0 01-1.25 1.25h-13.5A1.25 1.25 0 014 19.25V10.2z" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"/><path d="M12 17.2v-2.9" stroke="var(--accent2)" stroke-linecap="round" stroke-width="2"/></svg><span class="nav-label">Главная</span>
       </a>
-      <a class="nav-item" onclick="openPage('search')" href="#">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg><span class="nav-label">Поиск</span>
+      </div>
+      <div class="nav-group">
+      <a class="nav-item" onclick="openPage('search')" href="#" title="Поиск" aria-label="Поиск">
+        <svg class="nav-icon flow-ref-nav" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.75"/><path d="M20 20l-4.55-4.55" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/><path d="M18.95 17.98L21 20.1" stroke="var(--accent2)" stroke-width="2" stroke-linecap="round"/></svg><span class="nav-label">Поиск</span>
       </a>
-      <a class="nav-item" onclick="openPage('library')" href="#">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg><span class="nav-label">Библиотека</span>
+      <a class="nav-item" onclick="openPage('library')" href="#" title="Библиотека" aria-label="Библиотека">
+        <svg class="nav-icon flow-ref-nav" viewBox="0 0 24 24" fill="none"><rect x="5.5" y="5.5" width="13" height="13" rx="3.5" stroke="currentColor" stroke-width="1.75"/><path d="M9 16.85h6" stroke="var(--accent2)" stroke-width="2" stroke-linecap="round"/></svg><span class="nav-label">Библиотека</span>
       </a>
-      <a class="nav-item" onclick="openPage('liked')" href="#">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg><span class="nav-label">Любимые</span>
+      </div>
+      <div class="nav-group">
+      <a class="nav-item" onclick="openPage('liked')" href="#" title="Любимые" aria-label="Любимые">
+        <svg class="nav-icon flow-ref-nav" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M12 20.4s6.5-4.35 8.82-7.74A5.05 5.05 0 0012 6.42a5.05 5.05 0 00-8.82 6.24C5.47 15.93 12 20.35 12 20.42z"/></svg><span class="nav-label">Любимые</span>
       </a>
-      <a class="nav-item" onclick="openPage('social')" href="#">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6"/><path d="M23 11h-6"/></svg><span class="nav-label">Друзья</span>
+      <a class="nav-item" onclick="openPage('social')" href="#" title="Друзья" aria-label="Друзья">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6"/><path d="M23 11h-6"/></svg><span class="nav-label">Друзья</span>
       </a>
-      <a class="nav-item" onclick="openPage('rooms')" href="#">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8l-5 3V7z"/><path d="M8 11h8"/><path d="M8 15h5"/></svg><span class="nav-label">Комнаты</span>
+      </div>
+      <div class="nav-group nav-group-tail">
+      <a class="nav-item" onclick="openPage('rooms')" href="#" title="Комнаты" aria-label="Комнаты">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8l-5 3V7z"/><path d="M8 11h8"/><path d="M8 15h5"/></svg><span class="nav-label">Комнаты</span>
       </a>
-      <a class="nav-item" onclick="openPage('settings')" href="#">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg><span class="nav-label">Настройки</span>
+      <a class="nav-item" onclick="openPage('settings')" href="#" title="Настройки" aria-label="Настройки">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span class="nav-label">Настройки</span>
       </a>
+      </div>
     </nav>
+    </div>
+    <div class="sidebar-edit-drag-strip" id="sidebar-edit-drag-strip" role="toolbar" aria-label="Позиция боковой панели" title="Потяни, чтобы сдвинуть панель по вертикали">
+      <span class="sidebar-edit-drag-strip__label">Панель</span>
+    </div>
+    <button type="button" class="sidebar-corner-resize sidebar-corner-resize--tl" data-sidebar-corner="tl" tabindex="-1" title="Размер панели (угол)" aria-label="Размер панели, левый верх">
+      <span class="flow-resize-glyph" aria-hidden="true"></span>
+    </button>
+    <button type="button" class="sidebar-corner-resize sidebar-corner-resize--tr" data-sidebar-corner="tr" tabindex="-1" title="Размер панели (угол)" aria-label="Размер панели, правый верх">
+      <span class="flow-resize-glyph" aria-hidden="true"></span>
+    </button>
+    <button type="button" class="sidebar-corner-resize sidebar-corner-resize--bl" data-sidebar-corner="bl" tabindex="-1" title="Размер панели (угол)" aria-label="Размер панели, левый низ">
+      <span class="flow-resize-glyph" aria-hidden="true"></span>
+    </button>
+    <button type="button" class="sidebar-corner-resize sidebar-corner-resize--br" data-sidebar-corner="br" tabindex="-1" title="Размер панели (угол)" aria-label="Размер панели, правый низ">
+      <span class="flow-resize-glyph" aria-hidden="true"></span>
+    </button>
     <div class="sidebar-bottom">
+      <div class="sidebar-layout-constructor" id="sidebar-layout-constructor">
+        <div class="sidebar-layout-constructor-row">
+          <button type="button" id="btn-home-layout-edit" class="sidebar-layout-edit-btn sidebar-layout-edit-btn--primary" title="Изменить расположение блоков главной" aria-label="Редактировать макет главной" aria-pressed="false" onclick="event.preventDefault(); event.stopPropagation(); toggleHomeLayoutEdit();">
+            <svg class="nav-icon flow-ref-layout-move" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M12 6V2M12 22v-4M6 12H2M22 12h-4"/><circle cx="12" cy="12" r="3"/></svg>
+            <span class="nav-label sidebar-layout-edit-label" id="btn-home-layout-edit-label">Изменить</span>
+          </button>
+          <button type="button" id="btn-home-layout-reset" class="sidebar-layout-reset-btn" title="Сбросить раскладку главной" aria-label="Сбросить раскладку главной" onclick="event.preventDefault(); event.stopPropagation(); resetHomeDashboardLayoutPressed();">
+            <svg class="nav-icon flow-ref-layout-reset" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 1 3 7.94"/><path d="M3 3v8h8"/></svg>
+            <span class="nav-label">Сброс</span>
+          </button>
+        </div>
+      </div>
       <div class="sidebar-user" onclick="openPage('profile')">
         <div class="user-avatar" id="user-avatar">?</div>
         <div class="user-info"><span id="user-name">—</span><span class="user-sub">слушатель</span></div>
-        <button class="logout-btn" onclick="event.stopPropagation();logout()" title="Выйти"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M15 17l5-5-5-5"/><path d="M20 12H9"/><path d="M9 19H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4"/></svg></button>
+        <button class="logout-btn" onclick="event.stopPropagation();logout()" title="Выйти"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M15 17l5-5-5-5"/><path d="M20 12H9"/><path d="M9 19H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4"/></svg></button>
       </div>
     </div>
   </div>
-  <div class="sidebar-resizer" id="sidebar-resizer" title="Потяни для изменения ширины"></div>
 
-  <div class="content">
+  <div class="content" id="main-content-pane">
+    <!-- Рамки: только они двигают карточку; углы — отдельно для ресайза. Shell = высота видимой области (.clientHeight). -->
+    <div class="main-pane-frame-shell" id="main-pane-frame-shell" aria-hidden="true">
+      <div class="main-pane-frame-hit main-pane-frame-hit--top"></div>
+      <div class="main-pane-frame-hit main-pane-frame-hit--right"></div>
+      <div class="main-pane-frame-hit main-pane-frame-hit--bottom"></div>
+      <div class="main-pane-frame-hit main-pane-frame-hit--left"></div>
+    </div>
+    <button type="button" class="content-corner-resize content-corner-resize--tl" data-main-pane-corner="tl" tabindex="-1" aria-label="Размер окна контента, левый верх" title="Размер окна контента"><span class="flow-resize-glyph" aria-hidden="true"></span></button>
+    <button type="button" class="content-corner-resize content-corner-resize--tr" data-main-pane-corner="tr" tabindex="-1" aria-label="Размер окна контента, правый верх" title="Размер окна контента"><span class="flow-resize-glyph" aria-hidden="true"></span></button>
+    <button type="button" class="content-corner-resize content-corner-resize--bl" data-main-pane-corner="bl" tabindex="-1" aria-label="Размер окна контента, левый низ" title="Размер окна контента"><span class="flow-resize-glyph" aria-hidden="true"></span></button>
+    <button type="button" class="content-corner-resize content-corner-resize--br" data-main-pane-corner="br" tabindex="-1" aria-label="Размер окна контента, правый низ" title="Размер окна контента"><span class="flow-resize-glyph" aria-hidden="true"></span></button>
 
     <div id="page-home" class="page active">
+      <div class="yandex-home-shell" aria-label="Flow в стиле Яндекс Музыки">
+        <section class="yandex-wave-hero" onclick="startMyWave()" role="button" tabindex="0" aria-label="Запустить Мою волну">
+          <div class="yandex-wave-blob" aria-hidden="true"></div>
+          <div class="yandex-wave-copy">
+            <h2><span class="yandex-play-mark">▶</span>Моя волна</h2>
+            <button type="button" class="yandex-wave-settings" onclick="event.stopPropagation(); toggleYandexWaveModes()">☰ Настроить</button>
+            <div class="yandex-wave-mode-pop hidden" id="yandex-wave-mode-pop" onclick="event.stopPropagation()"></div>
+          </div>
+        </section>
+
+        <div class="yandex-shortcuts">
+          <button type="button" class="yandex-pill-card yandex-pill-card--avatars" onclick="openPage('social')">
+            <span class="yandex-avatar-stack" aria-hidden="true"><i></i><i></i></span>
+            <span><strong>Для вас</strong><small>друзья и активность</small></span>
+          </button>
+          <button type="button" class="yandex-pill-card" onclick="openPage('search')">
+            <span class="yandex-pill-icon" aria-hidden="true">↗</span>
+            <span><strong>Тренды</strong><small>найти музыку</small></span>
+          </button>
+        </div>
+
+        <div class="yandex-main-cards">
+          <button type="button" class="yandex-main-card yandex-liked-card" onclick="openPage('liked')">
+            <span class="yandex-main-cover" aria-hidden="true">♥</span>
+            <span class="yandex-main-card-text"><strong>Мне нравится</strong><small>любимые треки Flow</small></span>
+            <span class="yandex-main-arrow" aria-hidden="true">›</span>
+          </button>
+          <button type="button" class="yandex-main-card" onclick="enterPlayerMode()">
+            <span class="yandex-main-cover yandex-history-cover" aria-hidden="true">↶</span>
+            <span class="yandex-main-card-text"><strong>История</strong><small>открыть плеер</small></span>
+            <span class="yandex-main-arrow" aria-hidden="true">›</span>
+          </button>
+        </div>
+
+        <section class="yandex-ai-section">
+          <h3>Сведи в AI-сет</h3>
+          <button type="button" class="yandex-ai-card" onclick="startMyWave()">
+            <span class="yandex-ai-cover" aria-hidden="true">♪</span>
+            <span><strong>Flow Mix</strong><small>персональная волна по твоим прослушиваниям</small></span>
+            <span class="yandex-ai-more" aria-hidden="true">•••</span>
+          </button>
+        </section>
+      </div>
+      <div id="home-dashboard-stack" class="home-dashboard-stack">
+      <section class="home-dash-block" data-home-block="welcome">
+        <button type="button" class="home-dash-drag home-dash-handle" tabindex="-1" aria-label="Переместить блок" title="Зона захвата — перетаскивание"></button>
+        <div class="home-dash-fill">
       <div class="content-header">
         <h2 id="welcome-text">Добро пожаловать</h2>
         <p class="content-sub">Выбери источник и начни слушать</p>
       </div>
+        </div>
+        <button type="button" class="home-dash-resize resizer-corner" tabindex="-1" aria-label="Изменить размер блока" title="Угол — размер"></button>
+      </section>
+      <section class="home-dash-block" data-home-block="clone">
+        <button type="button" class="home-dash-drag home-dash-handle" tabindex="-1" aria-label="Переместить блок" title="Зона захвата — перетаскивание"></button>
+        <div class="home-dash-fill">
       <div class="home-clone glass-card">
-        <div class="home-clone-cover" id="home-clone-cover"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>
+        <div class="home-clone-cover" id="home-clone-cover"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>
         <div class="home-clone-main">
           <div class="home-clone-head">
             <div class="home-clone-title" id="home-clone-title">Ничего не играет</div>
@@ -119,11 +237,11 @@
           </div>
           <div class="home-clone-controls">
             <span id="host-lock-indicator-home" style="display:none;align-items:center;gap:4px;font-size:11px;opacity:.75;padding:0 4px">🔒 Host only</span>
-            <button class="ctrl-btn" id="home-repeat-btn" onclick="toggleRepeatMode()" title="Повтор"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></button>
+            <button class="ctrl-btn" id="home-repeat-btn" onclick="toggleRepeatMode()" title="Повтор"><svg class="ui-icon flow-ref-ctrl" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M17 2.3l4 4.2-4 4"/><path stroke="currentColor" stroke-width="1.75" d="M3 16v-7A4.5 4.5 0 017.5 4.5h12"/><path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M7 22l-4-4.2 4-4"/><path stroke="currentColor" stroke-width="1.75" d="M21 10.5v6A4.5 4.5 0 0116.5 21h-12"/><circle fill="var(--accent2)" cx="15.95" cy="18.95" r="1.65"/></svg></button>
             <button class="ctrl-btn" onclick="prevTrack()"><svg class="ui-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2v14H6zM9 12l9 7V5z"/></svg></button>
-            <button class="ctrl-btn play-btn" onclick="togglePlay()"><svg class="ui-icon" viewBox="0 0 24 24" fill="currentColor"><polygon points="8 5 19 12 8 19 8 5"/></svg></button>
+            <button class="ctrl-btn play-btn" id="home-play-btn" onclick="togglePlay()"><svg class="ui-icon ctrl-play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M9 8 L17 12 L9 16 Z"/></svg></button>
             <button class="ctrl-btn" onclick="nextTrack()"><svg class="ui-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M16 5h2v14h-2zM6 5v14l9-7z"/></svg></button>
-            <button class="ctrl-btn" id="home-shuffle-btn" onclick="toggleShuffleMode()" title="Перемешка"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"/><path d="M4 20L21 3"/><path d="M21 16v5h-5"/><path d="M15 15l6 6"/><path d="M4 4l5 5"/></svg></button>
+            <button class="ctrl-btn" id="home-shuffle-btn" onclick="toggleShuffleMode()" title="Перемешка"><svg class="ui-icon flow-ref-ctrl" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M16 4h5v5"/><path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M4 21L21 4"/><path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M21 17v5h-5"/><path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M14.5 16l6.5 6"/><path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M4 6l6 7"/><path stroke="var(--accent2)" stroke-width="2.25" stroke-linecap="round" d="M4 4l7 9"/></svg></button>
           </div>
           <div class="home-visualizer-wrap" id="home-visualizer-wrap">
             <canvas class="home-visualizer-canvas" id="home-visualizer-canvas" width="640" height="130"></canvas>
@@ -131,23 +249,35 @@
           </div>
         </div>
       </div>
+        </div>
+        <button type="button" class="home-dash-resize resizer-corner" tabindex="-1" aria-label="Изменить размер блока" title="Угол — размер"></button>
+      </section>
+      <section class="home-dash-block" data-home-block="cards">
+        <button type="button" class="home-dash-drag home-dash-handle" tabindex="-1" aria-label="Переместить блок" title="Зона захвата — перетаскивание"></button>
+        <div class="home-dash-fill">
       <div class="home-cards">
         <div class="home-card glass" onclick="openPage('search')">
-          <div class="home-card-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg></div>
+          <div class="home-card-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg></div>
           <div class="home-card-title">Найти музыку</div>
           <div class="home-card-sub">Источник: <span id="source-badge" class="source-badge">Spotify → SoundCloud → Audius</span></div>
         </div>
         <div class="home-card glass" onclick="enterPlayerMode()">
-          <div class="home-card-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14a9 9 0 0 1 18 0"/><path d="M21 14v4a2 2 0 0 1-2 2h-1v-8h1a2 2 0 0 1 2 2Z"/><path d="M3 14v4a2 2 0 0 0 2 2h1v-8H5a2 2 0 0 0-2 2Z"/></svg></div>
+          <div class="home-card-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14a9 9 0 0 1 18 0"/><path d="M21 14v4a2 2 0 0 1-2 2h-1v-8h1a2 2 0 0 1 2 2Z"/><path d="M3 14v4a2 2 0 0 0 2 2h1v-8H5a2 2 0 0 0-2 2Z"/></svg></div>
           <div class="home-card-title">Режим плеера</div>
           <div class="home-card-sub">Fullscreen с обложкой</div>
         </div>
         <div class="home-card glass" onclick="openPage('settings')">
-          <div class="home-card-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.04 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.96 19.35a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87A1.7 1.7 0 0 0 3 13.96H2.9a2 2 0 1 1 0-4H3A1.7 1.7 0 0 0 4.64 8.4a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1-1.56V2.9a2 2 0 1 1 4 0V3a1.7 1.7 0 0 0 1.04 1.56h.09a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9c0 .69.41 1.31 1.04 1.56H21.1a2 2 0 1 1 0 4H21a1.7 1.7 0 0 0-1.6 1.04V15Z"/></svg></div>
+          <div class="home-card-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.04 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.96 19.35a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87A1.7 1.7 0 0 0 3 13.96H2.9a2 2 0 1 1 0-4H3A1.7 1.7 0 0 0 4.64 8.4a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1-1.56V2.9a2 2 0 1 1 4 0V3a1.7 1.7 0 0 0 1.04 1.56h.09a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9c0 .69.41 1.31 1.04 1.56H21.1a2 2 0 1 1 0 4H21a1.7 1.7 0 0 0-1.6 1.04V15Z"/></svg></div>
           <div class="home-card-title">Настройки</div>
           <div class="home-card-sub">Фон, blur, источники</div>
         </div>
       </div>
+        </div>
+        <button type="button" class="home-dash-resize resizer-corner" tabindex="-1" aria-label="Изменить размер блока" title="Угол — размер"></button>
+      </section>
+      <section class="home-dash-block" data-home-block="wave">
+        <button type="button" class="home-dash-drag home-dash-handle" tabindex="-1" aria-label="Переместить блок" title="Зона захвата — перетаскивание"></button>
+        <div class="home-dash-fill">
       <div class="my-wave glass-card" id="my-wave">
         <div class="my-wave-hero">
           <div class="my-wave-badge">Моя волна</div>
@@ -160,6 +290,10 @@
         </div>
         <div class="my-wave-list" id="my-wave-list"></div>
       </div>
+        </div>
+        <button type="button" class="home-dash-resize resizer-corner" tabindex="-1" aria-label="Изменить размер блока" title="Угол — размер"></button>
+      </section>
+      </div><!-- /home-dashboard-stack -->
     </div>
 
     <div id="page-search" class="page">
@@ -167,13 +301,26 @@
         <h2>Поиск</h2>
         <p class="content-sub">Найди трек</p>
       </div>
-      <div class="search-bar glass">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-        <input id="search-input" type="text" placeholder="Исполнитель, название трека..." oninput="searchTracks()">
+      <div class="search-bar glass" id="search-bar" title="Поиск">
+        <svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input id="search-input" type="search" enterkeyhint="search" placeholder="Исполнитель, название трека..." oninput="searchTracks()" autocomplete="off">
       </div>
       <div class="search-source-row">
         <span style="font-size:11px;color:var(--muted);margin-right:2px">Источник:</span>
-        <button class="search-source-pill active" data-src="hybrid" onclick="switchSearchSource('hybrid')"><span class="pill-dot"></span>Spotify → SoundCloud → Audius</button>
+        <div class="source-mode-grid source-mode-grid--compact">
+          <button class="source-mode-card active" data-src="hybrid" onclick="switchSearchSource('hybrid')" title="Flow classic">
+            <span class="source-mode-icon">F</span>
+            <span class="source-mode-label">classic</span>
+          </button>
+          <button class="source-mode-card" data-src="yandex" onclick="switchSearchSource('yandex')" title="Яндекс">
+            <span class="source-mode-icon source-mode-icon-ya">✶</span>
+            <span class="source-mode-label">Ya</span>
+          </button>
+          <button class="source-mode-card" data-src="vk" onclick="switchSearchSource('vk')" title="ВКонтакте">
+            <span class="source-mode-icon" style="font-size:13px;font-weight:800;background:linear-gradient(135deg,#4680c2,#5b9bd5);color:#fff">VK</span>
+            <span class="source-mode-label">VK</span>
+          </button>
+        </div>
       </div>
       <div id="search-results-meta" class="results-meta" style="display:none">
         <span class="results-count" id="results-count"></span>
@@ -196,28 +343,31 @@
         </div>
       </div>
       <div class="library-inline-import">
-        <input id="playlist-link-import-input" type="url" autocomplete="off" class="token-field flow-input" placeholder="Ссылка на плейлист VK или Яндекс Музыки" />
+        <input id="playlist-link-import-input" type="url" autocomplete="off" class="token-field flow-input" placeholder="Ссылка: VK / Яндекс плейлист или music.yandex.../album/…" />
         <button type="button" class="btn-small" id="btn-import-playlist-link" onclick="importPlaylistLinkFromBar()">Импорт</button>
       </div>
       <div id="playlists-list" class="playlists-grid"></div>
       <div id="playlist-view" class="hidden">
-        <div class="playlist-view-header">
-          <div class="playlist-view-hero glass-card" style="flex:1;min-width:0">
-            <div class="playlist-view-cover" id="playlist-view-cover"></div>
-            <div class="playlist-view-main">
-              <h3 id="playlist-view-name"></h3>
-              <div id="playlist-view-meta" class="playlist-view-meta"></div>
-              <div class="playlist-view-controls">
-                <button class="btn-small" onclick="playOpenPlaylist()">▶ Слушать</button>
-                <button class="btn-small" onclick="shuffleOpenPlaylist()">⇄</button>
-                <button class="btn-small" onclick="editOpenPlaylist()">✎ Редактировать</button>
-                <button class="btn-small" onclick="removeOpenPlaylistDuplicates()">Убрать дубли</button>
-                <button class="btn-small playlist-close-x" onclick="closePlaylist()" title="Ко всем плейлистам">✕</button>
+        <div class="playlist-view-backdrop" id="playlist-view-backdrop" aria-hidden="true"></div>
+        <div class="playlist-view-content">
+          <div class="playlist-view-header">
+            <div class="playlist-view-hero glass-card" style="flex:1;min-width:0">
+              <div class="playlist-view-cover" id="playlist-view-cover"></div>
+              <div class="playlist-view-main">
+                <h3 id="playlist-view-name"></h3>
+                <div id="playlist-view-meta" class="playlist-view-meta"></div>
+                <div class="playlist-view-controls">
+                  <button class="btn-small" onclick="playOpenPlaylist()">▶ Слушать</button>
+                  <button class="btn-small" onclick="shuffleOpenPlaylist()">⇄</button>
+                  <button class="btn-small" onclick="editOpenPlaylist()">✎ Редактировать</button>
+                  <button class="btn-small" onclick="removeOpenPlaylistDuplicates()">Убрать дубли</button>
+                  <button class="btn-small playlist-close-x" onclick="closePlaylist()" title="Ко всем плейлистам">✕</button>
+                </div>
               </div>
             </div>
           </div>
+          <div id="playlist-tracks"></div>
         </div>
-        <div id="playlist-tracks"></div>
       </div>
     </div>
 
@@ -228,34 +378,39 @@
 
     <div id="page-profile" class="page">
       <div class="content-header"><h2>Профиль</h2><p class="content-sub">Твой Flow профиль</p></div>
-      <div class="profile-shell profile-unified glass-card">
-        <div class="profile-hero">
-          <div class="profile-banner" id="profile-banner"></div>
-          <div class="profile-avatar-wrap">
-            <div class="profile-avatar" id="profile-avatar-large">?</div>
+      <div class="profile-shell profile-unified flow-profile-card">
+        <div class="profile-hero flow-profile-hero">
+          <div class="profile-banner-shell">
+            <div class="profile-banner" id="profile-banner"></div>
           </div>
-          <div class="profile-main-meta">
-            <h3 id="profile-display-name">—</h3>
-            <p id="profile-bio">Добавь описание профиля</p>
-            <button class="btn-small profile-edit-main-btn" onclick="openProfileEditModal()">Редактировать профиль</button>
-          </div>
-        </div>
-        <div class="profile-grid">
-          <div class="profile-card">
-            <div class="profile-card-head">
-              <strong>Любимые треки</strong>
+          <div class="flow-profile-hero-fill">
+            <section class="flow-profile-main-tile flow-profile-nested-glass">
+              <div class="flow-profile-top-row flow-profile-top-row--solo">
+                <div class="flow-profile-avatar-col">
+                  <div class="flow-profile-thought-bubble flow-profile-thought-bubble--hidden" id="profile-thought-bubble" aria-hidden="true"></div>
+                  <div class="flow-profile-avatar-ring-wrap">
+                    <div class="flow-profile-avatar-ring">
+                      <div class="profile-avatar profile-avatar--disc flow-profile-avatar-face" id="profile-avatar-large">?</div>
+                    </div>
+                    <span class="flow-profile-online-dot" id="profile-avatar-presence-dot" aria-hidden="true" title="Статус в сети"></span>
+                  </div>
+                </div>
+              </div>
+              <div class="flow-profile-identity">
+                <h3 id="profile-display-name" class="flow-profile-display-name">—</h3>
+                <p id="profile-handle-line" class="flow-profile-handle-line"></p>
+                <div id="profile-badge-row" class="flow-profile-badge-strip" aria-hidden="true"></div>
+                <p id="profile-bio" class="flow-profile-bio">Добавь описание профиля</p>
+              </div>
+              <div class="flow-profile-friends-zone">
+                <div class="flow-profile-zone-label">Friends</div>
+                <div id="profile-friends-list" class="flow-profile-friends-strip"></div>
+              </div>
+            </section>
+            <div id="profile-now-playing" class="flow-profile-listening-slot"></div>
+            <div class="flow-profile-edit-row">
+              <button type="button" class="btn-small profile-edit-main-btn flow-profile-edit-btn" onclick="openProfileEditModal()">Редактировать профиль</button>
             </div>
-            <div id="profile-pinned-tracks"></div>
-          </div>
-          <div class="profile-card">
-            <div class="profile-card-head">
-              <strong>Отслеживание</strong>
-            </div>
-            <div id="profile-stats"></div>
-          </div>
-          <div class="profile-card">
-            <div class="profile-card-head"><strong>Друзья</strong></div>
-            <div id="profile-friends-list"></div>
           </div>
         </div>
       </div>
@@ -286,6 +441,10 @@
             <span class="settings-cat-title">Плеер</span>
             <span class="settings-cat-hint">Режимы и пресеты Flow</span>
           </button>
+          <button type="button" class="settings-cat" data-settings-cat="optimization" onclick="switchSettingsCategory('optimization')">
+            <span class="settings-cat-title">Оптимизация</span>
+            <span class="settings-cat-hint">Слабый ПК, фон и панель</span>
+          </button>
           <button type="button" class="settings-cat" data-settings-cat="accounts" onclick="switchSettingsCategory('accounts')">
             <span class="settings-cat-title">Аккаунты</span>
             <span class="settings-cat-hint">Токены и источники</span>
@@ -300,24 +459,40 @@
       <div id="settings-panel-appearance" class="settings-category-panel active">
         <div class="visual-settings">
 
-          <div class="vs-section glass-card">
-            <div class="vs-section-title">Стиль интерфейса</div>
+          <div class="vs-section glass-card vs-collapsible collapsed" data-settings-section="interface">
+            <button type="button" class="vs-section-head" onclick="toggleSettingsSection('interface')" aria-expanded="false">
+              <span class="vs-section-title">Интерфейс</span>
+              <span class="vs-section-chevron">⌄</span>
+            </button>
+            <div class="vs-section-body">
             <div class="vs-row">
               <label class="vs-label">Тема UI</label>
-              <div class="vs-btn-group">
-                <button class="vsb" id="vm-minimal" onclick="setVisualMode('minimal')">Минимализм</button>
-                <button class="vsb" id="vm-premium" onclick="setVisualMode('premium')">Премиум (старый)</button>
+              <div class="vs-btn-group vs-theme-grid">
+                <button class="vsb vsb-theme" id="vm-minimal" onclick="setVisualMode('minimal')" title="Classic">
+                  <span class="vsb-theme-icon">F</span>
+                  <span class="vsb-theme-label">clasic</span>
+                </button>
+                <button class="vsb vsb-theme" id="vm-floated" onclick="setVisualMode('floated')" title="Flow Custum">
+                  <span class="vsb-theme-icon">F⚙</span>
+                  <span class="vsb-theme-label">flow custum</span>
+                </button>
+                <button class="vsb vsb-theme" id="vm-yandex" onclick="setVisualMode('yandex')" title="FY Яндекс">
+                  <span class="vsb-theme-icon">FY</span>
+                  <span class="vsb-theme-label">яндекс</span>
+                </button>
               </div>
             </div>
             <div class="vs-row">
-              <label class="vs-label">Подсветка активного пункта меню</label>
-              <div class="vs-toggle" id="toggle-nav-active" onclick="toggleNavActiveHighlight()"><div class="vs-toggle-thumb"></div></div>
-            </div>
-            <div class="vs-row">
               <label class="vs-label">Расположение меню</label>
-              <div class="vs-btn-group">
-                <button class="vsb" id="layout-left" onclick="setSidebarPosition('left')">Слева</button>
-                <button class="vsb" id="layout-top" onclick="setSidebarPosition('top')">Сверху</button>
+              <div class="vs-btn-group vs-layout-grid">
+                <button class="vsb vs-layout-card" id="layout-left" onclick="setSidebarPosition('left')" title="Меню слева">
+                  <span class="vs-layout-mini vs-layout-mini-left"><i></i><b></b></span>
+                  <span class="vs-layout-label">Слева</span>
+                </button>
+                <button class="vsb vs-layout-card" id="layout-top" onclick="setSidebarPosition('top')" title="Меню сверху">
+                  <span class="vs-layout-mini vs-layout-mini-top"><i></i><b></b></span>
+                  <span class="vs-layout-label">Сверху</span>
+                </button>
               </div>
             </div>
             <div class="vs-row">
@@ -327,10 +502,15 @@
                 <button class="vsb" id="density-compact" onclick="setCardDensity('compact')">Компактно</button>
               </div>
             </div>
+            </div>
           </div>
 
-          <div class="vs-section glass-card">
-            <div class="vs-section-title">Фон и обложки</div>
+          <div class="vs-section glass-card vs-collapsible collapsed" data-settings-section="background">
+            <button type="button" class="vs-section-head" onclick="toggleSettingsSection('background')" aria-expanded="false">
+              <span class="vs-section-title">Фон</span>
+              <span class="vs-section-chevron">⌄</span>
+            </button>
+            <div class="vs-section-body">
             <div class="vs-row">
               <label class="vs-label">Тип фона</label>
               <div class="vs-btn-group">
@@ -342,9 +522,9 @@
             <div class="vs-row" id="custom-bg-row" style="display:none">
               <label class="vs-label">Загрузить фото/GIF</label>
               <input type="file" id="custom-bg-input" accept="image/*,.gif" onchange="loadCustomBg(this)" style="display:none">
-              <button class="vsb" onclick="pickCustomBgMedia('image')">Выбрать фото</button>
-              <button class="vsb" onclick="pickCustomBgMedia('gif')">Выбрать GIF</button>
-              <button class="vsb" onclick="clearCustomBg()" style="margin-left:8px">Убрать</button>
+              <button class="vsb vs-media-pick-card" id="bg-pick-image-btn" onclick="pickCustomBgMedia('image')">IMAGE</button>
+              <button class="vsb vs-media-pick-card" id="bg-pick-gif-btn" onclick="pickCustomBgMedia('gif')">GIF</button>
+              <button class="vsb vs-media-pick-card vs-media-clear" onclick="clearCustomBg()">CLEAR</button>
             </div>
             <div class="vs-media-preview hidden" id="custom-bg-preview-box">
               <div class="vs-media-preview-thumb" id="custom-bg-preview-thumb"></div>
@@ -353,14 +533,22 @@
                 <div class="vs-media-preview-sub" id="custom-bg-preview-text">Ничего не выбрано</div>
               </div>
             </div>
-            <div class="vs-divider"></div>
+            </div>
+          </div>
+
+          <div class="vs-section glass-card vs-collapsible collapsed" data-settings-section="cover">
+            <button type="button" class="vs-section-head" onclick="toggleSettingsSection('cover')" aria-expanded="false">
+              <span class="vs-section-title">Обложка трека</span>
+              <span class="vs-section-chevron">⌄</span>
+            </button>
+            <div class="vs-section-body">
             <div class="vs-row" style="align-items:flex-start;flex-direction:column;gap:8px">
               <label class="vs-label">Кастомная обложка для текущего трека</label>
               <div class="vs-btn-group">
                 <input type="file" id="track-cover-input" accept="image/*" onchange="setCustomTrackCover(this)" style="display:none">
-                <button class="vsb" onclick="pickCustomTrackCover('image')">Обложка: фото</button>
-                <button class="vsb" onclick="pickCustomTrackCover('gif')">Обложка: GIF</button>
-                <button class="vsb" onclick="clearCustomTrackCover()">Сбросить обложку</button>
+                <button class="vsb vs-media-pick-card" id="cover-pick-image-btn" onclick="pickCustomTrackCover('image')">IMAGE</button>
+                <button class="vsb vs-media-pick-card" id="cover-pick-gif-btn" onclick="pickCustomTrackCover('gif')">GIF</button>
+                <button class="vsb vs-media-pick-card vs-media-clear" onclick="clearCustomTrackCover()">CLEAR</button>
               </div>
               <div class="token-msg" id="track-cover-status" style="display:block">Выбери трек и задай для него свою обложку</div>
               <div class="vs-media-preview" id="track-cover-preview-box">
@@ -371,22 +559,15 @@
                 </div>
               </div>
             </div>
-            <div class="vs-row">
-              <label class="vs-label">Фон: использовать GIF</label>
-              <div class="vs-toggle active" id="toggle-gif-bg" onclick="toggleGifMode('bg')"><div class="vs-toggle-thumb"></div></div>
-            </div>
-            <div class="vs-row">
-              <label class="vs-label">Обложки треков: использовать GIF</label>
-              <div class="vs-toggle active" id="toggle-gif-track" onclick="toggleGifMode('track')"><div class="vs-toggle-thumb"></div></div>
-            </div>
-            <div class="vs-row">
-              <label class="vs-label">Обложки плейлистов: использовать GIF</label>
-              <div class="vs-toggle active" id="toggle-gif-playlist" onclick="toggleGifMode('playlist')"><div class="vs-toggle-thumb"></div></div>
             </div>
           </div>
 
-          <div class="vs-section glass-card">
-            <div class="vs-section-title">Размытие и яркость</div>
+          <div class="vs-section glass-card vs-collapsible collapsed" data-settings-section="blur">
+            <button type="button" class="vs-section-head" onclick="toggleSettingsSection('blur')" aria-expanded="false">
+              <span class="vs-section-title">Размытие и яркость</span>
+              <span class="vs-section-chevron">⌄</span>
+            </button>
+            <div class="vs-section-body">
             <div class="vs-row">
               <label class="vs-label">Blur фона <span class="vs-val" id="vs-blur-val">40px</span></label>
               <input type="range" min="0" max="80" value="40" class="vs-slider" id="vs-blur" oninput="applyVisualSettings()">
@@ -403,29 +584,77 @@
               <label class="vs-label">Blur панелей <span class="vs-val" id="vs-panel-blur-val">30px</span></label>
               <input type="range" min="0" max="60" value="30" class="vs-slider" id="vs-panel-blur" oninput="applyVisualSettings()">
             </div>
-          </div>
-
-          <div class="vs-section glass-card">
-            <div class="vs-section-title">Акцентный цвет</div>
-            <div class="vs-row">
-              <div class="vs-color-grid">
-                <button class="vscol active" style="background:linear-gradient(135deg,#7c3aed,#a855f7)" onclick="setAccent('#7c3aed','#a855f7')" title="Фиолетовый"></button>
-                <button class="vscol" style="background:linear-gradient(135deg,#db2777,#ec4899)" onclick="setAccent('#db2777','#ec4899')" title="Розовый"></button>
-                <button class="vscol" style="background:linear-gradient(135deg,#0ea5e9,#38bdf8)" onclick="setAccent('#0ea5e9','#38bdf8')" title="Голубой"></button>
-                <button class="vscol" style="background:linear-gradient(135deg,#10b981,#34d399)" onclick="setAccent('#10b981','#34d399')" title="Зелёный"></button>
-                <button class="vscol" style="background:linear-gradient(135deg,#f59e0b,#fbbf24)" onclick="setAccent('#f59e0b','#fbbf24')" title="Оранжевый"></button>
-                <button class="vscol" style="background:linear-gradient(135deg,#ef4444,#f87171)" onclick="setAccent('#ef4444','#f87171')" title="Красный"></button>
-                <button class="vscol" style="background:linear-gradient(135deg,#f97316,#fb923c)" onclick="setAccent('#f97316','#fb923c')" title="Янтарный"></button>
-                <button class="vscol" style="background:linear-gradient(135deg,#a0a0a0,#ffffff)" onclick="setAccent('#aaaaaa','#ffffff')" title="Белый"></button>
-                <button class="vscol" style="background:linear-gradient(135deg,#111827,#4b5563)" onclick="setAccent('#111827','#4b5563')" title="Графит"></button>
-                <button class="vscol" style="background:linear-gradient(135deg,#334155,#94a3b8)" onclick="setAccent('#334155','#94a3b8')" title="Slate"></button>
-                <button class="vscol" style="background:linear-gradient(135deg,#3f3f46,#d4d4d8)" onclick="setAccent('#3f3f46','#d4d4d8')" title="Smoke"></button>
-              </div>
             </div>
           </div>
 
-          <div class="vs-section glass-card">
-            <div class="vs-section-title">Эффекты</div>
+          <div class="vs-section glass-card vs-collapsible collapsed" data-settings-section="accent">
+            <button type="button" class="vs-section-head" onclick="toggleSettingsSection('accent')" aria-expanded="false">
+              <span class="vs-section-title">Акцентный цвет</span>
+              <span class="vs-section-chevron">⌄</span>
+            </button>
+            <div class="vs-section-body">
+            <div class="vs-row" style="align-items:flex-start;flex-direction:column;gap:10px">
+              <span class="vs-swatch-group-label">Базовые</span>
+              <div class="vs-color-grid">
+                <button type="button" class="vscol" data-a1="#7c3aed" data-a2="#a855f7" style="background:linear-gradient(135deg,#7c3aed,#a855f7)" onclick="setAccent('#7c3aed','#a855f7')" title="Фиолетовый"></button>
+                <button type="button" class="vscol" data-a1="#db2777" data-a2="#ec4899" style="background:linear-gradient(135deg,#db2777,#ec4899)" onclick="setAccent('#db2777','#ec4899')" title="Розовый"></button>
+                <button type="button" class="vscol" data-a1="#0ea5e9" data-a2="#38bdf8" style="background:linear-gradient(135deg,#0ea5e9,#38bdf8)" onclick="setAccent('#0ea5e9','#38bdf8')" title="Голубой"></button>
+                <button type="button" class="vscol" data-a1="#10b981" data-a2="#34d399" style="background:linear-gradient(135deg,#10b981,#34d399)" onclick="setAccent('#10b981','#34d399')" title="Зелёный"></button>
+                <button type="button" class="vscol" data-a1="#f59e0b" data-a2="#fbbf24" style="background:linear-gradient(135deg,#f59e0b,#fbbf24)" onclick="setAccent('#f59e0b','#fbbf24')" title="Оранжевый"></button>
+                <button type="button" class="vscol" data-a1="#ef4444" data-a2="#f87171" style="background:linear-gradient(135deg,#ef4444,#f87171)" onclick="setAccent('#ef4444','#f87171')" title="Красный"></button>
+                <button type="button" class="vscol" data-a1="#f97316" data-a2="#fb923c" style="background:linear-gradient(135deg,#f97316,#fb923c)" onclick="setAccent('#f97316','#fb923c')" title="Янтарный"></button>
+                <button type="button" class="vscol" data-a1="#aaaaaa" data-a2="#ffffff" style="background:linear-gradient(135deg,#a0a0a0,#ffffff)" onclick="setAccent('#aaaaaa','#ffffff')" title="Светлый нейтраль"></button>
+                <button type="button" class="vscol" data-a1="#111827" data-a2="#4b5563" style="background:linear-gradient(135deg,#111827,#4b5563)" onclick="setAccent('#111827','#4b5563')" title="Графит"></button>
+                <button type="button" class="vscol" data-a1="#334155" data-a2="#94a3b8" style="background:linear-gradient(135deg,#334155,#94a3b8)" onclick="setAccent('#334155','#94a3b8')" title="Slate"></button>
+                <button type="button" class="vscol" data-a1="#3f3f46" data-a2="#d4d4d8" style="background:linear-gradient(135deg,#3f3f46,#d4d4d8)" onclick="setAccent('#3f3f46','#d4d4d8')" title="Smoke"></button>
+              </div>
+              <span class="vs-swatch-group-label">2026 · phygital, неон, природа</span>
+              <div class="vs-color-grid vs-color-grid--dense">
+                <button type="button" class="vscol" data-a1="#006f87" data-a2="#8ad9f2" style="background:linear-gradient(135deg,#006f87,#8ad9f2)" onclick="setAccent('#006f87','#8ad9f2')" title="Transformative Teal"></button>
+                <button type="button" class="vscol" data-a1="#00796b" data-a2="#4fd1c5" style="background:linear-gradient(135deg,#00796b,#4fd1c5)" onclick="setAccent('#00796b','#4fd1c5')" title="Biolume teal"></button>
+                <button type="button" class="vscol" data-a1="#00ffc6" data-a2="#00897b" style="background:linear-gradient(135deg,#00ffc6,#00897b)" onclick="setAccent('#00ffc6','#00897b')" title="Неоновая лагуна"></button>
+                <button type="button" class="vscol" data-a1="#ff1f8a" data-a2="#c026d3" style="background:linear-gradient(135deg,#ff1f8a,#c026d3)" onclick="setAccent('#ff1f8a','#c026d3')" title="Cyber pink"></button>
+                <button type="button" class="vscol" data-a1="#8a00ff" data-a2="#e879f9" style="background:linear-gradient(135deg,#8a00ff,#e879f9)" onclick="setAccent('#8a00ff','#e879f9')" title="Hyper violet"></button>
+                <button type="button" class="vscol" data-a1="#ff1f8a" data-a2="#8a00ff" style="background:linear-gradient(135deg,#ff1f8a,#8a00ff)" onclick="setAccent('#ff1f8a','#8a00ff')" title="Electric fuchsia"></button>
+                <button type="button" class="vscol" data-a1="#00e8ff" data-a2="#22d3ee" style="background:linear-gradient(135deg,#00e8ff,#22d3ee)" onclick="setAccent('#00e8ff','#22d3ee')" title="Tech neon cyan"></button>
+                <button type="button" class="vscol" data-a1="#0d9488" data-a2="#99f6e4" style="background:linear-gradient(135deg,#0d9488,#99f6e4)" onclick="setAccent('#0d9488','#99f6e4')" title="Synthesized mint"></button>
+                <button type="button" class="vscol" data-a1="#a78bfa" data-a2="#38bdf8" style="background:linear-gradient(135deg,#a78bfa,#38bdf8)" onclick="setAccent('#a78bfa','#38bdf8')" title="Aurora harmony"></button>
+                <button type="button" class="vscol" data-a1="#e8d9ff" data-a2="#ffd7e8" style="background:linear-gradient(135deg,#c4b5fd,#fbcfe8)" onclick="setAccent('#e8d9ff','#ffd7e8')" title="Софт-аура (пастель)"></button>
+                <button type="button" class="vscol" data-a1="#c9a0b8" data-a2="#e8b4bc" style="background:linear-gradient(135deg,#c9a0b8,#e8b4bc)" onclick="setAccent('#c9a0b8','#e8b4bc')" title="Dusty rose &amp; lilac"></button>
+                <button type="button" class="vscol" data-a1="#f9c6b0" data-a2="#eaa292" style="background:linear-gradient(135deg,#f9c6b0,#eaa292)" onclick="setAccent('#f9c6b0','#eaa292')" title="Soft Sakura"></button>
+                <button type="button" class="vscol" data-a1="#fda4af" data-a2="#f472b6" style="background:linear-gradient(135deg,#fda4af,#f472b6)" onclick="setAccent('#fda4af','#f472b6')" title="Сакура ярче"></button>
+                <button type="button" class="vscol" data-a1="#818cf8" data-a2="#f472b6" style="background:linear-gradient(135deg,#818cf8,#f472b6)" onclick="setAccent('#818cf8','#f472b6')" title="Holographic"></button>
+                <button type="button" class="vscol" data-a1="#94a3b8" data-a2="#f1f5f9" style="background:linear-gradient(135deg,#94a3b8,#f1f5f9)" onclick="setAccent('#94a3b8','#f1f5f9')" title="Liquid chrome"></button>
+                <button type="button" class="vscol" data-a1="#64748b" data-a2="#cbd5e1" style="background:linear-gradient(135deg,#64748b,#cbd5e1)" onclick="setAccent('#64748b','#cbd5e1')" title="Cool steel"></button>
+                <button type="button" class="vscol" data-a1="#78350f" data-a2="#fbbf24" style="background:linear-gradient(135deg,#78350f,#fbbf24)" onclick="setAccent('#78350f','#fbbf24')" title="Chocolate &amp; amber"></button>
+                <button type="button" class="vscol" data-a1="#6b4423" data-a2="#c17854" style="background:linear-gradient(135deg,#6b4423,#c17854)" onclick="setAccent('#6b4423','#c17854')" title="Walnut retro"></button>
+                <button type="button" class="vscol" data-a1="#fdba74" data-a2="#86efac" style="background:linear-gradient(135deg,#fdba74,#86efac)" onclick="setAccent('#fdba74','#86efac')" title="Тёплая органика"></button>
+              </div>
+              <span class="vs-swatch-group-label">Премиум · минимализм</span>
+              <div class="vs-color-grid vs-color-grid--dense">
+                <button type="button" class="vscol" data-a1="#080808" data-a2="#d4af37" style="background:linear-gradient(135deg,#080808,#d4af37)" onclick="setAccent('#080808','#d4af37')" title="Obsidian &amp; liquid gold"></button>
+                <button type="button" class="vscol" data-a1="#d4af37" data-a2="#fef3c7" style="background:linear-gradient(135deg,#d4af37,#fef3c7)" onclick="setAccent('#d4af37','#fef3c7')" title="Muted gold"></button>
+                <button type="button" class="vscol" data-a1="#1c1917" data-a2="#ca8a04" style="background:linear-gradient(135deg,#1c1917,#ca8a04)" onclick="setAccent('#1c1917','#ca8a04')" title="Deep onyx &amp; золото"></button>
+                <button type="button" class="vscol" data-a1="#2f3e46" data-a2="#84a98c" style="background:linear-gradient(135deg,#2f3e46,#84a98c)" onclick="setAccent('#2f3e46','#84a98c')" title="Nordic fog"></button>
+                <button type="button" class="vscol" data-a1="#cad2c5" data-a2="#52796f" style="background:linear-gradient(135deg,#cad2c5,#52796f)" onclick="setAccent('#cad2c5','#52796f')" title="Северное стекло"></button>
+                <button type="button" class="vscol" data-a1="#022c22" data-a2="#9dbebb" style="background:linear-gradient(135deg,#022c22,#9dbebb)" onclick="setAccent('#022c22','#9dbebb')" title="Deep emerald &amp; silk"></button>
+                <button type="button" class="vscol" data-a1="#064e3b" data-a2="#6ee7b7" style="background:linear-gradient(135deg,#064e3b,#6ee7b7)" onclick="setAccent('#064e3b','#6ee7b7')" title="Изумрудный премиум"></button>
+                <button type="button" class="vscol" data-a1="#1a1a1b" data-a2="#a3a3a3" style="background:linear-gradient(135deg,#1a1a1b,#a3a3a3)" onclick="setAccent('#1a1a1b','#a3a3a3')" title="Monochrome graphite"></button>
+                <button type="button" class="vscol" data-a1="#71717a" data-a2="#d4d4d8" style="background:linear-gradient(135deg,#71717a,#d4d4d8)" onclick="setAccent('#71717a','#d4d4d8')" title="Titanium minimal"></button>
+                <button type="button" class="vscol" data-a1="#9ca3af" data-a2="#f3f4f6" style="background:linear-gradient(135deg,#9ca3af,#f3f4f6)" onclick="setAccent('#9ca3af','#f3f4f6')" title="Cloud dancer UI"></button>
+                <button type="button" class="vscol" data-a1="#0c0c0c" data-a2="#ff1f8a" style="background:linear-gradient(135deg,#0c0c0c,#ff1f8a)" onclick="setAccent('#0c0c0c','#ff1f8a')" title="Cyber pink night"></button>
+                <button type="button" class="vscol" data-a1="#101014" data-a2="#00e8ff" style="background:linear-gradient(135deg,#101014,#00e8ff)" onclick="setAccent('#101014','#00e8ff')" title="OLED tech dark"></button>
+              </div>
+            </div>
+            </div>
+          </div>
+
+          <div class="vs-section glass-card vs-collapsible collapsed" data-settings-section="effects">
+            <button type="button" class="vs-section-head" onclick="toggleSettingsSection('effects')" aria-expanded="true">
+              <span class="vs-section-title">Эффекты</span>
+              <span class="vs-section-chevron">⌄</span>
+            </button>
+            <div class="vs-section-body">
             <div class="vs-row">
               <label class="vs-label">Анимированные орбы</label>
               <div class="vs-toggle active" id="toggle-orbs" onclick="toggleEffect('orbs')"><div class="vs-toggle-thumb"></div></div>
@@ -450,18 +679,28 @@
               <label class="vs-label">Цвет орба 2</label>
               <input type="color" id="orb2-color" value="#a855f7" onchange="setOrbColor(2,this.value)">
             </div>
-          </div>
-
-          <div class="vs-section glass-card">
-            <div class="vs-section-title">Масштаб интерфейса</div>
-            <div class="vs-row">
-              <label class="vs-label">UI Scale <span class="vs-val" id="vs-scale-val">100%</span></label>
-              <input type="range" min="80" max="130" value="100" class="vs-slider" id="vs-scale" oninput="applyVisualSettings()">
             </div>
           </div>
 
-          <div class="vs-section glass-card">
-            <div class="vs-section-title">Шрифт</div>
+          <div class="vs-section glass-card vs-collapsible collapsed" data-settings-section="scale">
+            <button type="button" class="vs-section-head" onclick="toggleSettingsSection('scale')" aria-expanded="false">
+              <span class="vs-section-title">Масштаб интерфейса</span>
+              <span class="vs-section-chevron">⌄</span>
+            </button>
+            <div class="vs-section-body">
+            <div class="vs-row">
+              <label class="vs-label">UI Scale <span class="vs-val" id="vs-scale-val">100%</span></label>
+              <input type="range" min="75" max="125" value="100" class="vs-slider" id="vs-scale" oninput="applyVisualSettings()">
+            </div>
+            </div>
+          </div>
+
+          <div class="vs-section glass-card vs-collapsible collapsed" data-settings-section="font">
+            <button type="button" class="vs-section-head" onclick="toggleSettingsSection('font')" aria-expanded="false">
+              <span class="vs-section-title">Шрифт</span>
+              <span class="vs-section-chevron">⌄</span>
+            </button>
+            <div class="vs-section-body">
             <div class="vs-row">
               <label class="vs-label">Режим шрифта</label>
               <div class="vs-btn-group">
@@ -478,11 +717,34 @@
                 </label>
                 <button class="vsb" onclick="clearCustomFont()">Сбросить</button>
               </div>
+              <div class="vs-font-preview-card" id="font-preview-card">Aa123</div>
+              <div class="vs-font-library" id="font-library-list"></div>
               <div class="token-msg" id="custom-font-status" style="display:block">Используется системный шрифт</div>
             </div>
             <div class="vs-row">
               <label class="vs-label">Применять к заголовкам</label>
               <div class="vs-toggle" id="toggle-font-title" onclick="toggleCustomFontTitle()"><div class="vs-toggle-thumb"></div></div>
+            </div>
+            </div>
+          </div>
+
+          <div class="vs-section glass-card vs-collapsible collapsed" data-settings-section="notifications">
+            <button type="button" class="vs-section-head" onclick="toggleSettingsSection('notifications')" aria-expanded="false">
+              <span class="vs-section-title">Уведомления</span>
+              <span class="vs-section-chevron">⌄</span>
+            </button>
+            <div class="vs-section-body">
+            <div class="vs-row">
+              <label class="vs-label">Позиция уведомлений</label>
+              <div class="vs-btn-group vs-toast-grid">
+                <button class="vsb vs-toast-card" id="toast-pos-top-left" data-toast-pos="top-left" onclick="setToastPosition('top-left')"><span class="vs-toast-mini"><i class="pos pos-tl"></i></span><span class="vs-toast-label">TL</span></button>
+                <button class="vsb vs-toast-card" id="toast-pos-top-right" data-toast-pos="top-right" onclick="setToastPosition('top-right')"><span class="vs-toast-mini"><i class="pos pos-tr"></i></span><span class="vs-toast-label">TR</span></button>
+                <button class="vsb vs-toast-card" id="toast-pos-bottom-left" data-toast-pos="bottom-left" onclick="setToastPosition('bottom-left')"><span class="vs-toast-mini"><i class="pos pos-bl"></i></span><span class="vs-toast-label">BL</span></button>
+                <button class="vsb vs-toast-card" id="toast-pos-bottom-right" data-toast-pos="bottom-right" onclick="setToastPosition('bottom-right')"><span class="vs-toast-mini"><i class="pos pos-br"></i></span><span class="vs-toast-label">BR</span></button>
+                <button class="vsb vs-toast-card" id="toast-pos-current" data-toast-pos="default" onclick="setToastPosition('default')"><span class="vs-toast-mini"><i class="pos pos-cur"></i></span><span class="vs-toast-label">AUTO</span></button>
+              </div>
+            </div>
+            <div class="token-msg" style="display:block">Зелёные и красные уведомления будут появляться в выбранной точке с отступом от меню и плеера.</div>
             </div>
           </div>
 
@@ -549,33 +811,131 @@
         </div>
       </div>
 
+      <div id="settings-panel-optimization" class="settings-category-panel">
+        <div class="visual-settings optimization-settings">
+          <p class="opt-section-lead">Настройки производительности для слабых ПК.</p>
+          <div class="glass-card opt-settings-card">
+            <div class="opt-setting-row">
+              <span class="opt-setting-icon opt-ico-spin" aria-hidden="true"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path stroke-linecap="round" d="M12 3v3M12 18v3M3 12h3M18 12h3M5.64 5.64l2.12 2.12M16.24 16.24l2.12 2.12M5.64 18.36l2.12-2.12M16.24 7.76l2.12-2.12"/></svg></span>
+              <div class="opt-setting-text">
+                <div class="opt-setting-title">Отключить анимации</div>
+                <p class="opt-setting-desc">Отключает плавные переходы и эффекты для ускорения работы.</p>
+              </div>
+              <div class="vs-toggle" id="toggle-opt-animations" onclick="toggleOptimizationSetting('optDisableAnimations')"><div class="vs-toggle-thumb"></div></div>
+            </div>
+            <div class="opt-setting-row">
+              <span class="opt-setting-icon opt-ico-chip" aria-hidden="true"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 13h4v4h-4z"/><path stroke-linecap="round" d="M6 17H4v-4h2M14 21h4v-4h-2M14 9h6V7h-2M10 9V7H6v2"/><path stroke-linecap="round" d="M10 21v-4M6 3v4M22 17h-4M18 3v4"/></svg></span>
+              <div class="opt-setting-text">
+                <div class="opt-setting-title">Упрощённая графика</div>
+                <p class="opt-setting-desc">Отключает сложные эффекты вроде размытия для стабильной работы на старых видеокартах.</p>
+              </div>
+              <div class="vs-toggle" id="toggle-opt-simple-gfx" onclick="toggleOptimizationSetting('optSimpleGraphics')"><div class="vs-toggle-thumb"></div></div>
+            </div>
+            <div class="opt-setting-row">
+              <span class="opt-setting-icon opt-ico-snow" aria-hidden="true"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/><circle cx="12" cy="12" r="2.5"/></svg></span>
+              <div class="opt-setting-text">
+                <div class="opt-setting-title">Заморозка интерфейса</div>
+                <p class="opt-setting-desc">Останавливает тяжёлую отрисовку нижней панели при свёрнутом окне. Музыка продолжает играть.</p>
+              </div>
+              <div class="vs-toggle" id="toggle-opt-freeze-player" onclick="toggleOptimizationSetting('optFreezePlayerWhenMinimized')"><div class="vs-toggle-thumb"></div></div>
+            </div>
+            <div class="opt-setting-row">
+              <span class="opt-setting-icon opt-ico-moon" aria-hidden="true"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 14.8A9 9 0 1111.3 3a7 7 0 009.7 11.8z"/></svg></span>
+              <div class="opt-setting-text">
+                <div class="opt-setting-title">Отключать видео-фоны в фоне</div>
+                <p class="opt-setting-desc">Выключает тяжёлые фоны и визуализатор, пока окно скрыто или свернуто.</p>
+              </div>
+              <div class="vs-toggle" id="toggle-opt-bg-when-away" onclick="toggleOptimizationSetting('optPauseHeavyBgWhenBackgrounded')"><div class="vs-toggle-thumb"></div></div>
+            </div>
+            <div class="opt-setting-row">
+              <span class="opt-setting-icon" aria-hidden="true"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 11h2a1 1 0 001-1V9a1 1 0 011-1h1a1 1 0 011 1v1a1 1 0 001 1h2"/><path d="M9.5 15v.01M14.5 15v.01"/><rect x="4" y="7" width="16" height="10" rx="3"/></svg></span>
+              <div class="opt-setting-text">
+                <div class="opt-setting-title">Игровой режим</div>
+                <p class="opt-setting-desc">Пока окно не на экране (свернуто или ты в другой программе) — «sleep»: без текста и тяжёлой отрисовки, только звук. Вернёшься в Flow — всё как обычно.</p>
+              </div>
+              <div class="vs-toggle" id="toggle-opt-game-sleep" onclick="toggleOptimizationSetting('optGameSleepMode')"><div class="vs-toggle-thumb"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div id="settings-panel-accounts" class="settings-category-panel">
         <div class="glass-card" style="padding:18px;border-radius:18px;margin-top:8px;max-width:760px;">
           <div class="vs-section-title" style="margin-bottom:8px;">Источники</div>
-          <div style="color:var(--muted);font-size:14px;line-height:1.55;margin-bottom:14px;">Режим Spotify → SoundCloud → Audius включен. YouTube можно вернуть позже.</div>
+          <div style="color:var(--muted);font-size:14px;line-height:1.55;margin-bottom:14px;">Откуда брать результаты поиска: классический Flow (сервер), Яндекс Музыка или ВКонтакте (нужен токен с аудио).</div>
+          <div class="source-mode-grid" style="margin:0 0 14px;">
+            <button class="source-mode-card" data-src="hybrid" onclick="setActiveSource('hybrid')" title="Flow classic">
+              <span class="source-mode-icon">F</span>
+              <span class="source-mode-label">classic</span>
+            </button>
+            <button class="source-mode-card" data-src="yandex" onclick="setActiveSource('yandex')" title="Яндекс">
+              <span class="source-mode-icon source-mode-icon-ya">✶</span>
+              <span class="source-mode-label">Ya</span>
+            </button>
+            <button class="source-mode-card" data-src="vk" onclick="setActiveSource('vk')" title="ВКонтакте">
+              <span class="source-mode-icon" style="font-size:13px;font-weight:800;background:linear-gradient(135deg,#4680c2,#5b9bd5);color:#fff">VK</span>
+              <span class="source-mode-label">VK</span>
+            </button>
+          </div>
 
-          <div style="margin:10px 0 16px;padding:12px;border-radius:14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);">
-            <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">YouTube engine (yt-dlp)</div>
-            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-              <div id="ytdlp-status" style="font-size:13px;color:rgba(255,255,255,0.86);">Проверка...</div>
-              <button class="btn-small" id="ytdlp-update-btn" onclick="updateYtDlpNow()">Обновить yt-dlp</button>
+          <div class="vs-section glass-card vs-collapsible collapsed" data-settings-section="accountYoutube" style="margin:10px 0 16px;">
+            <button type="button" class="vs-section-head" onclick="toggleSettingsSection('accountYoutube')" aria-expanded="false">
+              <span class="vs-section-title">YouTube engine (yt-dlp)</span>
+              <span class="vs-section-chevron">⌄</span>
+            </button>
+            <div class="vs-section-body">
+              <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                <div id="ytdlp-status" style="font-size:13px;color:rgba(255,255,255,0.86);">Проверка...</div>
+                <button class="btn-small" id="ytdlp-update-btn" onclick="updateYtDlpNow()">Обновить yt-dlp</button>
+              </div>
+              <div id="ytdlp-sub" style="font-size:12px;color:var(--muted);margin-top:8px;"></div>
             </div>
-            <div id="ytdlp-sub" style="font-size:12px;color:var(--muted);margin-top:6px;"></div>
           </div>
 
-          <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Spotify Bearer (для поиска метаданных)</div>
-          <div class="token-field-wrap" style="margin-bottom:12px;">
-            <input id="sp-token-val" type="password" class="token-field" placeholder="Вставь Bearer токен Spotify...">
-            <button class="token-field-eye" onclick="toggleToken('sp-token-val')" title="Показать/скрыть">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          <div class="vs-section glass-card vs-collapsible collapsed" data-settings-section="accountSpotify" style="margin:10px 0 16px;">
+            <button type="button" class="vs-section-head" onclick="toggleSettingsSection('accountSpotify')" aria-expanded="false">
+              <span class="vs-section-title">Spotify Bearer</span>
+              <span class="vs-section-chevron">⌄</span>
             </button>
-            <button class="token-field-apply" onclick="applySpotifyToken()" title="Сохранить">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-            </button>
+            <div class="vs-section-body">
+              <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Для поиска метаданных и связки треков</div>
+              <div class="token-field-wrap" style="margin-bottom:0;">
+                <input id="sp-token-val" type="password" class="token-field" placeholder="Вставь Bearer токен Spotify...">
+                <button class="token-field-eye" onclick="toggleToken('sp-token-val')" title="Показать/скрыть">
+                  <svg class="ui-icon sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+                <button class="token-field-apply" onclick="applySpotifyToken()" title="Сохранить">
+                  <svg class="ui-icon sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><polyline points="20 6 9 17 4 12"/></svg>
+                </button>
+              </div>
+            </div>
           </div>
 
-          <div style="margin:10px 0 16px;padding:12px;border-radius:14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);">
-            <div class="vs-section-title" style="margin-bottom:8px;">Авторизация VK</div>
+          <div class="vs-section glass-card vs-collapsible collapsed" data-settings-section="accountSoundcloud" style="margin:10px 0 16px;">
+            <button type="button" class="vs-section-head" onclick="toggleSettingsSection('accountSoundcloud')" aria-expanded="false">
+              <span class="vs-section-title">SoundCloud Client ID</span>
+              <span class="vs-section-chevron">⌄</span>
+            </button>
+            <div class="vs-section-body">
+              <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Для потокового поиска и импорта</div>
+              <div class="token-field-wrap">
+                <input id="sc-custom-val" type="password" class="token-field" placeholder="Вставь SoundCloud Client ID...">
+                <button class="token-field-eye" onclick="toggleToken('sc-custom-val')" title="Показать/скрыть">
+                  <svg class="ui-icon sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+                <button class="token-field-apply" onclick="applyScId()" title="Сохранить">
+                  <svg class="ui-icon sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><polyline points="20 6 9 17 4 12"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="vs-section glass-card vs-collapsible collapsed" data-settings-section="accountVk" style="margin:10px 0 16px;">
+            <button type="button" class="vs-section-head" onclick="toggleSettingsSection('accountVk')" aria-expanded="false">
+              <span class="vs-section-title">Авторизация VK</span>
+              <span class="vs-section-chevron">⌄</span>
+            </button>
+            <div class="vs-section-body">
             <div id="vk-status" style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);margin-bottom:10px;">
               <div>
                 <div id="vk-status-text" style="font-size:13px;color:rgba(255,255,255,0.92)">Не настроен</div>
@@ -591,23 +951,33 @@
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
               <button class="btn-small" id="vk-get-btn" onclick="getVkToken()">Войти в VK и получить токен</button>
               <button class="btn-small" id="vk-browser-auth-btn" onclick="startVkBrowserAuth()">Открыть вход VK в браузере</button>
+              <button class="btn-small" onclick="openVkHostTokenPage()">Открыть vkhost.github.io</button>
             </div>
-            <div id="vk-msg" style="font-size:12px;color:var(--muted);margin-top:8px;"></div>
 
             <div style="font-size:12px;color:var(--muted);margin:12px 0 6px;">Токен VK (можно вставить вручную)</div>
             <div class="token-field-wrap">
               <input id="vk-token-val" type="password" class="token-field" placeholder="Вставь VK токен...">
               <button class="token-field-eye" onclick="toggleToken('vk-token-val')" title="Показать/скрыть">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg class="ui-icon sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
               </button>
               <button class="token-field-apply" onclick="applyVkToken()" title="Сохранить">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                <svg class="ui-icon sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><polyline points="20 6 9 17 4 12"/></svg>
               </button>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 0;">
+              <button class="btn-small" onclick="checkVkToken()">Проверить токен</button>
+            </div>
+            <div class="integration-hint" style="margin-top:12px">Ручной токен через <strong>vkhost.github.io</strong>: выбери <strong>Kate Mobile</strong>. В <strong>«Настройки»</strong> на vkhost отмечай нужные права (аудио, офлайн) — там как раз галочки. Затем войди: сначала может открыться VK ID («Продолжить как …») — нажми продолжить; на странице <strong>id.vk.com</strong> со списком прав <strong>нет отдельных галочек по строкам</strong>, это просто перечень доступа приложения; внизу страницы найди кнопку <strong>«Разрешить»</strong> (при узком окне — <strong>прокрути вниз</strong> или разверни браузер на весь экран). После перехода скопируй из адреса фрагмент от <code>access_token=</code> до <code>&amp;expires_in</code>.</div>
+            <div id="vk-msg" class="token-msg" style="display:block;margin-top:10px;" role="status" aria-live="polite"></div>
             </div>
           </div>
 
-          <div class="yandex-token-card">
-            <div class="vs-section-title" style="margin-bottom:8px;">Яндекс Музыка импорт</div>
+          <div class="vs-section glass-card vs-collapsible collapsed" data-settings-section="accountYandex" style="margin:10px 0 16px;">
+            <button type="button" class="vs-section-head" onclick="toggleSettingsSection('accountYandex')" aria-expanded="false">
+              <span class="vs-section-title">Яндекс Музыка импорт</span>
+              <span class="vs-section-chevron">⌄</span>
+            </button>
+            <div class="vs-section-body">
             <div id="ym-status" style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);margin-bottom:10px;">
               <div>
                 <div id="ym-status-text" style="font-size:13px;color:rgba(255,255,255,0.92)">Не настроен</div>
@@ -630,24 +1000,17 @@
             <div class="token-field-wrap" style="margin-bottom:8px;">
               <input id="ym-token-val" type="password" class="token-field" placeholder="Вставь access_token или полный redirect URL...">
               <button class="token-field-eye" onclick="toggleToken('ym-token-val')" title="Показать/скрыть">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg class="ui-icon sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
               </button>
               <button class="token-field-apply" onclick="applyYandexToken()" title="Сохранить">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                <svg class="ui-icon sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><polyline points="20 6 9 17 4 12"/></svg>
               </button>
             </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin:2px 0 8px;">
+              <button class="btn-small" onclick="checkYandexToken()">Проверить токен</button>
+            </div>
             <div id="ym-msg" class="token-msg" style="display:block"></div>
-          </div>
-
-          <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">SoundCloud Client ID (для будущего импорта)</div>
-          <div class="token-field-wrap">
-            <input id="sc-custom-val" type="password" class="token-field" placeholder="Вставь SoundCloud Client ID...">
-            <button class="token-field-eye" onclick="toggleToken('sc-custom-val')" title="Показать/скрыть">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-            </button>
-            <button class="token-field-apply" onclick="applyScId()" title="Сохранить">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-            </button>
+            </div>
           </div>
         </div>
       </div>
@@ -675,6 +1038,17 @@
           <div id="proxy-check-status" class="integration-hint" style="margin-top:4px">Аудио-прокси: не проверено</div>
         </div>
         <div class="glass-card" style="padding:18px;border-radius:18px;margin-top:12px;max-width:760px;">
+          <div class="vs-section-title" style="margin-bottom:8px;">Социальный слой (свой сервер вместо Supabase)</div>
+          <div class="integration-hint" style="margin-bottom:8px">На VPS запусти <code style="font-size:11px;opacity:.85">node server/flow-social-server.js</code> с переменной <code style="font-size:11px;opacity:.85">FLOW_SOCIAL_SECRET</code>. Здесь укажи тот же секрет и базовый URL (https://твой-домен без слэша).</div>
+          <input id="flow-social-api-base" class="token-field flow-input" placeholder="https://social.example.com" />
+          <input id="flow-social-api-secret" class="token-field flow-input" type="password" placeholder="Секрет (Bearer), как FLOW_SOCIAL_SECRET" style="margin-top:8px" />
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+            <button class="btn-small" onclick="saveFlowSocialBackendSettings()">Сохранить социальный сервер</button>
+            <button class="btn-small" onclick="checkFlowSocialBackendStatus()">Проверить API</button>
+          </div>
+          <div id="flow-social-api-status" class="integration-hint" style="margin-top:8px">Статус соц-API не проверен</div>
+        </div>
+        <div class="glass-card" style="padding:18px;border-radius:18px;margin-top:12px;max-width:760px;">
           <div class="vs-section-title" style="margin-bottom:8px;">Last.fm интеграция</div>
           <input id="lastfm-api-key" class="token-field flow-input" placeholder="Last.fm API Key" />
           <input id="lastfm-shared-secret" class="token-field flow-input" placeholder="Last.fm Shared Secret" style="margin-top:8px" />
@@ -693,47 +1067,58 @@
   <div id="lyrics-panel" class="lyrics-panel hidden">
     <div class="lyrics-header">
       <span class="lyrics-title" id="lyrics-track-name">—</span>
-      <button class="lyrics-close" onclick="toggleLyrics()"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+      <button class="lyrics-close" onclick="toggleLyrics()"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
     </div>
     <div class="lyrics-content" id="lyrics-content">
       <div class="lyrics-empty">Нажми на трек, чтобы загрузить текст</div>
     </div>
   </div>
 
-  <!-- PLAYER BAR -->
-  <div class="player-bar glass-bar" id="player-bar">
-    <div class="player-track" id="player-track-panel">
-      <div class="player-cover" id="player-cover" onclick="enterPlayerMode()" title="Открыть режим плеера"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>
-      <div class="player-meta">
-        <span id="player-name">Ничего не играет</span>
-        <span id="player-artist" class="player-artist">—</span>
+  <!-- PLAYER BAR: слева трек · центр shuffle + транспорт + repeat / под ними время по бокам прогресса · справа только громкость -->
+  <div class="player-bar glass-bar player-bar--nover" id="player-bar">
+    <div class="nover-bar-grid">
+      <div class="nover-bar-left">
+        <span class="nover-bar-accent" aria-hidden="true"></span>
+        <div class="player-track player-track--nover" id="player-track-panel">
+          <div class="player-cover" id="player-cover" onclick="enterPlayerMode()" title="Открыть режим плеера"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>
+          <div class="player-meta">
+            <span id="player-name">Ничего не играет</span>
+            <span id="player-artist" class="player-artist">—</span>
+          </div>
+          <div class="player-track-btns">
+            <button class="player-like-btn" id="player-like-btn" onclick="likeCurrentTrack()" title="Лайк"><svg class="ui-icon flow-ref-heart-player" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="1.62" stroke-linecap="round" stroke-linejoin="round" d="M12 20.4s6.5-4.35 8.82-7.74A5.05 5.05 0 0012 6.42a5.05 5.05 0 00-8.82 6.24C5.47 15.93 12 20.35 12 20.42z"/></svg></button>
+            <button class="player-like-btn" onclick="findSimilarTracks()" title="Найти похожие"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.62" stroke-linecap="round" stroke-linejoin="round"><path d="M14.83 14.83a4 4 0 0 1-6.63 1.1 4 4 0 0 1 1.53-6.73 4 4 0 0 1 5 .37l5.74 5.32"/><path d="M9.17 9.17a4 4 0 0 0 6.63-1.1 4 4 0 0 0-1.53 6.73 4 4 0 0 0-5-.37l-5.74-5.32"/></svg></button>
+            <button class="player-like-btn" id="lyrics-btn" onclick="toggleLyrics()" title="Текст"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.62" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg></button>
+            <button class="player-like-btn" onclick="enterPlayerMode()" title="Режим плеера"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.62" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M21 21h-5v-5"/></svg></button>
+          </div>
+        </div>
       </div>
-      <div class="player-track-btns">
-        <button class="player-like-btn" id="player-like-btn" onclick="likeCurrentTrack()" title="Лайк"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.35-9.5-8A5.5 5.5 0 0 1 12 5.1 5.5 5.5 0 0 1 21.5 13c-2.5 3.65-9.5 8-9.5 8Z"/></svg></button>
-        <button class="player-like-btn" onclick="findSimilarTracks()" title="Найти похожие">≈</button>
-        <button class="player-like-btn" id="lyrics-btn" onclick="toggleLyrics()" title="Текст"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg></button>
-        <button class="player-like-btn" onclick="enterPlayerMode()" title="Режим плеера"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M21 21h-5v-5"/></svg></button>
+      <div class="nover-bar-center player-center">
+        <div class="nover-transport-strip player-controls">
+          <span id="host-lock-indicator-main" style="display:none;align-items:center;gap:4px;font-size:11px;opacity:.75;padding:0 4px">🔒 Host only</span>
+          <button type="button" class="ctrl-btn nover-strip-btn" id="shuffle-btn" onclick="toggleShuffleMode()" title="Перемешка"><svg class="ui-icon flow-ref-ctrl" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="1.72" stroke-linecap="round" d="M16 4h5v5"/><path stroke="currentColor" stroke-width="1.72" stroke-linecap="round" d="M4 21L21 4"/><path stroke="currentColor" stroke-width="1.72" stroke-linecap="round" d="M21 17v5h-5"/><path stroke="currentColor" stroke-width="1.72" stroke-linecap="round" d="M14.5 16l6.5 6"/><path stroke="currentColor" stroke-width="1.72" stroke-linecap="round" d="M4 6l6 7"/><path stroke="var(--accent2)" stroke-width="2" stroke-linecap="round" d="M4 4l7 9"/></svg></button>
+          <button type="button" class="ctrl-btn nover-strip-btn" onclick="prevTrack()" title="Предыдущий"><svg class="ui-icon ctrl-side-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 17V7"/><path d="m9 17 7-6-7-6"/></svg></button>
+          <button type="button" class="ctrl-btn play-btn play-btn--nover-wire" id="play-btn" onclick="togglePlay()"><svg class="ui-icon ctrl-play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M9 8 L17 12 L9 16 Z"/></svg></button>
+          <button type="button" class="ctrl-btn nover-strip-btn" onclick="nextTrack()" title="Следующий"><svg class="ui-icon ctrl-side-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 17V7"/><path d="m15 17-7-6 7-6"/></svg></button>
+          <button type="button" class="ctrl-btn nover-strip-btn" id="repeat-btn" onclick="toggleRepeatMode()" title="Повтор"><svg class="ui-icon flow-ref-ctrl" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="1.72" stroke-linecap="round" stroke-linejoin="round" d="M17 2.3l4 4.2-4 4"/><path stroke="currentColor" stroke-width="1.72" d="M3 16v-7A4.5 4.5 0 017.5 4.5h12"/><path stroke="currentColor" stroke-width="1.72" stroke-linecap="round" stroke-linejoin="round" d="M7 22l-4-4.2 4-4"/><path stroke="currentColor" stroke-width="1.72" d="M21 10.5v6A4.5 4.5 0 0116.5 21h-12"/><circle fill="var(--accent2)" cx="15.95" cy="18.95" r="1.65"/></svg></button>
+        </div>
+        <div class="progress-wrap progress-wrap--nover nover-progress-classic">
+          <span id="time-current" class="time-label time-label--elapsed">0:00</span>
+          <input type="range" id="progress" class="progress-bar progress-bar--nover" value="0" step="0.001" max="1" oninput="seekTo(this.value)">
+          <span id="time-total" class="time-label time-label--duration">0:00</span>
+        </div>
+      </div>
+      <div class="player-right player-right--nover-volume">
+        <svg class="flow-vol-icon ui-icon md" viewBox="0 0 24 24" fill="none"><polygon fill="none" points="11 5 6 9 3 9 3 15 6 15 11 19 11 5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M15.62 10.55a6 6 0 010 9.1" stroke="var(--accent2)" stroke-width="1.6" stroke-linecap="round"/><path d="M18.5 8.55a11 11 0 010 13.6" stroke="var(--accent2)" stroke-width="1.6" stroke-linecap="round" opacity="0.9"/></svg>
+        <input type="range" id="volume" class="volume-bar volume-bar--nover" min="0" max="1" step="0.01" value="0.8" oninput="setVolume(this.value)">
       </div>
     </div>
-    <div class="player-center">
-      <div class="player-controls">
-        <span id="host-lock-indicator-main" style="display:none;align-items:center;gap:4px;font-size:11px;opacity:.75;padding:0 4px">🔒 Host only</span>
-        <button class="ctrl-btn" id="shuffle-btn" onclick="toggleShuffleMode()" title="Перемешка"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"/><path d="M4 20L21 3"/><path d="M21 16v5h-5"/><path d="M15 15l6 6"/><path d="M4 4l5 5"/></svg></button>
-        <button class="ctrl-btn" onclick="prevTrack()"><svg class="ui-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2v14H6zM9 12l9 7V5z"/></svg></button>
-        <button class="ctrl-btn play-btn" id="play-btn" onclick="togglePlay()"><svg class="ui-icon" viewBox="0 0 24 24" fill="currentColor"><polygon points="8 5 19 12 8 19 8 5"/></svg></button>
-        <button class="ctrl-btn" onclick="nextTrack()"><svg class="ui-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M16 5h2v14h-2zM6 5v14l9-7z"/></svg></button>
-        <button class="ctrl-btn" id="repeat-btn" onclick="toggleRepeatMode()" title="Повтор"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></button>
-      </div>
-      <div class="progress-wrap">
-        <span class="time-label" id="time-current">0:00</span>
-        <input type="range" id="progress" class="progress-bar" value="0" step="0.001" max="1" oninput="seekTo(this.value)">
-        <span class="time-label" id="time-total">0:00</span>
-      </div>
-    </div>
-    <div class="player-right">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity:0.4"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 010 7.07M19.07 4.93a10 10 0 010 14.14"/></svg>
-      <input type="range" id="volume" class="volume-bar" min="0" max="1" step="0.01" value="0.8" oninput="setVolume(this.value)">
-    </div>
+  </div>
+
+  <!-- Ползунок смещения контента и плеера по X (границы — в коде по окну) -->
+  <div class="main-shift-dock" id="main-shift-dock">
+    <input type="range" class="main-shift-slider" id="main-shift-slider" aria-label="Сдвиг основной области" title="Влево / вправо" min="-240" max="240" step="2" value="0">
+    <button type="button" class="main-shift-reset" id="main-shift-reset" title="Вернуть на место (сброс смещения)" aria-label="Сброс смещения">↺</button>
   </div>
 
 </div><!-- /screen-main -->
@@ -742,16 +1127,16 @@
 <div id="player-mode" class="player-mode hidden">
   <div class="pm-bg" id="pm-bg"></div>
   <button class="pm-close" onclick="exitPlayerMode()">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    <svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
   </button>
 
   <div class="pm-main-stack" id="pm-main-stack">
   <div class="pm-cover-wrap">
-    <div class="pm-cover" id="pm-cover"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>
+    <div class="pm-cover" id="pm-cover"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>
     <div class="pm-cover-actions" id="pm-cover-actions">
-      <button class="pm-cover-action-btn" id="pm-cover-like-btn" onclick="likeCurrentTrack()" title="В избранное"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.35-9.5-8A5.5 5.5 0 0 1 12 5.1 5.5 5.5 0 0 1 21.5 13c-2.5 3.65-9.5 8-9.5 8Z"/></svg></button>
-      <button class="pm-cover-action-btn" id="pm-cover-lyrics-btn" onclick="togglePmLyricsFromCover()" title="Текст"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg></button>
-      <button class="pm-cover-action-btn" id="pm-cover-volume-btn" onclick="togglePmVolumePopover(event)" title="Громкость"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg></button>
+      <button class="pm-cover-action-btn" id="pm-cover-like-btn" onclick="likeCurrentTrack()" title="В избранное"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.35-9.5-8A5.5 5.5 0 0 1 12 5.1 5.5 5.5 0 0 1 21.5 13c-2.5 3.65-9.5 8-9.5 8Z"/></svg></button>
+      <button class="pm-cover-action-btn" id="pm-cover-lyrics-btn" onclick="togglePmLyricsFromCover()" title="Текст"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg></button>
+      <button class="pm-cover-action-btn" id="pm-cover-volume-btn" onclick="togglePmVolumePopover(event)" title="Громкость"><svg class="ui-icon" viewBox="0 0 24 24" fill="none"><polygon fill="none" points="11 5 6 9 3 9 3 15 6 15 11 19 11 5" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"/><path d="M15.62 10.55a6 6 0 010 9.1" stroke="var(--accent2)" stroke-width="1.82" stroke-linecap="round"/><path d="M18.5 8.55a11 11 0 010 13.6" stroke="var(--accent2)" stroke-width="1.82" stroke-linecap="round" opacity="0.9"/></svg></button>
       <div class="pm-cover-volume-pop hidden" id="pm-cover-volume-pop">
         <input type="range" class="pm-cover-volume" min="0" max="1" step="0.01" value="0.8" oninput="setVolume(this.value)" id="pm-cover-volume">
       </div>
@@ -762,6 +1147,9 @@
   <div class="pm-info">
     <h1 class="pm-title" id="pm-title">Ничего не играет</h1>
     <p class="pm-artist" id="pm-artist">—</p>
+    <div class="pm-source-row">
+      <span id="pm-source-badge" class="track-source hidden">—</span>
+    </div>
   </div>
 
   <div class="pm-progress-wrap">
@@ -772,53 +1160,70 @@
 
   <div class="pm-controls">
     <span id="host-lock-indicator-pm" style="display:none;align-items:center;gap:4px;font-size:12px;opacity:.75;padding:0 4px">🔒 Host only</span>
-    <button class="pm-btn-side" onclick="likeCurrentTrack()" id="pm-like-btn"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.35-9.5-8A5.5 5.5 0 0 1 12 5.1 5.5 5.5 0 0 1 21.5 13c-2.5 3.65-9.5 8-9.5 8Z"/></svg></button>
+    <button class="pm-btn-side" onclick="likeCurrentTrack()" id="pm-like-btn"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.35-9.5-8A5.5 5.5 0 0 1 12 5.1 5.5 5.5 0 0 1 21.5 13c-2.5 3.65-9.5 8-9.5 8Z"/></svg></button>
     <button class="pm-btn" onclick="prevTrack()">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19 20L9 12l10-8v16zM5 4h2v16H5z"/></svg>
+      <svg class="ui-icon lg" viewBox="0 0 24 24" fill="currentColor"><path d="M19 20L9 12l10-8v16zM5 4h2v16H5z"/></svg>
     </button>
     <button class="pm-btn pm-play" id="pm-play-btn" onclick="togglePlay()">
-      <svg id="pm-play-icon" width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      <svg id="pm-play-icon" class="ctrl-play-icon" viewBox="0 0 24 24" fill="currentColor"><path fill="currentColor" d="M9 8 L17 12 L9 16 Z"/></svg>
     </button>
     <button class="pm-btn" onclick="nextTrack()">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M5 4l10 8-10 8V4zm14 0h-2v16h2z"/></svg>
+      <svg class="ui-icon lg" viewBox="0 0 24 24" fill="currentColor"><path d="M5 4l10 8-10 8V4zm14 0h-2v16h2z"/></svg>
     </button>
-    <button class="pm-btn-side" onclick="toggleLyrics()"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg></button>
+    <button class="pm-btn-side" onclick="toggleLyrics()"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg></button>
   </div>
 
   <div class="pm-volume-wrap">
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity:0.5;flex-shrink:0"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/></svg>
+    <svg class="flow-vol-icon ui-icon md" viewBox="0 0 24 24" fill="none" style="opacity:0.75;flex-shrink:0"><polygon fill="none" points="11 5 6 9 3 9 3 15 6 15 11 19 11 5" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"/><path d="M15.62 10.55a6 6 0 010 9.1" stroke="var(--accent2)" stroke-width="1.82" stroke-linecap="round"/><path d="M18.5 8.55a11 11 0 010 13.6" stroke="var(--accent2)" stroke-width="1.82" stroke-linecap="round" opacity="0.9"/></svg>
     <input type="range" class="pm-volume" min="0" max="1" step="0.01" value="0.8" oninput="setVolume(this.value)" id="pm-volume">
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity:0.5;flex-shrink:0"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 010 7.07M19.07 4.93a10 10 0 010 14.14"/></svg>
+    <svg class="flow-vol-icon ui-icon md" viewBox="0 0 24 24" fill="none" style="opacity:0.75;flex-shrink:0"><polygon fill="none" points="11 5 6 9 3 9 3 15 6 15 11 19 11 5" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"/><path d="M15.62 10.55a6 6 0 010 9.1" stroke="var(--accent2)" stroke-width="1.82" stroke-linecap="round"/><path d="M18.5 8.55a11 11 0 010 13.6" stroke="var(--accent2)" stroke-width="1.82" stroke-linecap="round" opacity="0.9"/></svg>
   </div>
   </div>
 
   <div class="pm-lyrics-shell hidden" id="pm-lyrics-shell">
     <div class="pm-lyrics-head">
       <div class="pm-lyrics-track" id="pm-lyrics-track-name">—</div>
-      <div class="pm-lyrics-head-top">
-        <button class="pm-lyrics-mini-btn" onclick="toggleLyricsSettingsPanel()" title="Настройки текста">
-          <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.04 1.56V21a2 2 0 1 1-4 0V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.04 1.56h.09a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87"/></svg>
-        </button>
-        <button class="pm-lyrics-close" onclick="toggleLyrics()" title="Скрыть текст">СКРЫТЬ ТЕКСТ <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+      <div class="pm-lyrics-settings-wrap">
+      <button class="pm-lyrics-mini-btn" id="pm-lyrics-settings-btn" type="button" onclick="toggleLyricsSettingsPanel()" title="Оформление текста">
+        <svg class="ui-icon pm-lyrics-settings-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="2" x2="6" y1="14" y2="14"/><line x1="10" x2="14" y1="8" y2="8"/><line x1="18" x2="22" y1="16" y2="16"/>
+        </svg>
+      </button>
+      <div class="pm-lyrics-controls pm-lyrics-popover hidden" id="pm-lyrics-controls-panel" role="dialog" aria-label="Оформление текста">
+        <div class="pm-lyrics-popover-inner">
+          <div class="pm-lyrics-size-row" role="group" aria-label="Размер текста">
+            <button type="button" class="pm-lyrics-size-a" id="pm-lyrics-size-xs" data-size="16" onclick="setLyricsSize(this.dataset.size)" title="Компакт">A</button>
+            <button type="button" class="pm-lyrics-size-a" id="pm-lyrics-size-s" data-size="22" onclick="setLyricsSize(this.dataset.size)" title="Средний">A</button>
+            <button type="button" class="pm-lyrics-size-a" id="pm-lyrics-size-m" data-size="28" onclick="setLyricsSize(this.dataset.size)" title="Крупнее">A</button>
+            <button type="button" class="pm-lyrics-size-a" id="pm-lyrics-size-l" data-size="38" onclick="setLyricsSize(this.dataset.size)" title="Максимум">A</button>
+          </div>
+          <div class="pm-lyrics-sep" role="presentation"></div>
+          <div class="pm-lyrics-section-label">Стиль текста</div>
+          <div class="pm-lyrics-opt-list">
+            <button type="button" class="pm-lyrics-opt" data-playback="standard" onclick="setLyricsPlaybackMode(this.dataset.playback)">Обычный</button>
+            <button type="button" class="pm-lyrics-opt" data-playback="scale" onclick="setLyricsPlaybackMode(this.dataset.playback)">Масштаб</button>
+            <button type="button" class="pm-lyrics-opt" data-playback="focus" onclick="setLyricsPlaybackMode(this.dataset.playback)">Фокус</button>
+            <button type="button" class="pm-lyrics-opt" data-playback="neon" onclick="setLyricsPlaybackMode(this.dataset.playback)">Неон</button>
+            <button type="button" class="pm-lyrics-opt" data-playback="karaoke" onclick="setLyricsPlaybackMode(this.dataset.playback)">Караоке</button>
+          </div>
+          <div class="pm-lyrics-sep" role="presentation"></div>
+          <div class="pm-lyrics-section-label">Эффект</div>
+          <div class="pm-lyrics-opt-list">
+            <button type="button" class="pm-lyrics-opt" data-effect="soft" onclick="setLyricsEffect(this.dataset.effect)">Приглушение</button>
+            <button type="button" class="pm-lyrics-opt" data-effect="glow" onclick="setLyricsEffect(this.dataset.effect)">Подсветка</button>
+            <button type="button" class="pm-lyrics-opt" data-effect="contrast" onclick="setLyricsEffect(this.dataset.effect)">Контраст</button>
+          </div>
+          <div class="pm-lyrics-sep" role="presentation"></div>
+          <div class="pm-lyrics-section-label pm-lyrics-section-label-muted">Режим и выравнивание</div>
+          <div class="pm-lyrics-compact-row">
+            <button type="button" class="pm-lyrics-toggle" id="pm-lyrics-scroll-smooth" data-scroll="smooth" onclick="setLyricsScrollMode(this.dataset.scroll)">Плавный</button>
+            <button type="button" class="pm-lyrics-toggle" id="pm-lyrics-scroll-line" data-scroll="line" onclick="setLyricsScrollMode(this.dataset.scroll)">Построчно</button>
+            <span class="pm-lyrics-compact-gap"></span>
+            <button type="button" class="pm-lyrics-toggle" id="pm-lyrics-align-left" onclick="setLyricsAlign('left')">Лево</button>
+            <button type="button" class="pm-lyrics-toggle" id="pm-lyrics-align-center" onclick="setLyricsAlign('center')">Центр</button>
+          </div>
+        </div>
       </div>
-      <div class="pm-lyrics-controls hidden" id="pm-lyrics-controls-panel">
-        <select id="pm-lyrics-playback-mode" onchange="setLyricsPlaybackMode(this.value)">
-          <option value="standard">Стандарт</option>
-          <option value="karaoke">Караоке</option>
-          <option value="focus">Фокус</option>
-        </select>
-        <select id="pm-lyrics-scroll-mode" onchange="setLyricsScrollMode(this.value)">
-          <option value="smooth">Плавный</option>
-          <option value="line">Построчный</option>
-        </select>
-        <select id="pm-lyrics-effect" onchange="setLyricsEffect(this.value)">
-          <option value="soft">Soft</option>
-          <option value="glow">Glow</option>
-          <option value="contrast">Contrast</option>
-        </select>
-        <button class="pm-lyrics-align-btn active" id="pm-lyrics-align-left" onclick="setLyricsAlign('left')">Лево</button>
-        <button class="pm-lyrics-align-btn" id="pm-lyrics-align-center" onclick="setLyricsAlign('center')">Центр</button>
-        <input id="pm-lyrics-size" type="range" min="13" max="42" value="16" oninput="setLyricsSize(this.value)">
       </div>
     </div>
     <div class="pm-lyrics-content" id="pm-lyrics-content">
@@ -874,6 +1279,11 @@
       <div class="profile-edit-section profile-edit-section-wide">
         <strong>Описание</strong>
         <textarea id="profile-edit-bio" class="flow-input profile-edit-bio" maxlength="180" placeholder="Описание профиля"></textarea>
+      </div>
+      <div class="profile-edit-section profile-edit-section-wide">
+        <strong>Облако над аватаром</strong>
+        <span>Короткая фраза в стиле Discord (пиксельный шрифт), пусто — скрыто</span>
+        <input type="text" id="profile-edit-thought-bubble" class="flow-input" maxlength="48" placeholder="Например: на волне" />
       </div>
       <div class="profile-edit-section">
         <strong>Цвет профиля</strong>
@@ -974,21 +1384,25 @@
 </div>
 <div id="peer-profile-modal" class="flow-modal hidden">
   <div class="flow-modal-backdrop" onclick="closePeerProfile()"></div>
-  <div class="flow-modal-card glass-card">
-    <h3>Профиль пользователя</h3>
-    <div id="peer-profile-body" style="margin-top:8px"></div>
-    <div style="display:flex;justify-content:flex-end;margin-top:10px">
-      <button class="btn-small" onclick="closePeerProfile()">Закрыть</button>
+  <div class="flow-modal-card glass-card peer-profile-modal-card">
+    <div id="peer-profile-body" class="peer-profile-body-slot"></div>
+    <div class="peer-profile-modal-footer">
+      <button type="button" class="btn-small" onclick="closePeerProfile()">Закрыть</button>
     </div>
   </div>
 </div>
 <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="src/modules/network/flow-social-backend.js"></script>
 <script src="src/modules/utils/smart-cleaning.js"></script>
 <script src="src/modules/audio/player-core.js"></script>
 <script src="src/modules/network/peer-social.js"></script>
-<script src="src/modules/ui/drag-drop.js"></script>
-<script src="renderer.js"></script>
+  <script src="src/modules/ui/drag-drop.js"></script>
+  <script src="src/modules/wave-engine.js"></script>
+  <div id="flow-game-sleep-overlay" class="flow-game-sleep-overlay" aria-hidden="true">
+    <div class="flow-game-sleep-title">Sleep mode</div>
+    <div class="flow-game-sleep-sub">Только воспроизведение · верни Flow на экран</div>
+  </div>
+  <script src="renderer.js?v=20260503-vk-source"></script>
 </body>
 </html>
 

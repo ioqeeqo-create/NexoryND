@@ -26,7 +26,11 @@ loadDotEnv()
 const PORT = Number(process.env.PORT || 8787)
 const HOST = String(process.env.HOST || '0.0.0.0')
 const DEFAULT_VK_TOKEN = String(process.env.VK_ACCESS_TOKEN || '').trim()
-const VK_UA = 'VKAndroidApp/5.52-4543 (Android 5.1.1; SDK 22; x86_64; unknown Android SDK built for x86_64; en; 320x480)'
+const VK_UAS = [
+  'KateMobileAndroid/56 lite-460 (Android 9; 9; SDK 28; HIGH)',
+  'KateMobileAndroid/52.1 lite-445 (Android 4.4.2; SDK 19; x86; unknown Android SDK built for x86; en)',
+]
+const VK_VERSIONS_TRY = ['5.131', '5.199', '5.95']
 const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 
 function writeJson(res, code, data) {
@@ -161,26 +165,116 @@ function uniqueTracks(rows, limit = 260) {
   return out
 }
 
+function vkHeadersGet(ua, site = 'www') {
+  if (site === 'm') {
+    return {
+      'User-Agent': ua,
+      Referer: 'https://m.vk.com/',
+      Origin: 'https://m.vk.com',
+      Accept: 'application/json',
+    }
+  }
+  return {
+    'User-Agent': ua,
+    Referer: 'https://vk.com/',
+    Origin: 'https://vk.com',
+    Accept: 'application/json',
+  }
+}
+
+function vkHeadersPost(ua, site = 'www') {
+  return {
+    ...vkHeadersGet(ua, site),
+    'Content-Type': 'application/x-www-form-urlencoded',
+  }
+}
+
+function throwVkApiError(method, apiError) {
+  const err = new Error(`VK API ${method}: ${apiError.error_msg || 'VK API error'}${apiError.error_code != null ? ` (code ${apiError.error_code})` : ''}`)
+  err.vkCode = apiError.error_code
+  err.vkMethod = method
+  throw err
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 async function vkApi(method, params, timeout = 15000) {
-  const url = `https://api.vk.com/method/${method}?${new URLSearchParams(params).toString()}`
-  const rsp = await axios.get(url, {
-    headers: { 'User-Agent': VK_UA, 'Accept': 'application/json' },
-    timeout,
-    validateStatus: () => true,
-  })
-  if (rsp.status >= 400) {
-    const err = new Error(`VK API ${method}: HTTP ${rsp.status}`)
-    err.vkMethod = method
-    throw err
+  const base = { ...params }
+  let lastRsp = null
+  let needGap = false
+
+  async function gap() {
+    if (needGap) await delay(420)
+    needGap = true
   }
-  if (rsp?.data?.error) {
-    const apiError = rsp.data.error
-    const err = new Error(`VK API ${method}: ${apiError.error_msg || 'VK API error'}${apiError.error_code ? ` (code ${apiError.error_code})` : ''}`)
-    err.vkCode = apiError.error_code
-    err.vkMethod = method
-    throw err
+
+  for (const ua of VK_UAS) {
+    for (const ver of VK_VERSIONS_TRY) {
+      const merged = { lang: '0', ...base, v: ver }
+      const qs = new URLSearchParams(merged).toString()
+
+      async function doGet(site) {
+        await gap()
+        return axios.get(`https://api.vk.com/method/${method}?${qs}`, {
+          headers: vkHeadersGet(ua, site),
+          timeout,
+          validateStatus: () => true,
+        })
+      }
+
+      async function doPost(site) {
+        await gap()
+        return axios.post(`https://api.vk.com/method/${method}`, qs, {
+          headers: vkHeadersPost(ua, site),
+          timeout,
+          validateStatus: () => true,
+        })
+      }
+
+      async function withFloodRetry(fetchFn) {
+        let rsp = await fetchFn()
+        if (rsp?.data?.error?.error_code === 6) {
+          await delay(1600)
+          rsp = await fetchFn()
+        }
+        return rsp
+      }
+
+      for (const site of ['www', 'm']) {
+        let rsp = await withFloodRetry(() => doGet(site))
+        lastRsp = rsp
+
+        if (rsp.status >= 400) {
+          const err = new Error(`VK API ${method}: HTTP ${rsp.status}`)
+          err.vkMethod = method
+          throw err
+        }
+        if (!rsp?.data?.error) return rsp.data.response
+
+        let c = rsp.data.error.error_code
+        if (c !== 3) throwVkApiError(method, rsp.data.error)
+
+        rsp = await withFloodRetry(() => doPost(site))
+        lastRsp = rsp
+        if (rsp.status >= 400) {
+          const err = new Error(`VK API ${method}: HTTP ${rsp.status}`)
+          err.vkMethod = method
+          throw err
+        }
+        if (!rsp?.data?.error) return rsp.data.response
+
+        const c2 = rsp.data.error.error_code
+        if (c2 !== 3) throwVkApiError(method, rsp.data.error)
+      }
+    }
   }
-  return rsp?.data?.response
+
+  if (lastRsp?.data?.error) throwVkApiError(method, lastRsp.data.error)
+  const err = new Error(`VK API ${method}: empty response`)
+  err.vkMethod = method
+  throw err
 }
 
 async function fetchViaVkApi(ref, token) {
@@ -189,7 +283,6 @@ async function fetchViaVkApi(ref, token) {
   const base = {
     owner_id: String(ref.ownerId),
     access_token: String(token),
-    v: '5.131',
   }
   if (ref.accessKey) base.access_key = String(ref.accessKey)
 
@@ -216,7 +309,7 @@ async function fetchViaVkApi(ref, token) {
       album_id: String(ref.albumId),
       count: '600',
     }))
-    const items = Array.isArray(list?.items) ? list.items : []
+    const items = Array.isArray(list?.items) ? list.items : (Array.isArray(list) ? list : [])
     const tracks = uniqueTracks(items.map((t) => ({
       title: t?.title,
       artist: t?.artist,

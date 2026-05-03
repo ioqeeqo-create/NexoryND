@@ -3,10 +3,14 @@ const { contextBridge, ipcRenderer } = require('electron')
 contextBridge.exposeInMainWorld('api', {
   minimize: () => ipcRenderer.send('window-minimize'),
   close: () => ipcRenderer.send('window-close'),
+  maximizeToggle: () => ipcRenderer.invoke('window-maximize-toggle'),
+  isWindowMaximized: () => ipcRenderer.invoke('window-is-maximized'),
   openExternal: (url) => ipcRenderer.send('open-external', url),
   getVkToken: (login, password) => ipcRenderer.invoke('vk-get-token', { login, password }),
   vkBrowserAuth: () => ipcRenderer.invoke('vk-browser-auth'),
   vkSearch: (q, token) => ipcRenderer.invoke('vk-search', { q, token }),
+  vkValidateToken: (token) => ipcRenderer.invoke('vk-validate-token', { token }),
+  yandexValidateToken: (token) => ipcRenderer.invoke('yandex-validate-token', { token }),
   yandexSearch: (q, token) => ipcRenderer.invoke('yandex-search', { q, token }),
   serverSearch: (q, settings = {}) => ipcRenderer.invoke('server-search', { q, settings }),
   importPlaylistLink: (url, tokens = {}) => ipcRenderer.invoke('import-playlist-link', { url, tokens }),
@@ -19,6 +23,7 @@ contextBridge.exposeInMainWorld('api', {
   ytdlpInfo: () => ipcRenderer.invoke('ytdlp-info'),
   probeStreamUrl: (url) => ipcRenderer.invoke('probe-stream-url', { url }),
   saveCustomMedia: (payload) => ipcRenderer.invoke('save-custom-media', payload),
+  presetEmbedMedia: (fileUrl) => ipcRenderer.invoke('preset-embed-media', fileUrl),
   streamCacheLookup: (payload) => ipcRenderer.invoke('stream-cache-lookup', payload),
   streamCacheStore: (payload) => ipcRenderer.invoke('stream-cache-store', payload),
   appVersion: () => ipcRenderer.invoke('app-version'),
@@ -26,7 +31,14 @@ contextBridge.exposeInMainWorld('api', {
   scSearch: (q, clientId) => ipcRenderer.invoke('sc-search', { q, clientId }),
   scStream: (transcodingUrl, clientId) => ipcRenderer.invoke('sc-stream', { transcodingUrl, clientId }),
   yandexStream: (trackId, token) => ipcRenderer.invoke('yandex-stream', { trackId, token }),
-  getLyrics: (title, artist, duration) => ipcRenderer.invoke('get-lyrics', { title, artist, duration }),
+  getLyrics: (title, artist, duration, options = {}) => ipcRenderer.invoke('get-lyrics', {
+    title,
+    artist,
+    duration,
+    source: options?.source || '',
+    trackId: options?.trackId || '',
+    yandexToken: options?.yandexToken || '',
+  }),
   proxySetUrl: (url) => ipcRenderer.invoke('proxy-set-url', url),
   discordRpcConnect: (clientId) => ipcRenderer.invoke('discord-rpc-connect', { clientId }),
   discordRpcUpdate: (payload) => ipcRenderer.invoke('discord-rpc-update', payload),
@@ -39,4 +51,15 @@ contextBridge.exposeInMainWorld('api', {
   },
   lastfmNowPlaying: (payload) => ipcRenderer.invoke('lastfm-now-playing', payload),
   lastfmScrobble: (payload) => ipcRenderer.invoke('lastfm-scrobble', payload),
+  onFlowWindowState: (cb) => {
+    if (typeof cb !== 'function') return () => {}
+    const handler = (_e, state) => {
+      try {
+        cb(state || {})
+      } catch (_) {}
+    }
+    ipcRenderer.on('flow-window-state', handler)
+    return () => ipcRenderer.removeListener('flow-window-state', handler)
+  },
+  getFlowWindowState: () => ipcRenderer.invoke('flow-window-get-state'),
 })
