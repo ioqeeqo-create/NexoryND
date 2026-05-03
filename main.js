@@ -862,6 +862,13 @@ function buildProxyHeaders(targetUrl, rangeHeader) {
   } else if (host.includes('vk.com') || host.includes('vk-cdn.net')) {
     headers.Origin = 'https://vk.com'
     headers.Referer = 'https://vk.com/'
+  } else if (
+    host === 'api.music.yandex.net' ||
+    /\.strm\.yandex\.net$/i.test(host) ||
+    (host.includes('yandex.net') && /\/get-mp3\//i.test(String(targetUrl.pathname || '')))
+  ) {
+    headers.Origin = 'https://music.yandex.ru'
+    headers.Referer = 'https://music.yandex.ru/'
   } else {
     // Some mirrors reject anonymous/file:// clients without an origin/referrer.
     const origin = `${String(targetUrl.protocol || 'https:')}//${String(targetUrl.host || host)}`
@@ -872,40 +879,69 @@ function buildProxyHeaders(targetUrl, rangeHeader) {
   return headers
 }
 
-function headOrRangeProbe(targetUrl, rangeHeader = 'bytes=0-0') {
+function rangeGetProbeResponse(url, rangeHeader) {
   return new Promise((resolve) => {
     try {
-      const target = new URL(targetUrl)
+      const target = new URL(url)
       const isHttps = target.protocol === 'https:'
       const lib = isHttps ? https : http
-      const headers = buildProxyHeaders(target, rangeHeader)
       const options = {
         hostname: target.hostname,
         port: target.port || (isHttps ? 443 : 80),
         path: target.pathname + target.search,
         method: 'GET',
-        headers
+        headers: buildProxyHeaders(target, rangeHeader),
       }
       const r = lib.request(options, (resp) => {
+        const status = Number(resp.statusCode || 0)
+        const loc = resp.headers.location
+        const headers = {
+          'content-type': resp.headers['content-type'] || null,
+          'content-length': resp.headers['content-length'] || null,
+          'content-range': resp.headers['content-range'] || null,
+          'accept-ranges': resp.headers['accept-ranges'] || null,
+        }
         resp.resume()
-        resolve({
-          ok: true,
-          status: resp.statusCode || 0,
-          headers: {
-            'content-type': resp.headers['content-type'] || null,
-            'content-length': resp.headers['content-length'] || null,
-            'content-range': resp.headers['content-range'] || null,
-            'accept-ranges': resp.headers['accept-ranges'] || null,
-          }
-        })
+        let redirectTo = null
+        if (status >= 300 && status < 400 && loc) {
+          try {
+            redirectTo = new URL(loc, target).toString()
+          } catch {}
+        }
+        resolve({ status, headers, redirectTo })
       })
-      r.on('error', (e) => resolve({ ok: false, error: e?.message || String(e) }))
-      r.setTimeout(10000, () => { r.destroy(new Error('timeout')) })
+      r.on('error', (e) => resolve({ status: 0, headers: {}, redirectTo: null, error: e?.message || String(e) }))
+      r.setTimeout(10000, () => {
+        try { r.destroy() } catch {}
+        resolve({ status: 0, headers: {}, redirectTo: null, error: 'timeout' })
+      })
       r.end()
     } catch (e) {
-      resolve({ ok: false, error: e?.message || String(e) })
+      resolve({ status: 0, headers: {}, redirectTo: null, error: e?.message || String(e) })
     }
   })
+}
+
+async function headOrRangeProbe(targetUrl, rangeHeader = 'bytes=0-0') {
+  let current = String(targetUrl || '').trim()
+  const maxHops = 8
+  for (let depth = 0; depth < maxHops; depth++) {
+    const row = await rangeGetProbeResponse(current, rangeHeader)
+    if (row.error) {
+      return { ok: false, error: row.error, status: row.status || 0, headers: row.headers || {} }
+    }
+    if (row.redirectTo) {
+      current = row.redirectTo
+      continue
+    }
+    return {
+      ok: true,
+      status: row.status,
+      headers: row.headers,
+      finalUrl: current,
+    }
+  }
+  return { ok: false, error: 'too many redirects', status: 508, headers: {} }
 }
 
 function probeStreamWithRedirects(targetUrl, rangeHeader = 'bytes=0-0', depth = 0) {
@@ -975,7 +1011,10 @@ ipcMain.handle('probe-stream-url', async (e, { url }) => {
   try {
     if (!url || !/^https?:\/\//i.test(String(url))) return { ok: false, error: 'bad url' }
     const r = await headOrRangeProbe(String(url), 'bytes=0-0')
-    try { console.log('[probe-stream-url]', r?.status || 0, String(url).slice(0, 140)) } catch {}
+    try {
+      const shown = (r && r.finalUrl) ? r.finalUrl : String(url)
+      console.log('[probe-stream-url]', r?.status || 0, String(shown).slice(0, 140))
+    } catch {}
     return r
   } catch (err) {
     return { ok: false, error: err?.message || String(err) }
@@ -2249,6 +2288,217 @@ function flattenYandexAlbumTracks(result = {}) {
   return out.filter((t) => t.title)
 }
 
+/** uid/login для путей /users/<id>/... (литерал «me» API не принимает). */
+async function getYandexMusicAccountUid(ymHeaders) {
+  const r = await httpsGetJson('api.music.yandex.net', '/account/settings', ymHeaders, 12000)
+  const res = r?.body?.result
+  if (!res || typeof res !== 'object') return null
+  if (res.uid !== undefined && res.uid !== null) return String(res.uid).trim()
+  if (typeof res.login === 'string' && res.login.trim()) return res.login.trim()
+  return null
+}
+
+function mapYandexPlaylistTrackRowsToImport(tracks = []) {
+  const out = []
+  for (const row of tracks) {
+    if (row && typeof row === 'object' && row.error) continue
+    const t = row?.track || row
+    if (!t?.title) continue
+    out.push({
+      title: t.title,
+      artist: Array.isArray(t.artists) ? t.artists.map((a) => a?.name).filter(Boolean).join(', ') : '—',
+    })
+  }
+  return out.filter((x) => x.title)
+}
+
+/** Полные объекты треков из ответа POST /tracks (массив в result). */
+function mapYandexTrackObjectsToImport(tracks = []) {
+  const out = []
+  for (const t of tracks) {
+    if (!t || typeof t !== 'object' || t.error) continue
+    if (!t.title) continue
+    out.push({
+      title: t.title,
+      artist: Array.isArray(t.artists) ? t.artists.map((a) => a?.name).filter(Boolean).join(', ') : '—',
+    })
+  }
+  return out.filter((x) => x.title)
+}
+
+/**
+ * Строки плейлиста без вложенного track.title часто содержат только id (часто «trackId:albumId»).
+ * Собираем идентификаторы для POST /tracks как у yandex-music-api (MarshalX).
+ */
+function collectYandexPlaylistTrackIdsForBatch(tracks = []) {
+  const out = []
+  const seen = new Set()
+  const add = (spec) => {
+    const s = String(spec ?? '').trim()
+    if (!s || seen.has(s)) return
+    seen.add(s)
+    out.push(s)
+  }
+  for (const row of tracks) {
+    if (!row || typeof row !== 'object' || row.error) continue
+    const nested = row.track
+    if (nested && typeof nested === 'object' && nested.title) continue
+    if (typeof row.id === 'string' && row.id.includes(':')) {
+      add(row.id)
+      continue
+    }
+    const tid = row.trackId != null ? row.trackId : row.id
+    const aid = row.albumId != null ? row.albumId : (nested && nested.albumId != null ? nested.albumId : null)
+    if (tid != null && aid != null) add(`${tid}:${aid}`)
+    else if (tid != null) add(String(tid))
+    else if (nested && nested.id != null) {
+      const ntid = nested.id
+      const said = nested.albumId != null ? nested.albumId
+        : (Array.isArray(nested.albums) && nested.albums[0]?.id != null ? nested.albums[0].id : null)
+      if (said != null) add(`${ntid}:${said}`)
+      else add(String(ntid))
+    }
+  }
+  return out
+}
+
+/** POST /tracks с track-ids[] (form), чанками — дозагрузка метаданных для lk.* и др. */
+async function fetchYandexTracksByIdsForImport(ymHeaders, trackIds) {
+  const ids = Array.isArray(trackIds) ? trackIds.filter(Boolean) : []
+  if (!ids.length) return []
+  const chunkSize = 150
+  const merged = []
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize)
+    const form = new URLSearchParams()
+    form.append('with-positions', 'true')
+    for (const id of chunk) form.append('track-ids', String(id))
+    let r = await httpsPostFormJson('api.music.yandex.net', '/tracks', form, ymHeaders, 35000)
+    let list = Array.isArray(r?.body?.result) ? r.body.result : []
+    if (!list.length) {
+      r = await httpsPostFormJson('api.music.yandex.net', '/tracks/', form, ymHeaders, 35000)
+      list = Array.isArray(r?.body?.result) ? r.body.result : []
+    }
+    const part = mapYandexTrackObjectsToImport(list)
+    merged.push(...part)
+  }
+  return merged
+}
+
+function isYandexLikesPlaylistKind(kind) {
+  return /^lk\./i.test(String(kind || '').trim())
+}
+
+/**
+ * «Мне нравится» (kind lk.*): список треков в API — GET /users/:uid/likes/tracks (result.library.tracks),
+ * а не /users/.../playlists/lk... (для OAuth там часто приходит пустой tracks).
+ */
+async function fetchYandexUserLikesTracksForImport(ymHeaders, uid) {
+  const user = encodeURIComponent(String(uid || '').trim())
+  if (!user) return { name: 'Мне нравится', tracksOut: [] }
+  const paths = [
+    `/users/${user}/likes/tracks?if-modified-since-revision=0`,
+    `/users/${user}/likes/tracks`,
+  ]
+  let rows = []
+  for (const p of paths) {
+    const r = await httpsGetJson('api.music.yandex.net', p, ymHeaders, 40000)
+    const res = r?.body?.result
+    let lib = null
+    if (res && typeof res === 'object') {
+      if (res.library && typeof res.library === 'object') lib = res.library
+      else if (Array.isArray(res.tracks)) lib = res
+    }
+    rows = Array.isArray(lib?.tracks) ? lib.tracks : []
+    if (rows.length) break
+  }
+  if (!rows.length) return { name: 'Мне нравится', tracksOut: [] }
+  const seen = new Set()
+  const batchIds = []
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue
+    const id = row.id != null ? String(row.id).trim() : ''
+    const aid = row.albumId != null ? String(row.albumId).trim() : ''
+    const spec = id && aid ? `${id}:${aid}` : id
+    if (!spec || seen.has(spec)) continue
+    seen.add(spec)
+    batchIds.push(spec)
+  }
+  const tracksOut = await fetchYandexTracksByIdsForImport(ymHeaders, batchIds)
+  return { name: 'Мне нравится', tracksOut }
+}
+
+/**
+ * Плейлисты вроде «Мне нравится» (kind lk.*) с короткой ссылки /playlists/lk…
+ * часто приходят без вложенных track на обычном GET — нужен rich-tracks или POST /users/…/playlists.
+ */
+async function fetchYandexUserPlaylistForImport(ymHeaders, ownerId, kind) {
+  const uid = String(ownerId || '').trim()
+  const k = String(kind || '').trim()
+  if (!uid || !k) return { pl: null, tracksOut: [] }
+
+  const pathKind = encodeURIComponent(k)
+
+  const load = async (pl) => ({
+    pl: pl && typeof pl === 'object' ? pl : null,
+    tracksOut: mapYandexPlaylistTrackRowsToImport(Array.isArray(pl?.tracks) ? pl.tracks : []),
+  })
+
+  let pl = null
+  let tracksOut = []
+  /** Не терять строки с track-id, если последний GET вернул пустой tracks. */
+  let lastPlWithTrackRows = null
+  const rememberRowsPl = (p) => {
+    if (p && typeof p === 'object' && Array.isArray(p.tracks) && p.tracks.length) lastPlWithTrackRows = p
+  }
+
+  const rRich = await httpsGetJson(
+    'api.music.yandex.net',
+    `/users/${encodeURIComponent(uid)}/playlists/${pathKind}?rich-tracks=true`,
+    ymHeaders,
+    28000,
+  )
+  ;({ pl, tracksOut } = await load(rRich?.body?.result))
+  rememberRowsPl(pl)
+  if (tracksOut.length) return { pl, tracksOut }
+
+  try {
+    const postR = await httpsPostFormJson(
+      'api.music.yandex.net',
+      `/users/${encodeURIComponent(uid)}/playlists`,
+      { kinds: k, mixed: 'false', 'rich-tracks': 'true' },
+      ymHeaders,
+      40000,
+    )
+    const raw = postR?.body?.result
+    const first = Array.isArray(raw) ? raw[0] : raw
+    ;({ pl, tracksOut } = await load(first))
+    rememberRowsPl(pl)
+    if (tracksOut.length) return { pl, tracksOut }
+  } catch {}
+
+  const rPlain = await httpsGetJson(
+    'api.music.yandex.net',
+    `/users/${encodeURIComponent(uid)}/playlists/${pathKind}`,
+    ymHeaders,
+    20000,
+  )
+  ;({ pl, tracksOut } = await load(rPlain?.body?.result))
+  rememberRowsPl(pl)
+  if (tracksOut.length) return { pl, tracksOut }
+
+  const sourcePl = lastPlWithTrackRows || pl
+  const rows = Array.isArray(sourcePl?.tracks) ? sourcePl.tracks : []
+  if (rows.length) {
+    const batchIds = collectYandexPlaylistTrackIdsForBatch(rows)
+    if (batchIds.length) {
+      const fromBatch = await fetchYandexTracksByIdsForImport(ymHeaders, batchIds)
+      if (fromBatch.length) return { pl: sourcePl, tracksOut: fromBatch }
+    }
+  }
+  return { pl: pl || sourcePl, tracksOut }
+}
+
 ipcMain.handle('import-playlist-link', async (e, { url, tokens = {} }) => {
   const link = String(url || '').trim()
   if (!link) return { ok: false, error: 'empty url' }
@@ -2431,22 +2681,33 @@ ipcMain.handle('import-playlist-link', async (e, { url, tokens = {} }) => {
       return { ok: false, error: 'Yandex import: не удалось распознать ссылку (нужен плейлист или album/ID)' + helperMsg }
     }
     try {
-      const r = await httpsGetJson(
-        'api.music.yandex.net',
-        `/users/${encodeURIComponent(yRef.user)}/playlists/${encodeURIComponent(yRef.kind)}`,
-        ymHeaders,
-        15000
-      )
-      const pl = r?.body?.result || {}
-      const tracks = Array.isArray(pl?.tracks) ? pl.tracks : []
-      const out = tracks.map((row) => {
-        const t = row?.track || row
-        return {
-          title: t?.title || null,
-          artist: Array.isArray(t?.artists) ? t.artists.map((a) => a?.name).filter(Boolean).join(', ') : '—'
+      let owner = String(yRef.user || '').trim()
+      if (!owner || /^me$/i.test(owner)) {
+        owner = await getYandexMusicAccountUid(ymHeaders)
+        if (!owner) {
+          const helperMsg = helperErr ? ` | helper: ${helperErr?.message || String(helperErr)}` : ''
+          return { ok: false, error: 'Yandex import: не удалось получить id аккаунта (account/settings). Проверь токен.' + helperMsg }
         }
-      }).filter((t) => t.title)
-      return { ok: true, service: 'yandex', name: String(pl?.title || 'Yandex Playlist'), tracks: out }
+      }
+      if (isYandexLikesPlaylistKind(yRef.kind)) {
+        const viaLikes = await fetchYandexUserLikesTracksForImport(ymHeaders, owner)
+        if (viaLikes.tracksOut.length) {
+          return { ok: true, service: 'yandex', name: viaLikes.name, tracks: viaLikes.tracksOut }
+        }
+      }
+      const { pl, tracksOut } = await fetchYandexUserPlaylistForImport(ymHeaders, owner, yRef.kind)
+      const helperMsg = helperErr ? ` | helper: ${helperErr?.message || String(helperErr)}` : ''
+      if (!tracksOut.length) {
+        const rowN = Array.isArray(pl?.tracks) ? pl.tracks.length : 0
+        const isLk = isYandexLikesPlaylistKind(yRef.kind)
+        const msg = isLk && !rowN
+          ? 'Yandex import: «Мне нравится» пусто в API (likes/tracks и плейлист lk не вернули треков). Если в браузере лайки есть — проверь права токена или пересоздай OAuth.'
+          : !rowN
+            ? 'Yandex import: в плейлисте не найдено треков (пустой список у API). Убедись, что ссылка и OAuth-токен относятся к одному аккаунту Яндекс Музыки.'
+            : 'Yandex import: API вернул позиции плейлиста, но не удалось получить названия треков (попробуй обновить приложение или другую ссылку на плейлист).'
+        return { ok: false, error: msg + helperMsg }
+      }
+      return { ok: true, service: 'yandex', name: String(pl?.title || 'Yandex Playlist'), tracks: tracksOut }
     } catch (err) {
       const helperMsg = helperErr ? ` | helper: ${helperErr?.message || String(helperErr)}` : ''
       return { ok: false, error: 'Yandex import: ' + (err?.message || String(err)) + helperMsg }
@@ -3243,6 +3504,16 @@ ipcMain.handle('sc-search', async (e, { q, clientId }) => {
 
 // в”Ђв”Ђв”Ђ РЇРќР”Р•РљРЎ: СЃС‚СЂРёРј в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 // РЇРЅРґРµРєСЃ РѕС‚РґР°С‘С‚ РїСЂСЏРјСѓСЋ СЃСЃС‹Р»РєСѓ С‡РµСЂРµР· download-info в†’ sign URL
+function decodeYandexXmlField(value) {
+  if (value == null) return ''
+  return String(value)
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+}
+
 ipcMain.handle('yandex-stream', async (e, { trackId, token }) => {
   try {
     // РЁР°Рі 1: РїРѕР»СѓС‡Р°РµРј download-info
@@ -3260,11 +3531,17 @@ ipcMain.handle('yandex-stream', async (e, { trackId, token }) => {
       return { ok: false, error: 'РЇРЅРґРµРєСЃ: РЅРµС‚ РёСЃС‚РѕС‡РЅРёРєРѕРІ РґР»СЏ С‚СЂРµРєР° вЂ” РЅСѓР¶РЅР° РїРѕРґРїРёСЃРєР° РџР»СЋСЃ' }
     }
 
-    // Р‘РµСЂС‘Рј MP3 СЃ РЅР°РёР±РѕР»СЊС€РёРј Р±РёС‚СЂРµР№С‚РѕРј
-    const sources = infoR.body.result
-      .filter(s => s.codec === 'mp3')
-      .sort((a, b) => (b.bitrateInKbps || 0) - (a.bitrateInKbps || 0))
-    if (!sources.length) return { ok: false, error: 'РЇРЅРґРµРєСЃ: MP3 РЅРµРґРѕСЃС‚СѓРїРµРЅ' }
+    const rows = Array.isArray(infoR.body.result) ? infoR.body.result : []
+    const byBr = (a, b) => (Number(b.bitrateInKbps || 0) - Number(a.bitrateInKbps || 0))
+    const mp3 = rows.filter((s) => String(s.codec || '').toLowerCase() === 'mp3').sort(byBr)
+    const aac = rows.filter((s) => {
+      const c = String(s.codec || '').toLowerCase()
+      return c === 'aac' || c === 'eac-aac' || c === 'he-aac' || c === 'aac-mp4'
+    }).sort(byBr)
+    let sources = mp3.length ? mp3 : (aac.length ? aac : [...rows].sort(byBr))
+    if (!sources.length) {
+      return { ok: false, error: 'РЇРЅРґРµРєСЃ: РЅРµС‚ РґРѕСЃС‚СѓРїРЅС‹С… РїРѕС‚РѕРєРѕРІ (mp3/aac)' }
+    }
 
     // РЁР°Рі 2: РїРѕР»СѓС‡Р°РµРј XML СЃ СЂРµР°Р»СЊРЅС‹Рј URL
     const src = sources[0]
@@ -3277,10 +3554,10 @@ ipcMain.handle('yandex-stream', async (e, { trackId, token }) => {
     if (!xmlR.raw) return { ok: false, error: 'РЇРЅРґРµРєСЃ: РЅРµ СѓРґР°Р»РѕСЃСЊ РїРѕР»СѓС‡РёС‚СЊ URL СЃС‚СЂРёРјР°' }
 
     // РџР°СЂСЃРёРј XML РІСЂСѓС‡РЅСѓСЋ (РЅРµС‚ xml2js РІ main process)
-    const host  = xmlR.raw.match(/<host>([^<]+)<\/host>/)?.[1]
-    const path  = xmlR.raw.match(/<path>([^<]+)<\/path>/)?.[1]
-    const ts    = xmlR.raw.match(/<ts>([^<]+)<\/ts>/)?.[1]
-    const s     = xmlR.raw.match(/<s>([^<]+)<\/s>/)?.[1]
+    let host = decodeYandexXmlField(xmlR.raw.match(/<host>([^<]+)<\/host>/)?.[1])
+    let path = decodeYandexXmlField(xmlR.raw.match(/<path>([^<]+)<\/path>/)?.[1])
+    let ts = decodeYandexXmlField(xmlR.raw.match(/<ts>([^<]+)<\/ts>/)?.[1])
+    let s = decodeYandexXmlField(xmlR.raw.match(/<s>([^<]+)<\/s>/)?.[1])
 
     if (!host || !path || !ts || !s) {
       return { ok: false, error: 'РЇРЅРґРµРєСЃ: РЅРµ СѓРґР°Р»РѕСЃСЊ СЂР°СЃРїР°СЂСЃРёС‚СЊ URL СЃС‚СЂРёРјР°' }
@@ -3293,7 +3570,9 @@ ipcMain.handle('yandex-stream', async (e, { trackId, token }) => {
       .digest('hex')
 
     const streamUrl = `https://${host}/get-mp3/${sign}/${ts}${path}`
-    return { ok: true, url: streamUrl }
+    const pr = await headOrRangeProbe(streamUrl, 'bytes=0-0').catch(() => null)
+    const urlOut = pr && pr.ok && pr.finalUrl ? pr.finalUrl : streamUrl
+    return { ok: true, url: urlOut }
   } catch (err) {
     return { ok: false, error: 'РЇРЅРґРµРєСЃ: ' + err.message }
   }

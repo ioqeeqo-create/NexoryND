@@ -2829,9 +2829,9 @@ body.flow-opt-no-animations * {
   margin-left: 0;
 }
 .flow-profile-listening-head .flow-profile-src-badge.track-source-yandex {
-  background: rgba(255, 214, 51, 0.2);
-  color: #ffde39;
-  border: 1px solid rgba(255, 214, 51, 0.42);
+  background: rgba(184, 134, 11, 0.16);
+  color: #b8941a;
+  border: none;
 }
 .flow-profile-src-badge.flow-profile-src-badge--muted {
   display: inline-flex;
@@ -3518,10 +3518,10 @@ input:not([type])::placeholder {
 .track-source-youtube { background:rgba(255,0,0,0.15); color:#ff6b6b; }
 .track-source-soundcloud { background:rgba(255,85,0,0.15); color:#ff8c40; }
 .track-source-vk { background:rgba(0,119,255,0.15); color:#5ba3ff; }
+/* Яндекс: как SC (плашка без обводки), «Ya», более тёмный янтарь */
 .track-source-yandex {
-  background: rgba(255, 214, 51, 0.2);
-  color: #ffde39;
-  border: 1px solid rgba(255, 214, 51, 0.42);
+  background: rgba(184, 134, 11, 0.16);
+  color: #b8941a;
 }
 .track-source-spotify { background:rgba(29,185,84,0.15); color:#1db954; }
 

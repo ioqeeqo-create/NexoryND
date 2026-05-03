@@ -8,6 +8,12 @@
     return audio
   }
 
+  function resumeAudioCtxIfNeeded(ctx) {
+    try {
+      if (ctx && ctx.state === 'suspended') void ctx.resume()
+    } catch (_) {}
+  }
+
   function ensureAudioAnalyser(audio, state) {
     if (
       state.analyser &&
@@ -15,6 +21,7 @@
       state.audioCtx &&
       state.audioCtx.state !== 'closed'
     ) {
+      resumeAudioCtxIfNeeded(state.audioCtx)
       return true
     }
     try {
@@ -27,8 +34,9 @@
       if (!state.audioCtx) return false
       const src = state.audioCtx.createMediaElementSource(audio)
       state.analyser = state.audioCtx.createAnalyser()
-      state.analyser.fftSize = 256
-      state.analyser.smoothingTimeConstant = 0.68
+      /* 128 → меньше работы на аудио-потоке; для виджета на главной достаточно 64 бинов. */
+      state.analyser.fftSize = 128
+      state.analyser.smoothingTimeConstant = 0.72
 
       const lowShelf = state.audioCtx.createBiquadFilter()
       lowShelf.type = 'lowshelf'
@@ -60,6 +68,7 @@
       outputGain.connect(state.audioCtx.destination)
 
       state.freqData = new Uint8Array(state.analyser.frequencyBinCount)
+      resumeAudioCtxIfNeeded(state.audioCtx)
       return true
     } catch {
       return false

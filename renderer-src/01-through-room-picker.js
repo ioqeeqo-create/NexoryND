@@ -91,6 +91,9 @@ let _roomServerHeartbeatTimer = null
 let _roomServerFullSyncTimer = null
 let _profilesRealtimeUnsub = null
 let _lastAppliedServerPlaybackTs = 0
+/** Монотонный номер sync от хоста — гость отбрасывает только устаревшие пакеты, не «равные по ts» с pause. */
+let _lastPlaybackSyncSeq = 0
+let _hostPlaybackSyncSeq = 0
 let _lastRoomServerLoadAt = 0
 let _friendPresence = new Map()
 let _friendsPollTimer = null

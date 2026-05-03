@@ -91,6 +91,9 @@ let _roomServerHeartbeatTimer = null
 let _roomServerFullSyncTimer = null
 let _profilesRealtimeUnsub = null
 let _lastAppliedServerPlaybackTs = 0
+/** Монотонный номер sync от хоста — гость отбрасывает только устаревшие пакеты, не «равные по ts» с pause. */
+let _lastPlaybackSyncSeq = 0
+let _hostPlaybackSyncSeq = 0
 let _lastRoomServerLoadAt = 0
 let _friendPresence = new Map()
 let _friendsPollTimer = null
@@ -4329,6 +4332,7 @@ function toggleYandexWaveModes(force) {
   pop.classList.toggle('hidden', !shouldOpen)
 }
 
+let _lastMyWavePreloadCheckAt = 0
 
 async function maybePreloadMyWave(force = false) {
   if (queueScope !== 'myWave' || _myWaveBuilding || _myWavePreloading) return
@@ -4571,12 +4575,19 @@ function resolvePeerAvatarByUsername(username = '') {
   }
 }
 
-/** Бейдж как на карточках треков: SoundCloud — оранжевый «SC» (совпадает с .track-source-soundcloud). */
+/** Ключ источника для класса `.track-source-*` и таблицы подписей (ya/ym → yandex). */
+function trackSourceBadgeKey(source) {
+  const s = String(source || '').toLowerCase()
+  if (s === 'ya' || s === 'ym') return 'yandex'
+  return s
+}
+
+/** Бейдж как на карточках треков: SC / Ya и т.д. (цвета в styles.css). */
 function profileListeningSourcePillHtml(trackHint) {
-  const LABELS = { soundcloud: 'SC', vk: 'VK', hitmo: 'HM', youtube: 'YT', spotify: 'SP' }
-  const src =
-    trackHint && typeof trackHint.source === 'string' && LABELS[trackHint.source] ? trackHint.source : ''
-  if (!src) {
+  const LABELS = { soundcloud: 'SC', vk: 'VK', hitmo: 'HM', youtube: 'YT', spotify: 'SP', yandex: 'Ya' }
+  const raw = trackHint && typeof trackHint.source === 'string' ? trackHint.source : ''
+  const src = raw ? trackSourceBadgeKey(raw) : ''
+  if (!src || !LABELS[src]) {
     return '<span class="flow-profile-src-badge flow-profile-src-badge--muted">SC</span>'
   }
   return `<span class="track-source track-source-${src} flow-profile-src-badge">${LABELS[src]}</span>`
@@ -5909,21 +5920,26 @@ function initPeerSocial() {
         const senderId = String(msg._peerId || fromPeerId || '').trim()
         if (!_roomState.hostPeerId && senderId) _roomState.hostPeerId = senderId
         if (expectedHostId && senderId && senderId !== expectedHostId) return
+        const seq = Number(msg.syncSeq || 0)
+        if (seq && _lastPlaybackSyncSeq && seq < _lastPlaybackSyncSeq) return
+        if (seq) _lastPlaybackSyncSeq = Math.max(_lastPlaybackSyncSeq || 0, seq)
         const ts = Number(msg.playbackTs || msg._ts || 0)
-        if (ts && ts <= _lastAppliedServerPlaybackTs) return
-        if (ts) _lastAppliedServerPlaybackTs = ts
+        if (ts) _lastAppliedServerPlaybackTs = Math.max(_lastAppliedServerPlaybackTs || 0, ts)
         if (msg.track && msg.track.id !== currentTrack?.id) {
           playTrackObj(msg.track, { remoteSync: true }).catch(() => {})
         }
-        if (typeof msg.currentTime === 'number') {
+        if (typeof msg.currentTime === 'number' && Number.isFinite(audio.duration) && audio.duration > 0) {
           const latencySec = Math.max(0, (Date.now() - Number(msg._ts || Date.now())) / 1000)
-          const targetTime = Math.max(0, msg.currentTime + latencySec)
-          if (Math.abs(audio.currentTime - targetTime) > 0.10) audio.currentTime = targetTime
+          const targetTime = Math.max(0, Math.min(msg.currentTime + latencySec, audio.duration))
+          if (Math.abs(audio.currentTime - targetTime) > 0.12) audio.currentTime = targetTime
         }
         if (typeof msg.paused === 'boolean') {
           if (msg.paused && !audio.paused) audio.pause()
           if (!msg.paused && audio.paused) audio.play().catch(() => {})
         }
+        try {
+          syncTransportPlayPauseUi()
+        } catch (_) {}
         if (Array.isArray(msg.sharedQueue)) {
           sharedQueue = msg.sharedQueue
           renderRoomQueue()
@@ -6024,9 +6040,16 @@ function initPeerSocial() {
         renderRoomQueue()
       }
       if (msg.type === 'room-control-toggle' && msg.roomId === _roomState.roomId && msg._peerId && msg._peerId !== _socialPeer?.peer?.id) {
+        if (_roomState?.host && typeof msg.currentTime === 'number' && Number.isFinite(audio.duration) && audio.duration > 0) {
+          const ct = Math.max(0, Math.min(Number(msg.currentTime), audio.duration))
+          if (Math.abs(audio.currentTime - ct) > 1.25) audio.currentTime = ct
+        }
         const shouldPause = Boolean(msg.paused)
         if (shouldPause && !audio.paused) audio.pause()
         if (!shouldPause && audio.paused) audio.play().catch(() => {})
+        try {
+          syncTransportPlayPauseUi()
+        } catch (_) {}
         if (_roomState?.host) {
           broadcastPlaybackSync(true)
           saveRoomStateToServer({
@@ -6165,6 +6188,8 @@ function createRoom() {
   _roomState = { roomId: r.roomId, host: true, hostPeerId: _socialPeer?.peer?.id || r.roomId }
   _roomMembers.clear()
   sharedQueue = []
+  _lastPlaybackSyncSeq = 0
+  _hostPlaybackSyncSeq = 0
   if (_socialPeer?.peer?.id) _roomMembers.set(_socialPeer.peer.id, getPublicProfilePayload(_profile?.username))
   setRoomStatus(`Рума ${r.roomId}: участников 1/3`)
   resetRoomHeartbeat()
@@ -6183,6 +6208,8 @@ function joinRoomById(forceRoomId = '') {
   _roomState = { roomId: r.roomId, host: false, hostPeerId: null }
   _roomMembers.clear()
   sharedQueue = []
+  _lastPlaybackSyncSeq = 0
+  _hostPlaybackSyncSeq = 0
   if (_socialPeer?.peer?.id) _roomMembers.set(_socialPeer.peer.id, getPublicProfilePayload(_profile?.username))
   setRoomStatus(`Подключение к руме ${r.roomId}...`)
   resetRoomHeartbeat()
@@ -6205,6 +6232,9 @@ function leaveRoom() {
   _roomState = { roomId: null, host: false, hostPeerId: null }
   _roomMembers.clear()
   sharedQueue = []
+  _lastPlaybackSyncSeq = 0
+  _hostPlaybackSyncSeq = 0
+  _lastAppliedServerPlaybackTs = 0
   if (_roomHeartbeatTimer) clearInterval(_roomHeartbeatTimer)
   _roomHeartbeatTimer = null
   setRoomStatus('Рума: не активна')
@@ -6450,11 +6480,13 @@ function broadcastPlaybackSync(force = false) {
   const now = Date.now()
   if (!force && now - _lastRoomSyncAt < 700) return
   _lastRoomSyncAt = now
+  _hostPlaybackSyncSeq = Number(_hostPlaybackSyncSeq || 0) + 1
   _socialPeer.send({
     type: 'playback-sync',
     roomId: _roomState.roomId,
     track: currentTrack,
     playbackTs: Date.now(),
+    syncSeq: _hostPlaybackSyncSeq,
     currentTime: Number(audio.currentTime || 0),
     paused: Boolean(audio.paused),
     source: currentTrack?.source || null,
@@ -8024,6 +8056,9 @@ function ensureAudioAnalyzer() {
   _audioCtx = state.audioCtx
   _analyser = state.analyser
   _freqData = state.freqData
+  try {
+    if (_audioCtx?.state === 'suspended') _audioCtx.resume().catch(() => {})
+  } catch (_) {}
   return true
 }
 
@@ -8641,7 +8676,12 @@ function toggleHomeLayoutEdit() {
   queueMicrotask(() => scheduleMainShiftRemeasure())
 }
 
+/** Троттлинг отрисовки виджета на главной: 60 FPS + Web Audio + canvas давали микрофризы при режиме «волна». */
+let _homeVizLastDrawAt = 0
+
 function drawHomeVisualizerFrame() {
+  const wrap = document.getElementById('home-visualizer-wrap')
+  if (!wrap || wrap.classList.contains('hidden')) return
   const canvas = document.getElementById('home-visualizer-canvas')
   if (!canvas) return
   try {
@@ -8731,7 +8771,20 @@ function startHomeVisualizerLoop() {
         gameSleep = document.body.classList.contains('flow-opt-game-sleep')
       } catch (_) {}
       const skipViz = Boolean(_lyricsOpen && playing) || gameSleep
-      if (!skipViz) drawHomeVisualizerFrame()
+      let shouldDraw = !skipViz
+      if (shouldDraw) {
+        const v = getVisual()
+        const hw = Object.assign({ enabled: true, mode: 'bars' }, v.homeWidget || {})
+        if (!hw.enabled || hw.mode === 'image') shouldDraw = false
+        else {
+          const now = performance.now()
+          const heavy = hw.mode === 'wave' || hw.mode === 'dots'
+          const minMs = playing ? (heavy ? 50 : 40) : 220
+          if (now - _homeVizLastDrawAt < minMs) shouldDraw = false
+          else _homeVizLastDrawAt = now
+        }
+      }
+      if (shouldDraw) drawHomeVisualizerFrame()
       requestAnimationFrame(tick)
     } else {
       setTimeout(() => requestAnimationFrame(tick), 250)
@@ -9132,6 +9185,13 @@ async function playTrackObj(track, opts = {}) {
     setStage('Старт воспроизведения…')
     audio.src = url
     await audio.play()
+    try {
+      if (_audioCtx?.state === 'suspended') await _audioCtx.resume().catch(() => {})
+    } catch (_) {}
+    try {
+      ensureAudioAnalyzer()
+      if (_audioCtx?.state === 'suspended') await _audioCtx.resume().catch(() => {})
+    } catch (_) {}
     // If nothing starts within ~5s, treat it as a dead stream and switch strategy.
     return waitForPlaybackProgress(5200)
   }
@@ -9262,22 +9322,39 @@ function prewarmNextQueueTrack() {
   } catch {}
 }
 
+function syncTransportPlayPauseUi() {
+  const playing = Boolean(audio && !audio.paused && !audio.ended)
+  const playBtn = document.getElementById('play-btn')
+  const icon = document.getElementById('pm-play-icon')
+  if (playBtn) playBtn.innerHTML = playing ? ICONS.pause : ICONS.play
+  if (icon) icon.innerHTML = playing ? PM_PAUSE_INNER : PM_PLAY_INNER
+}
+
 function togglePlay() {
   if (!audio.src) return
-  const playBtn = document.getElementById('play-btn')
   const isRoomParticipant = Boolean(_roomState?.roomId)
+  const isRoomGuest = isRoomParticipant && !_roomState?.host
+  if (isRoomGuest) {
+    const wantPaused = !audio.paused
+    _socialPeer?.send?.({
+      type: 'room-control-toggle',
+      roomId: _roomState.roomId,
+      paused: wantPaused,
+      currentTime: Number(audio.currentTime || 0),
+    })
+    saveRoomStateToServer({
+      playback_state: { paused: wantPaused, currentTime: Number(audio.currentTime || 0) },
+      playback_ts: Date.now(),
+    }).catch(() => {})
+    return
+  }
   if (audio.paused) {
     audio.play()
     if (_audioCtx?.state === 'suspended') _audioCtx.resume().catch(() => {})
-    if (playBtn) playBtn.innerHTML = ICONS.pause
-    const icon = document.getElementById('pm-play-icon')
-    if (icon) icon.innerHTML = PM_PAUSE_INNER
   } else {
     audio.pause()
-    if (playBtn) playBtn.innerHTML = ICONS.play
-    const icon = document.getElementById('pm-play-icon')
-    if (icon) icon.innerHTML = PM_PLAY_INNER
   }
+  syncTransportPlayPauseUi()
   if (isRoomParticipant) {
     _socialPeer?.send?.({
       type: 'room-control-toggle',
@@ -9429,7 +9506,13 @@ audio.ontimeupdate = () => {
       }
     }
   }
-  if (queueScope === 'myWave' && !audio.paused && queue.length - queueIndex - 1 <= 3) maybePreloadMyWave(false)
+  if (queueScope === 'myWave' && !audio.paused && queue.length - queueIndex - 1 <= 3) {
+    const t = performance.now()
+    if (t - (_lastMyWavePreloadCheckAt || 0) > 3500) {
+      _lastMyWavePreloadCheckAt = t
+      maybePreloadMyWave(false)
+    }
+  }
   broadcastPlaybackSync(false)
 }
 audio.onended = () => {
@@ -10191,11 +10274,50 @@ async function closeImportProgressSafe(minVisibleMs = 900) {
   closeImportProgress()
 }
 
+function getImportPreferredSource(imported = {}) {
+  const service = String(imported?.service || '').trim().toLowerCase()
+  if (service === 'yandex') return 'yandex'
+  if (service === 'vk') return 'vk'
+  return ''
+}
+
+function isTrackPlayableCandidate(track = {}) {
+  const src = String(track?.source || '').trim().toLowerCase()
+  const url = String(track?.url || '').trim()
+  if (src === 'youtube') return Boolean(track?.ytId || /youtube\.com|youtu\.be/i.test(url))
+  if (src === 'yandex') return Boolean(track?.id || url)
+  if (src === 'soundcloud') return Boolean(url || track?.scTranscoding)
+  if (src === 'hitmo' || src === 'vk' || src === 'audius') return Boolean(url)
+  if (src === 'spotify') return Boolean(url)
+  if (src === 'local') return Boolean(track?.filePath || url)
+  return Boolean(url || track?.id || track?.ytId)
+}
+
+async function searchImportTrackWithSource(q, settings, preferredSource = '') {
+  const src = String(preferredSource || '').trim().toLowerCase()
+  if (src === 'yandex') {
+    const token = String(settings?.yandexToken || '').trim()
+    if (!token || !window.api?.yandexSearch) return []
+    const ymList = await withTimeout(window.api.yandexSearch(q, token), 22000, 'yandex search timeout').catch(() => [])
+    return sanitizeTrackList(Array.isArray(ymList) ? ymList : [])
+  }
+  if (src === 'vk') {
+    const token = String(settings?.vkToken || '').trim()
+    if (!token || !window.api?.vkSearch) return []
+    const vkList = await withTimeout(searchVK(q, token), 60000, 'vk search timeout').catch(() => [])
+    return sanitizeTrackList(Array.isArray(vkList) ? vkList : [])
+  }
+  const hybrid = await searchHybridTracks(q, settings).catch(() => ({ tracks: [] }))
+  return sanitizeTrackList(hybrid?.tracks || [])
+}
+
 async function processPlaylistImport(trackList, imported = {}) {
   const srcTracks = Array.isArray(trackList) ? trackList : []
   const maxTracks = Math.min(srcTracks.length, 120)
   const collected = []
   const notFound = []
+  const skippedUnplayable = []
+  const preferredSource = getImportPreferredSource(imported)
   openImportProgress(maxTracks)
   try {
     for (let i = 0; i < maxTracks; i++) {
@@ -10211,9 +10333,8 @@ async function processPlaylistImport(trackList, imported = {}) {
         let first = null
         const settings = getSettings()
         for (const q of queries) {
-          // 1) Same chain as regular search bar.
-          const hybrid = await searchHybridTracks(q, settings).catch(() => ({ tracks: [] }))
-          const found = sanitizeTrackList(hybrid?.tracks || [])
+          // 1) Prefer source-specific import search (e.g. Yandex -> Yandex).
+          const found = await searchImportTrackWithSource(q, settings, preferredSource)
           if (Array.isArray(found) && found.length) {
             first = found[0]
             break
@@ -10229,10 +10350,15 @@ async function processPlaylistImport(trackList, imported = {}) {
           }
         }
         if (first) {
-          collected.push(Object.assign({}, first, {
+          const picked = Object.assign({}, first, {
             title: it.title || first.title,
             artist: it.artist || first.artist
-          }))
+          })
+          if (!isTrackPlayableCandidate(picked)) {
+            skippedUnplayable.push(`${picked.artist || '—'} - ${picked.title || '—'}`)
+            continue
+          }
+          collected.push(picked)
         } else {
           const row = `${it.artist || '—'} - ${it.title || '—'}`
           notFound.push(row)
@@ -10248,19 +10374,28 @@ async function processPlaylistImport(trackList, imported = {}) {
     }
     const pls = getPlaylists()
     const name = `${imported.name || 'Imported Playlist'} [${imported.service || 'import'}]`
-    pls.push(normalizePlaylist({ name, tracks: collected }))
+    const normalizedName = String(name).trim().toLowerCase()
+    const existingIdx = pls.findIndex((p) => String(p?.name || '').trim().toLowerCase() === normalizedName)
+    const nextPlaylist = normalizePlaylist({ name, tracks: collected })
+    if (existingIdx >= 0) pls[existingIdx] = nextPlaylist
+    else pls.push(nextPlaylist)
     savePlaylists(pls)
     renderPlaylists()
     openPage('library')
-    if (notFound.length) {
-      const report = notFound.slice(0, 12).join('; ')
-      updateImportProgress(maxTracks, maxTracks, `Готово. Не найдено ${notFound.length}: ${report}${notFound.length > 12 ? '...' : ''}`)
+    if (notFound.length || skippedUnplayable.length) {
+      const reportRows = [...notFound.slice(0, 8), ...skippedUnplayable.slice(0, 4)]
+      const report = reportRows.join('; ')
+      updateImportProgress(
+        maxTracks,
+        maxTracks,
+        `Готово. Не найдено ${notFound.length}, отброшено неиграбельных ${skippedUnplayable.length}: ${report}${(notFound.length + skippedUnplayable.length) > 12 ? '...' : ''}`
+      )
       await importDelay(1600)
     }
   } finally {
     closeImportProgress()
   }
-  return { added: collected.length, missed: notFound.length, total: maxTracks }
+  return { added: collected.length, missed: notFound.length, skipped: skippedUnplayable.length, total: maxTracks }
 }
 
 function collectImportTracksDeep(value, out = [], limit = 500) {
@@ -10467,7 +10602,7 @@ async function importPlaylistFromLink(urlFromUi = '') {
   try {
     if (imported?.via === 'flow-vk-server') showToast(`VK сервер вернул треков: ${srcTracks.length}`)
     const stats = await processPlaylistImport(srcTracks, imported)
-    showToast(`Импорт завершен. Добавлено ${stats.added} треков, ${stats.missed} не найдено`)
+    showToast(`Импорт завершен. Добавлено ${stats.added} треков, ${stats.missed} не найдено, ${stats.skipped || 0} отброшено`)
   } catch (err) {
     updateImportProgress(0, 0, `Ошибка: ${sanitizeDisplayText(err?.message || String(err))}`)
     await closeImportProgressSafe(1200)
@@ -10692,7 +10827,7 @@ function editPlaylistMeta(idx) {
 }
 
 // в”Ђв”Ђв”Ђ TRACK CARD в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-const SRC_LABELS = { soundcloud:'SC', vk:'VK', hitmo:'HM', youtube:'YT', spotify:'SP' }
+const SRC_LABELS = { soundcloud: 'SC', vk: 'VK', hitmo: 'HM', youtube: 'YT', spotify: 'SP', yandex: 'Ya' }
 
 function makeTrackEl(track, showPlaylist=false, bindDefaultPlay=true) {
   track = sanitizeTrack(track)
@@ -10702,8 +10837,9 @@ function makeTrackEl(track, showPlaylist=false, bindDefaultPlay=true) {
   const trackCover = getListCoverUrl(track)
   const fallbackBg = track.bg||'linear-gradient(135deg,#7c3aed,#a855f7)'
   const coverStyle = `background:${fallbackBg};`
-  const srcLbl = SRC_LABELS[track.source]||''
-  const badge = srcLbl ? `<span class="track-source track-source-${track.source}">${srcLbl}</span>` : ''
+  const badgeKey = trackSourceBadgeKey(track.source)
+  const srcLbl = SRC_LABELS[badgeKey] || ''
+  const badge = srcLbl ? `<span class="track-source track-source-${badgeKey}">${srcLbl}</span>` : ''
   el.innerHTML=`
     <div class="track-cover" style="${coverStyle}">${trackCover?'':'<svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'}
       <div class="cover-overlay"><div class="cover-play-icon"><svg class="ctrl-play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M9 8 L17 12 L9 16 Z"/></svg></div></div>
