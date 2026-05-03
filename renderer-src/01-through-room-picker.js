@@ -67,6 +67,7 @@ let _playerModeActive = false
 let _lastSearchMode = 'hybrid'
 let _playRequestSeq = 0
 const _ytPrewarmAt = new Map()
+const _queuePrewarmAt = new Map()
 const _coverLoadState = new Map()
 
 const defaultPlayback = { shuffle: false, repeat: 'off' } // repeat: off | all | one

@@ -5215,22 +5215,58 @@ async function playTrackObj(track, opts = {}) {
 
 function prewarmNextQueueTrack() {
   try {
-    if (!window.api?.youtubeStream) return
-    const next = queue[queueIndex + 1]
-    if (!next || next.source !== 'youtube' || !next.ytId) return
-    const key = String(next.ytId)
-    const lastAt = Number(_ytPrewarmAt.get(key) || 0)
-    if (Date.now() - lastAt < 90000) return
-    _ytPrewarmAt.set(key, Date.now())
-    window.api.youtubeStream(next.ytId, _ytInstanceCache, { forceFresh: false })
-      .then((res) => {
-        if (!res?.ok || !res?.url) return
-        const idx = queueIndex + 1
-        const cur = queue[idx]
-        if (!cur || cur.ytId !== next.ytId) return
-        queue[idx] = Object.assign({}, cur, { url: res.url, _streamInst: res.inst || null })
-      })
-      .catch(() => {})
+    const idx = queueIndex + 1
+    const next = queue[idx]
+    if (!next) return
+    const source = String(next.source || '').toLowerCase()
+    const markPrewarm = (key, ttlMs = 90000) => {
+      const now = Date.now()
+      const lastAt = Number(_queuePrewarmAt.get(key) || 0)
+      if (now - lastAt < ttlMs) return false
+      _queuePrewarmAt.set(key, now)
+      return true
+    }
+    if (source === 'youtube' && next.ytId && window.api?.youtubeStream) {
+      const key = `yt:${String(next.ytId)}`
+      if (!markPrewarm(key, 90000)) return
+      _ytPrewarmAt.set(String(next.ytId), Date.now())
+      window.api.youtubeStream(next.ytId, _ytInstanceCache, { forceFresh: false })
+        .then((res) => {
+          if (!res?.ok || !res?.url) return
+          const cur = queue[idx]
+          if (!cur || cur.ytId !== next.ytId) return
+          queue[idx] = Object.assign({}, cur, { url: res.url, _streamInst: res.inst || null })
+        })
+        .catch(() => {})
+      return
+    }
+    if (source === 'soundcloud' && next.scTranscoding && window.api?.scStream) {
+      const key = `sc:${String(next.id || next.scTranscoding)}`
+      if (!markPrewarm(key, 120000)) return
+      window.api.scStream(next.scTranscoding, next.scClientId)
+        .then((res) => {
+          if (!res?.ok || !res?.url) return
+          const cur = queue[idx]
+          if (!cur || String(cur.source || '').toLowerCase() !== 'soundcloud') return
+          queue[idx] = Object.assign({}, cur, { url: res.url })
+        })
+        .catch(() => {})
+      return
+    }
+    if (source === 'yandex' && next.id && !/^https?:\/\//i.test(String(next.url || '')) && window.api?.yandexStream) {
+      const ymTok = String(getSettings()?.yandexToken || '').trim()
+      if (!ymTok) return
+      const key = `ym:${String(next.id)}`
+      if (!markPrewarm(key, 120000)) return
+      window.api.yandexStream(String(next.id), ymTok)
+        .then((res) => {
+          if (!res?.ok || !res?.url) return
+          const cur = queue[idx]
+          if (!cur || String(cur.source || '').toLowerCase() !== 'yandex' || String(cur.id || '') !== String(next.id || '')) return
+          queue[idx] = Object.assign({}, cur, { url: res.url })
+        })
+        .catch(() => {})
+    }
   } catch {}
 }
 
