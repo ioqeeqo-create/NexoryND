@@ -565,6 +565,20 @@ function renderProfileNowPlaying() {
   }
 }
 
+/** Только полоска прогресса на профиле — без innerHTML и без applyCoverArt (раньше это делалось из timeupdate ~11 раз/с). */
+function patchProfileNowPlayingProgress() {
+  if (_activePageId !== 'profile' || !currentTrack?.title) return
+  const box = document.getElementById('profile-now-playing')
+  if (!box || box.classList.contains('flow-profile-activity-idle')) return
+  const duration = Number(audio?.duration || 0)
+  const current = Number(audio?.currentTime || 0)
+  const pct = Math.max(0, Math.min(100, duration > 0 ? (current / duration) * 100 : 0))
+  const fill = box.querySelector('.flow-profile-listening-bar-fill')
+  const knob = box.querySelector('.flow-profile-listening-knob')
+  if (fill) fill.style.width = `${pct}%`
+  if (knob) knob.style.left = `${pct}%`
+}
+
 function renderProfilePage() {
   if (!_profile?.username) return
   const custom = getProfileCustom()
@@ -3834,6 +3848,20 @@ function setupCardTilt() {
   }, { passive: true })
 }
 
+/** Только время и прогресс на клоне главной — вызывать из timeupdate (без обложки и без карточки профиля). */
+function syncHomeClonePlaybackProgress() {
+  const cur = document.getElementById('home-clone-time-cur')
+  const tot = document.getElementById('home-clone-time-total')
+  const prog = document.getElementById('home-clone-progress')
+  if (!cur || !tot || !prog) return
+  cur.textContent = fmtTime(audio.currentTime)
+  tot.textContent = fmtTime(audio.duration)
+  const ratio = audio.duration ? audio.currentTime / audio.duration : 0
+  prog.value = ratio
+  const fill = ratio * 100
+  prog.style.setProperty('--progress-fill', `${Math.max(0, Math.min(100, fill))}%`)
+}
+
 function syncHomeCloneUI() {
   const cover = document.getElementById('home-clone-cover')
   const title = document.getElementById('home-clone-title')
@@ -3852,12 +3880,8 @@ function syncHomeCloneUI() {
     cover.style.backgroundImage = ''
     cover.innerHTML = COVER_ICON
   }
-  cur.textContent = fmtTime(audio.currentTime)
-  tot.textContent = fmtTime(audio.duration)
-  prog.value = audio.duration ? (audio.currentTime / audio.duration) : 0
-  const fill = (audio.duration ? (audio.currentTime / audio.duration) : 0) * 100
-  prog.style.setProperty('--progress-fill', `${Math.max(0, Math.min(100, fill))}%`)
-  renderProfileNowPlaying()
+  syncHomeClonePlaybackProgress()
+  if (_activePageId === 'profile') renderProfileNowPlaying()
 }
 
 function alignHomeHeaderToPlay() {
@@ -3888,6 +3912,15 @@ function ensureAudioAnalyzer() {
   return true
 }
 
+function teardownAudioAnalyzer() {
+  const close = audioPlayer.closeAudioContext
+  const state = { audioCtx: _audioCtx, analyser: _analyser, freqData: _freqData }
+  if (typeof close === 'function') close(state)
+  _audioCtx = null
+  _analyser = null
+  _freqData = null
+}
+
 function resizeHomeVisualizerCanvas() {
   const canvas = document.getElementById('home-visualizer-canvas')
   const wrap = document.getElementById('home-visualizer-wrap')
@@ -3898,6 +3931,9 @@ function resizeHomeVisualizerCanvas() {
   if (canvas.width !== rw || canvas.height !== rh) {
     canvas.width = rw
     canvas.height = rh
+    try {
+      delete canvas._flowViz2d
+    } catch (_) {}
   }
 }
 
@@ -4495,8 +4531,18 @@ function drawHomeVisualizerFrame() {
   if (!canvas) return
   try {
     if (document.body.classList.contains('flow-opt-bg-sleep')) return
+    if (document.body.classList.contains('flow-opt-game-sleep')) return
   } catch (_) {}
-  const ctx = canvas.getContext('2d')
+  let ctx = canvas._flowViz2d
+  if (!ctx) {
+    try {
+      ctx = canvas.getContext('2d', { alpha: true, desynchronized: true })
+    } catch (_) {
+      ctx = null
+    }
+    if (!ctx) ctx = canvas.getContext('2d')
+    canvas._flowViz2d = ctx
+  }
   if (!ctx) return
   const v = getVisual()
   const hw = Object.assign({ enabled: true, mode: 'bars' }, v.homeWidget || {})
@@ -4554,50 +4600,28 @@ function drawHomeVisualizerFrame() {
 }
 
 function startHomeVisualizerLoop() {
-  let vizFrame = 0
   const tick = () => {
-    if (document.hidden) {
-      setTimeout(() => requestAnimationFrame(tick), 750)
-      return
-    }
     if (_activePageId === 'home') {
-      try {
-        if (document.body.classList.contains('flow-opt-bg-sleep')) {
-          setTimeout(() => requestAnimationFrame(tick), 420)
-          return
-        }
-      } catch (_) {}
-      const wrap = document.getElementById('home-visualizer-wrap')
-      if (wrap?.classList.contains('hidden')) {
-        setTimeout(() => requestAnimationFrame(tick), 350)
+      if (typeof document !== 'undefined' && document.hidden) {
+        requestAnimationFrame(tick)
         return
       }
-      const playing = (() => {
-        try {
-          return audio && !audio.paused && !audio.ended
-        } catch (_) {
-          return false
-        }
-      })()
-      if (playing) {
-        vizFrame++
-        if (vizFrame % 2 === 0) drawHomeVisualizerFrame()
-      } else {
-        vizFrame = 0
-        drawHomeVisualizerFrame()
-      }
+      let playing = false
+      try {
+        playing = Boolean(audio && !audio.paused && !audio.ended)
+      } catch (_) {}
+      // При открытом тексте и проигре визуализатор главной отключён — иначе два тяжёлых RAF подряд дают микрофризы.
+      let gameSleep = false
+      try {
+        gameSleep = document.body.classList.contains('flow-opt-game-sleep')
+      } catch (_) {}
+      const skipViz = Boolean(_lyricsOpen && playing) || gameSleep
+      if (!skipViz) drawHomeVisualizerFrame()
       requestAnimationFrame(tick)
     } else {
       setTimeout(() => requestAnimationFrame(tick), 250)
     }
   }
-  document.addEventListener(
-    'visibilitychange',
-    () => {
-      if (!document.hidden && _activePageId === 'home') requestAnimationFrame(tick)
-    },
-    { passive: true },
-  )
   requestAnimationFrame(tick)
 }
 
@@ -4609,6 +4633,12 @@ function syncPlayerUIFromTrack() {
   const coverUrl = getEffectiveCoverUrl(track)
   applyCoverArt(cover, coverUrl, fallbackBg)
   applyCoverArt(homeCover, coverUrl, fallbackBg)
+  try {
+    if (typeof shouldIsolateHostTrackVisualsFromRoomGuest === 'function' && shouldIsolateHostTrackVisualsFromRoomGuest()) {
+      if (_playerModeActive) syncPlayerModeUI()
+      return
+    }
+  } catch (_) {}
   updateYandexPlayerTheme(track)
   if (_playerModeActive) syncPlayerModeUI()
 }
@@ -4703,6 +4733,9 @@ async function playTrackObj(track, opts = {}) {
   const reqId = ++_playRequestSeq
   const isStale = () => reqId !== _playRequestSeq
   track = sanitizeTrack(track)
+  if (opts?.remoteSync && _roomState?.roomId && !_roomState?.host) {
+    track = Object.assign({}, track, { _flowSkipGlobalThemeFromTrack: true })
+  }
   const forcedCover = getEffectiveCoverUrl(track)
   if (forcedCover) {
     track = Object.assign({}, track, {
@@ -5057,8 +5090,6 @@ async function playTrackObj(track, opts = {}) {
   if (artistEl) artistEl.textContent = track.artist || '—'
   const cover = document.getElementById('player-cover')
   const effectiveCover = getEffectiveCoverUrl(track)
-  applyCoverArt(cover, effectiveCover, track.bg || 'linear-gradient(135deg,#7c3aed,#a855f7)')
-  updateYandexPlayerTheme(track)
   if (playBtn) playBtn.innerHTML = ICONS.pause
   const pmIcon = document.getElementById('pm-play-icon')
   if (pmIcon) pmIcon.innerHTML = PM_PAUSE_INNER
@@ -5066,9 +5097,19 @@ async function playTrackObj(track, opts = {}) {
   // РћР±РЅРѕРІР»СЏРµРј titlebar
   const tinfo = document.getElementById('titlebar-track-info')
   if (tinfo) tinfo.textContent = track.title + (track.artist ? ' вЂ” ' + track.artist : '')
-  // Р”РёРЅР°РјРёС‡РµСЃРєРёР№ С„РѕРЅ РѕС‚ РѕР±Р»РѕР¶РєРё
-  if (effectiveCover) updateOrbsFromCover(effectiveCover)
-  updateBackground()
+  const deferHeavyPlaybackUi = () => {
+    try {
+      applyCoverArt(cover, effectiveCover, track.bg || 'linear-gradient(135deg,#7c3aed,#a855f7)')
+      updateYandexPlayerTheme(track)
+      if (effectiveCover) updateOrbsFromCover(effectiveCover)
+      updateBackground()
+    } catch (_) {}
+  }
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(() => requestAnimationFrame(deferHeavyPlaybackUi))
+  } else {
+    setTimeout(deferHeavyPlaybackUi, 16)
+  }
   // РЎРёРЅС…СЂРѕРЅРёР·РёСЂСѓРµРј fullscreen РїР»РµРµСЂ
   syncPlayerModeUI()
   syncTrackCoverStatus()
@@ -5082,6 +5123,7 @@ async function playTrackObj(track, opts = {}) {
   pushLastFmNowPlaying(track)
   updateDiscordPresence(track, _roomState)
   broadcastPlaybackSync(true)
+  syncHomeCloneUI()
 }
 
 function prewarmNextQueueTrack() {
@@ -5241,7 +5283,8 @@ function nextTrack(autoEnded = false) {
 audio.ontimeupdate = () => {
   // Keep general UI updates lightweight, but make lyrics sync feel tighter.
   const shouldSyncUi = (performance.now() - _lastUiSyncAt) >= 90
-  if (_lyricsOpen && _lyricsData.length) syncLyrics(getLyricsSmoothedTime())
+  // Во время play караоке крутится в RAF — второй вызов из timeupdate даёт лишний main-thread и рывки UI.
+  if (_lyricsOpen && _lyricsData.length && audio.paused) syncLyrics(getLyricsSmoothedTime())
   if (shouldSyncUi) {
     _lastUiSyncAt = performance.now()
     const p = document.getElementById('progress')
@@ -5257,19 +5300,22 @@ audio.ontimeupdate = () => {
     const el3 = document.getElementById('pm-time-current'); if (el3) el3.textContent = cur
     const el4 = document.getElementById('pm-time-total');   if (el4) el4.textContent = tot
 
-    syncHomeCloneUI()
+    syncHomeClonePlaybackProgress()
+    patchProfileNowPlayingProgress()
+
+    if (_profile?.username && !audio.paused && audio.duration) {
+      const now = Date.now()
+      if (!_listenTickAt) _listenTickAt = now
+      const delta = Math.max(0, now - _listenTickAt) / 1000
+      _listenTickAt = now
+      if (delta > 0 && delta < 4) {
+        const st = getListenStats()
+        saveListenStats({ totalSeconds: Number(st.totalSeconds || 0) + delta })
+      }
+    }
   }
   if (queueScope === 'myWave' && !audio.paused && queue.length - queueIndex - 1 <= 3) maybePreloadMyWave(false)
   broadcastPlaybackSync(false)
-  if (!_profile?.username || audio.paused || !audio.duration) return
-  const now = Date.now()
-  if (!_listenTickAt) _listenTickAt = now
-  const delta = Math.max(0, now - _listenTickAt) / 1000
-  _listenTickAt = now
-  if (delta > 0 && delta < 4) {
-    const st = getListenStats()
-    saveListenStats({ totalSeconds: Number(st.totalSeconds || 0) + delta })
-  }
 }
 audio.onended = () => {
   stopLyricsSyncLoop()
@@ -5327,6 +5373,7 @@ async function searchHybridTracks(q, settings) {
 function searchLoadingPlaceholderLine(settings = getSettings()) {
   const src = String(settings?.activeSource || currentSource || 'hybrid').toLowerCase()
   if (src === 'yandex' || src === 'ya' || src === 'ym') return 'Поиск: Яндекс Музыка...'
+  if (src === 'vk') return 'Поиск: ВКонтакте...'
   if (src === 'hitmo' || src === 'hm') return 'Поиск: HitMo...'
   if (src === 'youtube' || src === 'yt') return 'Поиск: YouTube...'
   return 'Поиск: Spotify → SoundCloud → Audius...'
@@ -5385,6 +5432,17 @@ function searchTracks(queryOverride = '') {
         if (!Array.isArray(ymList)) throw new Error('Яндекс: некорректный ответ')
         results = sanitizeTrackList(ymList)
         mode = 'yandex'
+      } else if (src === 'vk') {
+        _lastSearchMode = 'vk'
+        const token = String(s.vkToken || '').trim()
+        if (!token) throw new Error('VK: укажи токен в настройках → Источники → ВКонтакте')
+        if (!window.api?.vkSearch) throw new Error('VK поиск доступен только в приложении Electron')
+        const vkList = await withTimeout(searchVK(q, token), 60000, 'vk search timeout').catch((e) => {
+          throw new Error(normalizeInvokeError(e) || 'таймаут поиска')
+        })
+        if (!Array.isArray(vkList)) throw new Error('VK: некорректный ответ')
+        results = sanitizeTrackList(vkList)
+        mode = 'vk'
       } else {
         const hybrid = await searchHybridTracks(q, s)
         results = sanitizeTrackList(hybrid.tracks || [])
@@ -5415,6 +5473,17 @@ async function searchTracksDirect(query, settings = getSettings()) {
     if (!Array.isArray(ymList)) throw new Error('Яндекс: некорректный ответ')
     _lastSearchMode = 'yandex'
     return sanitizeTrackList(ymList)
+  }
+  if (src === 'vk') {
+    _lastSearchMode = 'vk'
+    const token = String(settings?.vkToken || '').trim()
+    if (!token) throw new Error('VK: укажи токен в настройках → Источники → ВКонтакте')
+    if (!window.api?.vkSearch) throw new Error('VK поиск доступен только в приложении Electron')
+    const vkList = await withTimeout(searchVK(q, token), 60000, 'vk search timeout').catch((e) => {
+      throw new Error(normalizeInvokeError(e) || 'таймаут поиска')
+    })
+    if (!Array.isArray(vkList)) throw new Error('VK: некорректный ответ')
+    return sanitizeTrackList(vkList)
   }
   if (src === 'youtube' || src === 'yt') {
     if (!window.api?.youtubeSearch) throw new Error('YouTube поиск доступен только в Electron')
@@ -5463,6 +5532,7 @@ function getSourceLabel() {
   if (_lastSearchMode === 'audius') return 'Audius'
   if (_lastSearchMode === 'youtube') return 'YouTube'
   if (_lastSearchMode === 'yandex') return 'Яндекс Музыка'
+  if (_lastSearchMode === 'vk') return 'ВКонтакте'
   if (_lastSearchMode === 'hitmo') return 'HitMo'
   return 'Spotify → SoundCloud → Audius'
 }
@@ -5542,7 +5612,7 @@ async function searchVK(q, token) {
   if (window.api?.vkSearch) {
     let result
     try {
-      result = await window.api.vkSearch(q, token)
+      result = await window.api.vkSearch(q, token, Boolean(getSettings().vkSeleniumBridge))
     } catch (err) {
       throw new Error(normalizeInvokeError(err))
     }
@@ -6237,6 +6307,7 @@ async function importPlaylistFromLink(urlFromUi = '') {
     yandex: settings.yandexToken || '',
     vk: isVkLink ? getCurrentVkTokenForImport() : (settings.vkToken || ''),
     serverBaseUrl: settings.proxyBaseUrl || '',
+    allowVkSeleniumBridge: Boolean(settings.vkSeleniumBridge),
   }).catch((e) => ({ ok: false, error: e?.message || String(e) }))
   setImportProgressIndeterminate(false)
 
@@ -6621,6 +6692,12 @@ function stopLyricsSyncLoop() {
 function startLyricsSyncLoop() {
   if (_lyricsRafId) return
   const tick = () => {
+    try {
+      if (document.body.classList.contains('flow-opt-game-sleep')) {
+        _lyricsRafId = 0
+        return
+      }
+    } catch (_) {}
     if (!_lyricsOpen || !_lyricsData.length || audio.paused) {
       _lyricsRafId = 0
       return
@@ -6629,6 +6706,21 @@ function startLyricsSyncLoop() {
     _lyricsRafId = requestAnimationFrame(tick)
   }
   _lyricsRafId = requestAnimationFrame(tick)
+}
+
+/** Контейнер со строками текста — только видимая панель (иначе караоке каждый кадр правит два дерева DOM). */
+function getLyricsSyncRoot() {
+  try {
+    const pmShell = document.getElementById('pm-lyrics-shell')
+    const pmContent = document.getElementById('pm-lyrics-content')
+    if (pmShell && !pmShell.classList.contains('hidden') && pmContent) return pmContent
+    const sidePanel = document.getElementById('lyrics-panel')
+    const sideContent = document.getElementById('lyrics-content')
+    if (sidePanel && !sidePanel.classList.contains('hidden') && sideContent) return sideContent
+    return pmContent || sideContent || null
+  } catch (_) {
+    return null
+  }
 }
 
 function getKaraokeLineDuration(idx) {
@@ -6680,7 +6772,17 @@ function getLyricsVisualSettings() {
   }
 }
 
+let _lyricsCfgQuickMemo = null
+function getLyricsVisualSettingsQuick() {
+  const now = typeof performance !== 'undefined' ? performance.now() : Date.now()
+  if (_lyricsCfgQuickMemo && now - _lyricsCfgQuickMemo.at < 800) return _lyricsCfgQuickMemo.cfg
+  const cfg = getLyricsVisualSettings()
+  _lyricsCfgQuickMemo = { at: now, cfg }
+  return cfg
+}
+
 function applyLyricsVisualSettings() {
+  _lyricsCfgQuickMemo = null
   const cfg = getLyricsVisualSettings()
   document.documentElement.style.setProperty('--lyrics-size', `${cfg.size}px`)
   document.documentElement.style.setProperty('--lyrics-blur', `${cfg.blur}px`)
@@ -6892,14 +6994,37 @@ async function loadLyrics(track) {
   }
 }
 
-function syncLyrics(currentTime) {
-  if (!_lyricsData.length) return
-  const cfg = getLyricsVisualSettings()
-  let idx = -1
-  for (let i = 0; i < _lyricsData.length; i++) {
-    if (_lyricsData[i].time <= currentTime) idx = i
-    else break
+function findLyricsLineIndexAtTime(t) {
+  const arr = _lyricsData
+  const n = arr.length
+  if (!n) return -1
+  const tt = Number(t)
+  const t0 = Number(arr[0].time || 0)
+  if (tt < t0) return -1
+  const lastT = Number(arr[n - 1].time || 0)
+  if (tt >= lastT) return n - 1
+  let lo = 0
+  let hi = n - 1
+  let ans = 0
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1
+    if (Number(arr[mid].time || 0) <= tt) {
+      ans = mid
+      lo = mid + 1
+    } else hi = mid - 1
   }
+  return ans
+}
+
+function syncLyrics(currentTime) {
+  try {
+    if (document.body.classList.contains('flow-opt-game-sleep')) return
+  } catch (_) {}
+  if (!_lyricsData.length) return
+  const root = getLyricsSyncRoot()
+  if (!root) return
+  const cfg = getLyricsVisualSettingsQuick()
+  const idx = findLyricsLineIndexAtTime(currentTime)
   const idxChanged = idx !== _lyricsActiveIdx
   const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()
   const karaokeHighRate = cfg.playbackMode === 'karaoke' && idx >= 0
@@ -6909,7 +7034,10 @@ function syncLyrics(currentTime) {
   _lyricsLastPaintAt = now
   if (idxChanged) {
     _lyricsActiveIdx = idx
-    document.querySelectorAll('.lyrics-line').forEach((el) => {
+    root.querySelectorAll('.lyrics-line').forEach((el) => {
+      try {
+        delete el.dataset.kPaintSig
+      } catch (_) {}
       const i = Number(el.dataset.idx || -1)
       el.classList.toggle('active', i === idx)
       el.classList.toggle('past', i >= 0 && i < idx)
@@ -6918,7 +7046,7 @@ function syncLyrics(currentTime) {
   }
   if (cfg.playbackMode === 'karaoke') {
     if (idxChanged) {
-      document.querySelectorAll('.lyrics-line:not(.active) .lyrics-char.karaoke-on, .lyrics-line:not(.active) .lyrics-char.karaoke-next').forEach((el) => {
+      root.querySelectorAll('.lyrics-line:not(.active) .lyrics-char.karaoke-on, .lyrics-line:not(.active) .lyrics-char.karaoke-next').forEach((el) => {
         el.classList.remove('karaoke-on', 'karaoke-next')
         el.style.removeProperty('--karaoke-frac')
       })
@@ -6926,33 +7054,43 @@ function syncLyrics(currentTime) {
     const start = idx >= 0 ? Number(_lyricsData[idx]?.time || 0) : 0
     const duration = Math.max(0.35, idx >= 0 ? getKaraokeLineDuration(idx) : 0.35)
     const progress = idx >= 0 ? Math.max(0, Math.min(1, (currentTime - start) / duration)) : 0
-    document.querySelectorAll('.lyrics-line.active').forEach((lineEl) => {
-      const chars = Array.from(lineEl.querySelectorAll('.lyrics-char'))
-      if (!chars.length) return
-      const spread = progress * chars.length
-      const activeCount = Math.max(0, Math.min(chars.length, Math.floor(spread)))
-      const nextFrac = Math.max(0, Math.min(1, spread - activeCount))
-      lineEl.style.setProperty('--line-progress', `${(progress * 100).toFixed(2)}%`)
-      chars.forEach((charEl, cIdx) => {
-        charEl.classList.toggle('karaoke-on', cIdx < activeCount)
-        const isNext = cIdx === activeCount && activeCount < chars.length
-        charEl.classList.toggle('karaoke-next', isNext)
-        if (isNext) charEl.style.setProperty('--karaoke-frac', nextFrac.toFixed(3))
-        else charEl.style.removeProperty('--karaoke-frac')
-      })
-    })
+    const lineEl = root.querySelector('.lyrics-line.active')
+    if (lineEl) {
+      const chars = lineEl.querySelectorAll('.lyrics-char')
+      if (chars.length) {
+        const spread = progress * chars.length
+        const activeCount = Math.max(0, Math.min(chars.length, Math.floor(spread)))
+        const nextFrac = Math.max(0, Math.min(1, spread - activeCount))
+        const qFrac = Math.round(nextFrac * 40) / 40
+        const qProg = Math.round(progress * 240) / 240
+        const paintSig = `${activeCount}|${qFrac}|${qProg}`
+        if (lineEl.dataset.kPaintSig !== paintSig) {
+          lineEl.dataset.kPaintSig = paintSig
+          lineEl.style.setProperty('--line-progress', `${(qProg * 100).toFixed(2)}%`)
+          chars.forEach((charEl, cIdx) => {
+            charEl.classList.toggle('karaoke-on', cIdx < activeCount)
+            const isNext = cIdx === activeCount && activeCount < chars.length
+            charEl.classList.toggle('karaoke-next', isNext)
+            if (isNext) charEl.style.setProperty('--karaoke-frac', qFrac.toFixed(3))
+            else charEl.style.removeProperty('--karaoke-frac')
+          })
+        }
+      }
+    }
   } else if (idxChanged) {
-    document.querySelectorAll('.lyrics-char.karaoke-on, .lyrics-char.karaoke-next').forEach((el) => {
+    root.querySelectorAll('.lyrics-char.karaoke-on, .lyrics-char.karaoke-next').forEach((el) => {
       el.classList.remove('karaoke-on', 'karaoke-next')
       el.style.removeProperty('--karaoke-frac')
     })
-    document.querySelectorAll('.lyrics-line').forEach((lineEl) => lineEl.style.removeProperty('--line-progress'))
+    root.querySelectorAll('.lyrics-line').forEach((lineEl) => lineEl.style.removeProperty('--line-progress'))
   }
   if (idx >= 0) {
-    const el = document.querySelector('.pm-lyrics-shell:not(.hidden) .lyrics-line.active')
-      || document.querySelector('#lyrics-panel:not(.hidden) .lyrics-line.active')
-      || document.querySelector('.lyrics-line.active')
-    if (el && idxChanged) el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+    const el = root.querySelector('.lyrics-line.active')
+    if (el && idxChanged) {
+      const scrollBeh =
+        cfg.playbackMode === 'karaoke' ? 'auto' : cfg.scrollMode === 'smooth' ? 'smooth' : 'auto'
+      el.scrollIntoView({ behavior: scrollBeh, block: 'center', inline: 'nearest' })
+    }
   }
 }
 
@@ -7010,6 +7148,15 @@ function setupAppDragAndDrop() {
 
 // в”Ђв”Ђв”Ђ INIT + HOTKEYS в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 window.addEventListener('DOMContentLoaded', () => {
+  window.addEventListener(
+    'beforeunload',
+    () => {
+      try {
+        teardownAudioAnalyzer()
+      } catch (_) {}
+    },
+    { passive: true },
+  )
   enableMojibakeAutoFix()
   startApp()
   try { document.body.setAttribute('data-active-page', _activePageId || 'home') } catch {}

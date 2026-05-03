@@ -6,7 +6,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
   <!-- bump ?v= when profile/CSS/JS layout changes so Electron reloads assets -->
-  <link rel="stylesheet" href="styles.css?v=20260502-2.3.4-optimization-settings">
+  <link rel="stylesheet" href="styles.css?v=20260503-vk-code3-warn">
 </head>
 <body>
 
@@ -315,6 +315,10 @@
           <button class="source-mode-card" data-src="yandex" onclick="switchSearchSource('yandex')" title="Яндекс">
             <span class="source-mode-icon source-mode-icon-ya">✶</span>
             <span class="source-mode-label">Ya</span>
+          </button>
+          <button class="source-mode-card" data-src="vk" onclick="switchSearchSource('vk')" title="ВКонтакте">
+            <span class="source-mode-icon" style="font-size:13px;font-weight:800;background:linear-gradient(135deg,#4680c2,#5b9bd5);color:#fff">VK</span>
+            <span class="source-mode-label">VK</span>
           </button>
         </div>
       </div>
@@ -843,6 +847,14 @@
               </div>
               <div class="vs-toggle" id="toggle-opt-bg-when-away" onclick="toggleOptimizationSetting('optPauseHeavyBgWhenBackgrounded')"><div class="vs-toggle-thumb"></div></div>
             </div>
+            <div class="opt-setting-row">
+              <span class="opt-setting-icon" aria-hidden="true"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 11h2a1 1 0 001-1V9a1 1 0 011-1h1a1 1 0 011 1v1a1 1 0 001 1h2"/><path d="M9.5 15v.01M14.5 15v.01"/><rect x="4" y="7" width="16" height="10" rx="3"/></svg></span>
+              <div class="opt-setting-text">
+                <div class="opt-setting-title">Игровой режим</div>
+                <p class="opt-setting-desc">Пока окно не на экране (свернуто или ты в другой программе) — «sleep»: без текста и тяжёлой отрисовки, только звук. Вернёшься в Flow — всё как обычно.</p>
+              </div>
+              <div class="vs-toggle" id="toggle-opt-game-sleep" onclick="toggleOptimizationSetting('optGameSleepMode')"><div class="vs-toggle-thumb"></div></div>
+            </div>
           </div>
         </div>
       </div>
@@ -850,7 +862,7 @@
       <div id="settings-panel-accounts" class="settings-category-panel">
         <div class="glass-card" style="padding:18px;border-radius:18px;margin-top:8px;max-width:760px;">
           <div class="vs-section-title" style="margin-bottom:8px;">Источники</div>
-          <div style="color:var(--muted);font-size:14px;line-height:1.55;margin-bottom:14px;">Выбери, откуда брать результаты поиска: классический Flow или Яндекс.</div>
+          <div style="color:var(--muted);font-size:14px;line-height:1.55;margin-bottom:14px;">Откуда брать результаты поиска: классический Flow (сервер), Яндекс Музыка или ВКонтакте (нужен токен с аудио).</div>
           <div class="source-mode-grid" style="margin:0 0 14px;">
             <button class="source-mode-card" data-src="hybrid" onclick="setActiveSource('hybrid')" title="Flow classic">
               <span class="source-mode-icon">F</span>
@@ -859,6 +871,10 @@
             <button class="source-mode-card" data-src="yandex" onclick="setActiveSource('yandex')" title="Яндекс">
               <span class="source-mode-icon source-mode-icon-ya">✶</span>
               <span class="source-mode-label">Ya</span>
+            </button>
+            <button class="source-mode-card" data-src="vk" onclick="setActiveSource('vk')" title="ВКонтакте">
+              <span class="source-mode-icon" style="font-size:13px;font-weight:800;background:linear-gradient(135deg,#4680c2,#5b9bd5);color:#fff">VK</span>
+              <span class="source-mode-label">VK</span>
             </button>
           </div>
 
@@ -935,8 +951,8 @@
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
               <button class="btn-small" id="vk-get-btn" onclick="getVkToken()">Войти в VK и получить токен</button>
               <button class="btn-small" id="vk-browser-auth-btn" onclick="startVkBrowserAuth()">Открыть вход VK в браузере</button>
+              <button class="btn-small" onclick="openVkHostTokenPage()">Открыть vkhost.github.io</button>
             </div>
-            <div id="vk-msg" style="font-size:12px;color:var(--muted);margin-top:8px;"></div>
 
             <div style="font-size:12px;color:var(--muted);margin:12px 0 6px;">Токен VK (можно вставить вручную)</div>
             <div class="token-field-wrap">
@@ -947,6 +963,18 @@
               <button class="token-field-apply" onclick="applyVkToken()" title="Сохранить">
                 <svg class="ui-icon sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><polyline points="20 6 9 17 4 12"/></svg>
               </button>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 0;">
+              <button class="btn-small" onclick="checkVkToken()">Проверить токен</button>
+            </div>
+            <div class="integration-hint" style="margin-top:12px">Ручной токен через <strong>vkhost.github.io</strong>: выбери <strong>Kate Mobile</strong>. В <strong>«Настройки»</strong> на vkhost отмечай нужные права (аудио, офлайн) — там как раз галочки. Затем войди: сначала может открыться VK ID («Продолжить как …») — нажми продолжить; на странице <strong>id.vk.com</strong> со списком прав <strong>нет отдельных галочек по строкам</strong>, это просто перечень доступа приложения; внизу страницы найди кнопку <strong>«Разрешить»</strong> (при узком окне — <strong>прокрути вниз</strong> или разверни браузер на весь экран). После перехода скопируй из адреса фрагмент от <code>access_token=</code> до <code>&amp;expires_in</code>.</div>
+            <div id="vk-msg" class="token-msg" style="display:block;margin-top:10px;" role="status" aria-live="polite"></div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);">
+              <div style="font-size:12px;line-height:1.4;color:rgba(255,255,255,0.88);">
+                <div style="font-weight:600;margin-bottom:2px;">Обход через Chrome (Selenium)</div>
+                <div style="color:var(--muted);">Только если VK режет audio.*: отдельное окно Chrome, вход в VK, профиль в %LOCALAPPDATA%\Flow\vk_chrome_profile. По умолчанию выключено — поиск и импорт не запускают браузер сами.</div>
+              </div>
+              <div class="vs-toggle" id="toggle-vk-selenium-bridge" onclick="toggleVkSeleniumBridgeSetting()" title="Разрешить обход через Chrome"><div class="vs-toggle-thumb"></div></div>
             </div>
             </div>
           </div>
@@ -1377,7 +1405,11 @@
 <script src="src/modules/network/peer-social.js"></script>
   <script src="src/modules/ui/drag-drop.js"></script>
   <script src="src/modules/wave-engine.js"></script>
-  <script src="renderer.js?v=20260502-2.3.4-optimization-settings"></script>
+  <div id="flow-game-sleep-overlay" class="flow-game-sleep-overlay" aria-hidden="true">
+    <div class="flow-game-sleep-title">Sleep mode</div>
+    <div class="flow-game-sleep-sub">Только воспроизведение · верни Flow на экран</div>
+  </div>
+  <script src="renderer.js?v=20260503-room-guest-visual"></script>
 </body>
 </html>
 

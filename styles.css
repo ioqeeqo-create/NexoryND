@@ -233,6 +233,29 @@ body.audio-playing #player-bar.player-bar--nover.glass-bar {
   -webkit-backdrop-filter: blur(12px) saturate(130%);
 }
 
+/* Индикация буферизации - предотвращаем зависания UI */
+body.audio-buffering {
+  cursor: wait !important;
+}
+
+body.audio-buffering * {
+  pointer-events: none !important;
+}
+
+body.audio-buffering #player-bar .player-controls,
+body.audio-buffering #player-bar .progress-container {
+  opacity: 0.6;
+}
+
+body.audio-buffering .spin-icon {
+  animation: spin 1s linear infinite !important;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .bg-noise {
   position: fixed; inset: 0; z-index: 4;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
@@ -2108,6 +2131,47 @@ body.flow-opt-freeze-player #player-bar.player-bar {
 body.flow-opt-freeze-player #player-bar .player-track::before {
   opacity: 0 !important;
   visibility: hidden !important;
+}
+
+/* Игровой режим: при свёрнутом окне один слой поверх UI, без тяжёлого фона */
+.flow-game-sleep-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: #000;
+  color: rgba(255, 255, 255, 0.5);
+  font-family: inherit;
+  pointer-events: none;
+  text-align: center;
+  padding: 24px;
+}
+body.flow-opt-game-sleep .flow-game-sleep-overlay {
+  display: flex;
+}
+body.flow-opt-game-sleep #bg-layer,
+body.flow-opt-game-sleep #bg-cover-blur,
+body.flow-opt-game-sleep #bg-active-tint,
+body.flow-opt-game-sleep #bg-gradient-orbs,
+body.flow-opt-game-sleep .bg-noise {
+  visibility: hidden !important;
+}
+.flow-game-sleep-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.42);
+}
+.flow-game-sleep-sub {
+  font-size: 13px;
+  line-height: 1.45;
+  max-width: 280px;
+  color: rgba(255, 255, 255, 0.35);
 }
 
 body.flow-opt-no-animations *,
@@ -4344,7 +4408,13 @@ body.nav-active-highlight .src-tab.active { background:color-mix(in srgb, var(--
 .integration-hint { margin-top:8px; font-size:12px; color:var(--muted); line-height:1.45; }
 .token-msg { font-size:12px; min-height:14px; margin-bottom:8px; }
 .token-msg-ok { color:#34d399; }
+.token-msg-warn { color:#fbbf24; font-weight: 500; }
 .token-msg-err { color:#f87171; }
+/* VK: строка статуса под полем — серый по умолчанию, зелёный/красный при проверке */
+#vk-msg:not(.token-msg-ok):not(.token-msg-err):not(.token-msg-warn) { color: var(--muted); }
+#vk-msg.token-msg-ok { color: #34d399; }
+#vk-msg.token-msg-warn { color: #fbbf24; font-weight: 500; }
+#vk-msg.token-msg-err { color: #f87171; font-weight: 500; }
 .token-active-display { font-size:11px; color:var(--muted); margin-bottom:10px; font-family:monospace; }
 .token-login-group { margin-bottom:8px; }
 .btn-get-token { background:linear-gradient(135deg,var(--accent),var(--accent2)); border:none; color:#fff; padding:9px 18px; border-radius:10px; cursor:pointer; font-size:13px; font-weight:500; width:100%; margin-bottom:8px; transition:opacity 0.2s; }
@@ -4752,6 +4822,22 @@ body.lyrics-mode-karaoke .lyrics-line.active {
   letter-spacing:.01em;
   text-shadow:none;
   animation:none;
+}
+/* Караоке: без transition на строках/буквах — иначе каждый кадр стиль пересчитывается сотнями элементов. */
+body.lyrics-mode-karaoke .lyrics-line {
+  transition: none !important;
+}
+body.lyrics-mode-karaoke .pm-lyrics-content .lyrics-line {
+  transition: none !important;
+}
+body.lyrics-mode-karaoke .lyrics-char,
+body.lyrics-mode-karaoke .pm-lyrics-content .lyrics-char,
+body.lyrics-mode-karaoke #lyrics-content .lyrics-char {
+  transition: none !important;
+}
+body.lyrics-mode-karaoke .lyrics-content,
+body.lyrics-mode-karaoke .pm-lyrics-content {
+  scroll-behavior: auto;
 }
 body.lyrics-mode-focus .lyrics-line.past,
 body.lyrics-mode-focus .lyrics-line.future {
@@ -6591,7 +6677,6 @@ body.visual-yandex .yandex-ai-more {
   overflow-wrap:anywhere;
   word-break:break-word;
   transition:color 260ms ease, transform 260ms ease, opacity 260ms ease, filter 260ms ease;
-  will-change:transform, opacity;
   opacity:0;
   filter:blur(8px);
   transform:translateY(8px);
@@ -6869,12 +6954,12 @@ body.layout-top-nav[data-toast-position="bottom-left"] .toast {
 }
 .source-mode-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
-  width: min(360px, 100%);
+  width: min(520px, 100%);
 }
 .source-mode-grid--compact {
-  width: min(260px, 100%);
+  width: min(420px, 100%);
 }
 .source-mode-card {
   display: grid;

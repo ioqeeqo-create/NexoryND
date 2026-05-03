@@ -8,7 +8,9 @@ contextBridge.exposeInMainWorld('api', {
   openExternal: (url) => ipcRenderer.send('open-external', url),
   getVkToken: (login, password) => ipcRenderer.invoke('vk-get-token', { login, password }),
   vkBrowserAuth: () => ipcRenderer.invoke('vk-browser-auth'),
-  vkSearch: (q, token) => ipcRenderer.invoke('vk-search', { q, token }),
+  vkSearch: (q, token, allowSeleniumBridge) => ipcRenderer.invoke('vk-search', { q, token, allowSeleniumBridge: Boolean(allowSeleniumBridge) }),
+  vkValidateToken: (token) => ipcRenderer.invoke('vk-validate-token', { token }),
+  yandexValidateToken: (token) => ipcRenderer.invoke('yandex-validate-token', { token }),
   yandexSearch: (q, token) => ipcRenderer.invoke('yandex-search', { q, token }),
   serverSearch: (q, settings = {}) => ipcRenderer.invoke('server-search', { q, settings }),
   importPlaylistLink: (url, tokens = {}) => ipcRenderer.invoke('import-playlist-link', { url, tokens }),
@@ -59,4 +61,5 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('flow-window-state', handler)
     return () => ipcRenderer.removeListener('flow-window-state', handler)
   },
+  getFlowWindowState: () => ipcRenderer.invoke('flow-window-get-state'),
 })
