@@ -68,6 +68,7 @@ let _lastSearchMode = 'hybrid'
 let _playRequestSeq = 0
 const _ytPrewarmAt = new Map()
 const _queuePrewarmAt = new Map()
+let _queuePrewarmTimer = null
 const _coverLoadState = new Map()
 
 const defaultPlayback = { shuffle: false, repeat: 'off' } // repeat: off | all | one
@@ -105,6 +106,8 @@ let _libraryActionMode = null
 let _playlistPickerContext = null
 let _playlistPickerSelection = new Set()
 let _listenTickAt = 0
+let _listenStatsPendingSec = 0
+let _listenStatsLastFlushAt = 0
 let _peerProfiles = new Map()
 let _roomMembers = new Map()
 let sharedQueue = []

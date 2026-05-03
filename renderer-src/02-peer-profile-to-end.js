@@ -353,6 +353,16 @@ function saveListenStats(patch = {}) {
   scheduleProfileCloudSync()
 }
 
+function flushListenStatsPending(force = false) {
+  const pending = Number(_listenStatsPendingSec || 0)
+  if (!force && pending < 0.9) return
+  if (pending <= 0) return
+  const st = getListenStats()
+  saveListenStats({ totalSeconds: Number(st.totalSeconds || 0) + pending })
+  _listenStatsPendingSec = 0
+  _listenStatsLastFlushAt = Date.now()
+}
+
 function saveProfileCustom(patch = {}) {
   if (!ensureActiveProfile()?.username) {
     showToast('Сначала войди в профиль', true)
@@ -5203,7 +5213,7 @@ async function playTrackObj(track, opts = {}) {
   alignHomeHeaderToPlay()
   // Р—Р°РіСЂСѓР¶Р°РµРј lyrics РµСЃР»Рё РїР°РЅРµР»СЊ РѕС‚РєСЂС‹С‚Р°
   if (_lyricsOpen) loadLyrics(track)
-  prewarmNextQueueTrack()
+  scheduleNextTrackPrewarm(track)
   renderRoomNowPlaying()
   renderRoomQueue()
   _currentTrackStartedAt = Math.floor(Date.now() / 1000)
@@ -5213,8 +5223,36 @@ async function playTrackObj(track, opts = {}) {
   syncHomeCloneUI()
 }
 
+function scheduleNextTrackPrewarm(referenceTrack = null) {
+  try {
+    if (_queuePrewarmTimer) {
+      clearTimeout(_queuePrewarmTimer)
+      _queuePrewarmTimer = null
+    }
+    const ref = referenceTrack || currentTrack
+    if (!ref) return
+    const refKey = `${String(ref.source || '').toLowerCase()}:${String(ref.id || ref.ytId || ref.url || '')}:${queueIndex}`
+    const src = String(ref.source || '').toLowerCase()
+    const delayMs = src === 'yandex' ? 12000 : 6500
+    _queuePrewarmTimer = setTimeout(() => {
+      _queuePrewarmTimer = null
+      if (!audio || audio.paused || audio.ended) return
+      if ((audio.readyState || 0) < 3) return
+      if (Number(audio.currentTime || 0) < 4) return
+      const remain = Number(audio.duration || 0) - Number(audio.currentTime || 0)
+      if (Number.isFinite(remain) && remain > 0 && remain < 10) return
+      const cur = currentTrack
+      const curKey = `${String(cur?.source || '').toLowerCase()}:${String(cur?.id || cur?.ytId || cur?.url || '')}:${queueIndex}`
+      if (curKey !== refKey) return
+      prewarmNextQueueTrack()
+    }, delayMs)
+  } catch {}
+}
+
 function prewarmNextQueueTrack() {
   try {
+    if (!audio || audio.paused || audio.ended) return
+    if ((audio.readyState || 0) < 3) return
     const idx = queueIndex + 1
     const next = queue[idx]
     if (!next) return
@@ -5449,8 +5487,12 @@ audio.ontimeupdate = () => {
       const delta = Math.max(0, now - _listenTickAt) / 1000
       _listenTickAt = now
       if (delta > 0 && delta < 4) {
-        const st = getListenStats()
-        saveListenStats({ totalSeconds: Number(st.totalSeconds || 0) + delta })
+        _listenStatsPendingSec = Number(_listenStatsPendingSec || 0) + delta
+        const flushDueMs = 2600
+        if (!_listenStatsLastFlushAt) _listenStatsLastFlushAt = now
+        if (_listenStatsPendingSec >= 2.2 || (now - _listenStatsLastFlushAt) >= flushDueMs) {
+          flushListenStatsPending(false)
+        }
       }
     }
   }
@@ -5463,7 +5505,12 @@ audio.ontimeupdate = () => {
   }
   broadcastPlaybackSync(false)
 }
+audio.onpause = () => {
+  flushListenStatsPending(true)
+  _listenTickAt = 0
+}
 audio.onended = () => {
+  flushListenStatsPending(true)
   stopLyricsSyncLoop()
   _listenTickAt = 0
   const playBtn = document.getElementById('play-btn')
@@ -7376,6 +7423,7 @@ window.addEventListener('DOMContentLoaded', () => {
     'beforeunload',
     () => {
       try {
+        flushListenStatsPending(true)
         teardownAudioAnalyzer()
       } catch (_) {}
     },
