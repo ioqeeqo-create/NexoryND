@@ -43,4 +43,9 @@
 
 ---
 
-После публикации на Telegraph подставь финальный URL в константу `FLOW_VK_TELEGRAPH_GUIDE_URL` в `renderer-src/01-through-room-picker.js` (и пересобери `renderer.js`), если хочешь открывать именно telegra.ph, а не локальный HTML.
+**Публичная ссылка на гайд (HTML в репо):**  
+https://github.com/ioqeeqo-create/FlowPleerLoww/blob/master/assets/guides/vk-token-dlya-flow.html  
+
+В коде: `FLOW_VK_GUIDE_GITHUB_BLOB` + опционально `FLOW_VK_TELEGRAPH_GUIDE_URL` после публикации Telegraph.
+
+После публикации на Telegraph подставь полный `https://telegra.ph/...` в `FLOW_VK_TELEGRAPH_GUIDE_URL` в `renderer-src/01-through-room-picker.js` и пересобери `renderer.js` — тогда откроется Telegraph вместо GitHub.

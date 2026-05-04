@@ -11,16 +11,16 @@ const audio = (audioPlayer.createPlayerAudio || ((onErr) => {
     src: audio.currentSrc || audio.src || null
   })
   try {
-    const code = audio.error?.code ? `РєРѕРґ ${audio.error.code}` : 'РєРѕРґ РЅРµРёР·РІРµСЃС‚РµРЅ'
+    const code = audio.error?.code ? `код ${audio.error.code}` : 'код неизвестен'
     const src = audio.currentSrc || audio.src || ''
-    showToast(`РћС€РёР±РєР° Р°СѓРґРёРѕ (${code})`, true)
+    showToast(`Ошибка аудио (${code})`, true)
     if (src) console.warn('AUDIO SRC:', src)
   } catch {}
 })
 
 ;(function playbackPerfBackgroundHook() {
   try {
-    /** РўСЏР¶С‘Р»С‹Р№ blur/С„РѕРЅ РІ С‚РѕРј Р¶Рµ С‚РёРєРµ, С‡С‚Рѕ Рё СЃС‚Р°СЂС‚ РґРµРєРѕРґР°, Р±СЊС‘С‚ РїРѕ UI; РѕС‚РєР»Р°РґС‹РІР°РµРј С‚РѕР»СЊРєРѕ РЅР° play. Р’ СЃС‚Р°СЂРѕР№ СЂРµРїРµ СЌС‚РѕРіРѕ С…СѓРєР° РЅРµ Р±С‹Р»Рѕ вЂ” Р»РёС€РЅРёРµ updateBackground РЅР° pause/emptied СѓР±СЂР°РЅС‹. */
+    /** Тяжёлый blur/фон в том же тике, что и старт декода, бьёт по UI; откладываем только на play. В старой репе этого хука не было — лишние updateBackground на pause/emptied убраны. */
     let deferBgScheduled = false
     const deferHeavyBackdrop = () => {
       if (deferBgScheduled) return
@@ -130,7 +130,7 @@ const FLOW_SOCIAL_DEFAULT_API_BASE = 'http://85.239.34.229/social'
 const FLOW_SOCIAL_DEFAULT_API_SECRET = 'flowflow'
 const FRIEND_NOTIFY_COOLDOWN_MS = 90 * 1000
 const PROFILE_CACHE_TTL_MS = 60 * 1000
-/** Р›РµРЅРёРІС‹Р№ API В«РњРѕСЏ РІРѕР»РЅР°В» (СЂРµР°Р»РёР·Р°С†РёСЏ РІ src/modules/wave-engine.js). */
+/** Ленивый API «Моя волна» (реализация в src/modules/wave-engine.js). */
 let _waveEngineApi = null
 function waveEngine() {
   if (!_waveEngineApi && WE?.createWaveEngine) {
@@ -286,7 +286,7 @@ function showHostOnlyToast() {
   const now = Date.now()
   if (now - _lastHostOnlyToastAt < 1100) return
   _lastHostOnlyToastAt = now
-  showToast('РўРѕР»СЊРєРѕ С…РѕСЃС‚ СѓРїСЂР°РІР»СЏРµС‚ РїР»РµРµСЂРѕРј', true)
+  showToast('Только хост управляет плеером', true)
 }
 
 function updateHostLockUi() {
@@ -324,9 +324,9 @@ function updateRoomUi() {
   const roleBadgeEl = document.getElementById('room-role-badge')
   if (countEl) {
     if (_roomState?.roomId && _socialPeer) {
-      countEl.textContent = `РЈС‡Р°СЃС‚РЅРёРєРё: ${_socialPeer.peersCount()}/3`
+      countEl.textContent = `Участники: ${_socialPeer.peersCount()}/3`
     } else {
-      countEl.textContent = 'РЈС‡Р°СЃС‚РЅРёРєРё: вЂ”/3'
+      countEl.textContent = 'Участники: —/3'
     }
   }
   if (roleBadgeEl) {
@@ -354,7 +354,7 @@ function syncSocialWidgetState() {
   const active = Boolean(_roomState?.roomId)
   widget.classList.toggle('is-active', active)
   widget.classList.toggle('is-empty', !active)
-  widget.setAttribute('aria-label', active ? 'РџР°РЅРµР»СЊ РєРѕРјРЅР°С‚С‹' : 'РЎРѕР·РґР°С‚СЊ РєРѕРјРЅР°С‚Сѓ')
+  widget.setAttribute('aria-label', active ? 'Панель комнаты' : 'Создать комнату')
 }
 
 function handleSocialWidgetClick(event) {
@@ -441,7 +441,7 @@ const PM_PLAY_INNER = '<path fill="currentColor" d="M9 8 L17 12 L9 16 Z"/>'
 const PM_PAUSE_INNER = '<rect fill="currentColor" x="7.25" y="5.75" width="4" height="12.5" rx="1.15"/><rect fill="currentColor" x="12.75" y="5.75" width="4" height="12.5" rx="1.15"/>'
 const ICON_SIMILAR = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M14.83 14.83a4 4 0 0 1-6.63 1.1 4 4 0 0 1 1.53-6.73 4 4 0 0 1 5 .37l5.74 5.32"/><path d="M9.17 9.17a4 4 0 0 0 6.63-1.1 4 4 0 0 0-1.53 6.73 4 4 0 0 0-5-.37l-5.74-5.32"/></svg>'
 
-// РІвЂќР‚РІвЂќР‚РІвЂќР‚ VISUAL SETTINGS РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
+// в”Ђв”Ђв”Ђ VISUAL SETTINGS в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 const defaultVisual = {
   bgType: 'gradient',      // 'gradient' | 'cover' | 'custom'
   blur: 18, bright: 20, glass: 8, panelBlur: 24,
@@ -466,7 +466,7 @@ const defaultVisual = {
   lyrics: { scrollMode: 'smooth', align: 'left', size: 16, blur: 4 }
 }
 
-/** РљСЌС€ parse localStorage вЂ” getVisual() РІС‹Р·С‹РІР°РµС‚СЃСЏ РѕС‡РµРЅСЊ С‡Р°СЃС‚Рѕ (РІ С‚.С‡. РєР°Р¶РґС‹Р№ РєР°РґСЂ РґРѕРјР°С€РЅРµРіРѕ РІРёР·СѓР°Р»РёР·Р°С‚РѕСЂР°). */
+/** Кэш parse localStorage — getVisual() вызывается очень часто (в т.ч. каждый кадр домашнего визуализатора). */
 let _flowVisualMemo = null
 
 function getVisual() {
@@ -518,7 +518,7 @@ function setToastPosition(position) {
   const safe = getToastPosition(position)
   saveVisual({ toastPosition: safe })
   applyToastPosition(safe)
-  showToast(safe === 'default' ? 'РЈРІРµРґРѕРјР»РµРЅРёСЏ: РєР°Рє СЃРµР№С‡Р°СЃ' : 'РџРѕР·РёС†РёСЏ СѓРІРµРґРѕРјР»РµРЅРёР№ СЃРѕС…СЂР°РЅРµРЅР°')
+  showToast(safe === 'default' ? 'Уведомления: как сейчас' : 'Позиция уведомлений сохранена')
 }
 
 function toggleSettingsFold(id) {
@@ -541,8 +541,8 @@ function syncFontControls() {
   if (toggle) toggle.classList.toggle('active', Boolean(v.customFontApplyTitle))
   const status = document.getElementById('custom-font-status')
   if (status) {
-    if (mode === 'custom' && v.customFontName) status.textContent = `РЎРІРѕР№ С€СЂРёС„С‚: ${v.customFontName}`
-    else status.textContent = 'РСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ СЃРёСЃС‚РµРјРЅС‹Р№ С€СЂРёС„С‚'
+    if (mode === 'custom' && v.customFontName) status.textContent = `Свой шрифт: ${v.customFontName}`
+    else status.textContent = 'Используется системный шрифт'
   }
 }
 
@@ -576,16 +576,16 @@ function applyFontSettings(silent = true) {
       _customFontLoadedKey = v.customFontData
       applyVars()
       syncFontControls()
-      if (!silent) showToast('РЎРІРѕР№ С€СЂРёС„С‚ РїСЂРёРјРµРЅС‘РЅ')
+      if (!silent) showToast('Свой шрифт применён')
     }).catch(() => {
       setDefault()
       syncFontControls()
-      if (!silent) showToast('РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ С€СЂРёС„С‚, РѕСЃС‚Р°РІР»РµРЅ СЃС‚Р°РЅРґР°СЂС‚РЅС‹Р№', true)
+      if (!silent) showToast('Не удалось загрузить шрифт, оставлен стандартный', true)
     })
   } catch {
     setDefault()
     syncFontControls()
-    if (!silent) showToast('РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ С€СЂРёС„С‚, РѕСЃС‚Р°РІР»РµРЅ СЃС‚Р°РЅРґР°СЂС‚РЅС‹Р№', true)
+    if (!silent) showToast('Не удалось загрузить шрифт, оставлен стандартный', true)
   }
 }
 
@@ -600,7 +600,7 @@ function setCustomFont(input) {
   if (!file) return
   const okExt = /\.(ttf|otf|woff2?|TTF|OTF|WOFF2?)$/.test(file.name || '')
   if (!okExt) {
-    showToast('РџРѕРґРґРµСЂР¶РёРІР°СЋС‚СЃСЏ .ttf / .otf / .woff / .woff2', true)
+    showToast('Поддерживаются .ttf / .otf / .woff / .woff2', true)
     input.value = ''
     return
   }
@@ -635,7 +635,7 @@ function normalizeVisualThemeMode(mode) {
   return 'minimal'
 }
 
-/** РЎРІРѕР±РѕРґРЅР°СЏ РіРµРѕРјРµС‚СЂРёСЏ Р±Р»РѕРєРѕРІ РіР»Р°РІРЅРѕР№ Рё РєРѕРЅСЃС‚СЂСѓРєС‚РѕСЂ вЂ” С‚РѕР»СЊРєРѕ РІ С‚РµРјРµ UI В«РњРёРЅРёРјР°Р»В» (floated). */
+/** Свободная геометрия блоков главной и конструктор — только в теме UI «Минимал» (floated). */
 function isVisualFloatedLayout() {
   return normalizeVisualThemeMode(getVisual().visualMode) === 'floated'
 }
@@ -657,7 +657,7 @@ function syncHomeLayoutConstructorUi() {
   if (wrap) wrap.style.display = isVisualFloatedLayout() ? '' : 'none'
 }
 
-/** РџРѕСЃР»Рµ СЃРјРµРЅС‹ С‚РµРјС‹ UI: СЃС‚Р°С‚РёС‡РЅР°СЏ РіР»Р°РІРЅР°СЏ РІ РјРёРЅРёРјР°Р»РёР·РјРµ РёР»Рё РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёРµ РјР°РєРµС‚Р° РІ РјРёРЅРёРјР°Р»Рµ. */
+/** После смены темы UI: статичная главная в минимализме или восстановление макета в минимале. */
 function syncDashboardLayoutToVisualMode() {
   syncHomeLayoutConstructorUi()
   if (!isVisualFloatedLayout()) {
@@ -696,7 +696,7 @@ function syncDashboardLayoutToVisualMode() {
   refreshHomeDashboardLayoutAfterContentChange()
 }
 
-/** РўРёС…РёР№ СЃР±СЂРѕСЃ РіР»Р°РІРЅРѕР№ РїРѕСЃР»Рµ В«РњРёРЅРёРјР°Р»РёР·РјВ» в†’ В«РњРёРЅРёРјР°Р»В», Р±РµР· С‚РѕСЃС‚Р° (СѓР±РёСЂР°РµС‚ В«РєР°С€СѓВ» РёР· СЃС‚Р°СЂС‹С… РєРѕРѕСЂРґРёРЅР°С‚). */
+/** Тихий сброс главной после «Минимализм» → «Минимал», без тоста (убирает «кашу» из старых координат). */
 function quietResetHomeDashboardAfterMinimalismSwitch() {
   try {
     localStorage.removeItem(FLOW_HOME_BLOCK_GEOMETRY_LS)
@@ -756,7 +756,7 @@ function setVisualMode(mode) {
       window.flowFloatedMainPaneDrag?.refreshFromStorage?.()
     } catch (_) {}
   })
-  showToast(safe === 'yandex' ? 'Р РµР¶РёРј: РЇРЅРґРµРєСЃ' : (safe === 'floated' ? 'Р РµР¶РёРј: РјРёРЅРёРјР°Р»' : 'Р РµР¶РёРј: РјРёРЅРёРјР°Р»РёР·Рј'))
+  showToast(safe === 'yandex' ? 'Режим: Яндекс' : (safe === 'floated' ? 'Режим: минимал' : 'Режим: минимализм'))
 }
 
 async function toggleWindowMaximize() {
@@ -774,8 +774,8 @@ function syncTitlebarMaximizeIcon(isMaximized) {
   if (expand) expand.style.display = isMaximized ? 'none' : 'block'
   if (restore) restore.style.display = isMaximized ? 'block' : 'none'
   if (wrap) {
-    wrap.setAttribute('title', isMaximized ? 'Р’РѕСЃСЃС‚Р°РЅРѕРІРёС‚СЊ' : 'Р Р°Р·РІРµСЂРЅСѓС‚СЊ')
-    wrap.setAttribute('aria-label', isMaximized ? 'Р’РѕСЃСЃС‚Р°РЅРѕРІРёС‚СЊ РѕРєРЅРѕ' : 'Р Р°Р·РІРµСЂРЅСѓС‚СЊ РѕРєРЅРѕ')
+    wrap.setAttribute('title', isMaximized ? 'Восстановить' : 'Развернуть')
+    wrap.setAttribute('aria-label', isMaximized ? 'Восстановить окно' : 'Развернуть окно')
   }
 }
 
@@ -793,7 +793,7 @@ function setCardDensity(density) {
   const safe = density === 'compact' ? 'compact' : 'comfort'
   saveVisual({ cardDensity: safe })
   applyCardDensity(safe)
-  showToast(safe === 'compact' ? 'РџР»РѕС‚РЅРѕСЃС‚СЊ: РєРѕРјРїР°РєС‚РЅРѕ' : 'РџР»РѕС‚РЅРѕСЃС‚СЊ: РєРѕРјС„РѕСЂС‚РЅРѕ')
+  showToast(safe === 'compact' ? 'Плотность: компактно' : 'Плотность: комфортно')
 }
 
 function savePlaybackMode() {
@@ -1174,7 +1174,7 @@ function applyCoverArt(el, coverUrl, fallbackBg) {
   })
 }
 
-/** РўРѕ Р¶Рµ С‡РёСЃР»Рѕ, С‡С‚Рѕ `--ui-scale` Рё СЃР»Р°Р№РґРµСЂ В«РњР°СЃС€С‚Р°Р± UIВ»; РЅР° СЃС‚РµРєРµ РєРѕРЅСЃС‚СЂСѓРєС‚РѕСЂР° Р·Р°РґР°С‘С‚ `--home-construct-zoom` (Р±РµР· transform). */
+/** То же число, что `--ui-scale` и слайдер «Масштаб UI»; на стеке конструктора задаёт `--home-construct-zoom` (без transform). */
 function syncHomeConstructStackScalePct(pctRaw) {
   const pct = Number(pctRaw)
   const clamped = Number.isFinite(pct) ? Math.max(80, Math.min(130, pct)) : 100
@@ -1195,7 +1195,7 @@ function pulseHomeVisualLayoutSync() {
   })
 }
 
-/** РџСЂРё РІРѕСЃРїСЂРѕРёР·РІРµРґРµРЅРёРё СЃРёР»СЊРЅРµРµ СѓРјРµРЅСЊС€Р°РµРј blur С„РѕРЅР° вЂ” РјРµРЅСЊС€Рµ РЅР°РіСЂСѓР·РєР° РЅР° GPU. */
+/** При воспроизведении сильнее уменьшаем blur фона — меньше нагрузка на GPU. */
 function effectiveBackdropBlurPx(baseBlurPx) {
   const b = Number(baseBlurPx)
   if (!Number.isFinite(b) || b < 0) return 18
@@ -1305,9 +1305,9 @@ async function loadCustomBg(input) {
     saveVisual({ customBg: mediaUrl })
     refreshCustomBgPreview(file.name)
     updateBackground()
-    showToast('Р¤РѕРЅ СѓСЃС‚Р°РЅРѕРІР»РµРЅ')
+    showToast('Фон установлен')
   } catch (err) {
-    showToast(`РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ С„РѕРЅ: ${sanitizeDisplayText(err?.message || err)}`, true)
+    showToast(`Не удалось сохранить фон: ${sanitizeDisplayText(err?.message || err)}`, true)
   } finally {
     input.value = ''
   }
@@ -1324,7 +1324,7 @@ function clearCustomBg() {
   saveVisual({ customBg: null })
   refreshCustomBgPreview()
   updateBackground()
-  showToast('Р¤РѕРЅ СѓР±СЂР°РЅ')
+  showToast('Фон убран')
 }
 
 function setMediaPreviewBox(prefix, mediaUrl, text, keepVisible = false) {
@@ -1335,13 +1335,13 @@ function setMediaPreviewBox(prefix, mediaUrl, text, keepVisible = false) {
   const hasMedia = Boolean(mediaUrl)
   box.classList.toggle('hidden', !hasMedia && !keepVisible)
   thumb.style.backgroundImage = hasMedia ? `url(${mediaUrl})` : ''
-  sub.textContent = text || (hasMedia ? 'Р’С‹Р±СЂР°РЅ С„Р°Р№Р»' : 'РќРёС‡РµРіРѕ РЅРµ РІС‹Р±СЂР°РЅРѕ')
+  sub.textContent = text || (hasMedia ? 'Выбран файл' : 'Ничего не выбрано')
 }
 
 function refreshCustomBgPreview(fileName = '') {
   const v = getVisual()
   const media = v.customBg || ''
-  const label = fileName || (media ? 'РўРµРєСѓС‰РёР№ РїРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРёР№ С„РѕРЅ' : 'РќРёС‡РµРіРѕ РЅРµ РІС‹Р±СЂР°РЅРѕ')
+  const label = fileName || (media ? 'Текущий пользовательский фон' : 'Ничего не выбрано')
   setMediaPreviewBox('custom-bg', media, label)
 }
 
@@ -1390,9 +1390,9 @@ async function setHomeWidgetImage(input) {
     homeWidget.mode = 'image'
     saveVisual({ homeWidget })
     syncHomeWidgetUI()
-    showToast('Р’РёРґР¶РµС‚ СЃРѕС…СЂР°РЅС‘РЅ')
+    showToast('Виджет сохранён')
   } catch (err) {
-    showToast(`РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РІРёРґР¶РµС‚: ${sanitizeDisplayText(err?.message || err)}`, true)
+    showToast(`Не удалось сохранить виджет: ${sanitizeDisplayText(err?.message || err)}`, true)
   } finally {
     input.value = ''
   }
@@ -1452,7 +1452,7 @@ function setAccent(a1, a2) {
   document.documentElement.style.setProperty('--accent', a1)
   document.documentElement.style.setProperty('--accent2', a2)
   syncAccentSwatchSelection(a1, a2)
-  // update gorb colors (flat wash вЂ” Р±РµР· СЂР°РґРёР°Р»СЊРЅРѕРіРѕ РіСЂР°РґРёРµРЅС‚Р°)
+  // update gorb colors (flat wash — без радиального градиента)
   document.getElementById('gorb1').style.background = `color-mix(in srgb, ${a1} 24%, transparent)`
   document.getElementById('gorb2').style.background = `color-mix(in srgb, ${a2} 24%, transparent)`
   const o1 = document.getElementById('orb1-color')
@@ -1664,7 +1664,7 @@ function initVisualSettings() {
 }
 
 function reorderVisualSettingsSections() {
-  /* РџР»РµРµСЂ РІС‹РЅРµСЃРµРЅ РІ РѕС‚РґРµР»СЊРЅСѓСЋ РєР°С‚РµРіРѕСЂРёСЋ РЅР°СЃС‚СЂРѕРµРє; РїРѕСЂСЏРґРѕРє СЃРµРєС†РёР№ Р·Р°РґР°С‘С‚СЃСЏ РІ HTML. */
+  /* Плеер вынесен в отдельную категорию настроек; порядок секций задаётся в HTML. */
 }
 
 function toggleNavActiveHighlight() {
@@ -1700,7 +1700,7 @@ function setSidebarPosition(position) {
   const safe = position === 'top' ? 'top' : 'left'
   saveVisual({ sidebarPosition: safe })
   applySidebarPosition(safe)
-  showToast(safe === 'top' ? 'РњРµРЅСЋ РїРµСЂРµРјРµС‰РµРЅРѕ РЅР°РІРµСЂС…' : 'РњРµРЅСЋ РІРѕР·РІСЂР°С‰РµРЅРѕ РІР»РµРІРѕ')
+  showToast(safe === 'top' ? 'Меню перемещено наверх' : 'Меню возвращено влево')
 }
 
 function getSafeToastPosition(position) {
@@ -1720,10 +1720,10 @@ function setToastPosition(position) {
   const safe = getSafeToastPosition(position)
   saveVisual({ toastPosition: safe })
   applyToastPosition(safe)
-  showToast('РџРѕР·РёС†РёСЏ СѓРІРµРґРѕРјР»РµРЅРёР№ СЃРѕС…СЂР°РЅРµРЅР°')
+  showToast('Позиция уведомлений сохранена')
 }
 
-/** true = СЃРµРєС†РёСЏ СЃРІС‘СЂРЅСѓС‚Р° (РєР°Рє РІ Р±Р»РѕРєР°С… Р°РєРєР°СѓРЅС‚РѕРІ). Р’СЃРµРіРґР° С…СЂР°РЅРёРј РїРѕР»РЅС‹Р№ РѕР±СЉРµРєС‚ РєР»СЋС‡РµР№. */
+/** true = секция свёрнута (как в блоках аккаунтов). Всегда храним полный объект ключей. */
 const SETTINGS_SECTION_COLLAPSED_DEFAULTS = {
   interface: true,
   background: true,
@@ -1767,7 +1767,7 @@ function getMergedSettingsSectionsState() {
   return out
 }
 
-/** Р”РѕРїРёСЃС‹РІР°РµС‚ РІ localStorage РІСЃРµ РєР»СЋС‡Рё (СѓР±РёСЂР°РµС‚ Р±Р°Рі В«РєР»РёРєРЅСѓР» РѕРґРЅСѓ вЂ” РѕСЃС‚Р°Р»СЊРЅС‹Рµ СЃС…Р»РѕРїРЅСѓР»РёСЃСЊВ»). */
+/** Дописывает в localStorage все ключи (убирает баг «кликнул одну — остальные схлопнулись»). */
 function normalizeSettingsSectionsPersistence() {
   saveSettingsSectionsState(getMergedSettingsSectionsState())
 }
@@ -1815,14 +1815,14 @@ function switchSettingsCategory(cat) {
   applyUiTextOverrides()
 }
 
-/** РЎРѕРІРјРµСЃС‚РёРјРѕСЃС‚СЊ СЃРѕ СЃС‚Р°СЂС‹РјРё РІС‹Р·РѕРІР°РјРё switchSettingsTab('visual'|'sources'|'integrations'). */
+/** Совместимость со старыми вызовами switchSettingsTab('visual'|'sources'|'integrations'). */
 function switchSettingsTab(tab) {
   const mapped = SETTINGS_TAB_TO_CATEGORY[tab] || tab
   switchSettingsCategory(mapped)
 }
 window.switchSettingsCategory = switchSettingsCategory
 
-// РІвЂќР‚РІвЂќР‚РІвЂќР‚ FULLSCREEN PLAYER MODE РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
+// в”Ђв”Ђв”Ђ FULLSCREEN PLAYER MODE в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 function enterPlayerMode() {
   _playerModeActive = true
   const pm = document.getElementById('player-mode')
@@ -1859,7 +1859,7 @@ function refreshLyricsPanelsVisibility() {
     if (sidePanel) sidePanel.classList.toggle('hidden', !_lyricsOpen)
     pmRoot?.classList.remove('lyrics-mode')
   }
-  // РџРѕСЃР»Рµ СЃРјРµРЅС‹ РІРёРґРёРјРѕР№ РїР°РЅРµР»Рё РїРѕРґС‚СЏРЅСѓС‚СЊ СЃРѕСЃС‚РѕСЏРЅРёРµ СЃС‚СЂРѕРє РІ РЅРѕРІРѕРј РґРµСЂРµРІРµ (СЂР°РЅСЊС€Рµ РѕР±РЅРѕРІР»СЏР»РѕСЃСЊ С‚РѕР»СЊРєРѕ СЃРєСЂС‹С‚РѕРµ).
+  // После смены видимой панели подтянуть состояние строк в новом дереве (раньше обновлялось только скрытое).
   try {
     if (_lyricsOpen && _lyricsData?.length && typeof syncLyrics === 'function' && typeof getLyricsSmoothedTime === 'function') {
       queueMicrotask(() => syncLyrics(getLyricsSmoothedTime()))
@@ -1883,8 +1883,8 @@ function syncPlayerModeUI() {
   const orb2 = v.orb2Color || v.accent2 || '#9ca3af'
 
   if (t) {
-    pmTitle.textContent  = t.title || 'Р СњР ВµР С‘Р В·Р Р†Р ВµРЎРѓРЎвЂљР Р…Р С•'
-    pmArtist.textContent = t.artist || 'РІР‚вЂќ'
+    pmTitle.textContent  = t.title || 'РќРµРёР·РІРµСЃС‚РЅРѕ'
+    pmArtist.textContent = t.artist || 'вЂ”'
     const effectiveCover = getEffectiveCoverUrl(t)
     if (effectiveCover) {
       applyCoverArt(pmCover, effectiveCover, t.bg || 'linear-gradient(135deg,#7c3aed,#a855f7)')
@@ -1920,7 +1920,7 @@ function syncPlayerModeUI() {
   if (pmCoverLyrics) pmCoverLyrics.classList.toggle('active', _lyricsOpen)
 }
 
-// РІвЂќР‚РІвЂќР‚РІвЂќР‚ TIME FORMATTING РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
+// в”Ђв”Ђв”Ђ TIME FORMATTING в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 function fmtTime(sec) {
   if (!sec || isNaN(sec)) return '0:00'
   const m = Math.floor(sec / 60)
@@ -1939,21 +1939,21 @@ function withTimeout(promise, ms, label = 'timeout') {
 
 function looksLikeMojibake(value) {
   if (!value || typeof value !== 'string') return false
-  return /(?:[ГѓГ‚ГђГ‘Р РЎ]{2,}|Р [Рђ-СЏРЃС‘A-Za-z0-9]|РЎ[Рђ-СЏРЃС‘A-Za-z0-9]|Гђ.|Г‘.|Гѓ.|Г‚.|СЂСџ|РІР‚|СЃР“|Р“[Рђ-СЏРЃС‘A-Za-z0-9]|пїЅ)/.test(value)
+  return /(?:[ÃÂÐÑРС]{2,}|Р[А-яЁёA-Za-z0-9]|С[А-яЁёA-Za-z0-9]|Ð.|Ñ.|Ã.|Â.|рџ|вЂ|сГ|Г[А-яЁёA-Za-z0-9]|�)/.test(value)
 }
 
 function mojibakeScore(value) {
   if (!value) return 0
   let score = 0
-  score += (value.match(/Р [Рђ-СЏРЃС‘A-Za-z0-9]/g) || []).length
-  score += (value.match(/РЎ[Рђ-СЏРЃС‘A-Za-z0-9]/g) || []).length
-  score += (value.match(/Гђ.|Г‘.|СЂСџ|РІР‚/g) || []).length
-  score += (value.match(/пїЅ/g) || []).length * 3
+  score += (value.match(/Р[А-яЁёA-Za-z0-9]/g) || []).length
+  score += (value.match(/С[А-яЁёA-Za-z0-9]/g) || []).length
+  score += (value.match(/Ð.|Ñ.|рџ|вЂ/g) || []).length
+  score += (value.match(/�/g) || []).length * 3
   return score
 }
 
 function cyrillicScore(value) {
-  return (value?.match(/[Рђ-РЇР°-СЏРЃС‘]/g) || []).length
+  return (value?.match(/[А-Яа-яЁё]/g) || []).length
 }
 
 const CP1251_TO_BYTE = (() => {
@@ -2018,34 +2018,34 @@ function decodeMojibakeCandidate(value) {
 }
 
 const COMMON_MOJIBAKE_FIXES = [
-  ['РІВ¬РЋ', 'в¬ў'],
-  ['РІР‚вЂќ', 'вЂ”'],
-  ['РІв„ўР„', 'в™Є'],
-  ['РІв„ўРЋ', 'в™Ў'],
-  ['РІв„ўТђ', 'в™Ґ'],
-  ['РІСљвЂў', 'вњ•'],
-  ['РІСљвЂ¦', 'вњ…'],
-  ['РІС™РЋ', 'вљЎ'],
-  ['РІС™в„ўРїС‘РЏ', 'вљ™пёЏ'],
-  ['РІвЂ В©', 'в†©'],
-  ['РІвЂ вЂ™', 'в†’'],
-  ['РІвЂ“В¶', 'в–¶'],
-  ['РІРЏС‘', 'вЏё'],
-  ['РІРЏВ®', 'вЏ®'],
-  ['РІРЏВ­', 'вЏ­'],
-  ['РІвЂўРЊ', 'в•Њ'],
-  ['РІвЂєВ¶', 'в›¶'],
-  ['СЂСџвЂвЂ№', 'рџ‘‹'],
-  ['СЂСџР‹Вµ', 'рџЋµ'],
-  ['СЂСџР‹В§', 'рџЋ§'],
-  ['СЂСџвЂ“С', 'рџ–ј'],
-  ['СЂСџвЂ™В§', 'рџ’§'],
-  ['СЂСџР‹РЃ', 'рџЋЁ'],
-  ['СЂСџвЂќвЂћ', 'рџ”„'],
-  ['СЂСџвЂќВ¶', 'рџ”¶'],
-  ['СЂСџвЂќВµ', 'рџ”µ'],
-  ['СЂСџвЂњРѓ', 'рџ“Ѓ'],
-  ['СЂСџвЂќРЊ', 'рџ”Ќ'],
+  ['в¬Ў', '⬢'],
+  ['вЂ”', '—'],
+  ['в™Є', '♪'],
+  ['в™Ў', '♡'],
+  ['в™Ґ', '♥'],
+  ['вњ•', '✕'],
+  ['вњ…', '✅'],
+  ['вљЎ', '⚡'],
+  ['вљ™пёЏ', '⚙️'],
+  ['в†©', '↩'],
+  ['в†’', '→'],
+  ['в–¶', '▶'],
+  ['вЏё', '⏸'],
+  ['вЏ®', '⏮'],
+  ['вЏ­', '⏭'],
+  ['в•Ќ', '╌'],
+  ['в›¶', '⛶'],
+  ['рџ‘‹', '👋'],
+  ['рџЋµ', '🎵'],
+  ['рџЋ§', '🎧'],
+  ['рџ–ј', '🖼'],
+  ['рџ’§', '💧'],
+  ['рџЋЁ', '🎨'],
+  ['рџ”„', '🔄'],
+  ['рџ”¶', '🔶'],
+  ['рџ”µ', '🔵'],
+  ['рџ“Ѓ', '📁'],
+  ['рџ”Ќ', '🔍'],
 ]
 
 function applyCommonMojibakeFixes(value) {
@@ -2071,12 +2071,12 @@ function sanitizeDisplayText(value) {
 function sanitizeTrack(track) {
   if (!track || typeof track !== 'object') return track
   const cleanTitle = smartCleaning.smartCleanTrackTitle
-    ? smartCleaning.smartCleanTrackTitle(track.title || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ')
-    : (track.title || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ')
+    ? smartCleaning.smartCleanTrackTitle(track.title || 'Без названия')
+    : (track.title || 'Без названия')
   return {
     ...track,
-    title: sanitizeDisplayText(cleanTitle) || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ',
-    artist: sanitizeDisplayText(track.artist || 'вЂ”') || 'вЂ”'
+    title: sanitizeDisplayText(cleanTitle) || 'Без названия',
+    artist: sanitizeDisplayText(track.artist || '—') || '—'
   }
 }
 
@@ -2154,7 +2154,7 @@ function enableMojibakeAutoFix() {
 
 
 
-// РІвЂќР‚РІвЂќР‚РІвЂќР‚ SEARCH CACHE РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
+// в”Ђв”Ђв”Ђ SEARCH CACHE в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 const searchCache = new Map()
 const SEARCH_CACHE_TTL_MS = 2 * 60 * 1000
 function cacheGet(key) {
@@ -2185,19 +2185,19 @@ function getSearchCacheKey(query, settings = getSettings()) {
   return `${src}:${q}:${tokenSig}`
 }
 
-// РІвЂќР‚РІвЂќР‚РІвЂќР‚ PROVIDERS РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
+// в”Ђв”Ђв”Ђ PROVIDERS в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 const providers = {
   youtube:    (q)    => searchYouTube(q),
   spotify:    (q, s) => searchSpotify(q, s.spotifyToken),
   audius:     (q)    => searchAudius(q),
 }
 
-/** РђРєС‚РёРІРЅС‹Р№ РёСЃС‚РѕС‡РЅРёРє РІ РЅР°СЃС‚СЂРѕР№РєР°С…: РіРёР±СЂРёРґ РѕС‚РґРµР»СЊРЅРѕ РѕС‚ РѕРґРёРЅРѕС‡РЅС‹С… РїСЂРѕРІР°Р№РґРµСЂРѕРІ РІ `providers`. */
+/** Активный источник в настройках: гибрид отдельно от одиночных провайдеров в `providers`. */
 const ALLOWED_ACTIVE_SOURCES = new Set(['hybrid', 'spotify', 'soundcloud', 'audius', 'hitmo', 'yandex', 'vk'])
 
 function normalizeStoredActiveSource(rawSrc) {
   const raw = String(rawSrc || 'hybrid').toLowerCase()
-  // РћСЃРЅРѕРІРЅРѕР№ СЂР°Р±РѕС‡РёР№ РїРѕРёСЃРє вЂ” СЃРµСЂРІРµСЂРЅС‹Р№ Spotify в†’ SoundCloud в†’ Audius; YouTube РєР°Рє activeSource РЅРµ РёСЃРїРѕР»СЊР·СѓРµРј.
+  // Основной рабочий поиск — серверный Spotify → SoundCloud → Audius; YouTube как activeSource не используем.
   if (raw === 'yt' || raw === 'youtube') return 'hybrid'
   if (raw === 'ya' || raw === 'ym') return 'yandex'
   if (raw === 'sc') return 'soundcloud'
@@ -2207,7 +2207,7 @@ function normalizeStoredActiveSource(rawSrc) {
   return 'hybrid'
 }
 
-// РІвЂќР‚РІвЂќР‚РІвЂќР‚ SETTINGS РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
+// в”Ђв”Ђв”Ђ SETTINGS в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 function normalizeFlowServerUrl(value = '') {
   let raw = String(value || '').trim()
   if (!raw) raw = FLOW_SERVER_DEFAULT_URL
@@ -2254,7 +2254,7 @@ function shouldUseProxyStream() {
   return mode !== 'off' && mode !== FLOW_SERVER_DEFAULT_URL.toLowerCase()
 }
 
-/** VK/РЇРЅРґРµРєСЃ С‡Р°СЃС‚Рѕ РѕС‚РІРµС‡Р°СЋС‚ 403 Р±РµР· Referer РєР°Рє РІ Р±СЂР°СѓР·РµСЂРµ вЂ” Р»РѕРєР°Р»СЊРЅС‹Р№ РїСЂРѕРєСЃРё РІ main РЅСѓР¶РµРЅ РґР°Р¶Рµ РїСЂРё РґРµС„РѕР»С‚РЅРѕРј flow server. */
+/** VK/Яндекс часто отвечают 403 без Referer как в браузере — локальный прокси в main нужен даже при дефолтном flow server. */
 function shouldForceStreamProxyForUrl(url, source) {
   const src = String(source || '').toLowerCase()
   if (src === 'vk' || src === 'yandex') return true
@@ -2293,9 +2293,9 @@ function saveSettingsRaw(patch) {
   } catch (_) {}
 }
 
-/** РЎРѕСЃС‚РѕСЏРЅРёРµ РѕРєРЅР° РёР· Electron (СЃРІС‘СЂРЅСѓС‚Рѕ Рё С‚.Рґ.) вЂ” РґР»СЏ РѕРїС‚РёРјРёР·Р°С†РёР№ РїР°РЅРµР»Рё Рё С„РѕРЅР°. */
+/** Состояние окна из Electron (свёрнуто и т.д.) — для оптимизаций панели и фона. */
 let _flowElectronMinimized = false
-/** РќР° Windows Chromium С‡Р°СЃС‚Рѕ РЅРµ РґР°С‘С‚ visibility:hidden РїСЂРё Alt+Tab вЂ” РѕСЂРёРµРЅС‚РёСЂСѓРµРјСЃСЏ РµС‰С‘ Рё РЅР° blur РѕРєРЅР°. */
+/** На Windows Chromium часто не даёт visibility:hidden при Alt+Tab — ориентируемся ещё и на blur окна. */
 let _flowElectronFocused = true
 let _flowOptimizationChannelBound = false
 
@@ -2457,7 +2457,7 @@ function setupCompactSearchListeners() {
   })
 }
 
-/** РљРѕРјРїР°РєС‚РЅС‹Р№ / Zen UI: СѓР·РєРёР№ СЃРєРµР»РµС‚, РёРєРѕРЅРєРё РІ РјРµРЅСЋ, РјРёРЅРё-РїРѕРёСЃРє. */
+/** Компактный / Zen UI: узкий скелет, иконки в меню, мини-поиск. */
 function applyCompactUi(enabled) {
   const on = typeof enabled === 'boolean' ? enabled : Boolean(getSettings().compactUi)
   document.body.classList.toggle('flow-compact-ui', on)
@@ -2481,7 +2481,7 @@ function toggleCompactUi() {
   const next = !getSettings().compactUi
   saveSettingsRaw({ compactUi: next })
   applyCompactUi(next)
-  showToast(next ? 'РљРѕРјРїР°РєС‚РЅС‹Р№ СЂРµР¶РёРј РІРєР»СЋС‡С‘РЅ' : 'РљРѕРјРїР°РєС‚РЅС‹Р№ СЂРµР¶РёРј РІС‹РєР»СЋС‡РµРЅ')
+  showToast(next ? 'Компактный режим включён' : 'Компактный режим выключен')
 }
 
 function openUrl(url) {
@@ -2492,6 +2492,38 @@ function openUrl(url) {
 const YANDEX_MUSIC_TOKEN_GUIDE_URL = 'https://yandex-music.readthedocs.io/en/main/token.html'
 const YANDEX_MUSIC_OAUTH_URL = 'https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41195d'
 const VKHOST_TOKEN_PAGE = 'https://vkhost.github.io/'
+const FLOW_YANDEX_TELEGRAPH_GUIDE_URL = 'https://telegra.ph/Kak-podklyuchit-YAndeks-Muzyku-vo-Flow-05-03'
+/** Необязательно: Telegraph-статья по VK — полный https://telegra.ph/... (приоритет над GitHub). */
+const FLOW_VK_TELEGRAPH_GUIDE_URL = ''
+const FLOW_VK_GUIDE_GITHUB_BLOB =
+  'https://github.com/ioqeeqo-create/FlowPleerLoww/blob/master/assets/guides/vk-token-dlya-flow.html'
+
+function openFlowYandexTelegraphGuide() {
+  openUrl(FLOW_YANDEX_TELEGRAPH_GUIDE_URL)
+}
+window.openFlowYandexTelegraphGuide = openFlowYandexTelegraphGuide
+
+function openFlowVkTelegraphGuide() {
+  const tele = String(FLOW_VK_TELEGRAPH_GUIDE_URL || '').trim()
+  if (tele && /^https?:\/\//i.test(tele)) {
+    openUrl(tele)
+    return
+  }
+  if (String(FLOW_VK_GUIDE_GITHUB_BLOB || '').trim()) {
+    openUrl(FLOW_VK_GUIDE_GITHUB_BLOB.trim())
+    return
+  }
+  try {
+    const href = String(window.location?.href || '')
+    if (href) {
+      const u = new URL('assets/guides/vk-token-dlya-flow.html', href)
+      openUrl(u.href)
+      return
+    }
+  } catch (_) {}
+  openUrl(VKHOST_TOKEN_PAGE)
+}
+window.openFlowVkTelegraphGuide = openFlowVkTelegraphGuide
 
 function toggleToken(id) {
   const inp = document.getElementById(id)
@@ -2508,10 +2540,10 @@ function switchSrcTab(tab) {
 
 function applyScId() {
   const val = document.getElementById('sc-custom-val')?.value.trim()
-  if (!val) { showToast('Р вЂ™Р Р†Р ВµР Т‘Р С‘ Client ID', true); return }
+  if (!val) { showToast('Р’РІРµРґРё Client ID', true); return }
   saveSettingsRaw({ soundcloudClientId: val })
   updateScStatus(val)
-  showToast('SoundCloud Client ID РЎРѓР С•РЎвЂ¦РЎР‚Р В°Р Р…РЎвЂР Р…')
+  showToast('SoundCloud Client ID СЃРѕС…СЂР°РЅС‘РЅ')
 }
 
 function updateScStatus(clientId) {
@@ -2520,13 +2552,13 @@ function updateScStatus(clientId) {
   const display = document.getElementById('sc-active-display')
   if (clientId) {
     statusEl.className = 'token-status token-ok'
-    document.getElementById('sc-status-text').textContent = 'Р СњР В°РЎРѓРЎвЂљРЎР‚Р С•Р ВµР Р…'
-    document.getElementById('sc-status-sub').textContent = 'Client ID РЎРѓР С•РЎвЂ¦РЎР‚Р В°Р Р…РЎвЂР Р…'
-    if (display) { display.textContent = clientId.slice(0,8)+'РІР‚СћРІР‚СћРІР‚СћРІР‚Сћ'+clientId.slice(-4); display.style.display='block' }
+    document.getElementById('sc-status-text').textContent = 'РќР°СЃС‚СЂРѕРµРЅ'
+    document.getElementById('sc-status-sub').textContent = 'Client ID СЃРѕС…СЂР°РЅС‘РЅ'
+    if (display) { display.textContent = clientId.slice(0,8)+'вЂўвЂўвЂўвЂў'+clientId.slice(-4); display.style.display='block' }
   } else {
     statusEl.className = 'token-status'
-    document.getElementById('sc-status-text').textContent = 'Р С’Р Р†РЎвЂљР С•Р СР В°РЎвЂљР С‘РЎвЂЎР ВµРЎРѓР С”Р С‘Р в„– РЎР‚Р ВµР В¶Р С‘Р С'
-    document.getElementById('sc-status-sub').textContent = 'Client ID Р С‘Р В·Р Р†Р В»Р ВµР С”Р В°Р ВµРЎвЂљРЎРѓРЎРЏ РЎРѓР С• РЎРѓРЎвЂљРЎР‚Р В°Р Р…Р С‘РЎвЂ РЎвЂ№ SC'
+    document.getElementById('sc-status-text').textContent = 'РђРІС‚РѕРјР°С‚РёС‡РµСЃРєРёР№ СЂРµР¶РёРј'
+    document.getElementById('sc-status-sub').textContent = 'Client ID РёР·РІР»РµРєР°РµС‚СЃСЏ СЃРѕ СЃС‚СЂР°РЅРёС†С‹ SC'
     if (display) display.style.display = 'none'
   }
 }
@@ -2539,22 +2571,22 @@ async function getVkToken() {
   const btn = document.getElementById('vk-get-btn')
   const manual = tokenField?.value.trim()
   if (manual && !login) { applyVkToken(manual); return }
-  if (!login || !password) { msg.textContent='Р’РІРµРґРё Р»РѕРіРёРЅ Рё РїР°СЂРѕР»СЊ'; msg.className='token-msg token-msg-err'; return }
-  btn.textContent='РџРѕР»СѓС‡Р°СЋ...'; btn.disabled=true; msg.textContent=''
+  if (!login || !password) { msg.textContent='Введи логин и пароль'; msg.className='token-msg token-msg-err'; return }
+  btn.textContent='Получаю...'; btn.disabled=true; msg.textContent=''
   try {
-    const result = window.api?.getVkToken ? await window.api.getVkToken(login, password) : { ok:false, error:'РўРѕР»СЊРєРѕ РІ Electron' }
+    const result = window.api?.getVkToken ? await window.api.getVkToken(login, password) : { ok:false, error:'Только в Electron' }
     if (result.ok) {
       tokenField.value = result.token
       applyVkToken(result.token)
     } else {
-      msg.textContent = result.error || 'РћС€РёР±РєР°'
+      msg.textContent = result.error || 'Ошибка'
       msg.className = 'token-msg token-msg-err'
     }
   } catch (e) {
     msg.textContent = e.message
     msg.className = 'token-msg token-msg-err'
   }
-  btn.textContent='РџРѕР»СѓС‡РёС‚СЊ С‚РѕРєРµРЅ'; btn.disabled=false
+  btn.textContent='Получить токен'; btn.disabled=false
 }
 
 function openVkHostTokenPage() {
@@ -2566,20 +2598,20 @@ async function checkVkToken() {
   const token = getCurrentVkTokenForImport()
   if (!token) {
     if (msg) {
-      msg.textContent = 'Р’СЃС‚Р°РІСЊ С‚РѕРєРµРЅ РІ РїРѕР»Рµ РЅРёР¶Рµ РёР»Рё РЅР°Р¶РјРё В«СЃРѕС…СЂР°РЅРёС‚СЊВ» РїРѕСЃР»Рµ РІСЃС‚Р°РІРєРё'
+      msg.textContent = 'Вставь токен в поле ниже или нажми «сохранить» после вставки'
       msg.className = 'token-msg token-msg-err'
     }
     return
   }
   if (!window.api?.vkValidateToken) {
     if (msg) {
-      msg.textContent = 'РџСЂРѕРІРµСЂРєР° РґРѕСЃС‚СѓРїРЅР° С‚РѕР»СЊРєРѕ РІ Electron'
+      msg.textContent = 'Проверка доступна только в Electron'
       msg.className = 'token-msg token-msg-err'
     }
     return
   }
   if (msg) {
-    msg.textContent = 'РџСЂРѕРІРµСЂСЏСЋ С‚РѕРєРµРЅ...'
+    msg.textContent = 'Проверяю токен...'
     msg.className = 'token-msg'
   }
   try {
@@ -2587,8 +2619,8 @@ async function checkVkToken() {
     if (r?.ok) {
       const who = [r.name, r.userId != null ? `id ${r.userId}` : ''].filter(Boolean).join(', ')
       if (r.audioOk) {
-        let text = who ? `РўРѕРєРµРЅ СЂР°Р±РѕС‡РёР№ (${who}).` : 'РўРѕРєРµРЅ СЂР°Р±РѕС‡РёР№.'
-        text += ' Р”РѕСЃС‚СѓРї Рє audio API РµСЃС‚СЊ вЂ” РёРјРїРѕСЂС‚ Рё РїРѕРёСЃРє РїРѕ VK РґРѕР»Р¶РЅС‹ СЂР°Р±РѕС‚Р°С‚СЊ.'
+        let text = who ? `Токен рабочий (${who}).` : 'Токен рабочий.'
+        text += ' Доступ к audio API есть — импорт и поиск по VK должны работать.'
         if (msg) {
           msg.textContent = text
           msg.className = 'token-msg token-msg-ok'
@@ -2596,26 +2628,26 @@ async function checkVkToken() {
       } else {
         if (r.audioMissingAudioScope) {
           let line = who
-            ? `РџСЂРѕС„РёР»СЊ OK (${who}), РЅРѕ РІ С‚РѕРєРµРЅРµ РЅРµС‚ РґРѕСЃС‚СѓРїР° В«РђСѓРґРёРѕВ» РїРѕ РґР°РЅРЅС‹Рј VK. РќР° СЌРєСЂР°РЅРµ РІС…РѕРґР° РЅСѓР¶РЅРѕ СЏРІРЅРѕ СЂР°Р·СЂРµС€РёС‚СЊ РјСѓР·С‹РєСѓ/Р°СѓРґРёРѕ (РЅРµ С‚РѕР»СЊРєРѕ РїСЂРѕС„РёР»СЊ).`
-            : 'Р’ С‚РѕРєРµРЅРµ РїРѕ РґР°РЅРЅС‹Рј VK РЅРµС‚ РґРѕСЃС‚СѓРїР° В«РђСѓРґРёРѕВ». РџСЂРѕР№РґРё РІС…РѕРґ Р·Р°РЅРѕРІРѕ Рё СЂР°Р·СЂРµС€Рё Р°СѓРґРёРѕ РЅР° СЌРєСЂР°РЅРµ VK ID.'
+            ? `Профиль OK (${who}), но в токене нет доступа «Аудио» по данным VK. На экране входа нужно явно разрешить музыку/аудио (не только профиль).`
+            : 'В токене по данным VK нет доступа «Аудио». Пройди вход заново и разреши аудио на экране VK ID.'
           if (msg) {
             msg.textContent = line
             msg.className = 'token-msg token-msg-err'
           }
           return
         }
-        const ac = r.audioCode != null ? ` (РєРѕРґ ${r.audioCode})` : ''
+        const ac = r.audioCode != null ? ` (код ${r.audioCode})` : ''
         const detail = r.audioError ? `: ${r.audioError}` : ''
         let line = who
-          ? `РџСЂРѕС„РёР»СЊ РїРѕРґС‚РІРµСЂР¶РґС‘РЅ (${who}), РЅРѕ Р°СѓРґРёРѕ РІ Flow РЅРµРґРѕСЃС‚СѓРїРЅРѕ${ac}${detail}. РќР° vkhost РІС‹Р±РµСЂРё Kate Mobile Рё РїСЂР°РІРѕ В«РђСѓРґРёРѕВ».`
-          : `РђСѓРґРёРѕ API РЅРµРґРѕСЃС‚СѓРїРЅРѕ${ac}${detail}. РќР° vkhost вЂ” Kate Mobile Рё РїСЂР°РІРѕ В«РђСѓРґРёРѕВ».`
+          ? `Профиль подтверждён (${who}), но аудио в Flow недоступно${ac}${detail}. На vkhost выбери Kate Mobile и право «Аудио».`
+          : `Аудио API недоступно${ac}${detail}. На vkhost — Kate Mobile и право «Аудио».`
         if (r.audioScopeOkButMethodsBlocked) {
-          line += ` РџРѕ РјР°СЃРєРµ РїСЂР°РІ VK Р°СѓРґРёРѕ РІ С‚РѕРєРµРЅРµ РµСЃС‚СЊ вЂ” РЅРѕ РјРµС‚РѕРґС‹ audio.* РЅРµ РїСЂРёРЅРёРјР°СЋС‚СЃСЏ (С‡Р°СЃС‚Рѕ РїРѕР»РёС‚РёРєР° VK РїРѕ Р°РєРєР°СѓРЅС‚Сѓ/РјСѓР·С‹РєРµ). РћР±РѕР№С‚Рё РјРѕР¶РЅРѕ С‚РѕР»СЊРєРѕ РѕР±С…РѕРґРЅС‹РјРё РїСѓС‚СЏРјРё (Python+Chrome/Selenium), РѕС„РёС†РёР°Р»СЊРЅРѕ API РЅРµРґРѕСЃС‚СѓРїРµРЅ. РџРѕ СѓРјРѕР»С‡Р°РЅРёСЋ Flow РЅРµ РѕС‚РєСЂС‹РІР°РµС‚ Chrome СЃР°Рј вЂ” РІРєР»СЋС‡Рё РЅРёР¶Рµ В«РћР±С…РѕРґ С‡РµСЂРµР· Chrome (Selenium)В», РµСЃР»Рё РѕСЃРѕР·РЅР°РЅРЅРѕ С…РѕС‡РµС€СЊ СЌС‚РѕС‚ РїСѓС‚СЊ.`
+          line += ` По маске прав VK аудио в токене есть — но методы audio.* не принимаются (часто политика VK по аккаунту/музыке). Обойти можно только обходными путями (Python+Chrome/Selenium), официально API недоступен. По умолчанию Flow не открывает Chrome сам — включи ниже «Обход через Chrome (Selenium)», если осознанно хочешь этот путь.`
         } else if (Number(r.audioCode) === 3) {
-          line += ' РљРѕРґ 3 (В«РјРµС‚РѕРґ РЅРµРґРѕСЃС‚СѓРїРµРЅВ»): РїСЂРёР»РѕР¶РµРЅРёРµ РґРѕР»Р¶РЅРѕ Р±С‹С‚СЊ Kate Mobile РЅР° vkhost (client_id 2685278), РІ scope вЂ” Р°СѓРґРёРѕ. РўРѕРєРµРЅС‹ РѕС‚ РґСЂСѓРіРѕРіРѕ РїСЂРёР»РѕР¶РµРЅРёСЏ РёР»Рё С‚РѕР»СЊРєРѕ СЃ id.vk.com С‡Р°СЃС‚Рѕ РЅРµ РґР°СЋС‚ audio.*. РЎРіРµРЅРµСЂРёСЂСѓР№ РЅРѕРІС‹Р№ С‚РѕРєРµРЅ РЅР° vkhost, РІСЃС‚Р°РІСЊ С†РµР»РёРєРѕРј. РР»Рё В«РћС‚РєСЂС‹С‚СЊ РІС…РѕРґ VK РІ Р±СЂР°СѓР·РµСЂРµВ» РІ Flow (OAuth Kate).'
+          line += ' Код 3 («метод недоступен»): приложение должно быть Kate Mobile на vkhost (client_id 2685278), в scope — аудио. Токены от другого приложения или только с id.vk.com часто не дают audio.*. Сгенерируй новый токен на vkhost, вставь целиком. Или «Открыть вход VK в браузере» в Flow (OAuth Kate).'
         }
         if (Number(r.audioCode) === 6) {
-          line += ' РљРѕРґ 6 вЂ” СЃР»РёС€РєРѕРј РјРЅРѕРіРѕ Р·Р°РїСЂРѕСЃРѕРІ Рє VK: РїРѕРґРѕР¶РґРё 30вЂ“60 СЃРµРєСѓРЅРґ Рё РЅР°Р¶РјРё РїСЂРѕРІРµСЂРєСѓ СЃРЅРѕРІР°; РЅРµ РєР»РёРєР°Р№ В«РџСЂРѕРІРµСЂРёС‚СЊ С‚РѕРєРµРЅВ» РјРЅРѕРіРѕ СЂР°Р· РїРѕРґСЂСЏРґ.'
+          line += ' Код 6 — слишком много запросов к VK: подожди 30–60 секунд и нажми проверку снова; не кликай «Проверить токен» много раз подряд.'
         }
         if (msg) {
           msg.textContent = line
@@ -2623,14 +2655,14 @@ async function checkVkToken() {
         }
       }
     } else if (msg) {
-      const errText = r?.error || 'РўРѕРєРµРЅ РЅРµ РїРѕРґС…РѕРґРёС‚'
-      const withCode = r?.code != null ? `${errText} (РєРѕРґ ${r.code})` : errText
+      const errText = r?.error || 'Токен не подходит'
+      const withCode = r?.code != null ? `${errText} (код ${r.code})` : errText
       msg.textContent = withCode
       msg.className = 'token-msg token-msg-err'
     }
   } catch (e) {
     if (msg) {
-      msg.textContent = e?.message || 'РћС€РёР±РєР° РїСЂРѕРІРµСЂРєРё'
+      msg.textContent = e?.message || 'Ошибка проверки'
       msg.className = 'token-msg token-msg-err'
     }
   }
@@ -2640,14 +2672,14 @@ async function startVkBrowserAuth() {
   const msg = document.getElementById('vk-msg')
   if (!window.api?.vkBrowserAuth) {
     if (msg) {
-      msg.textContent = 'Р‘СЂР°СѓР·РµСЂРЅР°СЏ Р°РІС‚РѕСЂРёР·Р°С†РёСЏ РґРѕСЃС‚СѓРїРЅР° С‚РѕР»СЊРєРѕ РІ Electron'
+      msg.textContent = 'Браузерная авторизация доступна только в Electron'
       msg.className = 'token-msg token-msg-err'
     }
     return
   }
   try {
     if (msg) {
-      msg.textContent = 'РћС‚РєСЂС‹Р» РѕРєРЅРѕ VK. Р’РѕР№РґРё Рё СЂР°Р·СЂРµС€Рё РґРѕСЃС‚СѓРї Рє Р°СѓРґРёРѕ РґР»СЏ РёРјРїРѕСЂС‚Р° РїР»РµР№Р»РёСЃС‚РѕРІ.'
+      msg.textContent = 'Открыл окно VK. Войди и разреши доступ к аудио для импорта плейлистов.'
       msg.className = 'token-msg'
     }
     const result = await window.api.vkBrowserAuth()
@@ -2658,12 +2690,12 @@ async function startVkBrowserAuth() {
       return
     }
     if (msg) {
-      msg.textContent = result?.error || 'VK Р°РІС‚РѕСЂРёР·Р°С†РёСЏ РѕС‚РјРµРЅРµРЅР°'
+      msg.textContent = result?.error || 'VK авторизация отменена'
       msg.className = 'token-msg token-msg-err'
     }
   } catch (e) {
     if (msg) {
-      msg.textContent = e?.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РєСЂС‹С‚СЊ Р±СЂР°СѓР·РµСЂ'
+      msg.textContent = e?.message || 'Не удалось открыть браузер'
       msg.className = 'token-msg token-msg-err'
     }
   }
@@ -2675,10 +2707,10 @@ function applyVkToken(token) {
       ? String(token).trim()
       : String(document.getElementById('vk-token-val')?.value || '').trim()
   if (!t) {
-    showToast('Р’РІРµРґРё РёР»Рё РІСЃС‚Р°РІСЊ VK С‚РѕРєРµРЅ', true)
+    showToast('Введи или вставь VK токен', true)
     const mEl = document.getElementById('vk-msg')
     if (mEl) {
-      mEl.textContent = 'РџРѕР»Рµ С‚РѕРєРµРЅР° РїСѓСЃС‚РѕРµ'
+      mEl.textContent = 'Поле токена пустое'
       mEl.className = 'token-msg token-msg-err'
     }
     return
@@ -2689,7 +2721,7 @@ function applyVkToken(token) {
   const field = document.getElementById('vk-token-val')
   if (field) field.value = t
   updateVkStatus(t)
-  showToast('VK С‚РѕРєРµРЅ СЃРѕС…СЂР°РЅРµРЅ')
+  showToast('VK токен сохранен')
   if (window.api?.vkValidateToken) void checkVkToken().catch(() => {})
 }
 
@@ -2710,13 +2742,13 @@ function updateVkStatus(token) {
   const display = document.getElementById('vk-active-display')
   if (token) {
     el.className='token-status token-ok'
-    document.getElementById('vk-status-text').textContent='РќР°СЃС‚СЂРѕРµРЅ'
-    document.getElementById('vk-status-sub').textContent='РўРѕРєРµРЅ СЃРѕС…СЂР°РЅРµРЅ'
+    document.getElementById('vk-status-text').textContent='Настроен'
+    document.getElementById('vk-status-sub').textContent='Токен сохранен'
     if (display) { display.textContent=token.slice(0,6)+'****'+token.slice(-4); display.style.display='block' }
   } else {
     el.className='token-status'
-    document.getElementById('vk-status-text').textContent='РќРµ РЅР°СЃС‚СЂРѕРµРЅ'
-    document.getElementById('vk-status-sub').textContent='РќР°СЃС‚СЂРѕР№С‚Рµ РїРѕ РёРЅСЃС‚СЂСѓРєС†РёРё'
+    document.getElementById('vk-status-text').textContent='Не настроен'
+    document.getElementById('vk-status-sub').textContent='Настройте по инструкции'
     if (display) display.style.display='none'
   }
 }
@@ -2727,8 +2759,8 @@ function updateVkStatus(token) {
 
 function applySpotifyToken() {
   const token = document.getElementById('sp-token-val')?.value.trim()
-  if (!token) { showToast('Р вЂ™Р Р†Р ВµР Т‘Р С‘ РЎвЂљР С•Р С”Р ВµР Р… Spotify', true); return }
-  saveSettingsRaw({ spotifyToken: token }); updateSpotifyStatus(token); showToast('Spotify РЎвЂљР С•Р С”Р ВµР Р… РЎРѓР С•РЎвЂ¦РЎР‚Р В°Р Р…РЎвЂР Р… РІСљвЂњ')
+  if (!token) { showToast('Р’РІРµРґРё С‚РѕРєРµРЅ Spotify', true); return }
+  saveSettingsRaw({ spotifyToken: token }); updateSpotifyStatus(token); showToast('Spotify С‚РѕРєРµРЅ СЃРѕС…СЂР°РЅС‘РЅ вњ“')
 }
 
 function applyYandexToken() {
@@ -2737,14 +2769,14 @@ function applyYandexToken() {
   const m = token.match(/access_token=([^&#]+)/)
   if (m) token = decodeURIComponent(m[1])
   if (!token) {
-    if (msg) { msg.textContent = 'Р’СЃС‚Р°РІСЊ access_token РёР»Рё РїРѕР»РЅС‹Р№ redirect URL РїРѕСЃР»Рµ OAuth-РІС…РѕРґР°'; msg.className = 'token-msg token-msg-err' }
-    showToast('Р’РІРµРґРё С‚РѕРєРµРЅ РЇРЅРґРµРєСЃ РњСѓР·С‹РєРё', true)
+    if (msg) { msg.textContent = 'Вставь access_token или полный redirect URL после OAuth-входа'; msg.className = 'token-msg token-msg-err' }
+    showToast('Введи токен Яндекс Музыки', true)
     return
   }
   saveSettingsRaw({ yandexToken: token })
   updateYandexStatus(token)
-  if (msg) { msg.textContent = 'РўРѕРєРµРЅ СЃРѕС…СЂР°РЅРµРЅ. РўРµРїРµСЂСЊ РјРѕР¶РЅРѕ РёРјРїРѕСЂС‚РёСЂРѕРІР°С‚СЊ РїР»РµР№Р»РёСЃС‚С‹ РЇРЅРґРµРєСЃ РњСѓР·С‹РєРё РїРѕ СЃСЃС‹Р»РєРµ.'; msg.className = 'token-msg token-msg-ok' }
-  showToast('РўРѕРєРµРЅ РЇРЅРґРµРєСЃ РњСѓР·С‹РєРё СЃРѕС…СЂР°РЅРµРЅ')
+  if (msg) { msg.textContent = 'Токен сохранен. Теперь можно импортировать плейлисты Яндекс Музыки по ссылке.'; msg.className = 'token-msg token-msg-ok' }
+  showToast('Токен Яндекс Музыки сохранен')
 }
 
 function openYandexTokenGuide() {
@@ -2763,36 +2795,36 @@ async function checkYandexToken() {
   tok = String(tok || '').trim()
   if (!tok) {
     if (msg) {
-      msg.textContent = 'Р’СЃС‚Р°РІСЊ С‚РѕРєРµРЅ РёР»Рё СЃРѕС…СЂР°РЅРё РµРіРѕ РіР°Р»РѕС‡РєРѕР№ РІС‹С€Рµ'
+      msg.textContent = 'Вставь токен или сохрани его галочкой выше'
       msg.className = 'token-msg token-msg-err'
     }
     return
   }
   if (!window.api?.yandexValidateToken) {
     if (msg) {
-      msg.textContent = 'РџСЂРѕРІРµСЂРєР° РґРѕСЃС‚СѓРїРЅР° С‚РѕР»СЊРєРѕ РІ Electron'
+      msg.textContent = 'Проверка доступна только в Electron'
       msg.className = 'token-msg token-msg-err'
     }
     return
   }
   if (msg) {
-    msg.textContent = 'РџСЂРѕРІРµСЂСЏСЋ С‚РѕРєРµРЅ...'
+    msg.textContent = 'Проверяю токен...'
     msg.className = 'token-msg'
   }
   try {
     const r = await window.api.yandexValidateToken(tok)
     if (r?.ok) {
       if (msg) {
-        msg.textContent = r.login ? `РўРѕРєРµРЅ СЂР°Р±РѕС‡РёР№ (Р°РєРєР°СѓРЅС‚: ${r.login}).` : 'РўРѕРєРµРЅ СЂР°Р±РѕС‡РёР№.'
+        msg.textContent = r.login ? `Токен рабочий (аккаунт: ${r.login}).` : 'Токен рабочий.'
         msg.className = 'token-msg token-msg-ok'
       }
     } else if (msg) {
-      msg.textContent = r?.error || 'РўРѕРєРµРЅ РЅРµ РїРѕРґС…РѕРґРёС‚'
+      msg.textContent = r?.error || 'Токен не подходит'
       msg.className = 'token-msg token-msg-err'
     }
   } catch (e) {
     if (msg) {
-      msg.textContent = e?.message || 'РћС€РёР±РєР° РїСЂРѕРІРµСЂРєРё'
+      msg.textContent = e?.message || 'Ошибка проверки'
       msg.className = 'token-msg token-msg-err'
     }
   }
@@ -2806,13 +2838,13 @@ function updateYandexStatus(token) {
   const sub = document.getElementById('ym-status-sub')
   if (token) {
     el.className = 'token-status token-ok'
-    if (text) text.textContent = 'РќР°СЃС‚СЂРѕРµРЅ'
-    if (sub) sub.textContent = 'OAuth token СЃРѕС…СЂР°РЅРµРЅ, РёРјРїРѕСЂС‚ РЇРЅРґРµРєСЃ РїР»РµР№Р»РёСЃС‚РѕРІ РґРѕСЃС‚СѓРїРµРЅ'
+    if (text) text.textContent = 'Настроен'
+    if (sub) sub.textContent = 'OAuth token сохранен, импорт Яндекс плейлистов доступен'
     if (display) { display.textContent = token.slice(0, 6) + '****' + token.slice(-4); display.style.display = 'block' }
   } else {
     el.className = 'token-status'
-    if (text) text.textContent = 'РќРµ РЅР°СЃС‚СЂРѕРµРЅ'
-    if (sub) sub.textContent = 'РќСѓР¶РµРЅ OAuth token РґР»СЏ С‡С‚РµРЅРёСЏ РїР»РµР№Р»РёСЃС‚РѕРІ'
+    if (text) text.textContent = 'Не настроен'
+    if (sub) sub.textContent = 'Нужен OAuth token для чтения плейлистов'
     if (display) display.style.display = 'none'
   }
 }
@@ -2822,13 +2854,13 @@ function updateSpotifyStatus(token) {
   const display = document.getElementById('sp-active-display')
   if (token) {
     el.className='token-status token-ok'
-    document.getElementById('sp-status-text').textContent='Р СњР В°РЎРѓРЎвЂљРЎР‚Р С•Р ВµР Р…'
-    document.getElementById('sp-status-sub').textContent='Bearer РЎвЂљР С•Р С”Р ВµР Р… РЎРѓР С•РЎвЂ¦РЎР‚Р В°Р Р…РЎвЂР Р…'
-    if (display) { display.textContent=token.slice(0,6)+'РІР‚СћРІР‚СћРІР‚СћРІР‚Сћ'+token.slice(-4); display.style.display='block' }
+    document.getElementById('sp-status-text').textContent='РќР°СЃС‚СЂРѕРµРЅ'
+    document.getElementById('sp-status-sub').textContent='Bearer С‚РѕРєРµРЅ СЃРѕС…СЂР°РЅС‘РЅ'
+    if (display) { display.textContent=token.slice(0,6)+'вЂўвЂўвЂўвЂў'+token.slice(-4); display.style.display='block' }
   } else {
     el.className='token-status'
-    document.getElementById('sp-status-text').textContent='Р СњР Вµ Р Р…Р В°РЎРѓРЎвЂљРЎР‚Р С•Р ВµР Р…'
-    document.getElementById('sp-status-sub').textContent='Р СњРЎС“Р В¶Р ВµР Р… Bearer РЎвЂљР С•Р С”Р ВµР Р…'
+    document.getElementById('sp-status-text').textContent='РќРµ РЅР°СЃС‚СЂРѕРµРЅ'
+    document.getElementById('sp-status-sub').textContent='РќСѓР¶РµРЅ Bearer С‚РѕРєРµРЅ'
     if (display) display.style.display='none'
   }
 }
@@ -2872,7 +2904,7 @@ function loadSettingsPage() {
   requestAnimationFrame(() => {
     syncPlaybackModeUI()
     syncTrackCoverStatus()
-    setFlowConfigStatus('Р­РєСЃРїРѕСЂС‚ СЃРѕР·РґР°С‘С‚ JSON СЃ РІРёР·СѓР°Р»РѕРј, РїСЂРѕС„РёР»РµРј, РїР»РµР№Р»РёСЃС‚Р°РјРё Рё РЅР°СЃС‚СЂРѕР№РєР°РјРё.', false)
+    setFlowConfigStatus('Экспорт создаёт JSON с визуалом, профилем, плейлистами и настройками.', false)
     syncFontControls()
     syncHomeWidgetUI()
     applyHomeSliderStyle()
@@ -2894,17 +2926,17 @@ function syncPlaybackModeUI() {
   if (shBtn) shBtn.classList.toggle('active', Boolean(playbackMode.shuffle))
   if (homeShBtn) homeShBtn.classList.toggle('active', Boolean(playbackMode.shuffle))
   if (shSettings) {
-    shSettings.textContent = playbackMode.shuffle ? 'Р’РєР»СЋС‡РµРЅР°' : 'Р’С‹РєР»СЋС‡РµРЅР°'
+    shSettings.textContent = playbackMode.shuffle ? 'Включена' : 'Выключена'
     shSettings.classList.toggle('active', Boolean(playbackMode.shuffle))
   }
-  const repeatLabel = playbackMode.repeat === 'one' ? 'РћРґРёРЅ С‚СЂРµРє' : (playbackMode.repeat === 'all' ? 'РћС‡РµСЂРµРґСЊ' : 'Р’С‹РєР»')
+  const repeatLabel = playbackMode.repeat === 'one' ? 'Один трек' : (playbackMode.repeat === 'all' ? 'Очередь' : 'Выкл')
   if (rpBtn) {
     rpBtn.classList.toggle('active', playbackMode.repeat !== 'off')
-    rpBtn.title = `РџРѕРІС‚РѕСЂ: ${repeatLabel}`
+    rpBtn.title = `Повтор: ${repeatLabel}`
   }
   if (homeRpBtn) {
     homeRpBtn.classList.toggle('active', playbackMode.repeat !== 'off')
-    homeRpBtn.title = `РџРѕРІС‚РѕСЂ: ${repeatLabel}`
+    homeRpBtn.title = `Повтор: ${repeatLabel}`
   }
   if (rpSettings) {
     rpSettings.textContent = repeatLabel
@@ -2916,7 +2948,7 @@ function toggleShuffleMode() {
   playbackMode.shuffle = !playbackMode.shuffle
   savePlaybackMode()
   syncPlaybackModeUI()
-  showToast(playbackMode.shuffle ? 'РџРµСЂРµРјРµС€РєР° РІРєР»СЋС‡РµРЅР°' : 'РџРµСЂРµРјРµС€РєР° РІС‹РєР»СЋС‡РµРЅР°')
+  showToast(playbackMode.shuffle ? 'Перемешка включена' : 'Перемешка выключена')
 }
 
 function toggleRepeatMode() {
@@ -2925,8 +2957,8 @@ function toggleRepeatMode() {
   playbackMode.repeat = order[(idx + 1) % order.length]
   savePlaybackMode()
   syncPlaybackModeUI()
-  const label = playbackMode.repeat === 'one' ? 'РѕРґРёРЅ С‚СЂРµРє' : (playbackMode.repeat === 'all' ? 'РѕС‡РµСЂРµРґСЊ' : 'РІС‹РєР»')
-  showToast(`РџРѕРІС‚РѕСЂ: ${label}`)
+  const label = playbackMode.repeat === 'one' ? 'один трек' : (playbackMode.repeat === 'all' ? 'очередь' : 'выкл')
+  showToast(`Повтор: ${label}`)
 }
 
 function syncTrackCoverStatus() {
@@ -2935,17 +2967,17 @@ function syncTrackCoverStatus() {
   const map = getCustomCoverMap()
   const globalCustom = getGlobalCustomCover(map)
   if (globalCustom) {
-    el.textContent = 'РљР°СЃС‚РѕРјРЅР°СЏ РѕР±Р»РѕР¶РєР° РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ С‚РѕР»СЊРєРѕ РІ РїР»РµРµСЂРµ'
+    el.textContent = 'Кастомная обложка используется только в плеере'
     refreshTrackCoverPreview()
     return
   }
   if (!currentTrack) {
-    el.textContent = 'Р’С‹Р±РµСЂРё С‚СЂРµРє Рё Р·Р°РґР°Р№ РґР»СЏ РЅРµРіРѕ СЃРІРѕСЋ РѕР±Р»РѕР¶РєСѓ'
+    el.textContent = 'Выбери трек и задай для него свою обложку'
     refreshTrackCoverPreview()
     return
   }
   const hasCustom = getTrackCoverKeys(currentTrack).some((k) => Boolean(map[k]))
-  el.textContent = hasCustom ? 'Р”Р»СЏ С‚РµРєСѓС‰РµРіРѕ С‚СЂРµРєР° РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ РєР°СЃС‚РѕРјРЅР°СЏ РѕР±Р»РѕР¶РєР°' : 'Р”Р»СЏ С‚РµРєСѓС‰РµРіРѕ С‚СЂРµРєР° РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ РѕР±Р»РѕР¶РєР° РёР· РёСЃС‚РѕС‡РЅРёРєР°'
+  el.textContent = hasCustom ? 'Для текущего трека используется кастомная обложка' : 'Для текущего трека используется обложка из источника'
   refreshTrackCoverPreview()
 }
 
@@ -2953,7 +2985,7 @@ async function setCustomTrackCover(input) {
   const file = input?.files?.[0]
   if (!file) return
   if (!currentTrack) {
-    showToast('РЎРЅР°С‡Р°Р»Р° РІРєР»СЋС‡Рё С‚СЂРµРє', true)
+    showToast('Сначала включи трек', true)
     input.value = ''
     return
   }
@@ -2972,9 +3004,9 @@ async function setCustomTrackCover(input) {
     renderRoomQueue()
     syncTrackCoverStatus()
     refreshTrackCoverPreview(file.name)
-    showToast('РљР°СЃС‚РѕРјРЅР°СЏ РѕР±Р»РѕР¶РєР° СЃРѕС…СЂР°РЅРµРЅР° РґР»СЏ РїР»РµРµСЂР°')
+    showToast('Кастомная обложка сохранена для плеера')
   } catch (err) {
-    showToast(`РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РѕР±Р»РѕР¶РєСѓ: ${sanitizeDisplayText(err?.message || err)}`, true)
+    showToast(`Не удалось сохранить обложку: ${sanitizeDisplayText(err?.message || err)}`, true)
   } finally {
     input.value = ''
   }
@@ -2993,7 +3025,7 @@ function clearCustomTrackCover() {
   const hasPerTrack = Object.keys(map).some((k) => k !== '__global__' && Boolean(map[k]))
   const hasAny = Boolean(globalCustom) || hasPerTrack
   if (!hasAny) {
-    showToast('РљР°СЃС‚РѕРјРЅР°СЏ РѕР±Р»РѕР¶РєР° РЅРµ Р·Р°РґР°РЅР°', true)
+    showToast('Кастомная обложка не задана', true)
     return
   }
   // Full reset: clear global and legacy per-track bindings.
@@ -3010,23 +3042,23 @@ function clearCustomTrackCover() {
   renderRoomQueue()
   syncTrackCoverStatus()
   refreshTrackCoverPreview()
-  showToast('РљР°СЃС‚РѕРјРЅР°СЏ РѕР±Р»РѕР¶РєР° СѓРґР°Р»РµРЅР°')
+  showToast('Кастомная обложка удалена')
 }
 
 function refreshTrackCoverPreview(fileName = '') {
   const map = getCustomCoverMap()
   const globalCustom = getGlobalCustomCover(map)
   if (globalCustom) {
-    const label = fileName || 'РљР°СЃС‚РѕРјРЅР°СЏ РѕР±Р»РѕР¶РєР° РїР»РµРµСЂР°'
+    const label = fileName || 'Кастомная обложка плеера'
     setMediaPreviewBox('track-cover', globalCustom, label, true)
     return
   }
   if (!currentTrack) {
-    setMediaPreviewBox('track-cover', '', 'РЎРЅР°С‡Р°Р»Р° РІРєР»СЋС‡Рё С‚СЂРµРє', true)
+    setMediaPreviewBox('track-cover', '', 'Сначала включи трек', true)
     return
   }
   const custom = getTrackCoverKeys(currentTrack).map((k) => map[k]).find(Boolean) || ''
-  const label = fileName || (custom ? `РўРµРєСѓС‰РёР№ С‚СЂРµРє: ${currentTrack.title || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ'}` : 'Р”Р»СЏ СЌС‚РѕРіРѕ С‚СЂРµРєР° РѕР±Р»РѕР¶РєР° РЅРµ Р·Р°РґР°РЅР°')
+  const label = fileName || (custom ? `Текущий трек: ${currentTrack.title || 'Без названия'}` : 'Для этого трека обложка не задана')
   setMediaPreviewBox('track-cover', custom, label, true)
 }
 
@@ -3151,17 +3183,17 @@ async function exportFlowConfig() {
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(link.href)
-    setFlowConfigStatus('Flow preset СЌРєСЃРїРѕСЂС‚РёСЂРѕРІР°РЅ. РњРѕР¶РЅРѕ РѕС‚РїСЂР°РІР»СЏС‚СЊ .flowpreset РґСЂСѓРіСѓ.', false)
-    showToast('Flow preset СЌРєСЃРїРѕСЂС‚РёСЂРѕРІР°РЅ')
+    setFlowConfigStatus('Flow preset экспортирован. Можно отправлять .flowpreset другу.', false)
+    showToast('Flow preset экспортирован')
     if (failedEmbed && failedEmbed.length) {
       showToast(
-        `РќРµ СѓРґР°Р»РѕСЃСЊ РІСЃС‚СЂРѕРёС‚СЊ ${failedEmbed.length} С„Р°Р№Р»(РѕРІ) СЃ РґРёСЃРєР° вЂ” РЅР° РґСЂСѓРіРѕРј РџРљ РёС… РЅРµ Р±СѓРґРµС‚.`,
+        `Не удалось встроить ${failedEmbed.length} файл(ов) с диска — на другом ПК их не будет.`,
         true
       )
     }
   } catch (err) {
-    setFlowConfigStatus(`РћС€РёР±РєР° СЌРєСЃРїРѕСЂС‚Р°: ${err?.message || err}`, true)
-    showToast('РќРµ СѓРґР°Р»РѕСЃСЊ СЌРєСЃРїРѕСЂС‚РёСЂРѕРІР°С‚СЊ preset', true)
+    setFlowConfigStatus(`Ошибка экспорта: ${err?.message || err}`, true)
+    showToast('Не удалось экспортировать preset', true)
   }
 }
 
@@ -3171,7 +3203,7 @@ function pickFlowConfigFile() {
   input.click()
 }
 
-/** РџРѕСЃР»Рµ Р·Р°РїРёСЃРё РєР»СЋС‡РµР№ РїСЂРµСЃРµС‚Р° РІ localStorage РїРѕРґС‚СЏРЅСѓС‚СЊ in-memory СЃРѕСЃС‚РѕСЏРЅРёРµ Рё РЅРµ Р·Р°С‚РёСЂР°С‚СЊ flow_visual РїРѕР»Р·СѓРЅРєР°РјРё С„РѕСЂРјС‹. */
+/** После записи ключей пресета в localStorage подтянуть in-memory состояние и не затирать flow_visual ползунками формы. */
 function syncRuntimeCachesAfterPresetImport() {
   try {
     playbackMode = Object.assign({}, defaultPlayback, JSON.parse(localStorage.getItem('flow_playback_mode') || '{}'))
@@ -3214,7 +3246,7 @@ function importFlowConfigFile(input) {
       const preset = normalizeImportedFlowPreset(parsed)
       const storage = preset?.storage
       if (!storage || typeof storage !== 'object') {
-        throw new Error('РќРµРІРµСЂРЅС‹Р№ С„РѕСЂРјР°С‚ С„Р°Р№Р»Р°')
+        throw new Error('Неверный формат файла')
       }
       if (preset.replaceAll) {
         const protectedKeys = new Set([
@@ -3270,10 +3302,10 @@ function importFlowConfigFile(input) {
         if (typeof value === 'string' && value.trim()) localStorage.setItem(key, value)
       })
       syncRuntimeCachesAfterPresetImport()
-      setFlowConfigStatus('Flow preset РёРјРїРѕСЂС‚РёСЂРѕРІР°РЅ. РЎРµСЃСЃРёСЏ Р°РєРєР°СѓРЅС‚Р° СЃРѕС…СЂР°РЅРµРЅР°, РїРµСЂРµР·Р°РіСЂСѓР·РєР° РЅРµ С‚СЂРµР±СѓРµС‚СЃСЏ.', false)
-      showToast('Flow preset РёРјРїРѕСЂС‚РёСЂРѕРІР°РЅ')
+      setFlowConfigStatus('Flow preset импортирован. Сессия аккаунта сохранена, перезагрузка не требуется.', false)
+      showToast('Flow preset импортирован')
       try { applySettingsSectionsState() } catch {}
-      // Р’Р°Р¶РЅРѕ: РЅРµ РІС‹Р·С‹РІР°С‚СЊ applyVisualSettings() вЂ” РѕРЅР° Р±РµСЂС‘С‚ Р·РЅР°С‡РµРЅРёСЏ РёР· DOM Рё РїРµСЂРµР·Р°РїРёСЃС‹РІР°РµС‚ С‚РѕР»СЊРєРѕ С‡С‚Рѕ РёРјРїРѕСЂС‚РёСЂРѕРІР°РЅРЅС‹Р№ flow_visual.
+      // Важно: не вызывать applyVisualSettings() — она берёт значения из DOM и перезаписывает только что импортированный flow_visual.
       try { initVisualSettings() } catch {}
       try { syncIntegrationsUI() } catch {}
       try { applyUiTextOverrides() } catch {}
@@ -3287,8 +3319,8 @@ function importFlowConfigFile(input) {
       try { renderFriends().catch(() => {}) } catch {}
       try { pollFriendsPresence(true).catch(() => {}) } catch {}
     } catch (err) {
-      setFlowConfigStatus(`РћС€РёР±РєР° РёРјРїРѕСЂС‚Р°: ${err?.message || err}`, true)
-      showToast('РќРµ СѓРґР°Р»РѕСЃСЊ РёРјРїРѕСЂС‚РёСЂРѕРІР°С‚СЊ preset', true)
+      setFlowConfigStatus(`Ошибка импорта: ${err?.message || err}`, true)
+      showToast('Не удалось импортировать preset', true)
     } finally {
       input.value = ''
     }
@@ -3346,9 +3378,9 @@ function convertDotifyPresetToFlowStorage(preset) {
 function updateSourceBadge() {
   const raw = normalizeStoredActiveSource(getSettings()?.activeSource || currentSource || 'hybrid')
   currentSource = raw
-  let txt = 'Spotify в†’ SoundCloud в†’ Audius'
-  if (raw === 'yandex') txt = 'РЇРЅРґРµРєСЃ РњСѓР·С‹РєР°'
-  else if (raw === 'vk') txt = 'Р’РљРѕРЅС‚Р°РєС‚Рµ'
+  let txt = 'Spotify → SoundCloud → Audius'
+  if (raw === 'yandex') txt = 'Яндекс Музыка'
+  else if (raw === 'vk') txt = 'ВКонтакте'
   else if (raw === 'spotify') txt = 'Spotify'
   else if (raw === 'soundcloud') txt = 'SoundCloud'
   else if (raw === 'audius') txt = 'Audius'
@@ -3378,10 +3410,10 @@ function switchSearchSource(src) {
   syncSearchSourceRows()
   const msg =
     normalized === 'yandex'
-      ? 'РСЃС‚РѕС‡РЅРёРє: РЇРЅРґРµРєСЃ РњСѓР·С‹РєР° (РЅСѓР¶РµРЅ С‚РѕРєРµРЅ РІ РќР°СЃС‚СЂРѕР№РєР°С… в†’ РСЃС‚РѕС‡РЅРёРєРё)'
+      ? 'Источник: Яндекс Музыка (нужен токен в Настройках → Источники)'
       : normalized === 'vk'
-        ? 'РСЃС‚РѕС‡РЅРёРє: Р’РљРѕРЅС‚Р°РєС‚Рµ (С‚РѕРєРµРЅ Kate / OAuth РІ РќР°СЃС‚СЂРѕР№РєР°С… в†’ РСЃС‚РѕС‡РЅРёРєРё)'
-        : 'РСЃС‚РѕС‡РЅРёРє: РєР»Р°СЃСЃРёС‡РµСЃРєРёР№ РїРѕРёСЃРє (Spotify в†’ SoundCloud в†’ Audius)'
+        ? 'Источник: ВКонтакте (токен Kate / OAuth в Настройках → Источники)'
+        : 'Источник: классический поиск (Spotify → SoundCloud → Audius)'
   showToast(msg)
   try {
     if (typeof searchTracks === 'function' && String(document.getElementById('search-input')?.value || '').trim()) searchTracks()
@@ -3414,7 +3446,7 @@ function switchTab(tab) {
   if (loginTab) loginTab.classList.toggle('active', _authMode === 'login')
   if (registerTab) registerTab.classList.toggle('active', _authMode === 'register')
   const btn = document.getElementById('btn-label')
-  if (btn) btn.textContent = _authMode === 'register' ? 'РЎРѕР·РґР°С‚СЊ РїСЂРѕС„РёР»СЊ' : 'Р’РѕР№С‚Рё'
+  if (btn) btn.textContent = _authMode === 'register' ? 'Создать профиль' : 'Войти'
 }
 
 function setAuthError(text = '') {
@@ -3432,7 +3464,7 @@ function setAuthScreensAuthorized(isAuthorized) {
 }
 
 function syncProfileUi() {
-  const username = _profile?.username || 'СЃР»СѓС€Р°С‚РµР»СЊ'
+  const username = _profile?.username || 'слушатель'
   const nameEl = document.getElementById('user-name')
   const avatarEl = document.getElementById('user-avatar')
   const welcomeEl = document.getElementById('welcome-text')
@@ -3449,7 +3481,7 @@ function syncProfileUi() {
       avatarEl.textContent = username.slice(0, 1).toUpperCase()
     }
   }
-  if (welcomeEl) welcomeEl.textContent = `РџСЂРёРІРµС‚, ${username}`
+  if (welcomeEl) welcomeEl.textContent = `Привет, ${username}`
   renderProfilePage()
 }
 
@@ -3831,7 +3863,7 @@ function renderRoomMembers() {
   const el = document.getElementById('room-members-list')
   if (!el) return
   if (!_roomState?.roomId) {
-    el.innerHTML = '<div class="flow-empty-state compact"><strong>Р СѓРјР° РЅРµ Р°РєС‚РёРІРЅР°</strong><span>РЎРѕР·РґР°Р№ РєРѕРјРЅР°С‚Сѓ РёР»Рё РІСЃС‚Р°РІСЊ invite РґСЂСѓРіР°.</span></div>'
+    el.innerHTML = '<div class="flow-empty-state compact"><strong>Рума не активна</strong><span>Создай комнату или вставь invite друга.</span></div>'
     return
   }
   const members = Array.from(_roomMembers.values()).map((m) => {
@@ -3863,8 +3895,8 @@ function renderRoomMembers() {
     const avatar = m.avatarData
       ? `<div class="social-friend-avatar social-friend-avatar-active" style="background-image:url(${m.avatarData})"></div>`
       : `<div class="social-friend-avatar social-friend-avatar-active">${String(m.username || '?').slice(0,1).toUpperCase()}</div>`
-    return `<div class="social-friend-card online" oncontextmenu="openRoomMemberContextMenu(event, '${m.peerId || ''}', '${m.username || ''}')">${avatar}<div class="social-friend-meta"><strong>${m.username || 'user'} ${(isHost || isSelfHost) ? 'HOST' : ''}</strong><span>${m.username === _profile?.username ? 'СЌС‚Рѕ РІС‹' : 'РІ РєРѕРјРЅР°С‚Рµ'}</span></div></div>`
-  }).join('') || '<div class="flow-empty-state compact"><strong>РќРµС‚ СѓС‡Р°СЃС‚РЅРёРєРѕРІ</strong><span>РџРѕРґРєР»СЋС‡РµРЅРёРµ РїРѕСЏРІРёС‚СЃСЏ Р·РґРµСЃСЊ.</span></div>'
+    return `<div class="social-friend-card online" oncontextmenu="openRoomMemberContextMenu(event, '${m.peerId || ''}', '${m.username || ''}')">${avatar}<div class="social-friend-meta"><strong>${m.username || 'user'} ${(isHost || isSelfHost) ? 'HOST' : ''}</strong><span>${m.username === _profile?.username ? 'это вы' : 'в комнате'}</span></div></div>`
+  }).join('') || '<div class="flow-empty-state compact"><strong>Нет участников</strong><span>Подключение появится здесь.</span></div>'
 }
 
 function broadcastRoomMembersState() {
@@ -3906,7 +3938,7 @@ function renderRoomQueue() {
   const el = document.getElementById('room-queue-list')
   if (!el) return
   if (!_roomState?.roomId || !Array.isArray(sharedQueue) || !sharedQueue.length) {
-    el.innerHTML = '<div class="flow-empty-state compact"><strong>РћС‡РµСЂРµРґСЊ РїСѓСЃС‚Р°</strong><span>Р”РѕР±Р°РІСЊ С‚СЂРµРє С‡РµСЂРµР· РїРѕРёСЃРє РёР»Рё РёР· СЃРІРѕРёС… С‚СЂРµРєРѕРІ.</span></div>'
+    el.innerHTML = '<div class="flow-empty-state compact"><strong>Очередь пуста</strong><span>Добавь трек через поиск или из своих треков.</span></div>'
     return
   }
   const canEdit = Boolean(_roomState?.host)
@@ -3939,11 +3971,11 @@ function renderRoomQueue() {
     const coverUrl = getListCoverUrl(t)
     const cover = coverUrl
       ? `<div class="profile-row-cover" style="background-image:url(${coverUrl})"></div>`
-      : `<div class="profile-row-cover profile-row-cover-fallback">в™Є</div>`
+      : `<div class="profile-row-cover profile-row-cover-fallback">♪</div>`
     const controls = canEdit
-      ? `<button class="playlist-track-action danger">вњ•</button>`
+      ? `<button class="playlist-track-action danger">✕</button>`
       : ''
-    row.innerHTML = `${cover}<span>${t.title} вЂ” ${t.artist || 'вЂ”'}</span>${controls}`
+    row.innerHTML = `${cover}<span>${t.title} — ${t.artist || '—'}</span>${controls}`
     row.addEventListener('click', () => {
       if (!_roomState?.host) return
       playSharedQueueTrackAt(i)
@@ -3963,10 +3995,10 @@ function renderRoomNowPlaying() {
   const el = document.getElementById('room-now-playing')
   if (!el) return
   if (!_roomState?.roomId || !currentTrack) {
-    el.textContent = 'РЎРµР№С‡Р°СЃ РЅРёС‡РµРіРѕ РЅРµ РёРіСЂР°РµС‚'
+    el.textContent = 'Сейчас ничего не играет'
     return
   }
-  el.textContent = `РРіСЂР°РµС‚ СЃРµР№С‡Р°СЃ: ${currentTrack.title || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ'}${currentTrack.artist ? ` вЂ” ${currentTrack.artist}` : ''}`
+  el.textContent = `Играет сейчас: ${currentTrack.title || 'Без названия'}${currentTrack.artist ? ` — ${currentTrack.artist}` : ''}`
 }
 
 function playSharedQueueTrackAt(index) {
@@ -3997,7 +4029,7 @@ function enqueueSharedTrack(track) {
     sharedQueue.push(cleanTrack)
     renderRoomQueue()
     broadcastQueueUpdate()
-    return showToast('РўСЂРµРє РґРѕР±Р°РІР»РµРЅ РІ РѕС‡РµСЂРµРґСЊ РєРѕРјРЅР°С‚С‹')
+    return showToast('Трек добавлен в очередь комнаты')
   }
   sharedQueue.push(cleanTrack)
   renderRoomQueue()
@@ -4018,7 +4050,7 @@ function enqueueSharedTrack(track) {
   if (typeof _socialPeer?.sendToPeer === 'function' && _roomState?.hostPeerId) {
     _socialPeer.sendToPeer(_roomState.hostPeerId, payload)
   }
-  showToast('РўСЂРµРє РґРѕР±Р°РІР»РµРЅ РІ РѕС‡РµСЂРµРґСЊ РєРѕРјРЅР°С‚С‹')
+  showToast('Трек добавлен в очередь комнаты')
 }
 
 function removeSharedQueueTrack(index) {
@@ -4064,10 +4096,10 @@ async function searchRoomQueueTracks() {
   const q = String(input.value || '').trim()
   if (!q) {
     _roomSearchResults = []
-    list.innerHTML = '<div class="flow-empty-state compact"><strong>РќР°С‡РЅРё РїРѕРёСЃРє</strong><span>Р’РІРµРґРё РЅР°Р·РІР°РЅРёРµ С‚СЂРµРєР°, С‡С‚РѕР±С‹ РґРѕР±Р°РІРёС‚СЊ РµРіРѕ РІ РѕС‡РµСЂРµРґСЊ.</span></div>'
+    list.innerHTML = '<div class="flow-empty-state compact"><strong>Начни поиск</strong><span>Введи название трека, чтобы добавить его в очередь.</span></div>'
     return
   }
-  list.innerHTML = '<div class="flow-empty-state compact"><strong>РС‰Сѓ С‚СЂРµРєРё...</strong><span>РџСЂРѕРІРµСЂСЏСЋ РґРѕСЃС‚СѓРїРЅС‹Рµ РёСЃС‚РѕС‡РЅРёРєРё Flow.</span></div>'
+  list.innerHTML = '<div class="flow-empty-state compact"><strong>Ищу треки...</strong><span>Проверяю доступные источники Flow.</span></div>'
   clearTimeout(_roomSearchDebounceTimer)
   _roomSearchDebounceTimer = setTimeout(async () => {
     try {
@@ -4075,18 +4107,18 @@ async function searchRoomQueueTracks() {
       const hybrid = await searchHybridTracks(q, s)
       _roomSearchResults = sanitizeTrackList(hybrid?.tracks || []).slice(0, 4)
       if (!_roomSearchResults.length) {
-        list.innerHTML = '<div class="flow-empty-state compact"><strong>РќРёС‡РµРіРѕ РЅРµ РЅР°Р№РґРµРЅРѕ</strong><span>РџРѕРїСЂРѕР±СѓР№ РґСЂСѓРіРѕР№ Р·Р°РїСЂРѕСЃ РёР»Рё РёСЃС‚РѕС‡РЅРёРє.</span></div>'
+        list.innerHTML = '<div class="flow-empty-state compact"><strong>Ничего не найдено</strong><span>Попробуй другой запрос или источник.</span></div>'
         return
       }
       list.innerHTML = _roomSearchResults.map((t, i) => {
         const coverUrl = getListCoverUrl(t)
         const cover = coverUrl
           ? `<div class="profile-row-cover" style="background-image:url(${coverUrl})"></div>`
-          : `<div class="profile-row-cover profile-row-cover-fallback">в™Є</div>`
-        return `<button class="profile-picker-item" onclick="addRoomSearchTrack(${i})" style="display:flex;align-items:center;gap:8px">${cover}<span>${t.title} вЂ” ${t.artist || 'вЂ”'}</span></button>`
+          : `<div class="profile-row-cover profile-row-cover-fallback">♪</div>`
+        return `<button class="profile-picker-item" onclick="addRoomSearchTrack(${i})" style="display:flex;align-items:center;gap:8px">${cover}<span>${t.title} — ${t.artist || '—'}</span></button>`
       }).join('')
     } catch {
-      list.innerHTML = '<div class="flow-empty-state compact"><strong>РћС€РёР±РєР° РїРѕРёСЃРєР°</strong><span>РСЃС‚РѕС‡РЅРёРє РЅРµ РѕС‚РІРµС‚РёР», РїРѕРїСЂРѕР±СѓР№ РїРѕР·Р¶Рµ.</span></div>'
+      list.innerHTML = '<div class="flow-empty-state compact"><strong>Ошибка поиска</strong><span>Источник не ответил, попробуй позже.</span></div>'
     }
   }, 260)
 }
@@ -4100,7392 +4132,13 @@ function addRoomSearchTrack(index) {
 function openRoomOwnTracksPicker() {
   openPlaylistPickerModal({
     mode: 'room-own-source',
-    title: 'РЎРІРѕРё С‚СЂРµРєРё РІ РѕС‡РµСЂРµРґСЊ',
+    title: 'Свои треки в очередь',
     items: [
-      { id: 'liked', label: `Р›СЋР±РёРјС‹Рµ (${getLiked().length})` },
-      { id: 'playlists', label: `РџР»РµР№Р»РёСЃС‚С‹ (${getPlaylists().length})` },
+      { id: 'liked', label: `Любимые (${getLiked().length})` },
+      { id: 'playlists', label: `Плейлисты (${getPlaylists().length})` },
     ],
     payload: {}
   })
 }
 
-async function openPeerProfile(username, peerId = '') {
-  const modal = document.getElementById('peer-profile-modal')
-  const body = document.getElementById('peer-profile-body')
-  if (!modal || !body) return
-  const targetUsername = String(username || '').trim().toLowerCase()
-  const byName = Array.from(_peerProfiles.values()).find((p) => String(p?.username || '').trim().toLowerCase() === targetUsername)
-  const byPeerRaw = peerId ? _peerProfiles.get(peerId) : null
-  const byPeer = byPeerRaw && String(byPeerRaw?.username || '').trim().toLowerCase() === targetUsername ? byPeerRaw : null
-  let data = byPeer || byName || { username }
-  let profileFriends = []
-  const cached = getCachedPeerProfile(username)
-  if (cached) data = mergeProfileData(data, cached, peerId || data?.peerId || '')
-  data._friends = Array.isArray(data?._friends) ? data._friends : []
-  const renderModal = (profileData) => {
-    const uRaw = profileData.username || username || 'user'
-    const unameKey = String(uRaw).trim().toLowerCase()
-    const avatarSrc = withImageCacheBust(profileData.avatarData)
-    const bannerSrc = withImageCacheBust(profileData.bannerData)
-    const safeColor = normalizeProfileColor(profileData.profileColor || '')
-    const colorRgb = hexToRgb(safeColor)
-    const accent = safeColor || 'var(--accent2)'
-    const bannerC1 = colorRgb ? `rgba(${colorRgb.r},${colorRgb.g},${colorRgb.b},0.34)` : 'rgba(124,58,237,0.24)'
-    const bannerC2 = colorRgb
-      ? `rgba(${Math.min(255, Math.round(colorRgb.r * 0.7 + 48))},${Math.min(255, Math.round(colorRgb.g * 0.7 + 48))},${Math.min(255, Math.round(colorRgb.b * 0.7 + 70))},0.24)`
-      : 'rgba(59,130,246,0.2)'
-    const peerThemeStyle = `--profile-accent:${accent};--profile-banner-c1:${bannerC1};--profile-banner-c2:${bannerC2};`
-    const banner = bannerSrc
-      ? `linear-gradient(0deg, rgba(8,10,16,.42), rgba(8,10,16,.42)), url(${bannerSrc})`
-      : `linear-gradient(135deg, ${bannerC1}, ${bannerC2}), linear-gradient(180deg,#1a1f2e,#10131c)`
-    const avatarInner = avatarSrc
-      ? `<div class="profile-avatar profile-avatar--disc flow-profile-avatar-face" style="background-image:url(${avatarSrc});background-size:cover;background-position:center;"></div>`
-      : `<div class="profile-avatar profile-avatar--disc flow-profile-avatar-face">${escapeHtml(String(uRaw).slice(0, 1).toUpperCase())}</div>`
-    const pres = _friendPresence.get(unameKey) || {}
-    const friends = Array.isArray(profileData._friends) ? profileData._friends.slice(0, 24) : []
-    const friendsHtml = friends.length ? buildFlowProfileFriendsStripHtml(friends) : '<div class="flow-profile-friends-empty">РќРµС‚ РґР°РЅРЅС‹С…</div>'
-    const listenTrack =
-      pres.online && pres.track?.title
-        ? {
-            title: pres.track.title,
-            artist: pres.track.artist || '',
-            source: pres.track.source || 'soundcloud',
-          }
-        : null
-    const listenCoverId = 'peer-flow-listening-cover'
-    const listenHtml = stringifyFlowProfileListeningPanel(listenTrack, listenTrack ? 38 : 0, listenTrack ? listenCoverId : null)
-    body.innerHTML = `
-      <div class="profile-shell peer-profile-shell profile-unified flow-profile-card peer-profile-card-bleed" style="${peerThemeStyle}">
-        <div class="peer-profile-cover-wrap">
-          <div class="peer-profile-cover" style="background-image:${banner};"></div>
-          <div class="flow-profile-hero-fill peer-profile-below-cover">
-            <section class="flow-profile-main-tile flow-profile-nested-glass">
-              <div class="flow-profile-top-row peer-profile-top-row">
-                <div class="flow-profile-avatar-col">
-                  <div class="flow-profile-avatar-ring-wrap">
-                    <div class="flow-profile-avatar-ring">
-                      ${avatarInner}
-                    </div>
-                    <span class="flow-profile-online-dot ${pres.online ? '' : 'flow-profile-online-dot--offline'}" aria-hidden="true"></span>
-                  </div>
-                </div>
-              </div>
-              <div class="flow-profile-identity">
-                <h3 class="flow-profile-display-name">${escapeHtml(uRaw)}</h3>
-                <p class="flow-profile-handle-line">@${escapeHtml(uRaw)} вЂў custom</p>
-                <div class="flow-profile-badge-strip">${getFlowProfileBadgeStripHtml()}</div>
-                <p class="flow-profile-bio">${escapeHtml(profileData.bio || 'РћРїРёСЃР°РЅРёРµ РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚')}</p>
-              </div>
-              <div class="flow-profile-friends-zone">
-                <div class="flow-profile-zone-label">Friends</div>
-                <div class="flow-profile-friends-strip">${friendsHtml}</div>
-              </div>
-            </section>
-            <div class="flow-profile-listening-slot">${listenHtml}</div>
-          </div>
-        </div>
-      </div>
-    `
-    if (listenTrack) {
-      queueMicrotask(() => {
-        const c = document.getElementById(listenCoverId)
-        if (!c) return
-        c.textContent = 'в™Є'
-        c.style.display = 'flex'
-        c.style.alignItems = 'center'
-        c.style.justifyContent = 'center'
-        c.style.fontSize = '20px'
-        c.style.color = 'rgba(255,255,255,0.78)'
-        c.style.backgroundImage = 'none'
-        c.style.background = 'linear-gradient(135deg, rgba(124,58,237,0.58), rgba(59,130,246,0.48))'
-      })
-    }
-    modal.classList.remove('hidden')
-  }
-  renderModal(data)
-  const targetPeerId = String(peerId || data?.peerId || `flow-${targetUsername}` || '').trim()
-  const cloud = await fetchCloudPublicProfile(username).catch(() => null)
-  const cloudFriends = await fetchCloudFriendsForUser(username).catch(() => [])
-  if (Array.isArray(cloudFriends) && cloudFriends.length) profileFriends = cloudFriends
-  if (cloud) {
-    data = mergeProfileData(data, cloud, targetPeerId || data.peerId || '')
-    data._friends = profileFriends.slice()
-    if (data.peerId) _peerProfiles.set(data.peerId, data)
-    cachePeerProfile(data, data.peerId)
-    renderModal(data)
-  }
-  if (_socialPeer?.requestPeerData && targetPeerId && targetPeerId !== _socialPeer?.peer?.id) {
-    const rsp = await _socialPeer.requestPeerData(targetPeerId, { type: 'presence-request' }, 1300).catch(() => null)
-    const remoteProfile = rsp?.ok ? rsp?.data?.profile : null
-    if (remoteProfile) {
-      data = mergeProfileData(data, remoteProfile, rsp?.data?.peerId || targetPeerId || '')
-      if (!Array.isArray(data._friends)) data._friends = profileFriends.slice()
-      _peerProfiles.set(data.peerId, data)
-      cachePeerProfile(data, data.peerId)
-      renderModal(data)
-    }
-  }
-}
-
-function closePeerProfile() {
-  const modal = document.getElementById('peer-profile-modal')
-  if (modal) modal.classList.add('hidden')
-}
-
-function getListenStats() {
-  if (!_profile?.username) return { totalTracks: 0, totalSeconds: 0, lastTrackKey: null }
-  const key = `flow_listen_stats_${_profile.username}`
-  try { return Object.assign({ totalTracks: 0, totalSeconds: 0, lastTrackKey: null }, JSON.parse(localStorage.getItem(key) || '{}')) } catch { return { totalTracks: 0, totalSeconds: 0, lastTrackKey: null } }
-}
-
-function toDbSafeBigint(value, fallback = 0) {
-  if (typeof value === 'number' && Number.isFinite(value)) return Math.max(0, Math.round(value))
-  const normalized = String(value ?? '').trim().replace(/\s+/g, '').replace(',', '.')
-  const parsed = Number(normalized)
-  if (!Number.isFinite(parsed)) return fallback
-  return Math.max(0, Math.round(parsed))
-}
-
-function getListenHistory() {
-  if (!_profile?.username) return []
-  const key = `flow_listen_history_${_profile.username}`
-  try {
-    const list = JSON.parse(localStorage.getItem(key) || '[]')
-    return Array.isArray(list) ? list : []
-  } catch {
-    return []
-  }
-}
-
-function saveListenHistory(list = []) {
-  if (!_profile?.username) return
-  const key = `flow_listen_history_${_profile.username}`
-  try { localStorage.setItem(key, JSON.stringify(Array.isArray(list) ? list.slice(0, WE?.MY_WAVE_MAX_TRACKS ?? 30) : [])) } catch {}
-}
-
-function pushListenHistory(track) {
-  const safe = sanitizeTrack(track)
-  if (!safe?.id || !_profile?.username) return
-  const key = `${safe.source || 'unknown'}:${safe.id}`
-  const next = [{ key, playedAt: Date.now(), track: safe }]
-  const seen = new Set([key])
-  for (const item of getListenHistory()) {
-    const itemKey = String(item?.key || '')
-    if (!itemKey || seen.has(itemKey) || !item?.track?.id) continue
-    seen.add(itemKey)
-    next.push(item)
-    if (next.length >= (WE?.MY_WAVE_MAX_TRACKS ?? 30)) break
-  }
-  saveListenHistory(next)
-}
-
-function getMyWaveMode() {
-  return WE?.MY_WAVE_MODES?.[_myWaveMode] ? _myWaveMode : 'default'
-}
-
-function setMyWaveMode(mode) {
-  _myWaveMode = WE?.MY_WAVE_MODES?.[mode] ? mode : 'default'
-  try { localStorage.setItem('flow_my_wave_mode', _myWaveMode) } catch {}
-  renderMyWave()
-  renderYandexWaveModes()
-  syncYandexWaveSettingsLabel()
-}
-
-function syncYandexWaveSettingsLabel() {
-  const btn = document.querySelector('.yandex-wave-settings')
-  if (!btn) return
-  const mode = getMyWaveMode()
-  const cfg = WE?.MY_WAVE_MODES?.[mode]
-  const label = sanitizeDisplayText(cfg?.label || 'РќР°СЃС‚СЂРѕРёС‚СЊ')
-  btn.textContent = `в° ${label}`
-  btn.title = 'РќР°СЃС‚СЂРѕРёС‚СЊ РњРѕСЋ РІРѕР»РЅСѓ'
-}
-
-function renderYandexWaveModes() {
-  const pop = document.getElementById('yandex-wave-mode-pop')
-  if (!pop) return
-  const mode = getMyWaveMode()
-  const modes = Object.entries(WE?.MY_WAVE_MODES || {})
-  pop.innerHTML = `
-    <div class="yandex-wave-mode-title">Р РµР¶РёРј РњРѕРµР№ РІРѕР»РЅС‹</div>
-    <div class="yandex-wave-mode-grid">
-      ${modes.map(([id, cfg]) => (
-        `<button type="button" class="yandex-wave-mode-btn ${id === mode ? 'active' : ''}" data-wave-mode="${escapeHtml(id)}" onclick="setMyWaveMode('${escapeHtml(id)}'); toggleYandexWaveModes(false)">${escapeHtml(sanitizeDisplayText(cfg.label || id))}</button>`
-      )).join('')}
-    </div>
-  `
-  syncYandexWaveSettingsLabel()
-}
-
-function toggleYandexWaveModes(force) {
-  const pop = document.getElementById('yandex-wave-mode-pop')
-  if (!pop) return
-  renderYandexWaveModes()
-  const shouldOpen = typeof force === 'boolean' ? force : pop.classList.contains('hidden')
-  pop.classList.toggle('hidden', !shouldOpen)
-}
-
-
-async function maybePreloadMyWave(force = false) {
-  if (queueScope !== 'myWave' || _myWaveBuilding || _myWavePreloading) return
-  const remaining = queue.length - queueIndex - 1
-  if (!force && remaining > 3) return
-  if (getMyWaveSeedTracks().length < 3) return
-  const startLength = queue.length
-  _myWavePreloading = true
-  renderMyWave()
-  try {
-    const additions = await findMyWaveRecommendations(10, getMyWaveMode())
-    const existing = new Set(queue.map((track) => normalizeTrackSignature(track)).filter(Boolean))
-    const fresh = additions.filter((track) => {
-      const sig = normalizeTrackSignature(track)
-      if (!sig || existing.has(sig)) return false
-      existing.add(sig)
-      return true
-    })
-    if (fresh.length) {
-      queue.push(...fresh)
-      _myWaveRenderedTracks = queue.slice()
-      renderQueue()
-      showToast(`РњРѕСЏ РІРѕР»РЅР° РґРѕР·Р°РіСЂСѓР·РёР»Р° ${fresh.length} С‚СЂРµРєРѕРІ`)
-      if (force && queueIndex >= startLength - 1 && queue[queueIndex + 1]) {
-        queueIndex++
-        await playTrackObj(queue[queueIndex])
-      }
-    }
-  } catch (err) {
-    console.warn('my wave preload failed', err)
-  } finally {
-    _myWavePreloading = false
-    renderMyWave()
-  }
-}
-
-async function startMyWave() {
-  if (_myWaveBuilding) return
-  const seedTracks = getMyWaveSeedTracks()
-  if (seedTracks.length < 3) return showToast('РџРѕСЃР»СѓС€Р°Р№ РёР»Рё Р»Р°Р№РєРЅРё РµС‰Рµ РЅРµСЃРєРѕР»СЊРєРѕ С‚СЂРµРєРѕРІ, С‡С‚РѕР±С‹ РІРѕР»РЅР° РїРѕРЅСЏР»Р° РІРєСѓСЃ', true)
-  _myWaveBuilding = true
-  renderMyWave()
-  showToast('РњРѕСЏ РІРѕР»РЅР° РїРѕРґР±РёСЂР°РµС‚ РЅРѕРІС‹Рµ С‚СЂРµРєРё...')
-  try {
-    const tracks = await findMyWaveRecommendations(WE?.MY_WAVE_MIN_TRACKS ?? 10, getMyWaveMode())
-    if (!tracks.length) return showToast('Р’РѕР»РЅР° РїРѕРєР° РЅРµ РЅР°С€Р»Р° РЅРѕРІС‹Рµ С‚СЂРµРєРё. РџРѕРїСЂРѕР±СѓР№ РґСЂСѓРіРѕР№ СЂРµР¶РёРј РёР»Рё РїРѕСЃР»СѓС€Р°Р№ РµС‰Рµ РјСѓР·С‹РєСѓ', true)
-    _myWaveRenderedTracks = tracks.slice()
-    queue = tracks.slice()
-    queueIndex = 0
-    queueScope = 'myWave'
-    showToast(`РњРѕСЏ РІРѕР»РЅР° СЃРѕР±СЂР°Р»Р° ${tracks.length} РЅРѕРІС‹С… С‚СЂРµРєРѕРІ`)
-    await playTrackObj(queue[0])
-  } catch (err) {
-    showToast(`РњРѕСЏ РІРѕР»РЅР° РЅРµ Р·Р°РїСѓСЃС‚РёР»Р°СЃСЊ: ${sanitizeDisplayText(err?.message || err)}`, true)
-  } finally {
-    _myWaveBuilding = false
-    renderMyWave()
-  }
-}
-
-function renderMyWave() {
-  const listEl = document.getElementById('my-wave-list')
-  const hintEl = document.getElementById('my-wave-hint')
-  const modesEl = document.getElementById('my-wave-modes')
-  if (!listEl || !hintEl) return
-  const mode = getMyWaveMode()
-  const modeCfg = WE?.MY_WAVE_MODES?.[mode] || WE?.MY_WAVE_MODES?.default
-  const seedCount = getMyWaveSeedTracks().length
-  if (modesEl) {
-    modesEl.innerHTML = Object.entries(WE?.MY_WAVE_MODES || {}).map(([id, cfg]) => (
-      `<button class="my-wave-mode ${id === mode ? 'active' : ''}" data-wave-mode="${id}" onclick="setMyWaveMode('${id}')">${cfg.label}</button>`
-    )).join('')
-  }
-  if (seedCount < 3) {
-    hintEl.textContent = `РџРѕСЃР»СѓС€Р°Р№ РёР»Рё Р»Р°Р№РєРЅРё РµС‰Рµ ${3 - seedCount} С‚СЂРµРє(РѕРІ), С‡С‚РѕР±С‹ РІРѕР»РЅР° РїРѕРЅСЏР»Р° С‚РІРѕР№ РІРєСѓСЃ`
-  } else if (_myWaveBuilding) {
-    hintEl.textContent = `${modeCfg.label}: РёС‰Сѓ РЅРѕРІС‹Рµ С‚СЂРµРєРё РїРѕ С‚РІРѕРµРјСѓ РІРєСѓСЃСѓ...`
-  } else if (_myWavePreloading) {
-    hintEl.textContent = `${modeCfg.label}: РґРѕР·Р°РіСЂСѓР¶Р°СЋ РЅРѕРІС‹Рµ С‚СЂРµРєРё, С‡С‚РѕР±С‹ РІРѕР»РЅР° РЅРµ РєРѕРЅС‡Р°Р»Р°СЃСЊ...`
-  } else {
-    hintEl.textContent = `${modeCfg.label}: ${modeCfg.hint}. РќР°Р¶РјРё Р·Р°РїСѓСЃРє, Рё РІРѕР»РЅР° СЃР°РјР° СЃРѕР±РµСЂРµС‚ РЅРѕРІСѓСЋ РѕС‡РµСЂРµРґСЊ`
-  }
-  listEl.innerHTML = `
-    <div class="my-wave-orb mode-${mode} ${_myWaveBuilding || _myWavePreloading ? 'is-loading' : ''}" aria-label="${modeCfg.label}">
-      <div class="my-wave-orb-ring"></div>
-      <div class="my-wave-orb-core"></div>
-    </div>
-  `
-  renderRoomsMyWave()
-  refreshHomeDashboardLayoutAfterContentChange()
-}
-
-function renderRoomsMyWave() {
-  const hintEl = document.getElementById('rooms-wave-hint')
-  const modesEl = document.getElementById('rooms-wave-modes')
-  const listEl = document.getElementById('rooms-wave-list')
-  if (!hintEl || !modesEl || !listEl) return
-  const mode = getMyWaveMode()
-  const modeCfg = WE?.MY_WAVE_MODES?.[mode] || WE?.MY_WAVE_MODES?.default
-  const seedCount = getMyWaveSeedTracks().length
-  modesEl.innerHTML = Object.entries(WE?.MY_WAVE_MODES || {}).map(([id, cfg]) => (
-    `<button class="my-wave-mode ${id === mode ? 'active' : ''}" data-wave-mode="${id}" onclick="setMyWaveMode('${id}')">${cfg.label}</button>`
-  )).join('')
-  if (seedCount < 3) {
-    hintEl.textContent = `РџРѕСЃР»СѓС€Р°Р№ РёР»Рё Р»Р°Р№РєРЅРё РµС‰Рµ ${3 - seedCount} С‚СЂРµРє(РѕРІ), С‡С‚РѕР±С‹ РІРѕР»РЅР° РїРѕРЅСЏР»Р° С‚РІРѕР№ РІРєСѓСЃ`
-  } else if (_myWaveBuilding) {
-    hintEl.textContent = `${modeCfg.label}: РёС‰Сѓ РЅРѕРІС‹Рµ С‚СЂРµРєРё РїРѕ С‚РІРѕРµРјСѓ РІРєСѓСЃСѓ...`
-  } else if (_myWavePreloading) {
-    hintEl.textContent = `${modeCfg.label}: РґРѕР·Р°РіСЂСѓР¶Р°СЋ РЅРѕРІС‹Рµ С‚СЂРµРєРё, С‡С‚РѕР±С‹ РІРѕР»РЅР° РЅРµ РєРѕРЅС‡Р°Р»Р°СЃСЊ...`
-  } else {
-    hintEl.textContent = `${modeCfg.label}: ${modeCfg.hint}. РќР°Р¶РјРё Р·Р°РїСѓСЃРє, Рё РІРѕР»РЅР° СЃР°РјР° СЃРѕР±РµСЂРµС‚ РЅРѕРІСѓСЋ РѕС‡РµСЂРµРґСЊ`
-  }
-  listEl.innerHTML = `
-    <div class="my-wave-orb mode-${mode} ${_myWaveBuilding || _myWavePreloading ? 'is-loading' : ''}" aria-label="${modeCfg.label}">
-      <div class="my-wave-orb-ring"></div>
-      <div class="my-wave-orb-core"></div>
-    </div>
-  `
-}
-
-function playTrackFromMyWave(index) {
-  const i = Number(index)
-  const track = Number.isInteger(i) ? _myWaveRenderedTracks[i] : null
-  if (!track) return
-  queue = _myWaveRenderedTracks.slice()
-  queueIndex = i
-  queueScope = 'myWave'
-  playTrackObj(track).catch(() => {})
-}
-
-function saveListenStats(patch = {}) {
-  if (!ensureActiveProfile()?.username) return
-  const key = `flow_listen_stats_${_profile.username}`
-  const next = Object.assign(getListenStats(), patch || {})
-  localStorage.setItem(key, JSON.stringify(next))
-  scheduleProfileCloudSync()
-}
-
-function saveProfileCustom(patch = {}) {
-  if (!ensureActiveProfile()?.username) {
-    showToast('РЎРЅР°С‡Р°Р»Р° РІРѕР№РґРё РІ РїСЂРѕС„РёР»СЊ', true)
-    return getProfileCustom()
-  }
-  const key = `flow_profile_custom_${_profile.username}`
-  const next = Object.assign(getProfileCustom(), patch || {})
-  localStorage.setItem(key, JSON.stringify(next))
-  try {
-    const publicPayload = getPublicProfilePayload(_profile.username)
-    if (_socialPeer?.peer?.id && publicPayload) {
-      _peerProfiles.set(_socialPeer.peer.id, publicPayload)
-      cachePeerProfile(publicPayload, _socialPeer.peer.id)
-    }
-    if (_roomState?.roomId && _socialPeer?.send) {
-      _socialPeer.send({ type: 'room-profile-state', roomId: _roomState.roomId, profile: publicPayload, sharedQueue })
-    }
-  } catch {}
-  scheduleProfileCloudSync()
-  return next
-}
-
-function normalizeProfileColor(value = '') {
-  const raw = String(value || '').trim()
-  return /^#[0-9a-f]{6}$/i.test(raw) ? raw.toLowerCase() : ''
-}
-
-function hexToRgb(hex = '') {
-  const safe = normalizeProfileColor(hex)
-  if (!safe) return null
-  return {
-    r: parseInt(safe.slice(1, 3), 16),
-    g: parseInt(safe.slice(3, 5), 16),
-    b: parseInt(safe.slice(5, 7), 16),
-  }
-}
-
-function applyProfileColorTheme(profileColor = '') {
-  const page = document.getElementById('page-profile')
-  if (!page) return false
-  const rgb = hexToRgb(profileColor)
-  if (!rgb) return false
-  const { r, g, b } = rgb
-  page.style.setProperty('--profile-banner-c1', `rgba(${r},${g},${b},0.24)`)
-  page.style.setProperty('--profile-banner-c2', `rgba(${Math.min(255, Math.round(r * 0.7 + 48))},${Math.min(255, Math.round(g * 0.7 + 48))},${Math.min(255, Math.round(b * 0.7 + 70))},0.18)`)
-  page.style.setProperty('--profile-accent', profileColor)
-  return true
-}
-
-async function applyProfileBannerTheme(bannerData, profileColor = '') {
-  const page = document.getElementById('page-profile')
-  if (!page) return
-  if (applyProfileColorTheme(profileColor)) return
-  if (!bannerData) {
-    page.style.setProperty('--profile-banner-c1', 'rgba(124,58,237,0.16)')
-    page.style.setProperty('--profile-banner-c2', 'rgba(59,130,246,0.14)')
-    page.style.setProperty('--profile-accent', 'var(--accent2)')
-    return
-  }
-  try {
-    const img = await new Promise((resolve, reject) => {
-      const el = new Image()
-      el.crossOrigin = 'anonymous'
-      el.onload = () => resolve(el)
-      el.onerror = reject
-      el.src = bannerData
-    })
-    const c = document.createElement('canvas')
-    c.width = 12
-    c.height = 12
-    const ctx = c.getContext('2d', { willReadFrequently: true })
-    if (!ctx) return
-    ctx.drawImage(img, 0, 0, c.width, c.height)
-    const d = ctx.getImageData(0, 0, c.width, c.height).data
-    let r = 0; let g = 0; let b = 0; let n = 0
-    for (let i = 0; i < d.length; i += 16) {
-      r += d[i]; g += d[i + 1]; b += d[i + 2]; n++
-    }
-    if (!n) return
-    r = Math.round(r / n); g = Math.round(g / n); b = Math.round(b / n)
-    const c1 = `rgba(${r},${g},${b},0.20)`
-    const c2 = `rgba(${Math.min(255, Math.round(r * 0.75 + 38))},${Math.min(255, Math.round(g * 0.75 + 54))},${Math.min(255, Math.round(b * 0.75 + 84))},0.16)`
-    page.style.setProperty('--profile-banner-c1', c1)
-    page.style.setProperty('--profile-banner-c2', c2)
-    page.style.setProperty('--profile-accent', `rgb(${r},${g},${b})`)
-  } catch {}
-}
-
-function resolvePeerAvatarByUsername(username = '') {
-  const safe = String(username || '').trim().toLowerCase()
-  if (!safe) return null
-  const remote = Array.from(_peerProfiles.values()).find((p) => String(p?.username || '').trim().toLowerCase() === safe)
-  if (remote?.avatarData) return remote.avatarData
-  const cached = getCachedPeerProfile(safe)
-  if (cached?.avatarData) return cached.avatarData
-  const key = `flow_profile_custom_${safe}`
-  try {
-    const data = JSON.parse(localStorage.getItem(key) || '{}')
-    return data?.avatarData || null
-  } catch {
-    return null
-  }
-}
-
-/** Р‘РµР№РґР¶ РєР°Рє РЅР° РєР°СЂС‚РѕС‡РєР°С… С‚СЂРµРєРѕРІ: SoundCloud вЂ” РѕСЂР°РЅР¶РµРІС‹Р№ В«SCВ» (СЃРѕРІРїР°РґР°РµС‚ СЃ .track-source-soundcloud). */
-function profileListeningSourcePillHtml(trackHint) {
-  const LABELS = { soundcloud: 'SC', vk: 'VK', hitmo: 'HM', youtube: 'YT', spotify: 'SP' }
-  const src =
-    trackHint && typeof trackHint.source === 'string' && LABELS[trackHint.source] ? trackHint.source : ''
-  if (!src) {
-    return '<span class="flow-profile-src-badge flow-profile-src-badge--muted">SC</span>'
-  }
-  return `<span class="track-source track-source-${src} flow-profile-src-badge">${LABELS[src]}</span>`
-}
-
-/** @param {object|null} trackHint вЂ” РЅСѓР¶РµРЅ Р»Рё source РґР»СЏ Р±РµР№РґР¶Р° (РїР»РµРµСЂ Р±РµР· С‚СЂРµРєР° в†’ РїСЂРёРіР»СѓС€С‘РЅРЅС‹Р№ SC). */
-function flowProfileListeningBrandHtml(trackHint) {
-  const pill = profileListeningSourcePillHtml(trackHint)
-  return `<div class="flow-profile-listening-head">
-    <span class="flow-profile-listening-brand-slot">${pill}</span>
-    <span class="flow-profile-listening-caption">LISTENING TO FLOW</span>
-  </div>`
-}
-
-/** РљР°СЂС‚РѕС‡РєР° В«Listening to FlowВ» (Р°РЅР°Р»РѕРі РѕС‚РґРµР»СЊРЅРѕРіРѕ UI-РєРѕРјРїРѕРЅРµРЅС‚Р°): РѕР±Р»РѕР¶РєР°, РїСЂРѕРіСЂРµСЃСЃ, РёРЅРґРёРєР°С‚РѕСЂ РІ СѓРіР»Сѓ. */
-function buildProfileActivityCardHtml(track, progressPct, coverDomId) {
-  const pct = Math.max(0, Math.min(100, Number(progressPct) || 0))
-  const corner = '<span class="flow-profile-activity-corner-dot" aria-hidden="true"></span>'
-  if (!track || !track.title) {
-    return `${corner}${flowProfileListeningBrandHtml(null)}<div class="flow-profile-listening-empty"><span class="flow-profile-listening-dot"></span><span>РЎРµР№С‡Р°СЃ РЅРёС‡РµРіРѕ РЅРµ РёРіСЂР°РµС‚</span></div>`
-  }
-  const idAttr = coverDomId ? ` id="${coverDomId}"` : ''
-  return `${corner}${flowProfileListeningBrandHtml(track)}
-    <div class="flow-profile-listening-body">
-      <div class="flow-profile-listening-cover"${idAttr}></div>
-      <div class="flow-profile-listening-meta">
-        <p class="flow-profile-listening-title">${escapeHtml(track.title)}</p>
-        <span class="flow-profile-listening-artist">${escapeHtml(track.artist || 'вЂ”')}</span>
-        <div class="flow-profile-listening-bar">
-          <span class="flow-profile-listening-bar-fill" style="width:${pct}%"></span>
-          <span class="flow-profile-listening-knob" style="left:${pct}%"></span>
-        </div>
-      </div>
-    </div>`
-}
-
-function stringifyFlowProfileListeningPanel(track, progressPct, coverDomId) {
-  return buildProfileActivityCardHtml(track, progressPct, coverDomId)
-}
-
-/** @param {object|null} track @param {{ panel?: boolean }} [opts] */
-function formatFlowProfileFavoriteSongHtml(track, opts = {}) {
-  const usePanel = opts.panel !== false
-  const pc = usePanel ? ' flow-profile-favorite--panel' : ''
-  if (!track || !track.title) {
-    return `<div class="flow-profile-favorite flow-profile-favorite--empty${pc}"><span class="flow-profile-favorite-label">Favorite song</span><span class="flow-profile-favorite-empty-note">вЂ”</span></div>`
-  }
-  const cover = getListCoverUrl(track) || getEffectiveCoverUrl(track) || ''
-  const thumb = cover
-    ? `<div class="flow-profile-favorite-thumb" style="background-image:url(${cover})"></div>`
-    : `<div class="flow-profile-favorite-thumb flow-profile-favorite-thumb--ph">в™Є</div>`
-  return `<div class="flow-profile-favorite${pc}"><span class="flow-profile-favorite-label">Favorite song</span><div class="flow-profile-favorite-row">${thumb}<div class="flow-profile-favorite-meta"><span class="flow-profile-favorite-title">${escapeHtml(track.title)}</span><span class="flow-profile-favorite-artist">${escapeHtml(track.artist || 'вЂ”')}</span></div></div></div>`
-}
-
-function buildFlowProfileFriendsStripHtml(usernames) {
-  const list = Array.isArray(usernames) ? usernames.map((x) => String(x || '').trim()).filter(Boolean) : []
-  if (!list.length) return '<div class="flow-profile-friends-empty">РџРѕРєР° РЅРµС‚ РґСЂСѓР·РµР№</div>'
-  return list
-    .map((f) => {
-      const av = resolvePeerAvatarByUsername(f)
-      const face = av
-        ? `<div class="flow-profile-friend-face" style="background-image:url(${av})"></div>`
-        : `<div class="flow-profile-friend-face">${escapeHtml(f.slice(0, 1).toUpperCase())}</div>`
-      return `<button type="button" class="flow-profile-friend-chip" onclick="openPeerProfile(${JSON.stringify(f)},'')">${face}<span>${escapeHtml(f)}</span></button>`
-    })
-    .join('')
-}
-
-function getFlowProfileBadgeStripHtml() {
-  const flowIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 2l2.2 6.8H21l-5.5 4 2.1 6.5L12 15.2 6.4 19.3l2.1-6.5L3 8.8h6.8L12 2z"/></svg>`
-  const trophyIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 21h8M12 17v4M6 3h12v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V3z"/><path d="M6 5H4a2 2 0 0 0 0 4h2M18 5h2a2 2 0 0 1 0 4h-2"/></svg>`
-  const gemIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3l8 9-8 9-8-9 8-9z"/><path d="M4 12h16"/></svg>`
-  const gearIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>`
-  return `<span class="flow-profile-badge-chip" title="Flow">${flowIcon}</span><span class="flow-profile-badge-chip">${trophyIcon}</span><span class="flow-profile-badge-chip">${gemIcon}</span><span class="flow-profile-badge-chip">${gearIcon}</span>`
-}
-
-function injectFlowProfileBadgeRow(el) {
-  if (!el) return
-  el.innerHTML = getFlowProfileBadgeStripHtml()
-}
-
-function renderProfileNowPlaying() {
-  const box = document.getElementById('profile-now-playing')
-  if (!box) return
-  const duration = Number(audio?.duration || 0)
-  const current = Number(audio?.currentTime || 0)
-  const progress = duration > 0 ? (current / duration) * 100 : 0
-  const coverId = 'profile-flow-listening-cover'
-  const hasTrack = Boolean(currentTrack?.title)
-  box.classList.toggle('flow-profile-activity-idle', !hasTrack)
-  box.innerHTML = buildProfileActivityCardHtml(currentTrack, progress, hasTrack ? coverId : null)
-  if (currentTrack && hasTrack) {
-    const coverEl = document.getElementById(coverId)
-    if (coverEl) {
-      applyCoverArt(
-        coverEl,
-        getEffectiveCoverUrl(currentTrack),
-        currentTrack.bg || 'linear-gradient(135deg,#7c3aed,#a855f7)',
-      )
-    }
-  }
-}
-
-/** РўРѕР»СЊРєРѕ РїРѕР»РѕСЃРєР° РїСЂРѕРіСЂРµСЃСЃР° РЅР° РїСЂРѕС„РёР»Рµ вЂ” Р±РµР· innerHTML Рё Р±РµР· applyCoverArt (СЂР°РЅСЊС€Рµ СЌС‚Рѕ РґРµР»Р°Р»РѕСЃСЊ РёР· timeupdate ~11 СЂР°Р·/СЃ). */
-function patchProfileNowPlayingProgress() {
-  if (_activePageId !== 'profile' || !currentTrack?.title) return
-  const box = document.getElementById('profile-now-playing')
-  if (!box || box.classList.contains('flow-profile-activity-idle')) return
-  const duration = Number(audio?.duration || 0)
-  const current = Number(audio?.currentTime || 0)
-  const pct = Math.max(0, Math.min(100, duration > 0 ? (current / duration) * 100 : 0))
-  const fill = box.querySelector('.flow-profile-listening-bar-fill')
-  const knob = box.querySelector('.flow-profile-listening-knob')
-  if (fill) fill.style.width = `${pct}%`
-  if (knob) knob.style.left = `${pct}%`
-}
-
-function renderProfilePage() {
-  if (!_profile?.username) return
-  const custom = getProfileCustom()
-  const banner = document.getElementById('profile-banner')
-  const avatar = document.getElementById('profile-avatar-large')
-  const displayName = document.getElementById('profile-display-name')
-  const handleLine = document.getElementById('profile-handle-line')
-  const badgeRow = document.getElementById('profile-badge-row')
-  const favSlot = document.getElementById('profile-favorite-song')
-  const bio = document.getElementById('profile-bio')
-  const friendsEl = document.getElementById('profile-friends-list')
-  if (banner) {
-    if (custom.bannerData) {
-      banner.style.backgroundImage = `linear-gradient(0deg, rgba(8,10,16,.32), rgba(8,10,16,.28)), url(${custom.bannerData})`
-    } else {
-      banner.style.backgroundImage =
-        'linear-gradient(135deg, rgba(124,58,237,0.42), rgba(59,130,246,0.32)), linear-gradient(180deg, rgba(12,14,22,0.05) 0%, rgba(8,10,16,0.82) 100%)'
-    }
-    banner.style.backgroundSize = 'cover'
-    banner.style.backgroundPosition = 'center'
-  }
-  if (avatar) {
-    if (custom.avatarData) {
-      avatar.textContent = ''
-      avatar.style.backgroundImage = `url(${custom.avatarData})`
-      avatar.style.backgroundSize = 'cover'
-      avatar.style.backgroundPosition = 'center'
-    } else {
-      avatar.style.backgroundImage = ''
-      avatar.textContent = (_profile.username || '?').slice(0, 1).toUpperCase()
-    }
-  }
-  const bubbleEl = document.getElementById('profile-thought-bubble')
-  if (bubbleEl) {
-    const tb = String(custom.thoughtBubble || '').trim()
-    if (tb) {
-      bubbleEl.textContent = tb
-      bubbleEl.classList.remove('flow-profile-thought-bubble--hidden')
-      bubbleEl.setAttribute('aria-hidden', 'false')
-    } else {
-      bubbleEl.textContent = ''
-      bubbleEl.classList.add('flow-profile-thought-bubble--hidden')
-      bubbleEl.setAttribute('aria-hidden', 'true')
-    }
-  }
-  const presDot = document.getElementById('profile-avatar-presence-dot')
-  if (presDot) {
-    const selfOnline = Boolean(_socialPeer)
-    presDot.classList.toggle('flow-profile-online-dot--offline', !selfOnline)
-  }
-  if (displayName) displayName.textContent = _profile.username
-  if (handleLine) handleLine.textContent = `@${_profile.username} вЂў custom`
-  injectFlowProfileBadgeRow(badgeRow)
-  if (favSlot) favSlot.innerHTML = formatFlowProfileFavoriteSongHtml(custom.pinnedTracks?.[0] || null)
-  if (bio) bio.textContent = custom.bio || 'РћРїРёСЃР°РЅРёРµ РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚'
-  applyProfileBannerTheme(custom.bannerData, custom.profileColor).catch?.(() => {})
-  renderProfileNowPlaying()
-  if (friendsEl) {
-    const friends = typeof peerSocial.getFriends === 'function' ? peerSocial.getFriends(_profile.username) : []
-    friendsEl.innerHTML = buildFlowProfileFriendsStripHtml(friends)
-  }
-  syncProfileEditModal()
-}
-
-function syncProfileEditModal() {
-  const modal = document.getElementById('profile-edit-modal')
-  if (!modal || modal.classList.contains('hidden')) return
-  const draft = _profileEditDraft || getProfileCustom()
-  const avatar = document.getElementById('profile-edit-avatar-preview')
-  const banner = document.getElementById('profile-edit-banner-preview')
-  const bio = document.getElementById('profile-edit-bio')
-  const thoughtBubbleInp = document.getElementById('profile-edit-thought-bubble')
-  const colorPreview = document.getElementById('profile-edit-color-preview')
-  const colorText = document.getElementById('profile-edit-color-text')
-  const safeColor = normalizeProfileColor(draft.profileColor || '') || '#9ca3af'
-  modal.style.setProperty('--profile-edit-accent', safeColor)
-  if (avatar) {
-    avatar.textContent = draft.avatarData ? '' : String(_profile?.username || '?').slice(0, 1).toUpperCase()
-    avatar.style.backgroundImage = draft.avatarData ? `url(${draft.avatarData})` : ''
-  }
-  if (banner) {
-    banner.style.backgroundImage = draft.bannerData
-      ? `linear-gradient(0deg, rgba(8,10,16,.28), rgba(8,10,16,.28)), url(${draft.bannerData})`
-      : 'linear-gradient(135deg, rgba(59,130,246,.24), rgba(139,92,246,.22))'
-  }
-  if (bio && document.activeElement !== bio) bio.value = draft.bio || ''
-  if (thoughtBubbleInp && document.activeElement !== thoughtBubbleInp) thoughtBubbleInp.value = draft.thoughtBubble || ''
-  if (colorPreview) colorPreview.style.setProperty('--profile-edit-accent', safeColor)
-  if (colorText && document.activeElement !== colorText) colorText.value = normalizeProfileColor(draft.profileColor || '')
-  document.querySelectorAll('.profile-color-swatch').forEach((btn) => {
-    btn.classList.toggle('active', String(btn.dataset.color || '').toLowerCase() === safeColor)
-  })
-}
-
-function openProfileEditModal() {
-  if (!_profile?.username) return showToast('РЎРЅР°С‡Р°Р»Р° РІРѕР№РґРё РІ РїСЂРѕС„РёР»СЊ', true)
-  _profileEditDraft = Object.assign({}, getProfileCustom())
-  const modal = document.getElementById('profile-edit-modal')
-  const name = document.getElementById('profile-edit-username')
-  if (name) name.textContent = _profile.username
-  modal?.classList.remove('hidden')
-  syncProfileEditModal()
-}
-
-function closeProfileEditModal() {
-  const modal = document.getElementById('profile-edit-modal')
-  if (modal) modal.classList.add('hidden')
-  _profileEditDraft = null
-}
-
-function setProfileEditDraft(patch = {}) {
-  _profileEditDraft = Object.assign({}, _profileEditDraft || getProfileCustom(), patch || {})
-  syncProfileEditModal()
-}
-
-async function pickProfileEditImage(kind) {
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = 'image/*,.gif'
-  input.onchange = async () => {
-    const file = input.files?.[0]
-    if (!file) return
-    const dataUrl = await readFileAsDataUrl(file).catch(() => '')
-    const prepared = await prepareProfileImageData(file, dataUrl, kind).catch(() => dataUrl)
-    if (!prepared) return showToast(kind === 'avatar' ? 'РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ Р°РІР°С‚Р°СЂ' : 'РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ Р±Р°РЅРЅРµСЂ', true)
-    setProfileEditDraft(kind === 'avatar' ? { avatarData: prepared } : { bannerData: prepared })
-  }
-  input.click()
-}
-
-function clearProfileEditImage(kind) {
-  setProfileEditDraft(kind === 'avatar' ? { avatarData: null } : { bannerData: null })
-}
-
-function setProfileEditColor(value) {
-  const raw = String(value || '').trim()
-  const normalized = normalizeProfileColor(raw)
-  setProfileEditDraft({ profileColor: normalized })
-}
-
-async function submitProfileEditModal() {
-  if (!_profile?.username) return
-  const bio = document.getElementById('profile-edit-bio')
-  const thoughtBubbleInp = document.getElementById('profile-edit-thought-bubble')
-  const colorText = document.getElementById('profile-edit-color-text')
-  const draft = Object.assign({}, _profileEditDraft || getProfileCustom(), {
-    bio: String(bio?.value || '').trim().slice(0, 180),
-    thoughtBubble: String(thoughtBubbleInp?.value || '').trim().slice(0, 48),
-    profileColor: normalizeProfileColor(colorText?.value || _profileEditDraft?.profileColor || ''),
-  })
-  saveProfileCustom(draft)
-  syncProfileUi()
-  renderProfilePage()
-  scheduleProfileCloudSync()
-  const result = await syncProfileCloudNow().catch((err) => ({ ok: false, error: err?.message || String(err) }))
-  renderFriends().catch(() => {})
-  pollFriendsPresence(true).catch(() => {})
-  if (!result?.ok) return showToast(`РџСЂРѕС„РёР»СЊ СЃРѕС…СЂР°РЅС‘РЅ Р»РѕРєР°Р»СЊРЅРѕ, РЅРѕ СЃРµСЂРІРµСЂ РЅРµ РѕС‚РІРµС‚РёР»: ${result?.error || 'РѕС€РёР±РєР°'}`, true)
-  closeProfileEditModal()
-  showToast('РџСЂРѕС„РёР»СЊ СЃРѕС…СЂР°РЅС‘РЅ Рё СЃРёРЅС…СЂРѕРЅРёР·РёСЂРѕРІР°РЅ СЃ СЃРµСЂРІРµСЂРѕРј')
-}
-
-async function pickProfileAvatar() {
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = 'image/*'
-  input.onchange = async () => {
-    const file = input.files?.[0]
-    if (!file) return
-    const dataUrl = await readFileAsDataUrl(file).catch(() => '')
-    if (!dataUrl) return showToast('РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ Р°РІР°С‚Р°СЂ', true)
-    saveProfileCustom({ avatarData: dataUrl })
-    syncProfileUi()
-    renderProfilePage()
-  }
-  input.click()
-}
-
-async function pickProfileBanner() {
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = 'image/*'
-  input.onchange = async () => {
-    const file = input.files?.[0]
-    if (!file) return
-    const dataUrl = await readFileAsDataUrl(file).catch(() => '')
-    if (!dataUrl) return showToast('РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ Р±Р°РЅРЅРµСЂ', true)
-    saveProfileCustom({ bannerData: dataUrl })
-    renderProfilePage()
-  }
-  input.click()
-}
-
-function clearProfileAvatar() {
-  saveProfileCustom({ avatarData: null })
-  syncProfileUi()
-  renderProfilePage()
-  showToast('РђРІР°С‚Р°СЂ СѓРґР°Р»С‘РЅ')
-}
-
-function clearProfileBanner() {
-  saveProfileCustom({ bannerData: null })
-  renderProfilePage()
-  showToast('Р‘Р°РЅРЅРµСЂ СѓРґР°Р»С‘РЅ')
-}
-
-function editProfileBio() {
-  openProfileEditModal()
-}
-
-function addPinnedTrack() {
-  const tracks = getAllKnownTracks()
-  if (!tracks.length) return showToast('РќРµС‚ РґРѕСЃС‚СѓРїРЅС‹С… С‚СЂРµРєРѕРІ РґР»СЏ РґРѕР±Р°РІР»РµРЅРёСЏ', true)
-  openPlaylistPickerModal({
-    mode: 'profile-track',
-    title: 'Р’С‹Р±РµСЂРё С‚СЂРµРє РІ РїСЂРѕС„РёР»СЊ',
-    items: tracks.map((t, idx) => ({ id: String(idx), label: `${t.title} вЂ” ${t.artist || 'вЂ”'}` })),
-    payload: { tracks }
-  })
-}
-
-function addPinnedPlaylist() {
-  const playlists = getPlaylists().map(normalizePlaylist)
-  if (!playlists.length) return showToast('РЎРЅР°С‡Р°Р»Р° СЃРѕР·РґР°Р№ РїР»РµР№Р»РёСЃС‚', true)
-  openPlaylistPickerModal({
-    mode: 'profile-playlist',
-    title: 'Р’С‹Р±РµСЂРё РїР»РµР№Р»РёСЃС‚ РІ РїСЂРѕС„РёР»СЊ',
-    items: playlists.map((p, idx) => ({ id: String(idx), label: `${p.name} (${p.tracks.length})` })),
-    payload: {}
-  })
-}
-
-function getAllKnownTracks() {
-  const out = []
-  const seen = new Set()
-  const add = (t) => {
-    if (!t || !t.id || !t.source) return
-    const key = `${t.source}:${t.id}`
-    if (seen.has(key)) return
-    seen.add(key)
-    out.push(t)
-  }
-  add(currentTrack)
-  getLiked().forEach(add)
-  getPlaylists().map(normalizePlaylist).forEach((pl) => (pl.tracks || []).forEach(add))
-  return out
-}
-
-function openPlaylistPickerModal(ctx) {
-  _playlistPickerContext = ctx || null
-  _playlistPickerSelection = new Set()
-  const modal = document.getElementById('playlist-picker-modal')
-  const title = document.getElementById('playlist-picker-title')
-  const list = document.getElementById('playlist-picker-list')
-  const createRow = document.getElementById('playlist-picker-create-row')
-  const applyBtn = document.getElementById('playlist-picker-apply-btn')
-  if (!modal || !title || !list || !createRow || !applyBtn) return
-  title.textContent = ctx?.title || 'Р’С‹Р±РµСЂРё'
-  list.innerHTML = ''
-  createRow.style.display = ctx?.mode === 'add-track-playlist' ? 'flex' : 'none'
-  applyBtn.style.display = ctx?.multi ? 'inline-flex' : 'none'
-  ;(ctx?.items || []).forEach((item) => {
-    const btn = document.createElement('button')
-    btn.className = 'profile-picker-item'
-    if (ctx?.multi) {
-      btn.innerHTML = `<span style="opacity:.92">${item.label}</span><span class="profile-chip" data-picked="0">в—‹</span>`
-      btn.style.display = 'flex'
-      btn.style.justifyContent = 'space-between'
-      btn.style.alignItems = 'center'
-      btn.addEventListener('click', () => togglePlaylistPickerSelection(item.id))
-    } else {
-      btn.textContent = item.label
-      btn.addEventListener('click', () => submitPlaylistPicker(item.id))
-    }
-    btn.dataset.pickId = String(item.id)
-    list.appendChild(btn)
-  })
-  modal.classList.remove('hidden')
-}
-
-function closePlaylistPickerModal() {
-  const modal = document.getElementById('playlist-picker-modal')
-  if (modal) modal.classList.add('hidden')
-  _playlistPickerSelection = new Set()
-  _playlistPickerContext = null
-}
-
-function togglePlaylistPickerSelection(itemId) {
-  const id = String(itemId)
-  if (_playlistPickerSelection.has(id)) _playlistPickerSelection.delete(id)
-  else _playlistPickerSelection.add(id)
-  const list = document.getElementById('playlist-picker-list')
-  if (!list) return
-  const rows = Array.from(list.querySelectorAll('.profile-picker-item'))
-  const row = rows.find((el) => String(el.dataset.pickId || '') === id)
-  if (!row) return
-  const chip = row.querySelector('[data-picked]')
-  const selected = _playlistPickerSelection.has(id)
-  if (chip) chip.textContent = selected ? 'в—Џ' : 'в—‹'
-  row.classList.toggle('active', selected)
-}
-
-function applyPlaylistPickerSelection() {
-  const ctx = _playlistPickerContext
-  if (!ctx || !ctx.multi) return
-  const ids = Array.from(_playlistPickerSelection)
-  if (!ids.length) return showToast('Р’С‹Р±РµСЂРё РјРёРЅРёРјСѓРј РѕРґРёРЅ С‚СЂРµРє', true)
-  if (ctx.mode === 'room-own-liked-track-multi' || ctx.mode === 'room-own-playlist-track-multi') {
-    const tracks = ctx.payload?.tracks || []
-    let added = 0
-    ids.forEach((id) => {
-      const idx = Number(id)
-      const track = tracks[idx]
-      if (!track) return
-      enqueueSharedTrack(track)
-      added++
-    })
-    closePlaylistPickerModal()
-    showToast(`Р”РѕР±Р°РІР»РµРЅРѕ РІ РѕС‡РµСЂРµРґСЊ: ${added}`)
-    return
-  }
-  closePlaylistPickerModal()
-}
-
-function submitPlaylistPicker(selectedId) {
-  const ctx = _playlistPickerContext
-  if (!ctx) return
-  if (ctx.mode === 'add-track-playlist') {
-    const idx = Number(selectedId)
-    const pls = getPlaylists().map(normalizePlaylist)
-    if (pls[idx] && ctx.payload?.track) {
-      const track = ctx.payload.track
-      if (!pls[idx].tracks.some((t) => t.id === track.id && t.source === track.source)) pls[idx].tracks.push(track)
-      savePlaylists(pls)
-      showToast(`Р”РѕР±Р°РІР»РµРЅРѕ РІ "${pls[idx].name}"`)
-    }
-  } else if (ctx.mode === 'profile-track') {
-    const idx = Number(selectedId)
-    const track = ctx.payload?.tracks?.[idx]
-    if (track) {
-      const custom = getProfileCustom()
-      const key = `${track.source}:${track.id}`
-      const rest = (Array.isArray(custom.pinnedTracks) ? custom.pinnedTracks : []).filter(
-        (t) => `${t.source}:${t.id}` !== key,
-      )
-      const next = [track, ...rest].slice(0, 8)
-      saveProfileCustom({ pinnedTracks: next })
-      renderProfilePage()
-    }
-  } else if (ctx.mode === 'profile-playlist') {
-    const idx = Number(selectedId)
-    const custom = getProfileCustom()
-    if (!custom.pinnedPlaylists.includes(idx)) custom.pinnedPlaylists.push(idx)
-    saveProfileCustom({ pinnedPlaylists: custom.pinnedPlaylists.slice(0, 8) })
-    renderProfilePage()
-  } else if (ctx.mode === 'room-own-source') {
-    if (selectedId === 'liked') {
-      const liked = getLiked()
-      openPlaylistPickerModal({
-        mode: 'room-own-liked-track-multi',
-        title: 'Р’С‹Р±РµСЂРё С‚СЂРµРєРё РёР· Р»СЋР±РёРјС‹С…',
-        multi: true,
-        items: liked.map((t, idx) => ({ id: String(idx), label: `${t.title} вЂ” ${t.artist || 'вЂ”'}` })),
-        payload: { tracks: liked }
-      })
-      return
-    }
-    if (selectedId === 'playlists') {
-      const pls = getPlaylists().map(normalizePlaylist)
-      openPlaylistPickerModal({
-        mode: 'room-own-playlist',
-        title: 'Р’С‹Р±РµСЂРё РїР»РµР№Р»РёСЃС‚',
-        items: pls.map((p, idx) => ({ id: String(idx), label: `${p.name} (${p.tracks.length})` })),
-        payload: { playlists: pls }
-      })
-      return
-    }
-  } else if (ctx.mode === 'room-own-liked-track') {
-    const idx = Number(selectedId)
-    const track = ctx.payload?.tracks?.[idx]
-    if (track) enqueueSharedTrack(track)
-  } else if (ctx.mode === 'room-own-playlist') {
-    const idx = Number(selectedId)
-    const playlist = ctx.payload?.playlists?.[idx]
-    if (playlist?.tracks?.length) {
-      openPlaylistPickerModal({
-        mode: 'room-own-playlist-track-multi',
-        title: `РўСЂРµРєРё: ${playlist.name}`,
-        multi: true,
-        items: playlist.tracks.map((t, tIdx) => ({ id: String(tIdx), label: `${t.title} вЂ” ${t.artist || 'вЂ”'}` })),
-        payload: { tracks: playlist.tracks }
-      })
-      return
-    }
-  } else if (ctx.mode === 'room-own-liked-track-multi') {
-    return
-  } else if (ctx.mode === 'room-own-playlist-track-multi') {
-    return
-  } else if (ctx.mode === 'room-own-playlist-track') {
-    const idx = Number(selectedId)
-    const track = ctx.payload?.tracks?.[idx]
-    if (track) enqueueSharedTrack(track)
-  } else if (ctx.mode === 'room-invite-friend') {
-    const username = String(selectedId || '').trim()
-    if (username) {
-      const state = _friendPresence.get(username.toLowerCase()) || {}
-      sendRoomInviteToFriend(username, state.peerId || `flow-${username}`)
-    }
-  }
-  closePlaylistPickerModal()
-}
-
-function createPlaylistFromPicker() {
-  const ctx = _playlistPickerContext
-  if (!ctx || ctx.mode !== 'add-track-playlist') return
-  const nameInput = document.getElementById('playlist-picker-new-name')
-  const name = String(nameInput?.value || '').trim()
-  if (!name) return
-  const pls = getPlaylists().map(normalizePlaylist)
-  pls.push(normalizePlaylist({ name, tracks: [] }))
-  savePlaylists(pls)
-  const newIndex = pls.length - 1
-  submitPlaylistPicker(String(newIndex))
-}
-
-function renderPinnedTracks() {
-  const el = document.getElementById('profile-pinned-tracks')
-  if (!el) return
-  const custom = getProfileCustom()
-  if (!custom.pinnedTracks?.length) {
-    el.innerHTML = '<div class="flow-empty-state compact"><strong>Р›СЋР±РёРјС‹С… С‚СЂРµРєРѕРІ РЅРµС‚</strong><span>Р”РѕР±Р°РІСЊ С‚СЂРµРєРё РІ РїСЂРѕС„РёР»СЊ РёР· РјРµРЅСЋ СЂРµРґР°РєС‚РёСЂРѕРІР°РЅРёСЏ.</span></div>'
-    return
-  }
-  el.innerHTML = ''
-  custom.pinnedTracks.forEach((track, i) => {
-    const row = document.createElement('div')
-    row.className = 'profile-row'
-    const coverUrl = getListCoverUrl(track)
-    const cover = coverUrl
-      ? `<div class="profile-row-cover" style="background-image:url(${coverUrl})"></div>`
-      : `<div class="profile-row-cover profile-row-cover-fallback">в™Є</div>`
-    row.innerHTML = `${cover}<span>${track.title} вЂ” ${track.artist || 'вЂ”'}</span><button class="playlist-track-action danger">вњ•</button>`
-    row.querySelector('span')?.addEventListener('click', () => playTrackObj(track))
-    row.querySelector('button')?.addEventListener('click', () => {
-      const next = getProfileCustom()
-      next.pinnedTracks.splice(i, 1)
-      saveProfileCustom({ pinnedTracks: next.pinnedTracks })
-      renderProfilePage()
-    })
-    el.appendChild(row)
-  })
-}
-
-function renderPinnedPlaylists() {
-  const el = document.getElementById('profile-pinned-playlists')
-  if (!el) return
-  const custom = getProfileCustom()
-  const playlists = getPlaylists().map(normalizePlaylist)
-  const pinned = (custom.pinnedPlaylists || []).map((idx) => ({ idx, pl: playlists[idx] })).filter((x) => x.pl)
-  if (!pinned.length) {
-    el.innerHTML = '<div class="flow-empty-state compact"><strong>РџР»РµР№Р»РёСЃС‚С‹ РЅРµ Р·Р°РєСЂРµРїР»РµРЅС‹</strong><span>Р—Р°РєСЂРµРїРё РїР»РµР№Р»РёСЃС‚, С‡С‚РѕР±С‹ РѕРЅ РїРѕСЏРІРёР»СЃСЏ РІ РїСЂРѕС„РёР»Рµ.</span></div>'
-    return
-  }
-  el.innerHTML = ''
-  pinned.forEach((item, i) => {
-    const row = document.createElement('div')
-    row.className = 'profile-row'
-    row.innerHTML = `<span>${item.pl.name} (${item.pl.tracks.length})</span><button class="playlist-track-action danger">вњ•</button>`
-    row.querySelector('span')?.addEventListener('click', () => openPlaylist(item.idx))
-    row.querySelector('button')?.addEventListener('click', () => {
-      const next = getProfileCustom()
-      next.pinnedPlaylists.splice(i, 1)
-      saveProfileCustom({ pinnedPlaylists: next.pinnedPlaylists })
-      renderProfilePage()
-    })
-    el.appendChild(row)
-  })
-}
-
-function ensureFriendInteractionUI() {
-  if (!document.getElementById('friend-context-menu')) {
-    const menu = document.createElement('div')
-    menu.id = 'friend-context-menu'
-    menu.className = 'friend-context-menu hidden glass-card'
-    menu.innerHTML = `
-      <button class="friend-context-item" onclick="friendMenuOpenProfile()">Р—Р°Р№С‚Рё РІ РїСЂРѕС„РёР»СЊ</button>
-      <button class="friend-context-item" onclick="friendMenuJoinRoom()">РџСЂРёСЃРѕРµРґРёРЅРёС‚СЊСЃСЏ Рє СЂСѓРјРµ</button>
-      <button class="friend-context-item" onclick="friendMenuInviteRoom()">РџСЂРёРіР»Р°СЃРёС‚СЊ РІ РєРѕРјРЅР°С‚Сѓ</button>
-      <button class="friend-context-item" onclick="friendMenuRefresh()">РћР±РЅРѕРІРёС‚СЊ</button>
-      <button class="friend-context-item danger" onclick="friendMenuRemoveFriend()">РЈРґР°Р»РёС‚СЊ РёР· РґСЂСѓР·РµР№</button>
-    `
-    document.body.appendChild(menu)
-    document.addEventListener('click', () => closeFriendContextMenu())
-  }
-  if (!document.getElementById('room-member-context-menu')) {
-    const menu = document.createElement('div')
-    menu.id = 'room-member-context-menu'
-    menu.className = 'friend-context-menu hidden glass-card'
-    menu.innerHTML = `
-      <button class="friend-context-item" onclick="transferRoomHostFromMenu()">РџРµСЂРµРґР°С‚СЊ С…РѕСЃС‚Р°</button>
-    `
-    document.body.appendChild(menu)
-    document.addEventListener('click', () => closeRoomMemberContextMenu())
-  }
-  if (!document.getElementById('room-invite-popup')) {
-    const modal = document.createElement('div')
-    modal.id = 'room-invite-popup'
-    modal.className = 'flow-modal hidden'
-    modal.innerHTML = `
-      <div class="flow-modal-backdrop" onclick="declineRoomInvite(false)"></div>
-      <div class="flow-modal-card glass-card">
-        <h3>РџСЂРёРіР»Р°С€РµРЅРёРµ РІ СЂСѓРјСѓ</h3>
-        <p id="room-invite-text" style="margin-top:8px;opacity:.9">Р”СЂСѓРі РїСЂРёРіР»Р°С€Р°РµС‚ С‚РµР±СЏ РІ СЂСѓРјСѓ</p>
-        <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;opacity:.9">
-          <input type="checkbox" id="room-invite-mute15" />
-          РћС‚РєР»РѕРЅРёС‚СЊ Рё РЅРµ РїРѕР»СѓС‡Р°С‚СЊ РїСЂРёРіР»Р°С€РµРЅРёСЏ 15 РјРёРЅСѓС‚
-        </label>
-        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
-          <button class="btn-small" onclick="declineRoomInvite(true)">РћС‚РєР»РѕРЅРёС‚СЊ</button>
-          <button class="btn-small" onclick="acceptRoomInvite()">РџСЂРёСЃРѕРµРґРёРЅРёС‚СЊСЃСЏ</button>
-        </div>
-      </div>
-    `
-    document.body.appendChild(modal)
-  }
-}
-
-function openRoomMemberContextMenu(event, peerId = '', username = '') {
-  event?.preventDefault?.()
-  event?.stopPropagation?.()
-  ensureFriendInteractionUI()
-  const menu = document.getElementById('room-member-context-menu')
-  if (!menu) return
-  _roomContext = { peerId: String(peerId || '').trim(), username: String(username || '').trim() }
-  menu.style.left = `${Math.max(8, Number(event?.clientX || 0))}px`
-  menu.style.top = `${Math.max(8, Number(event?.clientY || 0))}px`
-  menu.classList.remove('hidden')
-}
-
-function closeRoomMemberContextMenu() {
-  document.getElementById('room-member-context-menu')?.classList.add('hidden')
-}
-
-function transferRoomHostFromMenu() {
-  const ctx = _roomContext || {}
-  closeRoomMemberContextMenu()
-  transferRoomHost(ctx.peerId, ctx.username)
-}
-
-async function transferRoomHost(peerId = '', username = '') {
-  const targetPeerId = String(peerId || '').trim()
-  if (!_roomState?.roomId || !_roomState.host) return showToast('РџРµСЂРµРґР°РІР°С‚СЊ С…РѕСЃС‚Р° РјРѕР¶РµС‚ С‚РѕР»СЊРєРѕ С‚РµРєСѓС‰РёР№ С…РѕСЃС‚', true)
-  if (!targetPeerId || targetPeerId === _socialPeer?.peer?.id) return showToast('Р’С‹Р±РµСЂРё РґСЂСѓРіРѕРіРѕ СѓС‡Р°СЃС‚РЅРёРєР°', true)
-  _roomState.host = false
-  _roomState.hostPeerId = targetPeerId
-  _socialPeer?.sendToPeer?.(targetPeerId, { type: 'room-host-transfer', roomId: _roomState.roomId, hostPeerId: targetPeerId, sharedQueue })
-  _socialPeer?.send?.({ type: 'room-host-changed', roomId: _roomState.roomId, hostPeerId: targetPeerId, username })
-  await saveRoomStateToServer({ host_peer_id: targetPeerId, shared_queue: sharedQueue }).catch(() => {})
-  updateRoomUi()
-  showToast(`РҐРѕСЃС‚ РїРµСЂРµРґР°РЅ: ${username || targetPeerId.replace(/^flow-/, '')}`)
-}
-
-function openFriendContextMenu(event, username, peerId = '', roomId = '', online = false) {
-  event?.preventDefault?.()
-  event?.stopPropagation?.()
-  ensureFriendInteractionUI()
-  const menu = document.getElementById('friend-context-menu')
-  if (!menu) return
-  _friendContext = {
-    username: String(username || ''),
-    peerId: String(peerId || ''),
-    roomId: String(roomId || ''),
-    online: Boolean(online),
-  }
-  menu.style.left = `${Math.max(8, Number(event?.clientX || 0))}px`
-  menu.style.top = `${Math.max(8, Number(event?.clientY || 0))}px`
-  menu.classList.remove('hidden')
-}
-
-function closeFriendContextMenu() {
-  const menu = document.getElementById('friend-context-menu')
-  if (menu) menu.classList.add('hidden')
-}
-
-function friendMenuInviteRoom() {
-  closeFriendContextMenu()
-  if (!_friendContext?.username) return
-  sendRoomInviteToFriend(_friendContext.username, _friendContext.peerId || _friendContext.roomId || '')
-}
-
-function friendMenuJoinRoom() {
-  closeFriendContextMenu()
-  const roomId = String(_friendContext?.roomId || '').trim()
-  if (!roomId) return showToast('РЈ РґСЂСѓРіР° СЃРµР№С‡Р°СЃ РЅРµС‚ Р°РєС‚РёРІРЅРѕР№ СЂСѓРјС‹', true)
-  joinRoomById(roomId)
-}
-
-function friendMenuOpenProfile() {
-  closeFriendContextMenu()
-  if (!_friendContext?.username) return
-  openPeerProfile(_friendContext.username, _friendContext.peerId || '')
-}
-
-async function friendMenuRefresh() {
-  closeFriendContextMenu()
-  if (!_friendContext?.username) return
-  const username = String(_friendContext.username || '').trim().toLowerCase()
-  if (!username) return
-  if (_socialPeer?.requestPeerData && _friendContext.peerId) {
-    const rsp = await _socialPeer.requestPeerData(_friendContext.peerId, { type: 'presence-request' }, 1300).catch(() => null)
-    const profile = rsp?.ok ? rsp?.data?.profile : null
-    if (profile) {
-      const pid = rsp?.data?.peerId || _friendContext.peerId
-      const merged = mergeProfileData(_peerProfiles.get(pid) || getCachedPeerProfile(username), Object.assign({}, profile, { peerId: pid }), pid)
-      cachePeerProfile(merged, pid)
-      _peerProfiles.set(pid, merged)
-      if (_roomMembers.has(pid)) _roomMembers.set(pid, merged)
-    }
-    if (rsp?.ok) {
-      const prev = _friendPresence.get(username) || {}
-      _friendPresence.set(username, Object.assign({}, prev, {
-        online: true,
-        peerId: rsp?.data?.peerId || rsp?.data?._peerId || prev.peerId || _friendContext.peerId || `flow-${username}`,
-        roomId: rsp?.data?.roomId || prev.roomId || null,
-        host: Boolean(rsp?.data?.host),
-        updatedAt: Date.now(),
-      }))
-    }
-  }
-  const cloud = await fetchCloudPublicProfile(username).catch(() => null)
-  if (cloud) {
-    const pid = _friendContext.peerId || `flow-${username}`
-    const merged = mergeProfileData(_peerProfiles.get(pid) || getCachedPeerProfile(username), Object.assign({}, cloud, { peerId: pid }), pid)
-    cachePeerProfile(merged, pid)
-    _peerProfiles.set(pid, merged)
-    if (_roomMembers.has(pid)) _roomMembers.set(pid, merged)
-  }
-  renderRoomMembers()
-  renderFriends().catch(() => {})
-  pollFriendsPresence(true).catch(() => {})
-  const modal = document.getElementById('peer-profile-modal')
-  if (modal && !modal.classList.contains('hidden')) {
-    openPeerProfile(username, _friendContext.peerId || '').catch(() => {})
-  }
-  showToast('РџСЂРѕС„РёР»СЊ РѕР±РЅРѕРІР»С‘РЅ')
-}
-
-function friendMenuRemoveFriend() {
-  closeFriendContextMenu()
-  if (!_profile?.username || !_friendContext?.username || typeof peerSocial.removeFriend !== 'function') return
-  const friend = String(_friendContext.username || '').trim().toLowerCase()
-  if (!friend) return
-  const ok = confirm(`РЈРґР°Р»РёС‚СЊ ${friend} РёР· РґСЂСѓР·РµР№?`)
-  if (!ok) return
-  const result = peerSocial.removeFriend(_profile.username, friend)
-  if (!result?.ok) return showToast(result?.error || 'РќРµ СѓРґР°Р»РѕСЃСЊ СѓРґР°Р»РёС‚СЊ РґСЂСѓРіР°', true)
-  _friendPresence.delete(friend)
-  const pid = String(_friendContext.peerId || `flow-${friend}`).trim()
-  if (pid) {
-    _peerProfiles.delete(pid)
-    _roomMembers.delete(pid)
-  }
-  renderFriends().catch(() => {})
-  renderRoomMembers()
-  showToast(`${friend} СѓРґР°Р»С‘РЅ РёР· РґСЂСѓР·РµР№`)
-}
-
-function sendRoomInviteToFriend(username, peerId = '') {
-  if (!_roomState?.roomId) return showToast('РЎРЅР°С‡Р°Р»Р° Р·Р°Р№РґРё РІ СЂСѓРјСѓ', true)
-  const toPeer = String(peerId || `flow-${username}`).trim()
-  if (!toPeer || !_socialPeer?.sendToPeer) return showToast('Р”СЂСѓРі РѕС„Р»Р°Р№РЅ', true)
-  _socialPeer.sendToPeer(toPeer, {
-    type: 'room-invite',
-    roomId: _roomState.roomId,
-    fromUsername: _profile?.username || 'user',
-  })
-  showToast(`РџСЂРёРіР»Р°С€РµРЅРёРµ РѕС‚РїСЂР°РІР»РµРЅРѕ: ${username}`)
-}
-
-function openRoomInvitePicker() {
-  if (!_profile?.username || !peerSocial.getFriends) return
-  const friends = peerSocial.getFriends(_profile.username) || []
-  if (!friends.length) return showToast('РЎРїРёСЃРѕРє РґСЂСѓР·РµР№ РїСѓСЃС‚', true)
-  openPlaylistPickerModal({
-    mode: 'room-invite-friend',
-    title: 'РџСЂРёРіР»Р°СЃРёС‚СЊ РґСЂСѓРіР° РІ СЂСѓРјСѓ',
-    items: friends.map((name) => ({ id: String(name), label: name })),
-    payload: {}
-  })
-}
-
-function showRoomInvitePrompt(invite) {
-  ensureFriendInteractionUI()
-  _pendingRoomInvite = invite || null
-  const popup = document.getElementById('room-invite-popup')
-  const text = document.getElementById('room-invite-text')
-  const mute = document.getElementById('room-invite-mute15')
-  if (!popup || !text || !mute) return
-  mute.checked = false
-  text.textContent = `${invite?.fromUsername || 'Р”СЂСѓРі'} РїСЂРёРіР»Р°С€Р°РµС‚ РІ СЂСѓРјСѓ ${invite?.roomId || ''}`
-  popup.classList.remove('hidden')
-}
-
-function acceptRoomInvite() {
-  const popup = document.getElementById('room-invite-popup')
-  if (popup) popup.classList.add('hidden')
-  const roomId = String(_pendingRoomInvite?.roomId || '').trim()
-  _pendingRoomInvite = null
-  if (roomId) joinRoomById(roomId)
-}
-
-function declineRoomInvite(withMuteChoice = true) {
-  const popup = document.getElementById('room-invite-popup')
-  if (popup) popup.classList.add('hidden')
-  const fromUser = String(_pendingRoomInvite?.fromUsername || '').trim().toLowerCase()
-  const mute = document.getElementById('room-invite-mute15')
-  if (withMuteChoice && mute?.checked && fromUser) {
-    muteInvitesFrom(fromUser, 15 * 60 * 1000)
-    showToast('РџСЂРёРіР»Р°С€РµРЅРёСЏ РѕС‚ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ СЃРєСЂС‹С‚С‹ РЅР° 15 РјРёРЅСѓС‚')
-  }
-  _pendingRoomInvite = null
-}
-
-function showOnboardingIfNeeded() {
-  if (localStorage.getItem('flow_onboarding_done')) return
-  const modal = document.createElement('div')
-  modal.id = 'flow-onboarding-modal'
-  modal.className = 'flow-modal flow-onboarding-modal'
-  modal.innerHTML = `
-    <div class="flow-modal-backdrop" onclick="finishOnboarding()"></div>
-    <div class="flow-modal-card glass-card onboarding-card">
-      <div class="onboarding-badge">Flow СЃС‚Р°СЂС‚</div>
-      <h3>Р”РѕР±СЂРѕ РїРѕР¶Р°Р»РѕРІР°С‚СЊ РІ Flow</h3>
-      <p>РџР°СЂСѓ РІР°Р¶РЅС‹С… РІРµС‰РµР№, С‡С‚РѕР±С‹ Сѓ С‚РµР±СЏ Рё РґСЂСѓР·РµР№ РІСЃС‘ СЂР°Р±РѕС‚Р°Р»Рѕ Р±РµР· СЂСѓС‡РЅРѕР№ РЅР°СЃС‚СЂРѕР№РєРё.</p>
-      <div class="onboarding-grid">
-        <div class="onboarding-item"><strong>РђРєРєР°СѓРЅС‚</strong><span>Р›РѕРіРёРЅ Рё РїР°СЂРѕР»СЊ СЃРѕС…СЂР°РЅСЏСЋС‚ РїСЂРѕС„РёР»СЊ РЅР° СЃРµСЂРІРµСЂРµ, РїРѕСЌС‚РѕРјСѓ РѕС‡РёСЃС‚РєР° РєСЌС€Р° Р±РѕР»СЊС€Рµ РЅРµ СѓР±РёРІР°РµС‚ Р°РєРєР°СѓРЅС‚.</span></div>
-        <div class="onboarding-item"><strong>РЎРµСЂРІРµСЂ</strong><span>РђРґСЂРµСЃ СѓР¶Рµ СЃС‚РѕРёС‚ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ. Р•РіРѕ РјРѕР¶РЅРѕ РїРѕРјРµРЅСЏС‚СЊ РІ РќР°СЃС‚СЂРѕР№РєРё в†’ РРЅС‚РµРіСЂР°С†РёРё.</span></div>
-        <div class="onboarding-item"><strong>РљРѕРјРЅР°С‚С‹</strong><span>РЎРѕР·РґР°РІР°Р№ СЂСѓРјСѓ, РєРёРґР°Р№ invite РґСЂСѓРіСѓ Рё СѓРїСЂР°РІР»СЏР№ РѕС‡РµСЂРµРґСЊСЋ РІРјРµСЃС‚Рµ.</span></div>
-        <div class="onboarding-item"><strong>VK-РёРјРїРѕСЂС‚</strong><span>Flow СЃРµСЂРІРµСЂ С‡РёС‚Р°РµС‚ РїР»РµР№Р»РёСЃС‚ VK, Р° РїСЂРёР»РѕР¶РµРЅРёРµ РёС‰РµС‚ СЌС‚Рё С‚СЂРµРєРё РІ С‚РІРѕРёС… РёСЃС‚РѕС‡РЅРёРєР°С….</span></div>
-      </div>
-      <div class="onboarding-actions">
-        <button class="btn-small" onclick="openSettingsFromOnboarding()">РћС‚РєСЂС‹С‚СЊ РЅР°СЃС‚СЂРѕР№РєРё</button>
-        <button class="btn-main" onclick="finishOnboarding()">РџРѕРіРЅР°Р»Рё</button>
-      </div>
-    </div>
-  `
-  document.body.appendChild(modal)
-}
-
-function finishOnboarding() {
-  localStorage.setItem('flow_onboarding_done', '1')
-  document.getElementById('flow-onboarding-modal')?.remove()
-}
-
-function openSettingsFromOnboarding() {
-  finishOnboarding()
-  showPage('settings')
-  switchSettingsTab?.('integrations')
-}
-
-function ensureSocialUI() {
-  ensureFriendInteractionUI()
-  if (document.getElementById('social-hub')) return
-  const root = document.getElementById('page-social-content')
-  if (!root) return
-  const box = document.createElement('div')
-  box.id = 'social-hub'
-  box.className = 'glass-card social-hub'
-  box.style.padding = '14px'
-  box.innerHTML = `
-    <div class="social-head">
-      <strong>Flow Social (P2P)</strong>
-      <span id="social-status" class="social-status">offline</span>
-    </div>
-    <div class="social-add-box">
-      <div class="social-section-title">Р”РѕР±Р°РІРёС‚СЊ РґСЂСѓРіР°</div>
-      <input id="friend-search-input" class="token-field flow-input" placeholder="Username РґСЂСѓРіР°" style="flex:1;min-width:180px" />
-      <button class="btn-small" onclick="addFriendByUsername()">РћС‚РїСЂР°РІРёС‚СЊ Р·Р°РїСЂРѕСЃ</button>
-    </div>
-    <div class="social-friends-box">
-      <div class="social-section-title">Р’С…РѕРґСЏС‰РёРµ Р·Р°СЏРІРєРё</div>
-      <div id="friend-requests-list"><div class="flow-empty-state compact"><strong>Р—Р°СЏРІРѕРє РЅРµС‚</strong><span>РљРѕРіРґР° РєС‚Рѕ-С‚Рѕ РґРѕР±Р°РІРёС‚ С‚РµР±СЏ, Р·Р°РїСЂРѕСЃ РїРѕСЏРІРёС‚СЃСЏ Р·РґРµСЃСЊ.</span></div></div>
-    </div>
-    <div class="social-friends-box">
-      <div class="social-section-title">Р”СЂСѓР·СЊСЏ</div>
-      <div id="friends-list"></div>
-    </div>
-  `
-  root.appendChild(box)
-}
-
-function ensureRoomsUI() {
-  if (document.getElementById('rooms-hub')) return
-  const root = document.getElementById('page-rooms-content')
-  if (!root) return
-  const box = document.createElement('div')
-  box.id = 'rooms-hub'
-  box.className = 'glass-card social-hub rooms-liquid-hub'
-  box.innerHTML = `
-    <div class="room-connect-panel">
-      <div id="social-widget" class="social-widget is-empty" onclick="handleSocialWidgetClick(event)" onkeydown="handleSocialWidgetKeydown(event)" role="button" tabindex="0">
-        <div class="widget-placeholder">
-          <span class="glow-text">РЎРѕР·РґР°С‚СЊ РєРѕРјРЅР°С‚Сѓ</span>
-        </div>
-        <div class="widget-content">
-          <div class="widget-members-area">
-            <div class="widget-mini-head">
-              <span class="social-section-title">Р’ РєРѕРјРЅР°С‚Рµ</span>
-              <span id="room-role-badge" class="room-role-badge room-role-solo">SOLO</span>
-            </div>
-            <div id="room-members-list" class="sidebar-users"><div class="flow-empty-state compact"><strong>РљРѕРјРЅР°С‚Р° РїСѓСЃС‚Р°СЏ</strong><span>РЎРѕР·РґР°Р№ СЂСѓРјСѓ РёР»Рё РїСЂРёСЃРѕРµРґРёРЅРёСЃСЊ РїРѕ invite.</span></div></div>
-          </div>
-          <div class="actions-menu">
-            <button class="action-btn invite" onclick="event.stopPropagation();openRoomInvitePicker()" title="РџСЂРёРіР»Р°СЃРёС‚СЊ РґСЂСѓРіР°"><span>пј‹</span><small>РџСЂРёРіР»Р°СЃРёС‚СЊ</small></button>
-            <button class="action-btn noop" onclick="event.stopPropagation();showToast('РџРѕРєР° РЅРёС‡РµРіРѕ')" title="РџРѕРєР° РЅРёС‡РµРіРѕ"><span>РЅРёС‡РµРіРѕ</span><small>РџРѕРєР° РЅРёС‡РµРіРѕ</small></button>
-            <button class="action-btn leave" onclick="event.stopPropagation();leaveRoom()" title="РџРѕРєРёРЅСѓС‚СЊ РіСЂСѓРїРїСѓ"><span>вњ•</span><small>РџРѕРєРёРЅСѓС‚СЊ</small></button>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="social-room-box rooms-search-tile">
-      <div class="social-section-title">РџРѕРёСЃРє РІ РѕС‡РµСЂРµРґСЊ</div>
-      <input id="room-queue-search" class="token-field flow-input" placeholder="РќР°Р№С‚Рё С‚СЂРµРє Рё РґРѕР±Р°РІРёС‚СЊ РІ РѕС‡РµСЂРµРґСЊ..." oninput="searchRoomQueueTracks()" />
-      <div style="margin-top:8px"><button class="btn-small" onclick="openRoomOwnTracksPicker()">РЎРІРѕРё С‚СЂРµРєРё</button></div>
-      <div class="rooms-wave-embedded">
-        <div class="my-wave rooms-wave-my-wave">
-          <div class="my-wave-hero">
-            <div class="my-wave-badge">РњРѕСЏ РІРѕР»РЅР°</div>
-            <h3>Р’РѕР»РЅР° РґР»СЏ РєРѕРјРЅР°С‚С‹</h3>
-            <p id="rooms-wave-hint">Р’С‹Р±РµСЂРё СЂРµР¶РёРј Рё Р·Р°РїСѓСЃС‚Рё РІРѕР»РЅСѓ РґР»СЏ РѕР±С‰РµР№ РѕС‡РµСЂРµРґРё</p>
-            <div class="my-wave-actions">
-              <button class="my-wave-start" onclick="startMyWave()">Р—Р°РїСѓСЃС‚РёС‚СЊ РІРѕР»РЅСѓ</button>
-              <div class="my-wave-modes" id="rooms-wave-modes"></div>
-            </div>
-          </div>
-          <div class="my-wave-list" id="rooms-wave-list"></div>
-        </div>
-      </div>
-      <div id="room-search-results" class="profile-picker-list" style="margin-top:8px"><div class="flow-empty-state compact"><strong>РќР°С‡РЅРё РїРѕРёСЃРє</strong><span>Р’РІРµРґРё РЅР°Р·РІР°РЅРёРµ С‚СЂРµРєР°, С‡С‚РѕР±С‹ РґРѕР±Р°РІРёС‚СЊ РµРіРѕ РІ РѕС‡РµСЂРµРґСЊ.</span></div></div>
-    </div>
-    <div class="social-room-box">
-      <div class="social-section-title">РћС‡РµСЂРµРґСЊ РїСЂРѕСЃР»СѓС€РёРІР°РЅРёСЏ</div>
-      <div id="room-now-playing" class="room-now-playing-line">РЎРµР№С‡Р°СЃ РЅРёС‡РµРіРѕ РЅРµ РёРіСЂР°РµС‚</div>
-      <div id="room-queue-list"></div>
-    </div>
-  `
-  root.appendChild(box)
-  syncSocialWidgetState()
-  renderRoomsMyWave()
-}
-
-async function renderFriends() {
-  const el = document.getElementById('friends-list')
-  if (!el || !_profile?.username || !peerSocial.getFriends) return
-  renderFriendRequests().catch(() => {})
-  const list = peerSocial.getFriends(_profile.username)
-  if (!list.length) {
-    el.innerHTML = '<div class="flow-empty-state"><strong>РџРѕРєР° РЅРµС‚ РґСЂСѓР·РµР№</strong><span>Р”РѕР±Р°РІСЊ РґСЂСѓРіР° РїРѕ username, С‡С‚РѕР±С‹ РІРёРґРµС‚СЊ РѕРЅР»Р°Р№РЅ, РїСЂРѕС„РёР»СЊ Рё РєРѕРјРЅР°С‚С‹.</span></div>'
-    return
-  }
-  const online = []
-  const offline = []
-  list.forEach((name) => {
-    const safe = String(name || '').trim().toLowerCase()
-    const state = _friendPresence.get(safe) || { online: false }
-    if (state.online) online.push({ name, state })
-    else offline.push({ name, state })
-  })
-  const fmtFriendCard = (item, onlineMode) => {
-    const avatar = resolvePeerAvatarByUsername(item.name)
-    const roomId = item.state.roomId || ''
-    const nowPlaying = onlineMode && item.state.track?.title
-      ? `СЃР»СѓС€Р°РµС‚: ${item.state.track.title}${item.state.track.artist ? ` вЂ” ${item.state.track.artist}` : ''}`
-      : (onlineMode ? 'РІ СЃРµС‚Рё' : 'РЅРµ РІ СЃРµС‚Рё')
-    const avatarHtml = avatar
-      ? `<div class="social-friend-avatar" style="background-image:url(${avatar})"></div>`
-      : `<div class="social-friend-avatar">${item.name.slice(0, 1).toUpperCase()}</div>`
-    return `
-      <div class="social-friend-card ${onlineMode ? 'online' : 'offline'}" oncontextmenu="openFriendContextMenu(event, '${item.name}', '${item.state.peerId || ''}', '${roomId}', ${onlineMode ? 'true' : 'false'})">
-        ${avatarHtml}
-        <div class="social-friend-meta">
-          <strong>${item.name}</strong>
-          <span>${nowPlaying}</span>
-        </div>
-      </div>
-    `
-  }
-  el.innerHTML = `
-    <div class="social-friends-section-title">Р’ СЃРµС‚Рё</div>
-    <div class="social-friends-grid">${online.length ? online.map((item) => fmtFriendCard(item, true)).join('') : '<div class="flow-empty-state compact"><strong>РќРёРєРѕРіРѕ РѕРЅР»Р°Р№РЅ</strong><span>Flow РїРѕРєР°Р¶РµС‚ РґСЂСѓРіР° СЃСЂР°Р·Сѓ, РєР°Рє РѕРЅ РїРѕСЏРІРёС‚СЃСЏ РІ СЃРµС‚Рё.</span></div>'}</div>
-    <div class="social-friends-section-title">РќРµ РІ СЃРµС‚Рё</div>
-    <div class="social-friends-grid">${offline.length ? offline.map((item) => fmtFriendCard(item, false)).join('') : '<div class="flow-empty-state compact"><strong>РџСѓСЃС‚Рѕ</strong><span>Р’СЃРµ РґСЂСѓР·СЊСЏ СЃРµР№С‡Р°СЃ РѕРЅР»Р°Р№РЅ.</span></div>'}</div>
-  `
-}
-
-function setSocialStatus(text) {
-  const el = document.getElementById('social-status')
-  if (el) el.textContent = text
-}
-
-function setRoomStatus(text) {
-  const el = document.getElementById('room-status')
-  if (el) el.textContent = text
-}
-
-function getLastFmPayload() {
-  const s = getSettings()
-  return {
-    apiKey: s.lastfmApiKey || '',
-    sharedSecret: s.lastfmSharedSecret || '',
-    sessionKey: s.lastfmSessionKey || '',
-  }
-}
-
-function syncIntegrationsUI() {
-  const s = getSettings()
-  const d = document.getElementById('discord-client-id')
-  const p = document.getElementById('proxy-base-url')
-  const k = document.getElementById('lastfm-api-key')
-  const ss = document.getElementById('lastfm-shared-secret')
-  const sk = document.getElementById('lastfm-session-key')
-  const fsb = document.getElementById('flow-social-api-base')
-  const fss = document.getElementById('flow-social-api-secret')
-  if (d) d.value = s.discordClientId || ''
-  if (p) p.value = normalizeFlowServerUrl(s.proxyBaseUrl || FLOW_SERVER_DEFAULT_URL)
-  if (k) k.value = s.lastfmApiKey || ''
-  if (ss) ss.value = s.lastfmSharedSecret || ''
-  if (sk) sk.value = s.lastfmSessionKey || ''
-  if (fsb) fsb.value = String(s.flowSocialApiBase || '').trim().replace(/\/$/, '')
-  if (fss) fss.value = String(s.flowSocialApiSecret || '').trim()
-}
-
-function saveFlowSocialBackendSettings() {
-  const elB = document.getElementById('flow-social-api-base')
-  const elS = document.getElementById('flow-social-api-secret')
-  const base = String(elB?.value || '').trim().replace(/\/$/, '')
-  const secret = String(elS?.value || '').trim()
-  saveSettingsRaw({ flowSocialApiBase: base, flowSocialApiSecret: secret })
-  try {
-    localStorage.setItem('flow_social_api_base', base)
-    localStorage.setItem('flow_social_api_secret', secret)
-  } catch (_) {}
-  try {
-    stopProfilesRealtimeSync()
-    stopRoomServerSync()
-    window.FlowSocialBackend?.invalidate?.()
-    if (_profile?.username) initPeerSocial()
-    if (_roomState?.roomId) startRoomServerSync()
-  } catch (_) {}
-  showToast('РЎРѕС†РёР°Р»СЊРЅС‹Р№ СЃРµСЂРІРµСЂ СЃРѕС…СЂР°РЅС‘РЅ')
-}
-
-async function checkFlowSocialBackendStatus() {
-  const statusEl = document.getElementById('flow-social-api-status')
-  const setStatus = (text, ok = null) => {
-    if (!statusEl) return
-    statusEl.textContent = text
-    if (ok === true) statusEl.style.color = '#7ee787'
-    else if (ok === false) statusEl.style.color = '#ff9b9b'
-    else statusEl.style.color = ''
-  }
-  const base = String(document.getElementById('flow-social-api-base')?.value || '').trim().replace(/\/$/, '')
-  const secret = String(document.getElementById('flow-social-api-secret')?.value || '').trim()
-  saveSettingsRaw({ flowSocialApiBase: base, flowSocialApiSecret: secret })
-  try {
-    localStorage.setItem('flow_social_api_base', base)
-    localStorage.setItem('flow_social_api_secret', secret)
-  } catch (_) {}
-  if (!base || !secret) {
-    setStatus('РЎРѕС†-API: СѓРєР°Р¶Рё URL Рё СЃРµРєСЂРµС‚', false)
-    return
-  }
-  setStatus('РЎРѕС†-API: РїСЂРѕРІРµСЂСЏСЋвЂ¦')
-  try {
-    const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), 5500)
-    const r = await fetch(`${base}/flow-api/v1/health`, {
-      method: 'GET',
-      cache: 'no-store',
-      signal: ctrl.signal,
-      headers: { Authorization: `Bearer ${secret}` },
-    })
-    clearTimeout(timer)
-    if (!r.ok) setStatus(`РЎРѕС†-API: РѕС€РёР±РєР° ${r.status}`, false)
-    else setStatus('РЎРѕС†-API: OK', true)
-  } catch (_) {
-    setStatus('РЎРѕС†-API: РЅРµРґРѕСЃС‚СѓРїРµРЅ (РїСЂРѕРІРµСЂСЊ URL, СЃРµРєСЂРµС‚, firewall)', false)
-  }
-}
-
-function saveProxySettings() {
-  const input = document.getElementById('proxy-base-url')
-  const proxyBaseUrl = normalizeFlowServerUrl(input?.value || FLOW_SERVER_DEFAULT_URL)
-  saveSettingsRaw({ proxyBaseUrl })
-  if (input) input.value = proxyBaseUrl
-  showToast('Flow СЃРµСЂРІРµСЂ СЃРѕС…СЂР°РЅС‘РЅ')
-  checkFlowServerStatus().catch(() => {})
-}
-
-async function checkFlowServerStatus() {
-  const statusEl = document.getElementById('flow-server-status')
-  const setStatus = (text, ok = null) => {
-    if (!statusEl) return
-    statusEl.textContent = text
-    if (ok === true) statusEl.style.color = '#7ee787'
-    else if (ok === false) statusEl.style.color = '#ff9b9b'
-    else statusEl.style.color = ''
-  }
-  const input = document.getElementById('proxy-base-url')
-  const base = normalizeFlowServerUrl(input?.value || getSettings().proxyBaseUrl || FLOW_SERVER_DEFAULT_URL)
-  saveSettingsRaw({ proxyBaseUrl: base })
-  if (input) input.value = base
-  if (!/^https?:\/\//i.test(base)) {
-    setStatus('РЎРµСЂРІРµСЂ: РЅРµРІРµСЂРЅС‹Р№ Р°РґСЂРµСЃ', false)
-    return { ok: false, ping: null }
-  }
-  _lastServerStatusCheckAt = Date.now()
-  setStatus('РЎРµСЂРІРµСЂ: РїСЂРѕРІРµСЂСЏСЋ...')
-  const started = performance.now()
-  try {
-    const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), 5500)
-    const rsp = await fetch(`${base}/health`, { method: 'GET', cache: 'no-store', signal: ctrl.signal })
-    clearTimeout(timer)
-    const ping = Math.max(1, Math.round(performance.now() - started))
-    if (!rsp.ok) {
-      setStatus(`РЎРµСЂРІРµСЂ: РѕС„С„Р»Р°Р№РЅ (${rsp.status})`, false)
-      return { ok: false, ping }
-    }
-    setStatus(`РЎРµСЂРІРµСЂ: РѕРЅР»Р°Р№РЅ, ping ${ping} ms`, true)
-    return { ok: true, ping }
-  } catch {
-    setStatus('РЎРµСЂРІРµСЂ: РѕС„С„Р»Р°Р№РЅ', false)
-    return { ok: false, ping: null }
-  }
-}
-
-async function checkProxyConnection() {
-  const statusEl = document.getElementById('proxy-check-status')
-  const setStatus = (text, ok = null) => {
-    if (!statusEl) return
-    statusEl.textContent = text
-    if (ok === true) statusEl.style.color = '#7ee787'
-    else if (ok === false) statusEl.style.color = '#ff9b9b'
-    else statusEl.style.color = ''
-  }
-  if (!window.api?.proxySetUrl) {
-    setStatus('РЎС‚Р°С‚СѓСЃ: РїСЂРѕРІРµСЂРєР° РґРѕСЃС‚СѓРїРЅР° С‚РѕР»СЊРєРѕ РІ Electron', false)
-    return
-  }
-  setStatus('РЎС‚Р°С‚СѓСЃ: РїСЂРѕРІРµСЂСЏСЋ РїСЂРѕРєСЃРё Рё РёСЃС‚РѕС‡РЅРёРєРё...')
-  const checks = [
-    { name: 'SoundCloud CDN', url: 'https://cf-media.sndcdn.com/' },
-    { name: 'Audius API', url: 'https://discoveryprovider.audius.co/v1/health_check' },
-    { name: 'Googlevideo (YouTube stream)', url: 'https://r1---sn-4g5e6n7s.googlevideo.com/' },
-  ]
-  const probe = async (url) => {
-    try {
-      const proxyUrl = await window.api.proxySetUrl(url)
-      const ctrl = new AbortController()
-      const timer = setTimeout(() => ctrl.abort(), 6000)
-      const res = await fetch(proxyUrl, { method: 'GET', headers: { Range: 'bytes=0-0' }, signal: ctrl.signal })
-      clearTimeout(timer)
-      return res.ok || res.status === 206
-    } catch {
-      return false
-    }
-  }
-  let okCount = 0
-  const lines = []
-  for (const item of checks) {
-    const ok = await probe(item.url)
-    if (ok) okCount++
-    lines.push(`${ok ? 'OK' : 'FAIL'} ${item.name}`)
-  }
-  const allOk = okCount === checks.length
-  const msg = `РЎС‚Р°С‚СѓСЃ: ${okCount}/${checks.length} РїСЂРѕС€Р»Рѕ | ${lines.join(' | ')}`
-  setStatus(msg, allOk ? true : (okCount > 0 ? null : false))
-  showToast(allOk ? 'РџСЂРѕРєСЃРё РїСЂРѕРІРµСЂРµРЅ: РІСЃРµ РёСЃС‚РѕС‡РЅРёРєРё РѕС‚РІРµС‡Р°СЋС‚' : `РџСЂРѕРєСЃРё РїСЂРѕРІРµСЂРєР°: РїСЂРѕС€Р»Рѕ ${okCount}/${checks.length}`, !allOk)
-}
-
-async function connectDiscordRpc() {
-  const input = document.getElementById('discord-client-id')
-  const clientId = String(input?.value || '').trim()
-  if (!clientId) return showToast('РЈРєР°Р¶Рё Discord Client ID', true)
-  saveSettingsRaw({ discordClientId: clientId, discordRpcEnabled: true })
-  if (!window.api?.discordRpcConnect) return showToast('RPC РґРѕСЃС‚СѓРїРµРЅ С‚РѕР»СЊРєРѕ РІ Electron', true)
-  const r = await window.api.discordRpcConnect(clientId).catch((e) => ({ ok: false, error: e?.message || String(e) }))
-  if (!r?.ok) return showToast(`Discord RPC: ${r?.error || 'РѕС€РёР±РєР°'}`, true)
-  syncIntegrationsUI()
-  showToast('Discord RPC РїРѕРґРєР»СЋС‡РµРЅ')
-}
-
-async function disconnectDiscordRpc() {
-  saveSettingsRaw({ discordRpcEnabled: false })
-  if (window.api?.discordRpcClear) await window.api.discordRpcClear().catch(() => {})
-  showToast('Discord RPC РѕС‚РєР»СЋС‡РµРЅ')
-}
-
-function saveLastFmCredentials() {
-  const apiKey = String(document.getElementById('lastfm-api-key')?.value || '').trim()
-  const sharedSecret = String(document.getElementById('lastfm-shared-secret')?.value || '').trim()
-  const sessionKey = String(document.getElementById('lastfm-session-key')?.value || '').trim()
-  saveSettingsRaw({ lastfmApiKey: apiKey, lastfmSharedSecret: sharedSecret, lastfmSessionKey: sessionKey })
-  syncIntegrationsUI()
-  showToast('Last.fm РґР°РЅРЅС‹Рµ СЃРѕС…СЂР°РЅРµРЅС‹')
-}
-
-async function updateDiscordPresence(track, roomInfo = null) {
-  const s = getSettings()
-  if (!s.discordRpcEnabled || !window.api?.discordRpcUpdate || !track) return
-  const buttons = []
-  if (roomInfo?.roomId) {
-    buttons.push({ label: 'Join', url: `https://flow.local/join?room=${encodeURIComponent(roomInfo.roomId)}` })
-  }
-  await window.api.discordRpcUpdate({
-    details: `Listening: ${track.title || 'Unknown'}`,
-    state: `${track.artist || 'вЂ”'}${roomInfo?.roomId ? ` вЂў room ${roomInfo.roomId}` : ''}`,
-    largeImageKey: 'flow',
-    largeImageText: 'Flow',
-    smallImageKey: 'music',
-    smallImageText: track.source || 'audio',
-    buttons,
-    partySize: _socialPeer?.peersCount?.() || undefined,
-    partyMax: roomInfo?.roomId ? 3 : undefined,
-    joinSecret: roomInfo?.roomId || null,
-    startTimestamp: Math.floor(Date.now() / 1000),
-  }).catch(() => {})
-}
-
-async function pushLastFmNowPlaying(track) {
-  const payload = getLastFmPayload()
-  if (!payload.apiKey || !payload.sharedSecret || !payload.sessionKey || !window.api?.lastfmNowPlaying) return
-  await window.api.lastfmNowPlaying({
-    ...payload,
-    artist: track?.artist || '',
-    track: track?.title || '',
-  }).catch(() => {})
-}
-
-async function scrobbleLastFm(track) {
-  const payload = getLastFmPayload()
-  if (!payload.apiKey || !payload.sharedSecret || !payload.sessionKey || !window.api?.lastfmScrobble) return
-  const ts = _currentTrackStartedAt || Math.floor(Date.now() / 1000)
-  await window.api.lastfmScrobble({
-    ...payload,
-    artist: track?.artist || '',
-    track: track?.title || '',
-    timestamp: ts,
-  }).catch(() => {})
-}
-
-function initPeerSocial() {
-  if (!_profile?.username || !peerSocial.FlowPeerSocial) return
-  startProfilesRealtimeSync()
-  if (_socialPeer) _socialPeer.destroy()
-  _socialPeer = new peerSocial.FlowPeerSocial(_profile.username, {
-    maxPeers: 3,
-    onStatus: (evt) => {
-      if (evt.type === 'ready') setSocialStatus(`online: ${evt.id}`)
-      if (evt.type === 'peer-joined') {
-        setRoomStatus(`Р СѓРјР° ${_roomState.roomId || 'вЂ”'}: СѓС‡Р°СЃС‚РЅРёРєРѕРІ ${_socialPeer.peersCount()}/3`)
-        const me = getPublicProfilePayload(_profile?.username)
-        if (me && _socialPeer?.peer?.id) _roomMembers.set(_socialPeer.peer.id, me)
-        if (evt.peerId && !_roomMembers.has(evt.peerId)) {
-          _roomMembers.set(evt.peerId, {
-            username: String(evt.peerId).replace(/^flow-/, '') || 'user',
-            peerId: evt.peerId,
-            avatarData: null,
-            bannerData: null,
-            bio: '',
-            stats: { totalTracks: 0, totalSeconds: 0 },
-            pinnedTracks: [],
-            pinnedPlaylists: [],
-          })
-        }
-        if (_roomState?.roomId && _roomState.host) _socialPeer.send({ type: 'room-profile-state', roomId: _roomState.roomId, profile: me, sharedQueue })
-        if (_roomState?.roomId && !_roomState.host && evt.peerId && _socialPeer?.sendToPeer) {
-          _socialPeer.sendToPeer(evt.peerId, { type: 'room-profile-state', roomId: _roomState.roomId, profile: me, sharedQueue })
-          _socialPeer.sendToPeer(evt.peerId, { type: 'room-queue-sync-request', roomId: _roomState.roomId })
-        }
-        broadcastRoomMembersState()
-        resetRoomHeartbeat()
-        updateRoomUi()
-        if (evt.peerId) showToast(`${String(evt.peerId).replace(/^flow-/, '')}: РІРѕС€С‘Р» РІ СЂСѓРјСѓ`)
-      }
-      if (evt.type === 'peer-left') {
-        setRoomStatus(`Р СѓРјР° ${_roomState.roomId || 'вЂ”'}: СѓС‡Р°СЃС‚РЅРёРєРѕРІ ${_socialPeer.peersCount()}/3`)
-        if (evt.peerId) {
-          _roomMembers.delete(evt.peerId)
-          _peerProfiles.delete(evt.peerId)
-        }
-        if (!_roomState.host && evt.peerId && evt.peerId === _roomState.hostPeerId) {
-          _roomState = { roomId: null, host: true, hostPeerId: null }
-          _roomMembers.clear()
-          showToast('РҐРѕСЃС‚ РїРѕРєРёРЅСѓР» РєРѕРјРЅР°С‚Сѓ. РўРµРїРµСЂСЊ РІС‹ СѓРїСЂР°РІР»СЏРµС‚Рµ РїР»РµРµСЂРѕРј СЃР°РјРё')
-          setRoomStatus('РҐРѕСЃС‚ РѕС‚РєР»СЋС‡РёР»СЃСЏ, Р°РІС‚РѕРЅРѕРјРЅС‹Р№ СЂРµР¶РёРј Р°РєС‚РёРІРёСЂРѕРІР°РЅ')
-        }
-        broadcastRoomMembersState()
-        resetRoomHeartbeat()
-        updateRoomUi()
-        if (evt.peerId) showToast(`${String(evt.peerId).replace(/^flow-/, '')}: РІС‹С€РµР» РёР· СЂСѓРјС‹`)
-      }
-      if (evt.type === 'error') {
-        setSocialStatus(`error: ${evt.error}`)
-        if (_roomState?.roomId) showToast(`РћС€РёР±РєР° СЃРѕРµРґРёРЅРµРЅРёСЏ: ${evt.error}`, true)
-      }
-    },
-    onMessage: (msg, fromPeerId) => {
-      if (!msg || typeof msg !== 'object') return
-      if (msg.type === 'playback-sync' && msg.roomId === _roomState.roomId && !_roomState.host) {
-        const expectedHostId = String(_roomState.hostPeerId || '').trim()
-        const senderId = String(msg._peerId || fromPeerId || '').trim()
-        if (!_roomState.hostPeerId && senderId) _roomState.hostPeerId = senderId
-        if (expectedHostId && senderId && senderId !== expectedHostId) return
-        const ts = Number(msg.playbackTs || msg._ts || 0)
-        if (ts && ts <= _lastAppliedServerPlaybackTs) return
-        if (ts) _lastAppliedServerPlaybackTs = ts
-        if (msg.track && msg.track.id !== currentTrack?.id) {
-          playTrackObj(msg.track, { remoteSync: true }).catch(() => {})
-        }
-        if (typeof msg.currentTime === 'number') {
-          const latencySec = Math.max(0, (Date.now() - Number(msg._ts || Date.now())) / 1000)
-          const targetTime = Math.max(0, msg.currentTime + latencySec)
-          if (Math.abs(audio.currentTime - targetTime) > 0.10) audio.currentTime = targetTime
-        }
-        if (typeof msg.paused === 'boolean') {
-          if (msg.paused && !audio.paused) audio.pause()
-          if (!msg.paused && audio.paused) audio.play().catch(() => {})
-        }
-        if (Array.isArray(msg.sharedQueue)) {
-          sharedQueue = msg.sharedQueue
-          renderRoomQueue()
-        }
-      }
-      if (msg.type === 'presence-request' && fromPeerId && _socialPeer) {
-        const payload = {
-          type: 'presence-state',
-          _responseTo: msg?._reqId || null,
-          toPeerId: fromPeerId,
-          track: currentTrack ? { title: currentTrack.title || '', artist: currentTrack.artist || '' } : null,
-          roomId: _roomState.roomId || null,
-          host: Boolean(_roomState.host),
-          profile: getPublicProfilePayload(_profile?.username),
-          peerId: _socialPeer?.peer?.id || null,
-        }
-        if (typeof _socialPeer.sendToPeer === 'function') _socialPeer.sendToPeer(fromPeerId, payload)
-        else _socialPeer.send(payload)
-      }
-      if (msg.type === 'presence-state' && msg.toPeerId && _socialPeer?.peer?.id && msg.toPeerId === _socialPeer.peer.id && msg._from) {
-        const key = String(msg._from).replace(/^flow-/, '').trim().toLowerCase()
-        const prevPresence = _friendPresence.get(key) || {}
-        const nextPresence = {
-          online: true,
-          roomId: msg.roomId || null,
-          track: msg.track || null,
-          host: Boolean(msg.host),
-          peerId: msg.peerId || msg._peerId || null,
-          updatedAt: Date.now(),
-        }
-        notifyFriendPresenceChange(key, prevPresence, nextPresence)
-        _friendPresence.set(key, nextPresence)
-        if (msg.profile && (msg.peerId || msg._peerId)) {
-          const pid = msg.peerId || msg._peerId
-          const merged = mergeProfileData(_peerProfiles.get(pid) || getCachedPeerProfile(msg.profile.username), Object.assign({}, msg.profile, { peerId: pid }), pid)
-          _peerProfiles.set(pid, merged)
-          cachePeerProfile(merged, pid)
-        }
-        renderFriends()
-      }
-      if (msg.type === 'room-invite') {
-        const fromUsername = String(msg.fromUsername || String(msg._from || '').replace(/^flow-/, '')).trim().toLowerCase()
-        if (isInviteMutedFrom(fromUsername)) return
-        const roomId = String(msg.roomId || '').trim()
-        if (!roomId) return
-        showRoomInvitePrompt({ roomId, fromUsername })
-      }
-      if (msg.type === 'room-host-transfer' && msg.roomId === _roomState.roomId) {
-        const myPeerId = String(_socialPeer?.peer?.id || '')
-        if (myPeerId && msg.hostPeerId === myPeerId) {
-          _roomState.host = true
-          _roomState.hostPeerId = myPeerId
-          if (Array.isArray(msg.sharedQueue)) sharedQueue = msg.sharedQueue.map((t) => sanitizeTrack(t)).filter(Boolean)
-          saveRoomStateToServer({ host_peer_id: myPeerId, shared_queue: sharedQueue }).catch(() => {})
-          broadcastRoomMembersState()
-          broadcastQueueUpdate()
-          updateRoomUi()
-          showToast('РўРµРїРµСЂСЊ С‚С‹ С…РѕСЃС‚ РєРѕРјРЅР°С‚С‹')
-        }
-      }
-      if (msg.type === 'room-host-changed' && msg.roomId === _roomState.roomId && msg.hostPeerId) {
-        const myPeerId = String(_socialPeer?.peer?.id || '')
-        _roomState.hostPeerId = String(msg.hostPeerId || '')
-        _roomState.host = myPeerId && _roomState.hostPeerId === myPeerId
-        updateRoomUi()
-        if (!_roomState.host) showToast(`РќРѕРІС‹Р№ С…РѕСЃС‚: ${String(msg.username || msg.hostPeerId).replace(/^flow-/, '')}`)
-      }
-      if (msg.type === 'room-profile-state' && msg.roomId === _roomState.roomId && msg.profile && msg._peerId) {
-        const profileWithPeer = mergeProfileData(_peerProfiles.get(msg._peerId) || getCachedPeerProfile(msg.profile.username), Object.assign({}, msg.profile, { peerId: msg._peerId }), msg._peerId)
-        _peerProfiles.set(msg._peerId, profileWithPeer)
-        cachePeerProfile(profileWithPeer, msg._peerId)
-        _roomMembers.set(msg._peerId, profileWithPeer)
-        if (Array.isArray(msg.sharedQueue)) sharedQueue = msg.sharedQueue
-        if (_roomState.host) broadcastRoomMembersState()
-        resetRoomHeartbeat()
-        updateRoomUi()
-      }
-      if (msg.type === 'room-members-state' && msg.roomId === _roomState.roomId && Array.isArray(msg.members)) {
-        const map = new Map()
-        msg.members.forEach((item) => {
-          if (!item?.peerId || !item?.profile) return
-          map.set(item.peerId, item.profile)
-          cachePeerProfile(item.profile, item.peerId)
-        })
-        if (_socialPeer?.peer?.id && !map.has(_socialPeer.peer.id) && _profile?.username) {
-          map.set(_socialPeer.peer.id, getPublicProfilePayload(_profile.username))
-        }
-        _roomMembers = map
-        resetRoomHeartbeat()
-        updateRoomUi()
-      }
-      if (msg.type === 'room-queue-add' && msg.roomId === _roomState.roomId && _roomState.host && msg.track) {
-        const t = sanitizeTrack(msg.track)
-        sharedQueue.push(t)
-        broadcastQueueUpdate()
-        _socialPeer.send({ type: 'room-profile-state', roomId: _roomState.roomId, profile: getPublicProfilePayload(_profile?.username), sharedQueue })
-        saveRoomStateToServer({ shared_queue: sharedQueue }).catch(() => {})
-        renderRoomQueue()
-      }
-      if (msg.type === 'room-control-toggle' && msg.roomId === _roomState.roomId && msg._peerId && msg._peerId !== _socialPeer?.peer?.id) {
-        const shouldPause = Boolean(msg.paused)
-        if (shouldPause && !audio.paused) audio.pause()
-        if (!shouldPause && audio.paused) audio.play().catch(() => {})
-        if (_roomState?.host) {
-          broadcastPlaybackSync(true)
-          saveRoomStateToServer({
-            playback_state: { paused: Boolean(audio.paused), currentTime: Number(audio.currentTime || 0) },
-            playback_ts: Date.now(),
-          }).catch(() => {})
-        }
-      }
-      if (msg.type === 'room-queue-sync-request' && msg.roomId === _roomState.roomId && _roomState.host) {
-        const payload = { type: 'room-queue-sync-state', roomId: _roomState.roomId, sharedQueue }
-        if (typeof _socialPeer.sendToPeer === 'function' && msg._peerId) _socialPeer.sendToPeer(msg._peerId, payload)
-        else _socialPeer.send(payload)
-      }
-      if (msg.type === 'room-queue-sync-state' && msg.roomId === _roomState.roomId && Array.isArray(msg.sharedQueue)) {
-        sharedQueue = msg.sharedQueue
-        saveRoomStateToServer({ shared_queue: sharedQueue }).catch(() => {})
-        renderRoomQueue()
-      }
-      if (msg.type === (peerSocial?.EVENTS?.QUEUE_UPDATE || 'queue-update') && msg.roomId === _roomState.roomId && Array.isArray(msg.sharedQueue)) {
-        sharedQueue = msg.sharedQueue
-        saveRoomStateToServer({ shared_queue: sharedQueue }).catch(() => {})
-        renderRoomQueue()
-      }
-    },
-  })
-  const r = _socialPeer.init()
-  if (!r?.ok) setSocialStatus(r?.error || 'peer init failed')
-  updateRoomUi()
-}
-
-async function submitAuth() {
-  const input = document.getElementById('auth-login')
-  const passInput = document.getElementById('auth-password')
-  const username = String(input?.value || '').trim()
-  const password = String(passInput?.value || '')
-  if (!username) return setAuthError('Р’РІРµРґРёС‚Рµ Username')
-  if (!password) return setAuthError('Р’РІРµРґРёС‚Рµ РїР°СЂРѕР»СЊ')
-  const fn = _authMode === 'register' ? peerSocial.createProfile : peerSocial.loginProfile
-  if (typeof fn !== 'function') return setAuthError('Social РјРѕРґСѓР»СЊ РЅРµ Р·Р°РіСЂСѓР¶РµРЅ')
-  let result = await fn(username, password)
-  if (!result?.ok && _authMode === 'login' && result?.legacy && typeof peerSocial.migrateLegacyAccount === 'function') {
-    const ok = confirm('РќР°Р№РґРµРЅ СЃС‚Р°СЂС‹Р№ Р°РєРєР°СѓРЅС‚ Р±РµР· РїР°СЂРѕР»СЏ. РњРёРіСЂРёСЂРѕРІР°С‚СЊ РµРіРѕ РЅР° С‚РµРєСѓС‰РёР№ РїР°СЂРѕР»СЊ?')
-    if (!ok) return setAuthError('РњРёРіСЂР°С†РёСЏ РѕС‚РјРµРЅРµРЅР°')
-    result = await peerSocial.migrateLegacyAccount(username, password)
-    if (result?.ok) showToast('РђРєРєР°СѓРЅС‚ РјРёРіСЂРёСЂРѕРІР°РЅ. РўРµРїРµСЂСЊ РІС…РѕРґ СЂР°Р±РѕС‚Р°РµС‚ С‡РµСЂРµР· РїР°СЂРѕР»СЊ.')
-  }
-  if (!result?.ok) return setAuthError(result?.error || 'РћС€РёР±РєР° РІС…РѕРґР°')
-  _profile = result.profile
-  setAuthError('')
-  try {
-    if (_profile?.username) localStorage.setItem('flow_auth_last_user', String(_profile.username).trim().toLowerCase())
-  } catch {}
-  if (passInput) passInput.value = ''
-  setAuthScreensAuthorized(true)
-  syncProfileUi()
-  ensureSocialUI()
-  ensureRoomsUI()
-  renderFriends()
-  initPeerSocial()
-  showOnboardingIfNeeded()
-  pollFriendsPresence().catch(() => {})
-  if (_friendsPollTimer) clearInterval(_friendsPollTimer)
-  _friendsPollTimer = setInterval(() => { pollFriendsPresence().catch(() => {}) }, FRIEND_POLL_INTERVAL_MS)
-}
-
-function logout() {
-  removeRoomMemberPresence(_roomState?.roomId).catch(() => {})
-  stopRoomServerSync()
-  stopProfilesRealtimeSync()
-  try { _socialPeer?.destroy() } catch {}
-  _socialPeer = null
-  _roomState = { roomId: null, host: false, hostPeerId: null }
-  _friendPresence.clear()
-  _roomMembers.clear()
-  sharedQueue = []
-  if (_roomHeartbeatTimer) clearInterval(_roomHeartbeatTimer)
-  _roomHeartbeatTimer = null
-  if (_friendsPollTimer) clearInterval(_friendsPollTimer)
-  _friendsPollTimer = null
-  updateRoomUi()
-  disconnectDiscordRpc().catch?.(() => {})
-  if (typeof peerSocial.logoutProfile === 'function') peerSocial.logoutProfile()
-  _profile = null
-  setAuthScreensAuthorized(false)
-}
-
-async function addFriendByUsername() {
-  const input = document.getElementById('friend-search-input')
-  const friend = String(input?.value || '').trim()
-  if (!_profile?.username || !friend || typeof peerSocial.sendFriendRequest !== 'function') return
-  const r = await peerSocial.sendFriendRequest(_profile.username, friend)
-  if (!r?.ok) return showToast(r?.error || 'РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РїСЂР°РІРёС‚СЊ Р·Р°РїСЂРѕСЃ', true)
-  renderFriends().catch(() => {})
-  input.value = ''
-  const online = await _socialPeer?.probeUser?.(friend, 1500).catch(() => false)
-  showToast(online ? `Р—Р°РїСЂРѕСЃ РІ РґСЂСѓР·СЊСЏ РѕС‚РїСЂР°РІР»РµРЅ: ${friend}` : `Р—Р°РїСЂРѕСЃ РІ РґСЂСѓР·СЊСЏ РѕС‚РїСЂР°РІР»РµРЅ: ${friend} (РґРѕСЃС‚Р°РІРёС‚СЃСЏ РїСЂРё РІС…РѕРґРµ)`)
-}
-
-async function renderFriendRequests() {
-  const el = document.getElementById('friend-requests-list')
-  if (!el || !_profile?.username || typeof peerSocial.getIncomingFriendRequests !== 'function') return
-  const reqs = await peerSocial.getIncomingFriendRequests(_profile.username).catch(() => [])
-  if (!Array.isArray(reqs) || !reqs.length) {
-    el.innerHTML = '<div class="flow-empty-state compact"><strong>Р—Р°СЏРІРѕРє РЅРµС‚</strong><span>РќРѕРІС‹Рµ Р·Р°РїСЂРѕСЃС‹ РІ РґСЂСѓР·СЊСЏ РїРѕСЏРІСЏС‚СЃСЏ РѕС‚РґРµР»СЊРЅС‹РјРё РєР°СЂС‚РѕС‡РєР°РјРё.</span></div>'
-    return
-  }
-  el.innerHTML = reqs.map((req) => {
-    const from = String(req.from_username || '')
-    return `
-      <div class="social-friend-card online">
-        <div class="social-friend-avatar">${from.slice(0,1).toUpperCase()}</div>
-        <div class="social-friend-meta">
-          <strong>${from}</strong>
-          <span>РџСЂРµРґР»РѕР¶РµРЅРёРµ РІ РґСЂСѓР·СЊСЏ</span>
-        </div>
-        <button class="btn-small" onclick="respondFriendRequest('${from}', true)">РџСЂРёРЅСЏС‚СЊ</button>
-        <button class="btn-small" onclick="respondFriendRequest('${from}', false)">РћС‚РєР»РѕРЅРёС‚СЊ</button>
-      </div>
-    `
-  }).join('')
-}
-
-async function respondFriendRequest(fromUsername, accept) {
-  if (!_profile?.username || typeof peerSocial.respondFriendRequest !== 'function') return
-  const r = await peerSocial.respondFriendRequest(_profile.username, fromUsername, Boolean(accept))
-  if (!r?.ok) return showToast(r?.error || 'РћС€РёР±РєР° РѕР±СЂР°Р±РѕС‚РєРё Р·Р°СЏРІРєРё', true)
-  showToast(accept ? 'Р”СЂСѓРі РґРѕР±Р°РІР»РµРЅ' : 'Р—Р°РїСЂРѕСЃ РѕС‚РєР»РѕРЅРµРЅ')
-  renderFriends().catch(() => {})
-  pollFriendsPresence().catch(() => {})
-}
-
-function createRoom() {
-  if (!_socialPeer) return
-  const r = _socialPeer.createRoom()
-  if (!r?.ok) return showToast(r?.error || 'РћС€РёР±РєР° СЃРѕР·РґР°РЅРёСЏ', true)
-  _roomState = { roomId: r.roomId, host: true, hostPeerId: _socialPeer?.peer?.id || r.roomId }
-  _roomMembers.clear()
-  sharedQueue = []
-  if (_socialPeer?.peer?.id) _roomMembers.set(_socialPeer.peer.id, getPublicProfilePayload(_profile?.username))
-  setRoomStatus(`Р СѓРјР° ${r.roomId}: СѓС‡Р°СЃС‚РЅРёРєРѕРІ 1/3`)
-  resetRoomHeartbeat()
-  startRoomServerSync()
-  saveRoomStateToServer({ shared_queue: [], now_playing: null, playback_ts: Date.now() }).catch(() => {})
-  updateRoomUi()
-  showToast('Р СѓРјР° СЃРѕР·РґР°РЅР°')
-}
-
-function joinRoomById(forceRoomId = '') {
-  const input = document.getElementById('join-room-input')
-  const roomId = resolveInviteToRoomId(forceRoomId || String(input?.value || '').trim())
-  if (!_socialPeer || !roomId) return
-  const r = _socialPeer.joinRoom(roomId)
-  if (!r?.ok) return showToast(r?.error || 'РћС€РёР±РєР° РІС…РѕРґР°', true)
-  _roomState = { roomId: r.roomId, host: false, hostPeerId: null }
-  _roomMembers.clear()
-  sharedQueue = []
-  if (_socialPeer?.peer?.id) _roomMembers.set(_socialPeer.peer.id, getPublicProfilePayload(_profile?.username))
-  setRoomStatus(`РџРѕРґРєР»СЋС‡РµРЅРёРµ Рє СЂСѓРјРµ ${r.roomId}...`)
-  resetRoomHeartbeat()
-  startRoomServerSync()
-  loadRoomStateFromServer().catch(() => {})
-  updateRoomUi()
-  showToast('РџРѕРґРєР»СЋС‡РµРЅРёРµ Рє СЂСѓРјРµ...')
-}
-
-function joinFriendRoom(roomId) {
-  joinRoomById(roomId)
-}
-
-function leaveRoom() {
-  const prevRoomId = _roomState?.roomId
-  removeRoomMemberPresence(prevRoomId).catch(() => {})
-  stopRoomServerSync()
-  if (!_socialPeer) return
-  if (typeof _socialPeer.leaveRoom === 'function') _socialPeer.leaveRoom()
-  _roomState = { roomId: null, host: false, hostPeerId: null }
-  _roomMembers.clear()
-  sharedQueue = []
-  if (_roomHeartbeatTimer) clearInterval(_roomHeartbeatTimer)
-  _roomHeartbeatTimer = null
-  setRoomStatus('Р СѓРјР°: РЅРµ Р°РєС‚РёРІРЅР°')
-  updateRoomUi()
-  showToast('Р’С‹ РїРѕРєРёРЅСѓР»Рё СЂСѓРјСѓ')
-}
-
-function copyInviteLink() {
-  if (!_roomState?.roomId || !_profile?.username) return showToast('РЎРЅР°С‡Р°Р»Р° СЃРѕР·РґР°Р№/РІРѕР№РґРё РІ СЂСѓРјСѓ', true)
-  const invite = `flow://join/${_profile.username}`
-  navigator.clipboard?.writeText(invite)
-    .then(() => showToast(`Invite СЃРєРѕРїРёСЂРѕРІР°РЅ: ${invite}`))
-    .catch(() => showToast('РќРµ СѓРґР°Р»РѕСЃСЊ СЃРєРѕРїРёСЂРѕРІР°С‚СЊ invite', true))
-}
-
-function openInviteModal() {
-  const modal = document.getElementById('invite-modal')
-  if (!modal) return
-  const input = document.getElementById('invite-input')
-  if (input) input.value = ''
-  modal.classList.remove('hidden')
-  requestAnimationFrame(() => { if (input) input.focus() })
-}
-
-function closeInviteModal() {
-  const modal = document.getElementById('invite-modal')
-  if (modal) modal.classList.add('hidden')
-}
-
-function submitInviteJoin() {
-  const input = document.getElementById('invite-input')
-  const roomId = resolveInviteToRoomId(String(input?.value || '').trim())
-  if (!roomId) return
-  closeInviteModal()
-  joinRoomById(roomId)
-}
-
-function openPlaylistEditModal(mode, payload = {}) {
-  const modal = document.getElementById('playlist-edit-modal')
-  if (!modal) return
-  const titleEl = document.getElementById('playlist-edit-title')
-  const nameLabel = document.getElementById('playlist-edit-name-label')
-  const descLabel = document.getElementById('playlist-edit-desc-label')
-  const nameInput = document.getElementById('playlist-edit-name-input')
-  const descInput = document.getElementById('playlist-edit-desc-input')
-  if (!nameInput || !descInput) return
-  _playlistEditContext = { mode, ...payload }
-  if (mode === 'playlist-meta') {
-    if (titleEl) titleEl.textContent = 'Р РµРґР°РєС‚РёСЂРѕРІР°С‚СЊ РїР»РµР№Р»РёСЃС‚'
-    if (nameLabel) nameLabel.textContent = 'РќР°Р·РІР°РЅРёРµ'
-    if (descLabel) descLabel.textContent = 'РћРїРёСЃР°РЅРёРµ'
-    nameInput.value = String(payload.name || '')
-    descInput.value = String(payload.description || '')
-    descInput.placeholder = 'РћРїРёСЃР°РЅРёРµ РїР»РµР№Р»РёСЃС‚Р°'
-  } else {
-    if (titleEl) titleEl.textContent = 'Р РµРґР°РєС‚РёСЂРѕРІР°С‚СЊ С‚СЂРµРє'
-    if (nameLabel) nameLabel.textContent = 'РќР°Р·РІР°РЅРёРµ С‚СЂРµРєР°'
-    if (descLabel) descLabel.textContent = 'РСЃРїРѕР»РЅРёС‚РµР»СЊ'
-    nameInput.value = String(payload.title || '')
-    descInput.value = String(payload.artist || '')
-    descInput.placeholder = 'РСЃРїРѕР»РЅРёС‚РµР»СЊ'
-  }
-  modal.classList.remove('hidden')
-  requestAnimationFrame(() => nameInput.focus())
-}
-
-function closePlaylistEditModal() {
-  const modal = document.getElementById('playlist-edit-modal')
-  if (modal) modal.classList.add('hidden')
-  _playlistEditContext = null
-}
-
-function submitPlaylistEditModal() {
-  if (!_playlistEditContext) return
-  const nameInput = document.getElementById('playlist-edit-name-input')
-  const descInput = document.getElementById('playlist-edit-desc-input')
-  if (!nameInput || !descInput) return
-  const first = String(nameInput.value || '').trim()
-  const second = String(descInput.value || '').trim()
-  const pls = getPlaylists().map(normalizePlaylist)
-  if (_playlistEditContext.mode === 'playlist-meta') {
-    const idx = Number(_playlistEditContext.playlistIndex)
-    if (!pls[idx]) return
-    pls[idx].name = first || pls[idx].name
-    pls[idx].description = second
-    savePlaylists(pls)
-    renderPlaylists()
-    if (openPlaylistIndex === idx) openPlaylist(idx)
-  } else if (_playlistEditContext.mode === 'track-meta') {
-    const pIdx = Number(_playlistEditContext.playlistIndex)
-    const tIdx = Number(_playlistEditContext.trackIndex)
-    const track = pls[pIdx]?.tracks?.[tIdx]
-    if (!track) return
-    track.title = first || track.title
-    track.artist = second || track.artist
-    savePlaylists(pls)
-    openPlaylist(pIdx)
-  }
-  closePlaylistEditModal()
-}
-
-function openLibraryActionModal(mode) {
-  const modal = document.getElementById('library-action-modal')
-  const title = document.getElementById('library-action-title')
-  const input = document.getElementById('library-action-input')
-  if (!modal || !title || !input) return
-  _libraryActionMode = mode
-  if (mode === 'create') {
-    title.textContent = 'РЎРѕР·РґР°С‚СЊ РїР»РµР№Р»РёСЃС‚'
-    input.placeholder = 'РќР°Р·РІР°РЅРёРµ РїР»РµР№Р»РёСЃС‚Р°'
-    input.value = ''
-  } else {
-    title.textContent = 'РРјРїРѕСЂС‚ РїР»РµР№Р»РёСЃС‚Р° РїРѕ СЃСЃС‹Р»РєРµ'
-    input.placeholder = 'Р’СЃС‚Р°РІСЊ СЃСЃС‹Р»РєСѓ РЅР° РїР»РµР№Р»РёСЃС‚ (Spotify / Yandex / VK)'
-    input.value = ''
-  }
-  modal.classList.remove('hidden')
-  requestAnimationFrame(() => input.focus())
-}
-
-function closeLibraryActionModal() {
-  const modal = document.getElementById('library-action-modal')
-  if (modal) modal.classList.add('hidden')
-  _libraryActionMode = null
-}
-
-async function submitLibraryActionModal() {
-  const input = document.getElementById('library-action-input')
-  const value = String(input?.value || '').trim()
-  if (!value) return
-  const mode = _libraryActionMode
-  closeLibraryActionModal()
-  if (mode === 'create') createPlaylist(value)
-  else if (mode === 'import') await importPlaylistFromLink(value)
-}
-
-function openImportProgress(total = 0) {
-  const modal = document.getElementById('import-progress-modal')
-  if (modal) modal.classList.remove('hidden')
-  updateImportProgress(0, total, 'РџРѕРґРіРѕС‚РѕРІРєР°...')
-}
-
-function closeImportProgress() {
-  const modal = document.getElementById('import-progress-modal')
-  if (modal) modal.classList.add('hidden')
-}
-
-function updateImportProgress(done, total, text = '') {
-  const safeDone = Math.max(0, Number(done) || 0)
-  const safeTotal = Math.max(0, Number(total) || 0)
-  const pct = safeTotal > 0 ? Math.round((safeDone / safeTotal) * 100) : 0
-  const bar = document.getElementById('import-progress-bar')
-  const count = document.getElementById('import-progress-count')
-  const pctEl = document.getElementById('import-progress-pct')
-  const textEl = document.getElementById('import-progress-text')
-  if (bar) bar.style.width = `${Math.max(0, Math.min(100, pct))}%`
-  if (count) count.textContent = `${safeDone}/${safeTotal || 0}`
-  if (pctEl) pctEl.textContent = `${pct}%`
-  if (textEl) textEl.textContent = text || 'РРјРїРѕСЂС‚...'
-}
-
-function setImportProgressIndeterminate(enabled) {
-  const bar = document.getElementById('import-progress-bar')
-  const count = document.getElementById('import-progress-count')
-  const pctEl = document.getElementById('import-progress-pct')
-  if (bar) bar.classList.toggle('indeterminate', Boolean(enabled))
-  if (enabled) {
-    if (count) count.textContent = '...'
-    if (pctEl) pctEl.textContent = '...'
-  }
-}
-
-function promptInviteJoin() {
-  openInviteModal()
-}
-
-async function pollFriendsPresence(force = false) {
-  if (!_socialPeer || !_profile?.username || !peerSocial.getFriends) return
-  const friends = peerSocial.getFriends(_profile.username) || []
-  const entries = await Promise.all(friends.map(async (friend) => {
-    const uname = String(friend || '').trim().toLowerCase()
-    const prev = _friendPresence.get(uname) || {}
-    const freshOnline = !force && prev.online && (Date.now() - Number(prev.updatedAt || 0) < FRIEND_FRESH_ONLINE_MS)
-    const isOnline = freshOnline ? true : await _socialPeer.probeUser(uname, 900).catch(() => false)
-    if (!isOnline) {
-      return [uname, { online: false, track: null, roomId: null, peerId: prev.peerId || null, updatedAt: Date.now() }]
-    }
-    let state = { online: true, track: prev.track || null, roomId: prev.roomId || `flow-${uname}`, peerId: prev.peerId || `flow-${uname}`, updatedAt: Date.now() }
-    const peerId = `flow-${uname}`
-    if (typeof _socialPeer.requestPeerData === 'function') {
-      const response = await _socialPeer.requestPeerData(peerId, { type: 'presence-request' }, 1100).catch(() => null)
-      if (response?.ok && response?.data?.type === 'presence-state') {
-        const p = response.data
-        state = {
-          online: true,
-          track: p.track || null,
-          roomId: p.roomId || `flow-${uname}`,
-          peerId: p.peerId || p._peerId || `flow-${uname}`,
-          host: Boolean(p.host),
-          updatedAt: Date.now(),
-        }
-        if (p.profile && (p.peerId || p._peerId)) {
-          const pid = p.peerId || p._peerId
-          const merged = mergeProfileData(_peerProfiles.get(pid) || getCachedPeerProfile(p.profile.username), Object.assign({}, p.profile, { peerId: pid }), pid)
-          _peerProfiles.set(pid, merged)
-          cachePeerProfile(merged, pid)
-        }
-      }
-    }
-    const shouldForceProfileRefresh = force || !prev.online
-    await refreshFriendProfileFromCloud(uname, shouldForceProfileRefresh).catch(() => null)
-    return [uname, state]
-  }))
-  const prevPresence = _friendPresence
-  entries.forEach(([uname, state]) => notifyFriendPresenceChange(uname, prevPresence.get(uname) || {}, state || {}))
-  _friendPresence = new Map(entries)
-  renderFriends()
-}
-
-function notifyFriendPresenceChange(username, prev = {}, next = {}) {
-  const name = String(username || '').trim()
-  if (!name) return
-  const now = Date.now()
-  const canNotify = (kind) => {
-    const key = `${name}:${kind}`
-    const last = Number(_friendNotifyAt.get(key) || 0)
-    if (now - last < FRIEND_NOTIFY_COOLDOWN_MS) return false
-    _friendNotifyAt.set(key, now)
-    return true
-  }
-  if (!prev.online && next.online && canNotify('online')) {
-    showToast(`${name} С‚РµРїРµСЂСЊ РѕРЅР»Р°Р№РЅ`)
-  }
-  const prevTrack = prev.track ? `${prev.track.artist || ''}:${prev.track.title || ''}` : ''
-  const nextTrack = next.track ? `${next.track.artist || ''}:${next.track.title || ''}` : ''
-  if (next.online && nextTrack && nextTrack !== prevTrack && canNotify(`track:${nextTrack}`)) {
-    showToast(`${name} СЃР»СѓС€Р°РµС‚: ${next.track.title || 'С‚СЂРµРє'}${next.track.artist ? ` вЂ” ${next.track.artist}` : ''}`)
-  }
-}
-
-function broadcastPlaybackSync(force = false) {
-  if (!_socialPeer || !_roomState.roomId || !currentTrack || !_roomState.host) return
-  const now = Date.now()
-  if (!force && now - _lastRoomSyncAt < 700) return
-  _lastRoomSyncAt = now
-  _socialPeer.send({
-    type: 'playback-sync',
-    roomId: _roomState.roomId,
-    track: currentTrack,
-    playbackTs: Date.now(),
-    currentTime: Number(audio.currentTime || 0),
-    paused: Boolean(audio.paused),
-    source: currentTrack?.source || null,
-    sharedQueue,
-  })
-  saveRoomStateToServer({
-    now_playing: currentTrack,
-    shared_queue: sharedQueue,
-    playback_state: { paused: Boolean(audio.paused), currentTime: Number(audio.currentTime || 0) },
-    playback_ts: Date.now(),
-  }).catch(() => {})
-}
-
-// РІвЂќР‚РІвЂќР‚РІвЂќР‚ APP START РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
-function startApp() {
-  try {
-    const s0 = getSettings()
-    const b = String(s0.flowSocialApiBase || '').trim()
-    const k = String(s0.flowSocialApiSecret || '').trim()
-    if (b) localStorage.setItem('flow_social_api_base', b.replace(/\/$/, ''))
-    if (k) localStorage.setItem('flow_social_api_secret', k)
-  } catch (_) {}
-  const profile = typeof peerSocial.getCurrentProfile === 'function' ? peerSocial.getCurrentProfile() : null
-  _profile = profile || null
-  if (_profile) {
-    setAuthScreensAuthorized(true)
-    syncProfileUi()
-    ensureSocialUI()
-    ensureRoomsUI()
-    renderFriends()
-    initPeerSocial()
-    syncIntegrationsUI()
-    showOnboardingIfNeeded()
-    pollFriendsPresence().catch(() => {})
-    if (_friendsPollTimer) clearInterval(_friendsPollTimer)
-    _friendsPollTimer = setInterval(() => { pollFriendsPresence().catch(() => {}) }, FRIEND_POLL_INTERVAL_MS)
-    const s = getSettings()
-    if (s.discordRpcEnabled && s.discordClientId) {
-      window.api?.discordRpcConnect?.(s.discordClientId).catch(() => {})
-    }
-  } else {
-    setAuthScreensAuthorized(false)
-    switchTab('login')
-    syncIntegrationsUI()
-  }
-  updateRoomUi()
-  if (!localStorage.getItem('flow_first_launch_done')) {
-    saveVisual({
-      bgType: 'gradient',
-      blur: 10,
-      bright: 16,
-      panelBlur: 18,
-      visualMode: 'minimal',
-      accent: '#4b5563',
-      accent2: '#9ca3af',
-      orb1Color: '#4b5563',
-      orb2Color: '#9ca3af',
-      homeSliderStyle: 'line',
-      homeWidget: { enabled: true, mode: 'bars', image: null },
-      effects: { orbs: false, glow: true, dyncolor: false },
-      uiScale: 100
-    })
-    localStorage.setItem('flow_first_launch_done', '1')
-  }
-  // Repair previously injected custom covers in collections on each launch.
-  restoreSourceCoversInCollections()
-  renderLiked(); renderPlaylists(); updateSourceBadge(); syncSearchSourcePills()
-  renderMyWave()
-  initVisualSettings()
-  syncPlaybackModeUI()
-  syncTrackCoverStatus()
-}
-
-function applyUiTextOverrides() {
-  const set = (selector, text) => {
-    const el = document.querySelector(selector)
-    if (el) el.textContent = text
-  }
-  const setAttr = (selector, attr, value) => {
-    const el = document.querySelector(selector)
-    if (el) el.setAttribute(attr, value)
-  }
-  const nav = document.querySelectorAll('.nav-item')
-  if (nav[0]?.querySelector('.nav-label')) nav[0].querySelector('.nav-label').textContent = 'Р“Р»Р°РІРЅР°СЏ'
-  if (nav[1]?.querySelector('.nav-label')) nav[1].querySelector('.nav-label').textContent = 'РџРѕРёСЃРє'
-  if (nav[2]?.querySelector('.nav-label')) nav[2].querySelector('.nav-label').textContent = 'Р‘РёР±Р»РёРѕС‚РµРєР°'
-  if (nav[3]?.querySelector('.nav-label')) nav[3].querySelector('.nav-label').textContent = 'Р›СЋР±РёРјС‹Рµ'
-  if (nav[4]?.querySelector('.nav-label')) nav[4].querySelector('.nav-label').textContent = 'Р”СЂСѓР·СЊСЏ'
-  if (nav[5]?.querySelector('.nav-label')) nav[5].querySelector('.nav-label').textContent = 'РљРѕРјРЅР°С‚С‹'
-  if (nav[6]?.querySelector('.nav-label')) nav[6].querySelector('.nav-label').textContent = 'РќР°СЃС‚СЂРѕР№РєРё'
-  const currentName = _profile?.username || 'СЃР»СѓС€Р°С‚РµР»СЊ'
-  set('#welcome-text', `РџСЂРёРІРµС‚, ${currentName}`)
-  set('#user-name', currentName)
-  set('.user-sub', 'СЃР»СѓС€Р°С‚РµР»СЊ')
-  setAttr('#search-input', 'placeholder', 'РСЃРїРѕР»РЅРёС‚РµР»СЊ, РЅР°Р·РІР°РЅРёРµ С‚СЂРµРєР°...')
-  set('#lyrics-track-name', 'вЂ”')
-  const setText = (selector, value) => {
-    const el = document.querySelector(selector)
-    if (el) el.textContent = value
-  }
-  setText('#page-settings .content-header h2', 'РќР°СЃС‚СЂРѕР№РєРё')
-  setText('#page-settings .content-header .content-sub', 'Р’С‹Р±РµСЂРё СЂР°Р·РґРµР» СЃР»РµРІР° вЂ” РЅР°СЃС‚СЂРѕР№РєРё СЃРіСЂСѓРїРїРёСЂРѕРІР°РЅС‹ РїРѕ СЃРјС‹СЃР»Сѓ.')
-  setText('#page-library .content-header h2', 'Р‘РёР±Р»РёРѕС‚РµРєР°')
-  setText('#page-liked .content-header h2', 'Р›СЋР±РёРјС‹Рµ')
-  setText('#page-profile .content-header h2', 'РџСЂРѕС„РёР»СЊ')
-  setText('#page-profile .content-sub', 'РўРІРѕР№ Flow РїСЂРѕС„РёР»СЊ')
-  setText('#page-rooms .content-header h2', 'РљРѕРјРЅР°С‚С‹')
-  setText('#page-rooms .content-sub', 'РЎРѕРІРјРµСЃС‚РЅРѕРµ РїСЂРѕСЃР»СѓС€РёРІР°РЅРёРµ Рё РѕР±С‰Р°СЏ РѕС‡РµСЂРµРґСЊ')
-  setText('#page-search .content-header h2', 'РџРѕРёСЃРє')
-  setText('#page-search .content-sub', 'РќР°Р№РґРё С‚СЂРµРє')
-  setText('#page-library .content-sub', 'РўРІРѕРё РїР»РµР№Р»РёСЃС‚С‹')
-  setText('#page-liked .content-sub', 'РўСЂРµРєРё, РєРѕС‚РѕСЂС‹Рµ С‚С‹ Р»Р°Р№РєРЅСѓР»')
-
-  const labels = Array.from(document.querySelectorAll('#settings-panel-appearance .vs-label, #settings-panel-playback .vs-label'))
-  labels.forEach((el) => {
-    const t = (el.textContent || '').trim()
-    if (t.includes('Blur') && t.includes('С„РѕРЅР°')) el.innerHTML = 'Blur С„РѕРЅР° <span class="vs-val" id="vs-blur-val">40px</span>'
-    if (t.includes('РЇСЂРєРѕСЃС‚СЊ') || t.includes('PРЏ')) el.innerHTML = 'РЇСЂРєРѕСЃС‚СЊ С„РѕРЅР° <span class="vs-val" id="vs-bright-val">50%</span>'
-    if (t.includes('РџСЂРѕР·СЂР°С‡РЅ')) el.innerHTML = 'РџСЂРѕР·СЂР°С‡РЅРѕСЃС‚СЊ СЃС‚РµРєР»Р° <span class="vs-val" id="vs-glass-val">8%</span>'
-    if (t.includes('РїР°РЅРµР»')) el.innerHTML = 'Blur РїР°РЅРµР»РµР№ <span class="vs-val" id="vs-panel-blur-val">30px</span>'
-  })
-}
-
-let scheduleMainShiftRemeasure = () => {}
-
-const FLOW_SIDEBAR_FLOAT_Y_LS = 'flow_sidebar_float_y'
-
-/** Slack L/T/R/B (px): В«РєСѓСЃРѕРєВ» РїСЂР°РІРѕР№ РєР°СЂС‚РѕС‡РєРё РѕС‚ РјР°РєСЃРёРјР°Р»СЊРЅРѕРіРѕ РїСЂСЏРјРѕСѓРіРѕР»СЊРЅРёРєР° РІ UI В«РњРёРЅРёРјР°Р»В». */
-const FLOW_MAIN_CARD_SLACK_LS = 'flow_main_card_slack_v1'
-
-/** РЎРѕС…СЂР°РЅС‘РЅРЅРѕРµ СЃРјРµС‰РµРЅРёРµ РїСЂР°РІРѕР№ РєР°СЂС‚РѕС‡РєРё (В«РѕРєРЅР°В» РєРѕРЅС‚РµРЅС‚Р°) РІ UI В«РњРёРЅРёРјР°Р»В», px. */
-const FLOW_MAIN_PANE_DRAG_LS = 'flow_floated_pane_drag_v1'
-
-function setupFloatedMainContentResize() {
-  const root = document.documentElement
-  const MAIN_MIN_W = 360
-  const MAIN_MIN_H = 240
-  /** Р”РѕРїРѕР»РЅРёС‚РµР»СЊРЅРѕРµ В«РІС‹СЂР°СЃС‚Р°РЅРёРµВ» РєР°СЂС‚РѕС‡РєРё Сѓ СѓРіР»РѕРІ: РѕС‚СЂРёС†Р°С‚РµР»СЊРЅС‹Р№ slack; РѕР±С‰РёР№ РјРѕРґСѓР»СЊ РѕРіСЂР°РЅРёС‡РµРЅ. */
-  const SLACK_NEG_CAP = 72
-
-  const modeOk = () =>
-    document.body.classList.contains('visual-floated') &&
-    !document.body.classList.contains('visual-minimal') &&
-    !document.body.classList.contains('layout-top-nav')
-
-  /** @typedef {{ l: number, t: number, r: number, b: number }} Slack */
-
-  /** @returns {{ baseMl: number, baseMt: number, maxW: number, maxH: number }} */
-  function readMaxBox() {
-    try {
-      const gcs = getComputedStyle(root)
-      const mis = parseFloat(gcs.getPropertyValue('--main-inset-start')) || 22
-      const mie = parseFloat(gcs.getPropertyValue('--main-inset-end')) || 22
-      const pans = parseFloat(gcs.getPropertyValue('--floated-pane-stack-start')) || 300
-      const offx = parseFloat(gcs.getPropertyValue('--floated-right-pane-offset-x') || '') || 0
-      const offy = parseFloat(gcs.getPropertyValue('--floated-right-pane-offset-y') || '') || 0
-      const smpt = parseFloat(gcs.getPropertyValue('--screen-main-pt')) || 18
-      const tb = parseFloat(gcs.getPropertyValue('--titlebar-h')) || 32
-      const ph = parseFloat(gcs.getPropertyValue('--player-h')) || 88
-      const psb = parseFloat(gcs.getPropertyValue('--player-stack-bottom')) || 22
-      const iw = typeof window !== 'undefined' ? window.innerWidth : 1100
-      const ih = typeof window !== 'undefined' ? window.innerHeight : 700
-      const nominalStart = mis + pans + offx
-      let baseMl = nominalStart
-      try {
-        const sb = typeof document !== 'undefined' ? document.getElementById('sidebar') : null
-        if (sb && document.body?.classList?.contains?.('visual-floated')) {
-          const br = sb.getBoundingClientRect()
-          const guardStr = gcs.getPropertyValue('--floated-content-overlap-guard').trim()
-          const guard = parseFloat(guardStr) || 44
-          if (br.width > 4 && br.height > 4) {
-            const dyn = br.right + guard
-            baseMl = Math.max(nominalStart, dyn)
-          }
-        }
-      } catch (_) {}
-      const baseMt = smpt + offy
-      const maxW = Math.max(MAIN_MIN_W, Math.floor(iw - baseMl - mie))
-      const maxH = Math.max(MAIN_MIN_H, Math.floor(ih - tb - smpt - offy - ph - psb + 10))
-      return { baseMl, baseMt, maxW, maxH }
-    } catch (_) {
-      return { baseMl: 22, baseMt: 18, maxW: 800, maxH: 600 }
-    }
-  }
-
-  function clampSlacks(s) {
-    const { maxW, maxH } = readMaxBox()
-    const clampH = (v) => Math.max(-SLACK_NEG_CAP, Math.min(Math.round(v), maxW))
-    const clampV = (v) => Math.max(-SLACK_NEG_CAP, Math.min(Math.round(v), maxH))
-    let L = clampH(s.l)
-    let T = clampV(s.t)
-    let R = clampH(s.r)
-    let B = clampV(s.b)
-
-    const shrinkHoriz = () => {
-      let wAvail = maxW - L - R
-      if (wAvail >= MAIN_MIN_W) return
-      let need = MAIN_MIN_W - wAvail
-      const eatNeg = () => {
-        while (need > 0 && L < 0) {
-          const t = Math.min(need, -L)
-          L += t
-          need -= t
-        }
-        while (need > 0 && R < 0) {
-          const t = Math.min(need, -R)
-          R += t
-          need -= t
-        }
-      }
-      eatNeg()
-      let guard = 0
-      while (need > 0 && guard < 5600) {
-        guard++
-        if (L >= R && L > 0) {
-          L--
-          need--
-        } else if (R > 0) {
-          R--
-          need--
-        } else if (L < 0) {
-          L++
-          need--
-        } else if (R < 0) {
-          R++
-          need--
-        } else break
-      }
-    }
-
-    const shrinkVert = () => {
-      let hAvail = maxH - T - B
-      if (hAvail >= MAIN_MIN_H) return
-      let need = MAIN_MIN_H - hAvail
-      const eatNeg = () => {
-        while (need > 0 && T < 0) {
-          const t = Math.min(need, -T)
-          T += t
-          need -= t
-        }
-        while (need > 0 && B < 0) {
-          const t = Math.min(need, -B)
-          B += t
-          need -= t
-        }
-      }
-      eatNeg()
-      let guard = 0
-      while (need > 0 && guard < 5600) {
-        guard++
-        if (T >= B && T > 0) {
-          T--
-          need--
-        } else if (B > 0) {
-          B--
-          need--
-        } else if (T < 0) {
-          T++
-          need--
-        } else if (B < 0) {
-          B++
-          need--
-        } else break
-      }
-    }
-
-    shrinkHoriz()
-    shrinkVert()
-    return { l: L, t: T, r: R, b: B }
-  }
-
-  /** @returns {Slack}
-   */
-  function readStoredSlacks() {
-    try {
-      const raw = localStorage.getItem(FLOW_MAIN_CARD_SLACK_LS)
-      if (!raw) return { l: 0, t: 0, r: 0, b: 0 }
-      const p = JSON.parse(raw)
-      if (!p || typeof p !== 'object') return { l: 0, t: 0, r: 0, b: 0 }
-      return clampSlacks({
-        l: +p.l || 0,
-        t: +p.t || 0,
-        r: +p.r || 0,
-        b: +p.b || 0,
-      })
-    } catch (_) {
-      return { l: 0, t: 0, r: 0, b: 0 }
-    }
-  }
-
-  /** @type {Slack}
-   */
-  let liveSlacks = readStoredSlacks()
-
-  function clearDomSlacks() {
-    try {
-      ;['--flow-main-card-sl-l', '--flow-main-card-sl-t', '--flow-main-card-sl-r', '--flow-main-card-sl-b'].forEach(
-        (prop) => {
-          root.style.removeProperty(prop)
-        },
-      )
-    } catch (_) {}
-    try {
-      document.body.classList.remove('has-flow-main-pane-slack')
-    } catch (_) {}
-  }
-
-  function persistSlacks() {
-    try {
-      localStorage.setItem(FLOW_MAIN_CARD_SLACK_LS, JSON.stringify(liveSlacks))
-    } catch (_) {}
-  }
-
-  function syncSlacksToDom(slack) {
-    if (!modeOk()) return
-    try {
-      root.style.setProperty('--flow-main-card-sl-l', `${slack.l}px`)
-      root.style.setProperty('--flow-main-card-sl-t', `${slack.t}px`)
-      root.style.setProperty('--flow-main-card-sl-r', `${slack.r}px`)
-      root.style.setProperty('--flow-main-card-sl-b', `${slack.b}px`)
-    } catch (_) {}
-  }
-
-  function applySlacks(s) {
-    liveSlacks = clampSlacks(s)
-    if (!modeOk()) {
-      clearDomSlacks()
-      return
-    }
-    const flat =
-      Math.abs(liveSlacks.l) +
-        Math.abs(liveSlacks.t) +
-        Math.abs(liveSlacks.r) +
-        Math.abs(liveSlacks.b) <
-      0.25
-    if (flat) {
-      clearDomSlacks()
-      liveSlacks = { l: 0, t: 0, r: 0, b: 0 }
-      return
-    }
-    syncSlacksToDom(liveSlacks)
-    try {
-      document.body.classList.add('has-flow-main-pane-slack')
-    } catch (_) {}
-  }
-
-  /** @returns {Slack}
-   */
-  function applyStoredOrClear() {
-    if (!modeOk()) {
-      clearDomSlacks()
-      return liveSlacks
-    }
-    const rd = readStoredSlacks()
-    const sumAbs =
-      Math.abs(rd.l) +
-      Math.abs(rd.t) +
-      Math.abs(rd.r) +
-      Math.abs(rd.b)
-    if (sumAbs <= 0.25) {
-      clearDomSlacks()
-      liveSlacks = { l: 0, t: 0, r: 0, b: 0 }
-      return liveSlacks
-    }
-    liveSlacks = rd
-    syncSlacksToDom(liveSlacks)
-    try {
-      document.body.classList.add('has-flow-main-pane-slack')
-    } catch (_) {}
-    return liveSlacks
-  }
-
-  let cornerDragging = false
-  /** @type {null | { corner: string, cx: number, cy: number, s: Slack }} */
-  let anchor = null
-  /** @type {null | Element} */
-  let captureEl = null
-  let capPid = /** @type {null | number} */ (null)
-
-  function finishCorner() {
-    if (!cornerDragging) return
-    cornerDragging = false
-    anchor = null
-    document.body.style.cursor = ''
-    try {
-      document.body.classList.remove('flow-main-pane-resizing')
-    } catch (_) {}
-    window.removeEventListener('pointermove', onMv, true)
-    window.removeEventListener('pointerup', finishCorner, true)
-    window.removeEventListener('pointercancel', finishCorner, true)
-    if (captureEl && capPid != null) {
-      try {
-        captureEl.releasePointerCapture(capPid)
-      } catch (_) {}
-    }
-    captureEl = null
-    capPid = null
-    persistSlacks()
-    try {
-      scheduleMainShiftRemeasure()
-    } catch (_) {}
-    try {
-      syncFlowLayoutCoords()
-    } catch (_) {}
-  }
-
-  /** @param {PointerEvent} e */
-  function onMv(e) {
-    if (!cornerDragging || !anchor) return
-    const { corner, cx: sx, cy: sy, s: startSlack } = anchor
-    const cx = e.clientX
-    const cy = e.clientY
-    const dx = cx - sx
-    const dy = cy - sy
-    const ns = { ...startSlack }
-    if (corner === 'br') {
-      ns.r = startSlack.r - dx
-      ns.b = startSlack.b - dy
-    } else if (corner === 'tr') {
-      ns.r = startSlack.r - dx
-      ns.t = startSlack.t + dy
-    } else if (corner === 'bl') {
-      ns.l = startSlack.l + dx
-      ns.b = startSlack.b - dy
-    } else if (corner === 'tl') {
-      ns.l = startSlack.l + dx
-      ns.t = startSlack.t + dy
-    }
-    applySlacks(ns)
-  }
-
-  /** @param {string} corner @param {PointerEvent} e @param {Element} el */
-  function beginCorner(corner, e, el) {
-    if (!modeOk()) return
-    if (!e.isPrimary || e.button !== 0) return
-    e.preventDefault()
-    e.stopPropagation()
-    anchor = { corner, cx: e.clientX, cy: e.clientY, s: { ...liveSlacks } }
-    cornerDragging = true
-    try {
-      document.body.classList.add('flow-main-pane-resizing')
-    } catch (_) {}
-    document.body.style.cursor = corner === 'tl' || corner === 'br' ? 'nwse-resize' : 'nesw-resize'
-    captureEl = el
-    capPid = e.pointerId
-    window.addEventListener('pointermove', onMv, true)
-    window.addEventListener('pointerup', finishCorner, true)
-    window.addEventListener('pointercancel', finishCorner, true)
-    try {
-      el.setPointerCapture(e.pointerId)
-    } catch (_) {}
-  }
-
-  const pane = document.getElementById('main-content-pane')
-  document.querySelectorAll('[data-main-pane-corner]').forEach((btn) => {
-    const corner = String(btn.getAttribute('data-main-pane-corner') || '')
-    if (!['tl', 'tr', 'bl', 'br'].includes(corner)) return
-    btn.addEventListener('pointerdown', (e) => beginCorner(corner, e, btn))
-  })
-
-  let rt = 0
-  window.addEventListener(
-    'resize',
-    () => {
-      clearTimeout(rt)
-      rt = setTimeout(() => {
-        try {
-          if (!pane || !modeOk()) return
-          liveSlacks = clampSlacks(liveSlacks)
-          applySlacks(liveSlacks)
-          persistSlacks()
-        } catch (_) {}
-      }, 140)
-    },
-    { passive: true },
-  )
-
-  window.flowMainPaneResize = {
-    reclamp() {
-      applySlacks(clampSlacks(liveSlacks))
-    },
-    reset() {
-      try {
-        localStorage.removeItem(FLOW_MAIN_CARD_SLACK_LS)
-      } catch (_) {}
-      liveSlacks = { l: 0, t: 0, r: 0, b: 0 }
-      clearDomSlacks()
-    },
-    clearDom() {
-      clearDomSlacks()
-    },
-    refreshMode() {
-      if (!pane) return
-      if (!modeOk()) {
-        clearDomSlacks()
-        return
-      }
-      applyStoredOrClear()
-    },
-  }
-
-  if (pane && modeOk()) applyStoredOrClear()
-}
-
-/** Р Р°РјРєРё РїРѕ РїРµСЂРёРјРµС‚СЂСѓ РєР°СЂС‚РѕС‡РєРё: РїРµСЂРµС‚Р°СЃРєРёРІР°РЅРёРµ С‚РѕР»СЊРєРѕ РёР· РїРѕР»РѕСЃ (СѓРіРѕР»РєРё РѕСЃРІРѕР±РѕР¶РґРµРЅС‹ РїРѕРґ СЂРµСЃР°Р№Р·). */
-function setupFloatedMainPaneDrag() {
-  const paneEl = document.getElementById('main-content-pane')
-  const hits = paneEl?.querySelectorAll('.main-pane-frame-hit') ?? []
-  if (!paneEl || hits.length === 0) return
-
-  const modeOkDrag = () =>
-    document.body.classList.contains('visual-floated') &&
-    !document.body.classList.contains('visual-minimal') &&
-    !document.body.classList.contains('layout-top-nav')
-
-  /** Р’С‹СЃРѕС‚Р° sticky-shell = РІРёРґРёРјР°СЏ РѕР±Р»Р°СЃС‚СЊ РїР°РЅРµР»Рё, С‡С‚РѕР±С‹ СЂР°РјРєРё РЅРµ В«СѓРїР»С‹РІР°Р»РёВ» РїСЂРё РїСЂРѕРєСЂСѓС‚РєРµ РєРѕРЅС‚РµРЅС‚Р°. */
-  function refreshFrameShellGeometry() {
-    try {
-      if (!modeOkDrag()) return
-      const ph = paneEl.clientHeight
-      paneEl.style.setProperty('--main-pane-frame-shell-h', `${Math.max(64, Math.round(ph))}px`)
-    } catch (_) {}
-  }
-
-  function readDragLs() {
-    try {
-      const raw = localStorage.getItem(FLOW_MAIN_PANE_DRAG_LS)
-      if (!raw) return { x: 0, y: 0 }
-      const p = JSON.parse(raw)
-      return { x: +p.x || 0, y: +p.y || 0 }
-    } catch (_) {
-      return { x: 0, y: 0 }
-    }
-  }
-
-  function applyDragVars(x, y) {
-    try {
-      document.documentElement.style.setProperty('--flow-floated-pane-drag-x', `${Math.round(x)}px`)
-      document.documentElement.style.setProperty('--flow-floated-pane-drag-y', `${Math.round(y)}px`)
-    } catch (_) {}
-  }
-
-  function persistDrag(x, y) {
-    try {
-      localStorage.setItem(
-        FLOW_MAIN_PANE_DRAG_LS,
-        JSON.stringify({ x: Math.round(x), y: Math.round(y) }),
-      )
-    } catch (_) {}
-    try {
-      syncFlowLayoutCoords()
-    } catch (_) {}
-  }
-
-  /** @returns {{ x: number, y: number }} */
-  function clampDrag(x, y) {
-    const content = document.getElementById('main-content-pane')
-    const pad = 8
-    let cx = x
-    let cy = y
-    if (!content || !modeOkDrag()) return { x: cx, y: cy }
-    const vw = typeof window !== 'undefined' ? window.innerWidth : 1200
-    const vh = typeof window !== 'undefined' ? window.innerHeight : 800
-    const gcs = getComputedStyle(document.documentElement)
-    const parseVar = (name, fallback) => {
-      const n = parseFloat(gcs.getPropertyValue(name))
-      return Number.isFinite(n) ? n : fallback
-    }
-    const titleH = parseVar('--titlebar-h', 32)
-    const mainPt = parseVar('--screen-main-pt', 18)
-    const offY = parseVar('--floated-right-pane-offset-y', 0)
-    const playerH = parseVar('--player-h', 88)
-    const playerBottom = parseVar('--player-stack-bottom', 12)
-    const insetStart = parseVar('--main-inset-start', 22)
-    const paneStack = parseVar('--floated-pane-stack-start', 300)
-    const offX = parseVar('--floated-right-pane-offset-x', 0)
-    const mainShift = parseVar('--main-shift-x', 0)
-    const insetEnd = parseVar('--main-inset-end', 22)
-    /* Р‘Р°СЂСЊРµСЂ РїСЂР°РІРѕР№ РїР°РЅРµР»Рё РїРѕРјРµРЅСЏРЅ РјРµСЃС‚Р°РјРё: СЂРµР·РµСЂРІ СѓС…РѕРґРёС‚ РЅР° РїСЂР°РІС‹Р№ РєСЂР°Р№. */
-    const minLeft = insetStart + pad
-    const maxRight = vw - insetEnd - (paneStack + offX + Math.max(0, mainShift)) - pad
-    const minTop = titleH + mainPt + offY + 4
-    const maxBottom = vh - (playerH + playerBottom + 6)
-    for (let iter = 0; iter < 8; iter++) {
-      applyDragVars(cx, cy)
-      const cr = content.getBoundingClientRect()
-      const prevCx = cx
-      const prevCy = cy
-      if (cr.left < minLeft) cx += minLeft - cr.left
-      if (cr.right > maxRight) cx -= cr.right - maxRight
-      if (cr.top < minTop) cy += minTop - cr.top
-      if (cr.bottom > maxBottom) cy -= cr.bottom - maxBottom
-
-      if (Math.abs(cx - prevCx) < 0.25 && Math.abs(cy - prevCy) < 0.25) break
-    }
-    return { x: Math.round(cx), y: Math.round(cy) }
-  }
-
-  function refreshFromStorage() {
-    if (!modeOkDrag()) return
-    const saved = readDragLs()
-    const c = clampDrag(saved.x, saved.y)
-    applyDragVars(c.x, c.y)
-    if (Math.abs(c.x - saved.x) > 0.6 || Math.abs(c.y - saved.y) > 0.6) persistDrag(c.x, c.y)
-    try {
-      scheduleMainShiftRemeasure()
-    } catch (_) {}
-  }
-
-  queueMicrotask(() => {
-    refreshFrameShellGeometry()
-    refreshFromStorage()
-  })
-
-  try {
-    let roRaf = 0
-    const ro =
-      typeof ResizeObserver !== 'undefined'
-        ? new ResizeObserver(() => {
-            if (roRaf) return
-            roRaf = requestAnimationFrame(() => {
-              roRaf = 0
-              try {
-                refreshFrameShellGeometry()
-              } catch (_) {}
-            })
-          })
-        : null
-    ro?.observe(paneEl)
-  } catch (_) {}
-
-  let resizeRaf = 0
-  window.addEventListener(
-    'resize',
-    () => {
-      if (resizeRaf) return
-      resizeRaf = requestAnimationFrame(() => {
-        resizeRaf = 0
-        try {
-          refreshFrameShellGeometry()
-          refreshFromStorage()
-        } catch (_) {}
-      })
-    },
-    { passive: true },
-  )
-
-  let dragging = false
-  let sx = 0
-  let sy = 0
-  let ox = 0
-  let oy = 0
-  /** @type {null | HTMLElement} */
-  let capEl = null
-  let capId = /** @type {null | number} */ (null)
-
-  const fin = () => {
-    if (!dragging) return
-    dragging = false
-    document.body.classList.remove('flow-floated-main-pane-dragging')
-    window.removeEventListener('pointermove', mv, true)
-    window.removeEventListener('pointerup', fin, true)
-    window.removeEventListener('pointercancel', fin, true)
-    try {
-      if (capEl) capEl.releasePointerCapture(capId ?? -1)
-    } catch (_) {}
-    capEl = null
-    capId = null
-    try {
-      let xPx = 0
-      let yPx = 0
-      try {
-        xPx = parseFloat(
-          getComputedStyle(document.documentElement).getPropertyValue('--flow-floated-pane-drag-x'),
-        ) || 0
-      } catch (_) {}
-      try {
-        yPx = parseFloat(
-          getComputedStyle(document.documentElement).getPropertyValue('--flow-floated-pane-drag-y'),
-        ) || 0
-      } catch (_) {}
-      persistDrag(xPx, yPx)
-    } catch (_) {}
-    try {
-      window.flowMainPaneResize?.reclamp?.()
-    } catch (_) {}
-    try {
-      scheduleMainShiftRemeasure()
-    } catch (_) {}
-  }
-
-  /** @param {PointerEvent} ev */
-  function mv(ev) {
-    if (!dragging) return
-    const rawX = ox + (ev.clientX - sx)
-    const rawY = oy + (ev.clientY - sy)
-    const c = clampDrag(rawX, rawY)
-    applyDragVars(c.x, c.y)
-    persistDrag(c.x, c.y)
-  }
-
-  /** @param {PointerEvent} e @param {HTMLElement} captureTarget */
-  function onHitPointerDown(e, captureTarget) {
-    if (!modeOkDrag()) return
-    if (document.body.classList.contains('home-layout-edit')) return
-    if (!e.isPrimary || e.button !== 0) return
-    if (e.target instanceof Element && e.target.closest('.content-corner-resize')) return
-    e.preventDefault()
-    e.stopPropagation()
-    dragging = true
-    document.body.classList.add('flow-floated-main-pane-dragging')
-    sx = e.clientX
-    sy = e.clientY
-    capEl = captureTarget
-    try {
-      ox = parseFloat(
-        getComputedStyle(document.documentElement).getPropertyValue('--flow-floated-pane-drag-x'),
-      ) || 0
-    } catch (_) {
-      ox = 0
-    }
-    try {
-      oy = parseFloat(
-        getComputedStyle(document.documentElement).getPropertyValue('--flow-floated-pane-drag-y'),
-      ) || 0
-    } catch (_) {
-      oy = 0
-    }
-    capId = e.pointerId
-    window.addEventListener('pointermove', mv, true)
-    window.addEventListener('pointerup', fin, true)
-    window.addEventListener('pointercancel', fin, true)
-    try {
-      captureTarget.setPointerCapture(e.pointerId)
-    } catch (_) {}
-  }
-
-  hits.forEach((el) =>
-    el.addEventListener(
-      'pointerdown',
-      (e) => onHitPointerDown(e, /** @type {HTMLElement} */ (el)),
-      true,
-    ),
-  )
-
-  window.flowFloatedMainPaneDrag = {
-    refreshFromStorage,
-    refreshFrameShellGeometry,
-    clear: () => {
-      applyDragVars(0, 0)
-      persistDrag(0, 0)
-    },
-  }
-}
-
-function applySidebarFloatYPx(px) {
-  let maxY = 320
-  try {
-    if (typeof window !== 'undefined') {
-      const ih = window.innerHeight
-      const root = document.documentElement
-      const gcs = getComputedStyle(root)
-      const tb = parseFloat(gcs.getPropertyValue('--titlebar-h')) || 32
-      const ph = parseFloat(gcs.getPropertyValue('--player-h')) || 88
-      const psb = parseFloat(gcs.getPropertyValue('--player-stack-bottom')) || 0
-      const smpt = parseFloat(gcs.getPropertyValue('--screen-main-pt')) || 0
-      /* РЎРёРјРјРµС‚СЂРёСЏ РІРІРµСЂС…/РІРЅРёР·: РѕРґРёРЅР°РєРѕРІС‹Р№ РјРѕРґСѓР»СЊ, clamp РЅРёР¶Рµ РІ [-maxY, +maxY]. */
-      maxY = Math.max(160, Math.min(560, Math.floor(ih - tb - ph - psb - smpt - 180)))
-    }
-  } catch (_) {
-    maxY = 320
-  }
-  const c = Math.max(-maxY, Math.min(maxY, Math.round(px)))
-  try {
-    document.documentElement.style.setProperty('--sidebar-float-y', `${c}px`)
-  } catch (_) {}
-  try {
-    localStorage.setItem(FLOW_SIDEBAR_FLOAT_Y_LS, String(c))
-  } catch (_) {}
-  try {
-    syncFlowLayoutCoords()
-  } catch (_) {}
-}
-
-/** РЎР±СЂРѕСЃ РїРµСЂРµС‚Р°СЃРєРёРІР°РЅРёСЏ СЃР°Р№РґР±Р°СЂР° ( Escape / СЃРјРµРЅР° СЃС‚СЂР°РЅРёС†С‹ ). */
-let _teardownSidebarPanelDrag = () => {}
-
-function setupSidebarResize() {
-  const MIN_W = 72
-  const MAX_W = 320
-  const MIN_CONTENT_TAIL = 260
-  const sidebar = document.getElementById('sidebar')
-  const gutters = [
-    ['left', document.getElementById('sidebar-resize-gutter-left')],
-    ['right', document.getElementById('sidebar-resize-gutter')],
-  ].filter(([, el]) => el)
-  if (!sidebar || gutters.length === 0) return
-
-  const root = document.documentElement
-
-  const getSidebarGapPx = () => {
-    const raw = String(getComputedStyle(root).getPropertyValue('--sidebar-gap') || '').trim()
-    const n = parseFloat(raw)
-    return Number.isFinite(n) ? n : 12
-  }
-  const getMainInsetLeft = () => {
-    const main = document.getElementById('screen-main')
-    if (!main) return 0
-    let inset = 0
-    try {
-      inset = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--main-inset-start')) || 0
-    } catch (_) {}
-    const pl = parseFloat(getComputedStyle(main).paddingLeft) || 0
-    return main.getBoundingClientRect().left + pl + inset
-  }
-  const computeMaxShift = (sidebarWidthPx) => {
-    const main = document.getElementById('screen-main')
-    if (!main) return 0
-    const r = main.getBoundingClientRect()
-    const pcs = getComputedStyle(main)
-    const pl = parseFloat(pcs.paddingLeft) || 0
-    const pr = parseFloat(pcs.paddingRight) || 0
-    const usable = Math.max(0, r.width - pl - pr)
-    const gap = getSidebarGapPx()
-    /* В«РњРёРЅРёРјР°Р»В»: СЃРґРІРёРі С‚РѕР»СЊРєРѕ РІ РїСЂРµРґРµР»Р°С… РѕРєРЅР° вЂ” РЅРµ РѕС‚ С€РёСЂРёРЅС‹ flex-РєРѕРЅС‚РµР№РЅРµСЂР° (РёРЅР°С‡Рµ РїР°РЅРµР»СЊ В«РґСЂРѕР¶РёС‚В» РїСЂРё СЂРµСЃР°Р№Р·Рµ). */
-    if (document.body.classList.contains('visual-floated') && !document.body.classList.contains('layout-top-nav')) {
-      let insetStart = 0
-      let insetEnd = 0
-      let paneStack = 300
-      let offX = 0
-      let mainShift = 0
-      let nudge = 0
-      try {
-        insetStart = parseFloat(getComputedStyle(root).getPropertyValue('--main-inset-start')) || 0
-        insetEnd = parseFloat(getComputedStyle(root).getPropertyValue('--main-inset-end')) || 0
-        paneStack = parseFloat(getComputedStyle(root).getPropertyValue('--floated-pane-stack-start')) || 300
-        offX = parseFloat(getComputedStyle(root).getPropertyValue('--floated-right-pane-offset-x')) || 0
-        mainShift = parseFloat(getComputedStyle(root).getPropertyValue('--main-shift-x')) || 0
-        nudge = parseFloat(getComputedStyle(root).getPropertyValue('--floated-sidebar-nudge-x')) || 0
-      } catch (_) {}
-      const vw = typeof window !== 'undefined' ? window.innerWidth : 1200
-      const w = Math.max(MIN_W, Math.min(MAX_W, Math.round(sidebarWidthPx)))
-      let maxShift = Math.max(0, Math.floor(vw - insetEnd - w - insetStart - 10))
-      /* РќРµРІРёРґРёРјС‹Р№ С„РёРѕР»РµС‚РѕРІС‹Р№ Р±Р°СЂСЊРµСЂ: sb.right РЅРµ РјРѕР¶РµС‚ РїРµСЂРµР№С‚Рё РІ СЃС‚Р°СЂС‚ Р¶С‘Р»С‚РѕР№ Р·РѕРЅС‹ РєРѕРЅС‚РµРЅС‚Р°. */
-      try {
-        const barrier = insetStart + paneStack + offX + mainShift - 12
-        const byBarrier = Math.floor(barrier - insetStart - nudge - w)
-        if (Number.isFinite(byBarrier)) maxShift = Math.min(maxShift, Math.max(0, byBarrier))
-      } catch (_) {}
-      return maxShift
-    }
-    return Math.max(0, usable - sidebarWidthPx - gap - MIN_CONTENT_TAIL)
-  }
-  const readShiftStored = () => {
-    const s = parseInt(localStorage.getItem('flow_sidebar_shift') || '0', 10)
-    return Number.isFinite(s) ? Math.max(0, s) : 0
-  }
-  const clampShiftForWidth = (wPx, shiftPx) =>
-    Math.max(0, Math.min(computeMaxShift(wPx), shiftPx))
-
-  const setWidthCss = (w) => {
-    const clamped = Math.max(MIN_W, Math.min(MAX_W, Math.round(w)))
-    root.style.setProperty('--sidebar-w', clamped + 'px')
-    localStorage.setItem('flow_sidebar_w', String(clamped))
-    sidebar.classList.toggle('collapsed', clamped <= 92)
-    return clamped
-  }
-  const setShiftCss = (shiftPx) => {
-    const s = Math.max(0, Math.round(shiftPx))
-    root.style.setProperty('--sidebar-shift', s + 'px')
-    localStorage.setItem('flow_sidebar_shift', String(s))
-  }
-
-  const sidebarWidthEffectivePx = () => {
-    try {
-      if (!document.body.classList.contains('layout-top-nav')) {
-        const bw = sidebar.getBoundingClientRect().width
-        if (Number.isFinite(bw) && bw >= 48) return Math.round(bw)
-      }
-    } catch (_) {}
-    let wParsed = NaN
-    try { wParsed = parseFloat(getComputedStyle(root).getPropertyValue('--sidebar-w')) || NaN } catch (_) {}
-    const wPx = Number.isFinite(wParsed) ? Math.round(wParsed) : 210
-    return Math.max(MIN_W, Math.min(MAX_W, wPx))
-  }
-
-  const syncShiftToWidth = () => {
-    let wPx = sidebarWidthEffectivePx()
-    wPx = Math.max(MIN_W, Math.min(MAX_W, wPx))
-    let shParsed = 0
-    try { shParsed = parseFloat(getComputedStyle(root).getPropertyValue('--sidebar-shift')) || 0 } catch (_) {}
-    const sh = clampShiftForWidth(wPx, shParsed)
-    if (Math.abs(sh - shParsed) > 0.5) setShiftCss(sh)
-  }
-
-  /** РЇРєРѕСЂСЊ вЂ” Р»РµРІР°СЏ РєРѕРѕСЂРґРёРЅР°С‚Р° СЃР°Р№РґР±Р°СЂР° РІ РјРѕРјРµРЅС‚ Р·Р°С…РІР°С‚Р° (РїСЂР°РІС‹Р№ РіСЂРёРї). */
-  let anchorLeftPx = 0
-  /** РЇРєРѕСЂСЊ вЂ” РїСЂР°РІР°СЏ РєРѕРѕСЂРґРёРЅР°С‚Р° СЃР°Р№РґР±Р°СЂР° РІ РјРѕРјРµРЅС‚ Р·Р°С…РІР°С‚Р° (Р»РµРІС‹Р№ РіСЂРёРї): СЃС‚С‹Рє СЃ РѕСЃРЅРѕРІРЅРѕР№ РѕР±Р»Р°СЃС‚СЊСЋ. */
-  let anchorRightPx = 0
-
-  const applyRightDrag = (clientX) => {
-    setWidthCss(clientX - anchorLeftPx)
-    syncShiftToWidth()
-  }
-  /** Р›РµРІС‹Р№ РіСЂРёРї: РґРІРёРіР°РµРј Р»РµРІСѓСЋ СЃС‚РѕСЂРѕРЅСѓ, РїСЂР°РІР°СЏ (Сѓ РјРµРЅСЋ РєРѕРЅС‚РµРЅС‚Р°) РѕСЃС‚Р°С‘С‚СЃСЏ РЅР° РјРµСЃС‚Рµ РґРѕ РѕС‚РїСѓСЃРєР°РЅРёСЏ. */
-  const applyLeftDrag = (clientX) => {
-    const wReq = anchorRightPx - clientX
-    const clampedW = Math.max(MIN_W, Math.min(MAX_W, Math.round(wReq)))
-    const leftDesired = anchorRightPx - clampedW
-    const innerL = getMainInsetLeft()
-    let shiftReq = leftDesired - innerL
-    shiftReq = clampShiftForWidth(clampedW, shiftReq)
-    setWidthCss(clampedW)
-    setShiftCss(shiftReq)
-  }
-
-  const SIDEBAR_H_MIN = 196
-
-  const applySidebarPanelHeightFromStorage = () => {
-    if (!document.body.classList.contains('visual-floated')) {
-      root.style.removeProperty('--sidebar-panel-height')
-      return
-    }
-    try {
-      const n = parseInt(localStorage.getItem(FLOW_SIDEBAR_PANEL_H_LS) || '', 10)
-      if (Number.isFinite(n) && n >= SIDEBAR_H_MIN) {
-        root.style.setProperty('--sidebar-panel-height', `${n}px`)
-      }
-    } catch (_) {}
-  }
-
-  /** @param {number} h @param {{ fixedHMax?: number, lockSidebarTopPx?: number, lockPlayerTopPx?: number }} [opts] */
-  const setPanelHeightClamped = (h, opts = {}) => {
-    let hMax
-    if (opts.fixedHMax != null && Number.isFinite(opts.fixedHMax)) {
-      hMax = opts.fixedHMax
-    } else {
-      const sidebarTop =
-        opts.lockSidebarTopPx != null ? opts.lockSidebarTopPx : sidebar.getBoundingClientRect().top
-      const playerBar = document.getElementById('player-bar')
-      const pt =
-        opts.lockPlayerTopPx != null
-          ? opts.lockPlayerTopPx
-          : playerBar
-            ? playerBar.getBoundingClientRect().top
-            : window.innerHeight - 88
-      hMax = Math.max(SIDEBAR_H_MIN + 40, Math.floor(pt - sidebarTop - 8))
-    }
-    const clamped = Math.max(SIDEBAR_H_MIN, Math.min(hMax, Math.round(h)))
-    root.style.setProperty('--sidebar-panel-height', `${clamped}px`)
-    return clamped
-  }
-
-  let dragging = false
-  let dragEdge = 'right'
-  let activePointerId = null
-  let captureEl = null
-
-  let cornerDragging = false
-  let cornerCaptureEl = null
-  let cornerPointerId = null
-  /** @type {{ corner: string, freezeL: number, freezeR: number, freezeT: number, freezeB: number, innerL: number, fixedHMax: number, startCx: number, startCy: number, startW: number, startShift: number, startPanelH: number } | null} */
-  let cornerAnchor = null
-
-  const winPointerMove = (e) => {
-    if (!dragging || document.body.classList.contains('layout-top-nav')) return
-    if (dragEdge === 'left') applyLeftDrag(e.clientX)
-    else applyRightDrag(e.clientX)
-  }
-  const winPointerUp = () => {
-    if (!dragging) return
-    dragging = false
-    document.body.style.cursor = ''
-    document.body.classList.remove('is-resizing-sidebar')
-    window.removeEventListener('pointermove', winPointerMove, true)
-    window.removeEventListener('pointerup', winPointerUp, true)
-    window.removeEventListener('pointercancel', winPointerUp, true)
-    if (captureEl != null && activePointerId != null) {
-      try { captureEl.releasePointerCapture(activePointerId) } catch (_) {}
-    }
-    captureEl = null
-    activePointerId = null
-    scheduleMainShiftRemeasure()
-    try {
-      syncFlowLayoutCoords()
-    } catch (_) {}
-  }
-
-  const finishCornerDrag = () => {
-    if (!cornerDragging) return
-    cornerDragging = false
-    document.body.style.cursor = ''
-    document.body.classList.remove('is-resizing-sidebar')
-    window.removeEventListener('pointermove', winCornerMove, true)
-    window.removeEventListener('pointerup', finishCornerDrag, true)
-    window.removeEventListener('pointercancel', finishCornerDrag, true)
-    if (cornerCaptureEl != null && cornerPointerId != null) {
-      try {
-        cornerCaptureEl.releasePointerCapture(cornerPointerId)
-      } catch (_) {}
-    }
-    cornerCaptureEl = null
-    cornerPointerId = null
-    cornerAnchor = null
-    try {
-      const raw = getComputedStyle(root).getPropertyValue('--sidebar-panel-height').trim()
-      const n = parseFloat(raw)
-      if (Number.isFinite(n) && n >= SIDEBAR_H_MIN) {
-        localStorage.setItem(FLOW_SIDEBAR_PANEL_H_LS, String(Math.round(n)))
-      }
-    } catch (_) {}
-    scheduleMainShiftRemeasure()
-    try {
-      syncFlowLayoutCoords()
-    } catch (_) {}
-  }
-
-  const winCornerMove = (e) => {
-    if (!cornerDragging || !cornerAnchor) return
-    const a = cornerAnchor
-    const { corner, fixedHMax, startCx, startCy, startW, startShift, startPanelH } = a
-    const cx = e.clientX
-    const cy = e.clientY
-    const hOpts = { fixedHMax }
-    /* Р”РµР»СЊС‚С‹ РѕС‚ С‚РѕС‡РєРё Р·Р°С…РІР°С‚Р° РґР»СЏ РІСЃРµС… СѓРіР»РѕРІ вЂ” freezeL/freezeR РїСЂРё РґСЂР°РіРµ В«РїР»С‹РІСѓС‚В» Рё РїСЂР°РІС‹Рµ СѓРіР»С‹ РґС‘СЂРіР°Р»РёСЃСЊ. */
-    if (corner === 'br') {
-      const nw = Math.max(MIN_W, Math.min(MAX_W, Math.round(startW + (cx - startCx))))
-      const nh = Math.max(SIDEBAR_H_MIN, Math.min(fixedHMax, Math.round(startPanelH + (cy - startCy))))
-      setWidthCss(nw)
-      setPanelHeightClamped(nh, hOpts)
-    } else if (corner === 'tl') {
-      /* Р›РµРІС‹Р№ РІРµСЂС…: С€РёСЂРёРЅР°/СЃРґРІРёРі РѕС‚ РґРµР»СЊС‚С‹ вЂ” С„РёРєСЃРёСЂСѓРµРј РїСЂР°РІС‹Р№ РєСЂР°Р№ (innerL+shift+w), РёРЅР°С‡Рµ cx-innerL РґР°С‘С‚ В«СЃС…Р»РѕРїС‹РІР°РЅРёРµВ». */
-      const newW = Math.max(MIN_W, Math.min(MAX_W, Math.round(startW + (startCx - cx))))
-      const newH = Math.max(SIDEBAR_H_MIN, Math.min(fixedHMax, Math.round(startPanelH + (startCy - cy))))
-      const sh = clampShiftForWidth(newW, startShift + startW - newW)
-      setWidthCss(newW)
-      setShiftCss(sh)
-      setPanelHeightClamped(newH, hOpts)
-    } else if (corner === 'tr') {
-      const nw = Math.max(MIN_W, Math.min(MAX_W, Math.round(startW + (cx - startCx))))
-      const nh = Math.max(SIDEBAR_H_MIN, Math.min(fixedHMax, Math.round(startPanelH + (startCy - cy))))
-      setWidthCss(nw)
-      setPanelHeightClamped(nh, hOpts)
-    } else if (corner === 'bl') {
-      const newW = Math.max(MIN_W, Math.min(MAX_W, Math.round(startW + (startCx - cx))))
-      const newH = Math.max(SIDEBAR_H_MIN, Math.min(fixedHMax, Math.round(startPanelH + (cy - startCy))))
-      const sh = clampShiftForWidth(newW, startShift + startW - newW)
-      setWidthCss(newW)
-      setShiftCss(sh)
-      setPanelHeightClamped(newH, hOpts)
-    }
-  }
-
-  const startSidebarCornerDrag = (corner, e, capEl) => {
-    if (!document.body.classList.contains('visual-floated')) return
-    if (document.body.classList.contains('layout-top-nav')) return
-    if (
-      !document.body.classList.contains('flow-edit-enabled') ||
-      !document.body.classList.contains('home-layout-edit')
-    ) {
-      return
-    }
-    if (!e.isPrimary || e.button !== 0) return
-    e.preventDefault()
-    e.stopPropagation()
-    winPointerUp()
-    const rect = sidebar.getBoundingClientRect()
-    const playerBar = document.getElementById('player-bar')
-    const startPlayerTop = playerBar ? playerBar.getBoundingClientRect().top : window.innerHeight - 88
-    const fixedHMax = Math.max(SIDEBAR_H_MIN + 40, Math.floor(startPlayerTop - rect.top - 8))
-    let wParsed = NaN
-    try {
-      wParsed = parseFloat(String(getComputedStyle(root).getPropertyValue('--sidebar-w') || '').trim())
-    } catch (_) {}
-    const startW = Math.max(
-      MIN_W,
-      Math.min(MAX_W, Number.isFinite(wParsed) ? Math.round(wParsed) : sidebarWidthEffectivePx()),
-    )
-    let shParsed = 0
-    try {
-      shParsed = parseFloat(getComputedStyle(root).getPropertyValue('--sidebar-shift')) || 0
-    } catch (_) {}
-    const startShift = clampShiftForWidth(startW, shParsed)
-    let ph0 = NaN
-    try {
-      ph0 = parseFloat(getComputedStyle(root).getPropertyValue('--sidebar-panel-height').trim())
-    } catch (_) {}
-    const startPanelH =
-      Number.isFinite(ph0) && ph0 >= SIDEBAR_H_MIN ? ph0 : Math.max(SIDEBAR_H_MIN, rect.height)
-    cornerDragging = true
-    cornerAnchor = {
-      corner,
-      freezeL: rect.left,
-      freezeR: rect.right,
-      freezeT: rect.top,
-      freezeB: rect.bottom,
-      innerL: getMainInsetLeft(),
-      fixedHMax,
-      startCx: e.clientX,
-      startCy: e.clientY,
-      startW,
-      startShift,
-      startPanelH,
-    }
-    cornerCaptureEl = capEl
-    cornerPointerId = e.pointerId
-    document.body.classList.add('is-resizing-sidebar')
-    document.body.style.cursor = corner === 'tl' || corner === 'br' ? 'nwse-resize' : 'nesw-resize'
-    window.addEventListener('pointermove', winCornerMove, true)
-    window.addEventListener('pointerup', finishCornerDrag, true)
-    window.addEventListener('pointercancel', finishCornerDrag, true)
-    try {
-      capEl.setPointerCapture(e.pointerId)
-    } catch (_) {}
-  }
-
-  const startEdgeDrag = (edge, e, capEl) => {
-    if (document.body.classList.contains('layout-top-nav')) return
-    if (!e.isPrimary) return
-    e.preventDefault()
-    e.stopPropagation()
-    const rect = sidebar.getBoundingClientRect()
-    if (edge === 'left') anchorRightPx = rect.right
-    else anchorLeftPx = rect.left
-    dragging = true
-    dragEdge = edge
-    captureEl = capEl
-    activePointerId = e.pointerId
-    document.body.style.cursor = 'ew-resize'
-    document.body.classList.add('is-resizing-sidebar')
-    window.addEventListener('pointermove', winPointerMove, true)
-    window.addEventListener('pointerup', winPointerUp, true)
-    window.addEventListener('pointercancel', winPointerUp, true)
-    try { capEl.setPointerCapture(e.pointerId) } catch (_) {}
-  }
-
-  gutters.forEach(([edge, gutter]) => {
-    gutter.addEventListener('pointerdown', (e) => startEdgeDrag(edge, e, gutter))
-  })
-
-  document.querySelectorAll('.sidebar-corner-resize[data-sidebar-corner]').forEach((btn) => {
-    const corner = String(btn.getAttribute('data-sidebar-corner') || '')
-    if (!['tl', 'tr', 'bl', 'br'].includes(corner)) return
-    btn.addEventListener('pointerdown', (e) => startSidebarCornerDrag(corner, e, btn))
-  })
-
-  const saved = parseInt(localStorage.getItem('flow_sidebar_w') || '210', 10)
-  const wInit = Number.isFinite(saved) ? saved : 210
-  const cw = setWidthCss(wInit)
-  setShiftCss(clampShiftForWidth(cw, readShiftStored()))
-  applySidebarPanelHeightFromStorage()
-
-  const rebalanceSidebarAfterResize = () => {
-    const floated = document.body.classList.contains('visual-floated') && !document.body.classList.contains('layout-top-nav')
-    if (floated) {
-      try {
-        const raw = getComputedStyle(root).getPropertyValue('--sidebar-panel-height').trim()
-        const n = parseFloat(raw)
-        if (Number.isFinite(n)) setPanelHeightClamped(n)
-      } catch (_) {}
-      /* РќРµ РІС‹Р·С‹РІР°РµРј syncShiftToWidth: РѕРЅ РїСЂРёРІСЏР·С‹РІР°РµС‚ СЃРґРІРёРі Рє С€РёСЂРёРЅРµ #screen-main Рё РґР°С‘С‚ В«СЂРµР·РёРЅСѓВ» РїСЂРё СЂРµСЃР°Р№Р·Рµ. */
-      let wPx = NaN
-      try {
-        wPx = parseFloat(getComputedStyle(root).getPropertyValue('--sidebar-w')) || NaN
-      } catch (_) {}
-      wPx = Math.max(MIN_W, Math.min(MAX_W, Number.isFinite(wPx) ? Math.round(wPx) : 210))
-      let shParsed = 0
-      try {
-        shParsed = parseFloat(getComputedStyle(root).getPropertyValue('--sidebar-shift')) || 0
-      } catch (_) {}
-      const cap = Math.max(0, Math.min(computeMaxShift(wPx), Math.round(shParsed)))
-      if (Math.abs(cap - shParsed) > 0.5) setShiftCss(cap)
-      return
-    }
-    syncShiftToWidth()
-    try {
-      const raw = getComputedStyle(root).getPropertyValue('--sidebar-panel-height').trim()
-      const n = parseFloat(raw)
-      if (Number.isFinite(n)) setPanelHeightClamped(n)
-    } catch (_) {}
-  }
-  window.addEventListener(
-    'resize',
-    debounceSidebarLayoutSync(rebalanceSidebarAfterResize, 160),
-    { passive: true },
-  )
-  window.addEventListener('blur', () => {
-    winPointerUp()
-    finishCornerDrag()
-  })
-
-  window.flowSidebarPanel = {
-    clampShiftForWidth,
-    setShiftCss,
-    sidebarWidthEffectivePx,
-    syncShiftToWidth,
-  }
-}
-
-function setupSidebarPanelEditDrag() {
-  const sidebar = document.getElementById('sidebar')
-  if (!sidebar) return
-
-  const isExcludedDragSurface = (t) => {
-    try {
-      if (!t || typeof t.closest !== 'function') return true
-      return !!(
-        t.closest('a.nav-item') ||
-        t.closest('.sidebar-user') ||
-        t.closest('.sidebar-logo') ||
-        t.closest('#sidebar-layout-constructor') ||
-        t.closest('.sidebar-corner-resize') ||
-        t.closest('.sidebar-resize-gutter') ||
-        t.closest('#sidebar-edit-drag-strip')
-      )
-    } catch (_) {
-      return true
-    }
-  }
-
-  const readShiftPx = () => {
-    try {
-      const v = getComputedStyle(document.documentElement).getPropertyValue('--sidebar-shift').trim()
-      const n = parseFloat(v)
-      return Number.isFinite(n) ? n : 0
-    } catch (_) {
-      return 0
-    }
-  }
-  const readFloatYPx = () => {
-    try {
-      const v = getComputedStyle(document.documentElement).getPropertyValue('--sidebar-float-y').trim()
-      const n = parseFloat(v)
-      return Number.isFinite(n) ? n : 0
-    } catch (_) {
-      return 0
-    }
-  }
-
-  let dragging = false
-  let startX = 0
-  let startY = 0
-  let originShift = 0
-  let originFloat = 0
-  let pid = null
-  let capEl = null
-
-  const mv = (e) => {
-    if (!dragging) return
-    const api = window.flowSidebarPanel
-    if (!api) return
-    const wPx = api.sidebarWidthEffectivePx()
-    let nextShift = originShift + (e.clientX - startX)
-    nextShift = api.clampShiftForWidth(wPx, nextShift)
-    api.setShiftCss(nextShift)
-    applySidebarFloatYPx(originFloat + (e.clientY - startY))
-  }
-
-  const fin = () => {
-    if (!dragging) return
-    dragging = false
-    document.body.classList.remove('sidebar-panel-dragging')
-    window.removeEventListener('pointermove', mv, true)
-    window.removeEventListener('pointerup', fin, true)
-    window.removeEventListener('pointercancel', fin, true)
-    if (capEl != null && pid != null) {
-      try {
-        capEl.releasePointerCapture(pid)
-      } catch (_) {}
-    }
-    capEl = null
-    pid = null
-    scheduleMainShiftRemeasure()
-    try {
-      reclampHomeGeometryOnResize()
-    } catch (_) {}
-    try {
-      syncFlowLayoutCoords()
-    } catch (_) {}
-  }
-
-  _teardownSidebarPanelDrag = () => {
-    fin()
-  }
-
-  sidebar.addEventListener(
-    'pointerdown',
-    (e) => {
-      if (!document.body.classList.contains('visual-floated')) return
-      if (document.body.classList.contains('layout-top-nav')) return
-      if (!e.isPrimary || e.button !== 0) return
-      const t = e.target
-      if (!sidebar.contains(t)) return
-      if (isExcludedDragSurface(t)) return
-      e.preventDefault()
-      e.stopPropagation()
-      dragging = true
-      document.body.classList.add('sidebar-panel-dragging')
-      startX = e.clientX
-      startY = e.clientY
-      originShift = readShiftPx()
-      originFloat = readFloatYPx()
-      capEl = sidebar
-      pid = e.pointerId
-      window.addEventListener('pointermove', mv, true)
-      window.addEventListener('pointerup', fin, true)
-      window.addEventListener('pointercancel', fin, true)
-      try {
-        sidebar.setPointerCapture(e.pointerId)
-      } catch (_) {}
-    },
-    true,
-  )
-}
-
-function debounceSidebarLayoutSync(fn, ms = 140) {
-  let t = 0
-  return () => {
-    if (document.body?.classList?.contains('layout-top-nav')) return
-    clearTimeout(t)
-    t = setTimeout(fn, ms)
-  }
-}
-
-const FLOW_MAIN_SHIFT_LS = 'flow_main_shift_px'
-const FLOW_SIDEBAR_PANEL_H_LS = 'flow_sidebar_panel_h'
-
-/** РЎР±СЂРѕСЃ РіРѕСЂРёР·РѕРЅС‚Р°Р»СЊРЅРѕРіРѕ СЃРґРІРёРіР° (РєР»Р°СЃСЃРёС‡РµСЃРєРёР№ В«РњРёРЅРёРјР°Р»РёР·РјВ» Р±РµР· РѕС„С„СЃРµС‚Р°). */
-function clearMainPaneShiftForClassicLayout() {
-  try {
-    document.documentElement.style.setProperty('--main-shift-x', '0px')
-    localStorage.setItem(FLOW_MAIN_SHIFT_LS, '0')
-    const sl = document.getElementById('main-shift-slider')
-    if (sl) sl.value = '0'
-  } catch (_) {}
-}
-
-/** Р“РѕСЂРёР·РѕРЅС‚Р°Р»СЊРЅС‹Р№ СЃРґРІРёРі РѕСЃРЅРѕРІРЅРѕР№ РѕР±Р»Р°СЃС‚Рё (.content + РЅРёР¶РЅРёР№ РїР»РµРµСЂ + С‚РµРєСЃС‚РѕРІР°СЏ РїР°РЅРµР»СЊ) РІ РіСЂР°РЅРёС†Р°С… РѕРєРЅР°. */
-function setupMainPaneShift() {
-  const slider = document.getElementById('main-shift-slider')
-  const btn = document.getElementById('main-shift-reset')
-  if (!slider || !btn) return
-
-  const root = document.documentElement.style
-  /** @type {{ min: number, max: number }} */
-  let limits = { min: -280, max: 280 }
-
-  const applyShiftPx = (px) => {
-    root.setProperty('--main-shift-x', `${Math.round(px)}px`)
-  }
-
-  const clampAndPersist = (px) => {
-    const c = Math.max(limits.min, Math.min(limits.max, Math.round(px)))
-    applyShiftPx(c)
-    try { localStorage.setItem(FLOW_MAIN_SHIFT_LS, String(c)) } catch (_) {}
-    slider.value = String(c)
-    return c
-  }
-
-  const recomputeLimits = () => {
-    const scr = document.getElementById('screen-main')
-    const content = document.querySelector('#screen-main .content')
-    const player = document.getElementById('player-bar')
-    if (!scr || scr.classList.contains('hidden') || !content) return
-
-    applyShiftPx(0)
-    requestAnimationFrame(() => {
-      const vw = window.innerWidth
-      const margin = 12
-      const cr = content.getBoundingClientRect()
-      const pr = player ? player.getBoundingClientRect() : cr
-      const unionL = Math.min(cr.left, pr.left)
-      const unionR = Math.max(cr.right, pr.right)
-
-      const winMin = Math.floor(margin - unionL)
-      const winMax = Math.floor(vw - margin - unionR)
-
-      let rawMin = winMin
-      let rawMax = winMax
-
-      const topNav = document.body.classList.contains('layout-top-nav')
-      /* В«РњРёРЅРёРјР°Р»В»: РєРѕР»РѕРЅРєР° РєРѕРЅС‚РµРЅС‚Р° РЅРµ РїСЂРёРІСЏР·Р°РЅР° Рє sb.right вЂ” Р»РёРјРёС‚С‹ СЃРґРІРёРіР° С‚РѕР»СЊРєРѕ РѕС‚ РѕРєРЅР°. */
-      if (!topNav && !document.body.classList.contains('visual-floated')) {
-        const sidebar = document.getElementById('sidebar')
-        let gapPx = 12
-        try {
-          gapPx = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-gap')) || 12
-        } catch (_) {}
-        if (sidebar) {
-          const sb = sidebar.getBoundingClientRect()
-          const boundary = sb.right + gapPx + 2
-          const needContent = Math.ceil(boundary - cr.left)
-          const needPlayer = Math.ceil(boundary - pr.left)
-          rawMin = Math.max(rawMin, needContent, needPlayer)
-        }
-      }
-
-      rawMin = Math.max(-520, rawMin)
-      rawMax = Math.min(520, rawMax)
-      if (rawMin >= rawMax - 6) {
-        rawMin = -120
-        rawMax = 120
-      }
-      limits = { min: rawMin, max: rawMax }
-
-      slider.min = String(limits.min)
-      slider.max = String(limits.max)
-      slider.step = Math.abs(limits.max - limits.min) > 420 ? '4' : '2'
-
-      let saved = 0
-      try { saved = parseInt(localStorage.getItem(FLOW_MAIN_SHIFT_LS) || '0', 10) } catch (_) {}
-      clampAndPersist(Number.isFinite(saved) ? saved : 0)
-    })
-  }
-
-  slider.addEventListener('input', () => {
-    clampAndPersist(parseFloat(slider.value || '0'))
-  })
-  btn.addEventListener('click', (e) => {
-    e.preventDefault()
-    e.stopPropagation()
-    try {
-      localStorage.setItem('flow_sidebar_shift', '0')
-      document.documentElement.style.setProperty('--sidebar-shift', '0px')
-    } catch (_) {}
-    try {
-      localStorage.setItem(FLOW_MAIN_SHIFT_LS, '0')
-    } catch (_) {}
-    applyShiftPx(0)
-    slider.value = '0'
-    requestAnimationFrame(() => {
-      recomputeLimits()
-      try { window.dispatchEvent(new Event('resize')) } catch (_) {}
-    })
-  })
-
-  let rt = 0
-  window.addEventListener(
-    'resize',
-    () => {
-      clearTimeout(rt)
-      rt = setTimeout(recomputeLimits, 100)
-    },
-    { passive: true },
-  )
-
-  let rSched = 0
-  scheduleMainShiftRemeasure = () => {
-    clearTimeout(rSched)
-    rSched = setTimeout(recomputeLimits, 70)
-  }
-
-  queueMicrotask(recomputeLimits)
-}
-
-function setupCardTilt() {
-  const selector = '.track-card, .playlist-card, .social-friend-card, .profile-card, .home-card'
-  let activeCard = null
-  let rafId = 0
-  let pendingEvt = null
-
-  const resetCard = (el) => {
-    if (!el) return
-    el.style.setProperty('--card-tilt-x', '0deg')
-    el.style.setProperty('--card-tilt-y', '0deg')
-    el.style.setProperty('--card-tilt-glow-x', '50%')
-    el.style.setProperty('--card-tilt-glow-y', '50%')
-    el.classList.remove('is-tilting')
-  }
-
-  const updateTilt = () => {
-    rafId = 0
-    const e = pendingEvt
-    const card = activeCard
-    if (!e || !card) return
-    const rect = card.getBoundingClientRect()
-    if (!rect.width || !rect.height) return
-    const px = (e.clientX - rect.left) / rect.width
-    const py = (e.clientY - rect.top) / rect.height
-    const rx = (0.5 - py) * 4.6
-    const ry = (px - 0.5) * 4.6
-    card.style.setProperty('--card-tilt-x', `${rx.toFixed(2)}deg`)
-    card.style.setProperty('--card-tilt-y', `${ry.toFixed(2)}deg`)
-    card.style.setProperty('--card-tilt-glow-x', `${Math.max(0, Math.min(100, px * 100)).toFixed(1)}%`)
-    card.style.setProperty('--card-tilt-glow-y', `${Math.max(0, Math.min(100, py * 100)).toFixed(1)}%`)
-    card.classList.add('is-tilting')
-  }
-
-  document.addEventListener('pointermove', (e) => {
-    const card = e.target?.closest?.(selector) || null
-    if (card !== activeCard) {
-      resetCard(activeCard)
-      activeCard = card
-    }
-    if (!activeCard) return
-    pendingEvt = e
-    if (!rafId) rafId = requestAnimationFrame(updateTilt)
-  }, { passive: true })
-
-  document.addEventListener('pointerleave', () => {
-    pendingEvt = null
-    if (rafId) cancelAnimationFrame(rafId)
-    rafId = 0
-    resetCard(activeCard)
-    activeCard = null
-  }, { passive: true })
-}
-
-/** РўРѕР»СЊРєРѕ РІСЂРµРјСЏ Рё РїСЂРѕРіСЂРµСЃСЃ РЅР° РєР»РѕРЅРµ РіР»Р°РІРЅРѕР№ вЂ” РІС‹Р·С‹РІР°С‚СЊ РёР· timeupdate (Р±РµР· РѕР±Р»РѕР¶РєРё Рё Р±РµР· РєР°СЂС‚РѕС‡РєРё РїСЂРѕС„РёР»СЏ). */
-function syncHomeClonePlaybackProgress() {
-  const cur = document.getElementById('home-clone-time-cur')
-  const tot = document.getElementById('home-clone-time-total')
-  const prog = document.getElementById('home-clone-progress')
-  if (!cur || !tot || !prog) return
-  cur.textContent = fmtTime(audio.currentTime)
-  tot.textContent = fmtTime(audio.duration)
-  const ratio = audio.duration ? audio.currentTime / audio.duration : 0
-  prog.value = ratio
-  const fill = ratio * 100
-  prog.style.setProperty('--progress-fill', `${Math.max(0, Math.min(100, fill))}%`)
-}
-
-function syncHomeCloneUI() {
-  const cover = document.getElementById('home-clone-cover')
-  const title = document.getElementById('home-clone-title')
-  const artist = document.getElementById('home-clone-artist')
-  const cur = document.getElementById('home-clone-time-cur')
-  const tot = document.getElementById('home-clone-time-total')
-  const prog = document.getElementById('home-clone-progress')
-  if (!cover || !title || !artist || !cur || !tot || !prog) return
-  if (currentTrack) {
-    title.textContent = currentTrack.title || 'РќРёС‡РµРіРѕ РЅРµ РёРіСЂР°РµС‚'
-    artist.textContent = currentTrack.artist || 'вЂ”'
-    applyCoverArt(cover, getEffectiveCoverUrl(currentTrack), currentTrack.bg || 'linear-gradient(135deg,#7c3aed,#a855f7)')
-  } else {
-    title.textContent = 'РќРёС‡РµРіРѕ РЅРµ РёРіСЂР°РµС‚'
-    artist.textContent = 'вЂ”'
-    cover.style.backgroundImage = ''
-    cover.innerHTML = COVER_ICON
-  }
-  syncHomeClonePlaybackProgress()
-  if (_activePageId === 'profile') renderProfileNowPlaying()
-}
-
-function alignHomeHeaderToPlay() {
-  const main = document.querySelector('.home-clone-main')
-  const head = document.querySelector('.home-clone-head')
-  const play = document.querySelector('.home-clone-controls .play-btn')
-  if (!main || !head || !play) return
-  const mainRect = main.getBoundingClientRect()
-  const headRect = head.getBoundingClientRect()
-  const playRect = play.getBoundingClientRect()
-  const headCenter = headRect.left + headRect.width / 2
-  const playCenter = playRect.left + playRect.width / 2
-  const delta = playCenter - headCenter
-  const maxShift = Math.max(14, Math.floor(mainRect.width * 0.08))
-  const shift = Math.max(-maxShift, Math.min(maxShift, delta))
-  main.style.setProperty('--home-head-shift', `${shift.toFixed(1)}px`)
-}
-
-function ensureAudioAnalyzer() {
-  const ensure = audioPlayer.ensureAudioAnalyser
-  if (typeof ensure !== 'function') return false
-  const state = { audioCtx: _audioCtx, analyser: _analyser, freqData: _freqData }
-  const ok = ensure(audio, state)
-  if (!ok) return false
-  _audioCtx = state.audioCtx
-  _analyser = state.analyser
-  _freqData = state.freqData
-  return true
-}
-
-function teardownAudioAnalyzer() {
-  const close = audioPlayer.closeAudioContext
-  const state = { audioCtx: _audioCtx, analyser: _analyser, freqData: _freqData }
-  if (typeof close === 'function') close(state)
-  _audioCtx = null
-  _analyser = null
-  _freqData = null
-}
-
-function resizeHomeVisualizerCanvas() {
-  const canvas = document.getElementById('home-visualizer-canvas')
-  const wrap = document.getElementById('home-visualizer-wrap')
-  if (!canvas || !wrap || wrap.classList.contains('hidden')) return
-  const r = wrap.getBoundingClientRect()
-  const rw = Math.max(1, Math.round(r.width))
-  const rh = Math.max(1, Math.round(r.height))
-  if (canvas.width !== rw || canvas.height !== rh) {
-    canvas.width = rw
-    canvas.height = rh
-    try {
-      delete canvas._flowViz2d
-    } catch (_) {}
-  }
-}
-
-const FLOW_HOME_BLOCK_ORDER_LS = 'flow_home_block_order'
-const FLOW_HOME_BLOCK_GEOMETRY_LS = 'flow_home_block_geometry'
-/** РђРіСЂРµРіР°С‚ РјР°РєРµС‚Р° (Р±Р»РѕРєРё РіР»Р°РІРЅРѕР№ + СЃРЅРёРјРѕРє СЃР°Р№РґР±Р°СЂР°) вЂ” РґСѓР±Р»РёСЂСѓРµС‚ РіРµРѕРјРµС‚СЂРёСЋ Р±Р»РѕРєРѕРІ РґР»СЏ РѕР±РјРµРЅР°/Р±СЌРєР°РїР°. */
-const FLOW_LAYOUT_COORDS_LS = 'flow_layout_coords'
-/** РњР°СЃС€С‚Р°Р± Р±Р»РѕРєРѕРІ РіР»Р°РІРЅРѕР№ РІ В«РњРёРЅРёРјР°Р»В» (С‡РёСЃР»Рѕ 0.72вЂ“1.38, СѓРјРЅРѕР¶РµРЅРёРµ zoom РЅР° СЃС‚РµРє). */
-const FLOW_HOME_EDITOR_ZOOM_LS = 'flow_home_editor_zoom'
-
-function loadHomeEditorZoomValue() {
-  try {
-    const z = parseFloat(localStorage.getItem(FLOW_HOME_EDITOR_ZOOM_LS) || '')
-    if (!Number.isFinite(z)) return 1
-    return Math.max(0.72, Math.min(1.38, z))
-  } catch (_) {
-    return 1
-  }
-}
-
-function applyHomeEditorZoom(_z) {
-  const stack = document.getElementById('home-dashboard-stack')
-  if (!stack) return
-  stack.style.removeProperty('--home-editor-zoom')
-}
-
-function persistHomeEditorZoom(z) {
-  try {
-    localStorage.setItem(FLOW_HOME_EDITOR_ZOOM_LS, String(z))
-  } catch (_) {}
-}
-
-function syncHomeEditorZoomFromStorage() {
-  if (!isVisualFloatedLayout()) {
-    applyHomeEditorZoom(1)
-    return
-  }
-  applyHomeEditorZoom(loadHomeEditorZoomValue())
-}
-
-const DEFAULT_HOME_BLOCK_ORDER = Object.freeze(['welcome', 'clone', 'cards', 'wave'])
-
-function snapshotSidebarLayoutForCoords() {
-  try {
-    const cs = getComputedStyle(document.documentElement)
-    const phRaw = cs.getPropertyValue('--sidebar-panel-height').trim()
-    const ph = parseFloat(phRaw)
-    return {
-      shift: Math.round(parseFloat(cs.getPropertyValue('--sidebar-shift')) || 0),
-      floatY: Math.round(parseFloat(cs.getPropertyValue('--sidebar-float-y')) || 0),
-      width: Math.round(parseFloat(cs.getPropertyValue('--sidebar-w')) || 210),
-      mainInsetStart: Math.round(parseFloat(cs.getPropertyValue('--main-inset-start')) || 0),
-      panelHeight: Number.isFinite(ph) ? Math.round(ph) : null,
-    }
-  } catch (_) {
-    return {}
-  }
-}
-
-/** РЎРѕС…СЂР°РЅРёС‚СЊ РµРґРёРЅС‹Р№ СЃРЅРёРјРѕРє `flow_layout_coords` РёР· С‚РµРєСѓС‰РµРіРѕ LS РіРµРѕРјРµС‚СЂРёРё Р±Р»РѕРєРѕРІ + CSS-СЃР°Р№РґР±Р°СЂР°. */
-function syncFlowLayoutCoords() {
-  try {
-    let blocks = {}
-    const rawLegacy = localStorage.getItem(FLOW_HOME_BLOCK_GEOMETRY_LS)
-    if (rawLegacy) {
-      const p = JSON.parse(rawLegacy)
-      if (p && typeof p === 'object' && !Array.isArray(p)) blocks = p
-    }
-    localStorage.setItem(
-      FLOW_LAYOUT_COORDS_LS,
-      JSON.stringify({
-        v: 1,
-        blocks,
-        sidebar: snapshotSidebarLayoutForCoords(),
-        updatedAt: Date.now(),
-      }),
-    )
-  } catch (_) {}
-}
-
-function loadHomeBlockGeometryRaw() {
-  try {
-    let legacy = null
-    const rawLegacy = localStorage.getItem(FLOW_HOME_BLOCK_GEOMETRY_LS)
-    if (rawLegacy) {
-      const p = JSON.parse(rawLegacy)
-      if (p && typeof p === 'object' && !Array.isArray(p)) legacy = p
-    }
-    const legacyKeys = legacy ? Object.keys(legacy).filter((k) => legacy[k] && typeof legacy[k] === 'object') : []
-    let fromCoords = null
-    try {
-      const rawU = localStorage.getItem(FLOW_LAYOUT_COORDS_LS)
-      if (rawU) {
-        const u = JSON.parse(rawU)
-        if (u?.blocks && typeof u.blocks === 'object' && !Array.isArray(u.blocks)) fromCoords = u.blocks
-      }
-    } catch (_) {}
-    const coordKeys = fromCoords ? Object.keys(fromCoords) : []
-
-    if (legacyKeys.length > 0) return legacy
-
-    if (coordKeys.length > 0 && fromCoords) {
-      const g = cloneHomeGeometry(fromCoords)
-      try {
-        localStorage.setItem(FLOW_HOME_BLOCK_GEOMETRY_LS, JSON.stringify(g))
-      } catch (_) {}
-      syncFlowLayoutCoords()
-      return g
-    }
-  } catch (_) {}
-  return null
-}
-
-function cloneHomeGeometry(geom) {
-  const o = {}
-  if (!geom) return o
-  for (const k of Object.keys(geom)) {
-    const v = geom[k]
-    if (!v || typeof v !== 'object') continue
-    const x = +v.x
-    const y = +v.y
-    const w = +v.w
-    const h = +v.h
-    if (![x, y, w, h].every(Number.isFinite)) continue
-    o[k] = { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) }
-  }
-  return o
-}
-
-function homeGeomRectValid(rect) {
-  return !!(rect && rect.width >= 48 && rect.height >= 48)
-}
-
-/** РћРґРЅР° Р·Р°РїРёСЃСЊ РґР»СЏ РѕС‚СЂРёСЃРѕРІРєРё position:absolute Р±Р»РѕРєР°. */
-function homeGeomQuadValid(g) {
-  return !!(
-    g &&
-    Number.isFinite(g.x) &&
-    Number.isFinite(g.y) &&
-    Number.isFinite(g.w) &&
-    Number.isFinite(g.h) &&
-    g.w >= 48 &&
-    g.h >= 48
-  )
-}
-
-/** Р“Р»Р°РІРЅР°СЏ РЅРµ СЃРєСЂС‹С‚Р° вЂ” РёРЅР°С‡Рµ getBoundingClientRect РґР°С‘С‚ В«РЅСѓР»РµРІРѕР№В» РєРѕРЅС‚СѓСЂ Рё Р·Р°С‚СЂС‘С‚ СЃРѕС…СЂР°РЅС‘РЅРЅС‹Рµ РєРѕРѕСЂРґРёРЅР°С‚С‹. */
-function isHomePageActiveForDashboardMeasure() {
-  const pageHome = document.getElementById('page-home')
-  return !!(pageHome && pageHome.classList.contains('active'))
-}
-
-function readHomeBlockGeometryFromDom() {
-  const stack = document.getElementById('home-dashboard-stack')
-  if (!stack || !isHomePageActiveForDashboardMeasure()) return {}
-  const sr = stack.getBoundingClientRect()
-  if (!homeGeomRectValid(sr)) return {}
-  const g = {}
-  stack.querySelectorAll(':scope > .home-dash-block[data-home-block]').forEach((el) => {
-    const id = el.dataset.homeBlock
-    const r = el.getBoundingClientRect()
-    const w = Math.round(r.width)
-    const h = Math.round(r.height)
-    if (!Number.isFinite(w) || !Number.isFinite(h) || !homeGeomQuadValid({ x: 0, y: 0, w, h })) return
-    const x = Math.round(r.left - sr.left)
-    const y = Math.round(r.top - sr.top)
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return
-    g[id] = { x, y, w, h }
-  })
-  return g
-}
-
-function saveHomeBlockGeometry(geom) {
-  try {
-    const payload = geom && typeof geom === 'object' && !Array.isArray(geom) ? geom : {}
-    localStorage.setItem(FLOW_HOME_BLOCK_GEOMETRY_LS, JSON.stringify(payload))
-    syncFlowLayoutCoords()
-  } catch (_) {}
-}
-
-const _HOME_BLOCK_MIN = Object.freeze({
-  welcome: [200, 96],
-  clone: [300, 200],
-  cards: [240, 130],
-  wave: [240, 160],
-})
-
-function clampHomeBlockInStack(stack, id, geom) {
-  const g = geom[id]
-  if (!g || !stack) return
-  const sw = Math.max(stack.clientWidth, 200)
-  const [minW, minH] = _HOME_BLOCK_MIN[id] || [200, 120]
-  g.w = Math.max(minW, Math.min(Math.round(g.w), sw - 8))
-  g.h = Math.max(minH, Math.round(g.h))
-  g.x = Math.max(4, Math.min(Math.round(g.x), Math.max(sw - g.w - 4, 4)))
-  g.y = Math.max(4, Math.round(g.y))
-}
-
-function applyHomeBlockGeometry(geom) {
-  const stack = document.getElementById('home-dashboard-stack')
-  if (!stack) return
-  const ids = [...stack.querySelectorAll(':scope > .home-dash-block[data-home-block]')].map((el) => el.dataset.homeBlock)
-  const g0 = cloneHomeGeometry(geom)
-  const has = ids.some((id) => g0[id] && homeGeomQuadValid(g0[id]))
-  stack.classList.toggle('home-dashboard-stack--geometry', Boolean(has))
-  if (!has) {
-    stack.querySelectorAll(':scope > .home-dash-block').forEach((el) => {
-      el.style.left = el.style.top = el.style.width = el.style.height = ''
-      el.style.zIndex = ''
-    })
-    stack.style.minHeight = ''
-    return
-  }
-  let maxB = 0
-  ids.forEach((id) => {
-    const el = stack.querySelector(`:scope > .home-dash-block[data-home-block="${id}"]`)
-    const g = g0[id]
-    if (!el || !g || !homeGeomQuadValid(g)) return
-    el.style.left = `${Math.round(g.x)}px`
-    el.style.top = `${Math.round(g.y)}px`
-    el.style.width = `${Math.round(g.w)}px`
-    el.style.height = `${Math.round(g.h)}px`
-    maxB = Math.max(maxB, g.y + g.h)
-  })
-  stack.style.minHeight = `${Math.max(Math.ceil(maxB + 24), 240)}px`
-}
-
-function persistHomeDashboardLayoutFromDom() {
-  if (!isVisualFloatedLayout()) return
-  const stack = document.getElementById('home-dashboard-stack')
-  if (!stack) return
-  const hasGeoClass = stack.classList.contains('home-dashboard-stack--geometry')
-  const hasInlineGeom = [...stack.querySelectorAll(':scope > .home-dash-block[data-home-block]')].some(
-    (el) =>
-      el.style.left &&
-      el.style.top &&
-      el.style.width &&
-      el.style.height,
-  )
-  if (!hasGeoClass && !hasInlineGeom) return
-  const g = readHomeBlockGeometryFromDom()
-  const sanitized = {}
-  for (const id of Object.keys(g)) {
-    if (homeGeomQuadValid(g[id])) sanitized[id] = g[id]
-  }
-  if (Object.keys(sanitized).length === 0) return
-  saveHomeBlockGeometry(sanitized)
-  try {
-    stack.classList.add('home-dashboard-stack--geometry')
-  } catch (_) {}
-}
-
-let _homeDashGeomReflowT = null
-/** РџРѕСЃР»Рµ show РіР»Р°РІРЅРѕР№ РѕРґРёРЅ РїСЂРѕС…РѕРґ clamp+paint (РґРІРѕР№РЅР°СЏ РѕС‚СЂРёСЃРѕРІРєР° вЂ” СЃС‚Р°Р±РёР»СЊРЅС‹Рµ clientWidth/stack). */
-function scheduleHomeDashboardGeometryReflow() {
-  if (!isVisualFloatedLayout()) return
-  clearTimeout(_homeDashGeomReflowT)
-  _homeDashGeomReflowT = setTimeout(() => {
-    _homeDashGeomReflowT = null
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const stack = document.getElementById('home-dashboard-stack')
-        if (_activePageId !== 'home' || !isHomePageActiveForDashboardMeasure()) return
-        if (!stack?.classList.contains('home-dashboard-stack--geometry')) return
-        if (!homeGeomRectValid(stack.getBoundingClientRect())) return
-        const g = cloneHomeGeometry(loadHomeBlockGeometryRaw())
-        if (!Object.keys(g).length) return
-        getHomeBlockIdsFromStack(stack).forEach((id) => clampHomeBlockInStack(stack, id, g))
-        applyHomeBlockGeometry(g)
-        try {
-          saveHomeBlockGeometry(g)
-        } catch (_) {}
-        try {
-          resizeHomeVisualizerCanvas()
-        } catch (_) {}
-        try {
-          alignHomeHeaderToPlay()
-        } catch (_) {}
-        scheduleMainShiftRemeasure()
-      })
-    })
-  }, 0)
-}
-
-function reclampHomeGeometryOnResize() {
-  scheduleHomeDashboardGeometryReflow()
-}
-
-function refreshHomeDashboardLayoutAfterContentChange() {
-  if (!isVisualFloatedLayout()) {
-    applyStaticHomeDashboardOrder()
-    applyHomeBlockGeometry(null)
-    applyHomeEditorZoom(1)
-    return
-  }
-  applyHomeDashboardOrder()
-  const raw = loadHomeBlockGeometryRaw()
-  const cloned = cloneHomeGeometry(raw)
-  if (cloned && Object.keys(cloned).some((id) => homeGeomQuadValid(cloned[id]))) {
-    applyHomeBlockGeometry(cloned)
-    scheduleHomeDashboardGeometryReflow()
-  } else applyHomeBlockGeometry(null)
-  syncHomeEditorZoomFromStorage()
-}
-
-/** РЎР°Р№РґР±Р°СЂ: СЃР±СЂРѕСЃ СЂР°СЃРєР»Р°РґРєРё вЂ” С‚РѕР»СЊРєРѕ РІ С‚РµРјРµ В«РњРёРЅРёРјР°Р»В» (floated). */
-function resetHomeDashboardLayoutPressed() {
-  if (!isVisualFloatedLayout()) {
-    showToast('РЎР±СЂРѕСЃ СЂР°СЃРєР»Р°РґРєРё РґРѕСЃС‚СѓРїРµРЅ С‚РѕР»СЊРєРѕ РІ РёРЅС‚РµСЂС„РµР№СЃРµ В«РњРёРЅРёРјР°Р»В»')
-    return
-  }
-  resetHomeDashboardLayout()
-}
-
-/** РЎР±СЂРѕСЃ СЃРѕС…СЂР°РЅС‘РЅРЅРѕРіРѕ РјР°РєРµС‚Р° РіР»Р°РІРЅРѕР№ (РєРѕРЅСЃС‚СЂСѓРєС‚РѕСЂ + РїРѕСЂСЏРґРѕРє). Р‘РµР· РёРЅС‚РµСЂact.js вЂ” С‡РёСЃС‚С‹Рµ LS + DOM. */
-function resetHomeDashboardLayout() {
-  try {
-    localStorage.removeItem(FLOW_HOME_BLOCK_GEOMETRY_LS)
-    localStorage.removeItem(FLOW_HOME_BLOCK_ORDER_LS)
-    localStorage.removeItem(FLOW_LAYOUT_COORDS_LS)
-    localStorage.removeItem(FLOW_HOME_EDITOR_ZOOM_LS)
-  } catch (_) {}
-  applyHomeEditorZoom(1)
-  document.body.classList.remove('home-layout-edit', 'flow-edit-enabled')
-  syncHomeLayoutEditButton()
-  teardownHomeDashboardDrag(true)
-  try {
-    _teardownSidebarPanelDrag()
-  } catch (_) {}
-  const stack = document.getElementById('home-dashboard-stack')
-  if (stack) {
-    const map = {}
-    stack.querySelectorAll(':scope > .home-dash-block[data-home-block]').forEach((el) => {
-      map[el.dataset.homeBlock] = el
-    })
-    DEFAULT_HOME_BLOCK_ORDER.forEach((id) => {
-      const el = map[id]
-      if (el) stack.appendChild(el)
-    })
-  }
-  applyHomeBlockGeometry(null)
-  if (_activePageId === 'home') {
-    requestAnimationFrame(() => {
-      resizeHomeVisualizerCanvas()
-      try {
-        alignHomeHeaderToPlay()
-      } catch (_) {}
-      scheduleMainShiftRemeasure()
-    })
-  }
-  showToast('Р Р°СЃРєР»Р°РґРєР° РіР»Р°РІРЅРѕР№ СЃР±СЂРѕС€РµРЅР°')
-  queueMicrotask(() => scheduleMainShiftRemeasure())
-}
-
-/** РџСЂСЏРјС‹Рµ РїРѕС‚РѕРјРєРё `#home-dashboard-stack` вЂ” РїРѕСЂСЏРґРѕРє СѓР·Р»Р° = РїРѕСЂСЏРґРѕРє РІ РєРѕРЅСЃС‚СЂСѓРєС‚РѕСЂРµ. */
-function getHomeBlockIdsFromStack(stack) {
-  if (!stack) return []
-  return [...stack.children]
-    .filter((c) => c?.classList?.contains?.('home-dash-block') && c?.dataset?.homeBlock)
-    .map((c) => String(c.dataset.homeBlock))
-}
-
-/** РўРѕР»СЊРєРѕ id РёР· DOM РїРѕ СЃРѕС…СЂР°РЅС‘РЅРЅРѕРјСѓ РїРѕСЂСЏРґРєСѓ; РѕС‚СЃСѓС‚СЃС‚РІРѕРІР°РІС€РёРµ СЂР°РЅРµРµ Р±Р»РѕРєРё вЂ” РІ РєРѕРЅРµС†. */
-function mergeSavedHomeOrderWithDom(saved, domOrderedIds) {
-  const domSet = new Set(domOrderedIds)
-  const seen = new Set()
-  const out = []
-  if (Array.isArray(saved)) {
-    for (const id of saved) {
-      const sid = typeof id === 'string' ? id : ''
-      if (sid && domSet.has(sid) && !seen.has(sid)) {
-        seen.add(sid)
-        out.push(sid)
-      }
-    }
-  }
-  for (const id of domOrderedIds) {
-    if (id && !seen.has(id)) {
-      seen.add(id)
-      out.push(id)
-    }
-  }
-  return out
-}
-
-/** РЎС‚Р°С‚РёС‡РЅС‹Р№ РїРѕСЂСЏРґРѕРє Р±Р»РѕРєРѕРІ РіР»Р°РІРЅРѕР№ (В«РњРёРЅРёРјР°Р»РёР·РјВ») вЂ” РІСЃРµРіРґР° РєР°Рє РІ СЂР°Р·РјРµС‚РєРµ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ. */
-function applyStaticHomeDashboardOrder() {
-  const stack = document.getElementById('home-dashboard-stack')
-  if (!stack) return
-  const map = {}
-  stack.querySelectorAll(':scope > .home-dash-block[data-home-block]').forEach((el) => {
-    map[el.dataset.homeBlock] = el
-  })
-  DEFAULT_HOME_BLOCK_ORDER.forEach((id) => {
-    const el = map[id]
-    if (el) stack.appendChild(el)
-  })
-}
-
-function applyHomeDashboardOrder() {
-  const stack = document.getElementById('home-dashboard-stack')
-  if (!stack) return
-  const domIds = getHomeBlockIdsFromStack(stack)
-  if (!domIds.length) return
-  let saved = []
-  try {
-    const p = JSON.parse(localStorage.getItem(FLOW_HOME_BLOCK_ORDER_LS) || 'null')
-    if (Array.isArray(p)) saved = p
-  } catch (_) {}
-  const order = mergeSavedHomeOrderWithDom(saved, domIds)
-  try {
-    if (JSON.stringify(saved) !== JSON.stringify(order)) {
-      localStorage.setItem(FLOW_HOME_BLOCK_ORDER_LS, JSON.stringify(order))
-    }
-  } catch (_) {}
-
-  const map = {}
-  stack.querySelectorAll(':scope > .home-dash-block[data-home-block]').forEach((el) => {
-    map[el.dataset.homeBlock] = el
-  })
-  order.forEach((id) => {
-    const el = map[id]
-    if (el) stack.appendChild(el)
-  })
-}
-
-let _homeDashDragState = null
-
-function teardownHomeDashboardDrag(force = false) {
-  const st = _homeDashDragState
-  if (!st) return
-  window.removeEventListener('pointermove', st.mv, true)
-  window.removeEventListener('pointerup', st.fin, true)
-  window.removeEventListener('pointercancel', st.fin, true)
-  if (st.block) {
-    st.block.classList.remove('home-dash-block--dragging')
-    st.block.style.zIndex = ''
-  }
-  document.body.classList.remove('home-dash-dragging', 'home-dash-sizing')
-  try {
-    st.captureEl?.releasePointerCapture?.(st.pointerId)
-  } catch (_) {}
-  _homeDashDragState = null
-  if (!force) {
-    persistHomeDashboardLayoutFromDom()
-    requestAnimationFrame(() => {
-      resizeHomeVisualizerCanvas()
-      try {
-        alignHomeHeaderToPlay()
-      } catch (_) {}
-      scheduleMainShiftRemeasure()
-    })
-  }
-}
-
-function setupHomeDashboardDragAndDrop() {
-  const stack = document.getElementById('home-dashboard-stack')
-  if (!stack || stack.dataset.homeDndReady === '1') return
-  stack.dataset.homeDndReady = '1'
-
-  stack.addEventListener(
-    'pointerdown',
-    (e) => {
-      if (!document.body.classList.contains('flow-edit-enabled')) return
-      if (!stack.classList.contains('home-dashboard-stack--geometry')) return
-      const block = e.target.closest('.home-dash-block[data-home-block]')
-      if (!block || !stack.contains(block)) return
-      const id = block.dataset.homeBlock
-      const resizeGrip = e.target.closest('.home-dash-resize, .resizer-corner')
-      const dragGrip = e.target.closest('.home-dash-drag, .home-dash-handle')
-      const isResize = resizeGrip && block.contains(resizeGrip)
-      if (!isResize) {
-        if (!dragGrip || !block.contains(dragGrip)) return
-      }
-
-      e.preventDefault()
-      e.stopPropagation()
-      teardownHomeDashboardDrag(true)
-
-      const domG = readHomeBlockGeometryFromDom()
-      const geom = cloneHomeGeometry(loadHomeBlockGeometryRaw())
-      Object.keys(domG).forEach((k) => {
-        if (!geom[k]) geom[k] = domG[k]
-      })
-      if (!geom[id]) geom[id] = domG[id]
-      const origin = { ...geom[id] }
-      block.classList.add('home-dash-block--dragging')
-      document.body.classList.add(isResize ? 'home-dash-sizing' : 'home-dash-dragging')
-      block.style.zIndex = '60'
-
-      const startX = e.clientX
-      const startY = e.clientY
-      const captureEl = isResize ? resizeGrip : dragGrip
-
-      const mv = (ev) => {
-        if (isResize) {
-          geom[id].w = Math.round(origin.w + ev.clientX - startX)
-          geom[id].h = Math.round(origin.h + ev.clientY - startY)
-        } else {
-          geom[id].x = Math.round(origin.x + ev.clientX - startX)
-          geom[id].y = Math.round(origin.y + ev.clientY - startY)
-        }
-        clampHomeBlockInStack(stack, id, geom)
-        applyHomeBlockGeometry(geom)
-      }
-      const fin = () => {
-        teardownHomeDashboardDrag(false)
-      }
-      window.addEventListener('pointermove', mv, true)
-      window.addEventListener('pointerup', fin, true)
-      window.addEventListener('pointercancel', fin, true)
-      try {
-        captureEl.setPointerCapture(e.pointerId)
-      } catch (_) {}
-      _homeDashDragState = { mv, fin, stack, block, captureEl, pointerId: e.pointerId }
-    },
-    true,
-  )
-}
-
-/** API РёР· РїР»Р°РЅР° В«СЃРІРѕР±РѕРґРЅС‹С… Р±Р»РѕРєРѕРІВ»: СЌР»РµРјРµРЅС‚ СѓР¶Рµ РѕР±СЃР»СѓР¶РёРІР°РµС‚СЃСЏ РґРµР»РµРіРёСЂРѕРІР°РЅРёРµРј СЃРѕ СЃС‚РµРєР°. */
-function makeBlockDynamic(sectionEl) {
-  return !!(sectionEl && typeof sectionEl.matches === 'function' && sectionEl.matches('.home-dash-block[data-home-block]'))
-}
-
-/** РџРѕРІС‚РѕСЂРЅРѕ РїСЂРёРјРµРЅРёС‚СЊ РїРѕСЂСЏРґРѕРє/РіРµРѕРјРµС‚СЂРёСЋ РёР· С…СЂР°РЅРёР»РёС‰Р° Рё РѕР±РЅРѕРІРёС‚СЊ flow_layout_coords. */
-function initFloatingHomeWorkspace() {
-  refreshHomeDashboardLayoutAfterContentChange()
-  syncFlowLayoutCoords()
-}
-
-function syncHomeLayoutEditButton() {
-  const btn = document.getElementById('btn-home-layout-edit')
-  const label = document.getElementById('btn-home-layout-edit-label')
-  if (!btn) return
-  const on = document.body.classList.contains('home-layout-edit')
-  btn.classList.toggle('active', on)
-  btn.setAttribute('aria-pressed', on ? 'true' : 'false')
-  if (label) label.textContent = on ? 'РЎРѕС…СЂР°РЅРёС‚СЊ' : 'РР·РјРµРЅРёС‚СЊ'
-  btn.title = on ? 'РЎРѕС…СЂР°РЅРёС‚СЊ СЂР°СЃРїРѕР»РѕР¶РµРЅРёРµ Р±Р»РѕРєРѕРІ РіР»Р°РІРЅРѕР№' : 'РР·РјРµРЅРёС‚СЊ СЂР°СЃРїРѕР»РѕР¶РµРЅРёРµ Р±Р»РѕРєРѕРІ РіР»Р°РІРЅРѕР№'
-  btn.setAttribute('aria-label', on ? 'РЎРѕС…СЂР°РЅРёС‚СЊ РјР°РєРµС‚ РіР»Р°РІРЅРѕР№' : 'Р РµРґР°РєС‚РёСЂРѕРІР°С‚СЊ РјР°РєРµС‚ РіР»Р°РІРЅРѕР№')
-}
-
-/** РљРѕРЅСЃС‚СЂСѓРєС‚РѕСЂ РіР»Р°РІРЅРѕР№: РєР»Р°СЃСЃС‹ body + СЃРѕС…СЂР°РЅС‘РЅРЅР°СЏ РіРµРѕРјРµС‚СЂРёСЏ РІ LS (flow_home_block_geometry). */
-function toggleHomeLayoutEdit() {
-  if (!isVisualFloatedLayout()) {
-    showToast('РљРѕРЅСЃС‚СЂСѓРєС‚РѕСЂ РіР»Р°РІРЅРѕР№ РґРѕСЃС‚СѓРїРµРЅ С‚РѕР»СЊРєРѕ РІ РёРЅС‚РµСЂС„РµР№СЃРµ В«РњРёРЅРёРјР°Р»В»')
-    return
-  }
-  const on = !document.body.classList.contains('home-layout-edit')
-  document.body.classList.toggle('home-layout-edit', on)
-  document.body.classList.toggle('flow-edit-enabled', on)
-  syncHomeLayoutEditButton()
-  if (on) syncHomeEditorZoomFromStorage()
-  const stack = document.getElementById('home-dashboard-stack')
-  if (on) {
-    let geom = cloneHomeGeometry(loadHomeBlockGeometryRaw())
-    if (!Object.keys(geom).length) {
-      applyHomeBlockGeometry(null)
-      requestAnimationFrame(() => {
-        geom = readHomeBlockGeometryFromDom()
-        if (Object.keys(geom).length) {
-          saveHomeBlockGeometry(geom)
-          applyHomeBlockGeometry(cloneHomeGeometry(geom))
-        }
-        scheduleHomeDashboardGeometryReflow()
-        showToast('Р РµРґР°РєС‚РѕСЂ: Р·РѕРЅР° РїРѕРґ РєРѕРЅС‚РµРЅС‚РѕРј вЂ” РїРµСЂРµРЅРѕСЃ, СѓРіРѕР»РѕРє вЂ” СЂР°Р·РјРµСЂ')
-        pulseHomeVisualLayoutSync()
-      })
-    } else {
-      const snap = readHomeBlockGeometryFromDom()
-      Object.keys(snap).forEach((id) => {
-        if (!geom[id] && homeGeomQuadValid(snap[id])) geom[id] = snap[id]
-      })
-      saveHomeBlockGeometry(geom)
-      applyHomeBlockGeometry(cloneHomeGeometry(geom))
-      scheduleHomeDashboardGeometryReflow()
-      showToast('Р РµРґР°РєС‚РѕСЂ: Р·РѕРЅР° РїРѕРґ РєРѕРЅС‚РµРЅС‚РѕРј вЂ” РїРµСЂРµРЅРѕСЃ, СѓРіРѕР»РѕРє вЂ” СЂР°Р·РјРµСЂ')
-      pulseHomeVisualLayoutSync()
-    }
-  } else {
-    try {
-      _teardownSidebarPanelDrag()
-    } catch (_) {}
-    persistHomeDashboardLayoutFromDom()
-    applyHomeBlockGeometry(cloneHomeGeometry(loadHomeBlockGeometryRaw()))
-    showToast('РњР°РєРµС‚ РіР»Р°РІРЅРѕР№ СЃРѕС…СЂР°РЅС‘РЅ')
-    pulseHomeVisualLayoutSync()
-  }
-  queueMicrotask(() => scheduleMainShiftRemeasure())
-}
-
-function drawHomeVisualizerFrame() {
-  const canvas = document.getElementById('home-visualizer-canvas')
-  if (!canvas) return
-  try {
-    if (document.body.classList.contains('flow-opt-bg-sleep')) return
-    if (document.body.classList.contains('flow-opt-game-sleep')) return
-  } catch (_) {}
-  let ctx = canvas._flowViz2d
-  if (!ctx) {
-    try {
-      ctx = canvas.getContext('2d', { alpha: true, desynchronized: true })
-    } catch (_) {
-      ctx = null
-    }
-    if (!ctx) ctx = canvas.getContext('2d')
-    canvas._flowViz2d = ctx
-  }
-  if (!ctx) return
-  const v = getVisual()
-  const hw = Object.assign({ enabled: true, mode: 'bars' }, v.homeWidget || {})
-  if (!hw.enabled || hw.mode === 'image') return
-  const w = canvas.width
-  const h = canvas.height
-  ctx.clearRect(0, 0, w, h)
-  const canAnalyze = ensureAudioAnalyzer() && !audio.paused && !audio.ended
-  if (canAnalyze) _analyser.getByteFrequencyData(_freqData)
-  const data = _freqData || new Uint8Array(128)
-  const baseColor = v.accent2 || '#9ca3af'
-  ctx.strokeStyle = baseColor
-  ctx.fillStyle = baseColor
-  ctx.globalAlpha = 0.9
-  if (hw.mode === 'wave') {
-    ctx.beginPath()
-    const step = Math.max(1, Math.floor(data.length / 52))
-    for (let i = 0; i < 52; i++) {
-      const val = data[i * step] || 0
-      const y = h - (val / 255) * (h - 18) - 9
-      const x = (i / 51) * w
-      if (i === 0) ctx.moveTo(x, y)
-      else ctx.lineTo(x, y)
-    }
-    ctx.lineWidth = 2
-    ctx.stroke()
-    return
-  }
-  if (hw.mode === 'dots') {
-    const cols = 44
-    const step = Math.max(1, Math.floor(data.length / cols))
-    for (let i = 0; i < cols; i++) {
-      const val = data[i * step] || 0
-      const dots = Math.max(2, Math.round((val / 255) * 8))
-      const x = 10 + (i / cols) * (w - 20)
-      for (let d = 0; d < dots; d++) {
-        const y = h - 10 - d * 12
-        ctx.beginPath()
-        ctx.arc(x, y, 2.4, 0, Math.PI * 2)
-        ctx.fill()
-      }
-    }
-    return
-  }
-  const bars = 56
-  const step = Math.max(1, Math.floor(data.length / bars))
-  const bw = (w - 20) / bars
-  for (let i = 0; i < bars; i++) {
-    const val = data[i * step] || 0
-    const bh = 8 + (val / 255) * (h - 24)
-    const x = 10 + i * bw
-    const y = h - bh - 6
-    ctx.fillRect(x, y, Math.max(2, bw - 2), bh)
-  }
-}
-
-function startHomeVisualizerLoop() {
-  const tick = () => {
-    if (_activePageId === 'home') {
-      if (typeof document !== 'undefined' && document.hidden) {
-        requestAnimationFrame(tick)
-        return
-      }
-      let playing = false
-      try {
-        playing = Boolean(audio && !audio.paused && !audio.ended)
-      } catch (_) {}
-      // РџСЂРё РѕС‚РєСЂС‹С‚РѕРј С‚РµРєСЃС‚Рµ Рё РїСЂРѕРёРіСЂРµ РІРёР·СѓР°Р»РёР·Р°С‚РѕСЂ РіР»Р°РІРЅРѕР№ РѕС‚РєР»СЋС‡С‘РЅ вЂ” РёРЅР°С‡Рµ РґРІР° С‚СЏР¶С‘Р»С‹С… RAF РїРѕРґСЂСЏРґ РґР°СЋС‚ РјРёРєСЂРѕС„СЂРёР·С‹.
-      let gameSleep = false
-      try {
-        gameSleep = document.body.classList.contains('flow-opt-game-sleep')
-      } catch (_) {}
-      const skipViz = Boolean(_lyricsOpen && playing) || gameSleep
-      if (!skipViz) drawHomeVisualizerFrame()
-      requestAnimationFrame(tick)
-    } else {
-      setTimeout(() => requestAnimationFrame(tick), 250)
-    }
-  }
-  requestAnimationFrame(tick)
-}
-
-function syncPlayerUIFromTrack() {
-  const track = currentTrack
-  const cover = document.getElementById('player-cover')
-  const homeCover = document.getElementById('home-clone-cover')
-  const fallbackBg = track?.bg || 'linear-gradient(135deg,#7c3aed,#a855f7)'
-  const coverUrl = getEffectiveCoverUrl(track)
-  applyCoverArt(cover, coverUrl, fallbackBg)
-  applyCoverArt(homeCover, coverUrl, fallbackBg)
-  updateYandexPlayerTheme(track)
-  if (_playerModeActive) syncPlayerModeUI()
-}
-
-// РІвЂќР‚РІвЂќР‚РІвЂќР‚ NAVIGATION РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
-let _activePageId = 'home'
-let _deferredPageRenderRaf = 0
-
-function runDeferredPageRender(id) {
-  if (id === 'home') return renderMyWave()
-  if (id === 'liked') return renderLiked()
-  if (id === 'library') return renderPlaylists()
-  if (id === 'social') return renderFriends()
-  if (id === 'rooms') { renderRoomMembers(); return renderRoomQueue() }
-  if (id === 'profile') return renderProfilePage()
-  if (id === 'settings') return loadSettingsPage()
-}
-
-function openPage(id, opts = {}) {
-  toggleYandexWaveModes(false)
-  const force = Boolean(opts && opts.force)
-  if (!force && id === _activePageId) return
-  const prevPage = _activePageId
-  if (prevPage === 'home' && id !== 'home') {
-    if (
-      isVisualFloatedLayout() &&
-      document.getElementById('home-dashboard-stack')?.classList.contains('home-dashboard-stack--geometry')
-    ) {
-      persistHomeDashboardLayoutFromDom()
-    }
-    document.body.classList.remove('home-layout-edit', 'flow-edit-enabled')
-    syncHomeLayoutEditButton()
-    teardownHomeDashboardDrag(true)
-    try {
-      _teardownSidebarPanelDrag()
-    } catch (_) {}
-  }
-  if (id === 'social') ensureSocialUI()
-  if (id === 'rooms') ensureRoomsUI()
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'))
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'))
-  document.getElementById('page-'+id)?.classList.add('active')
-  const pages = ['home','search','library','liked','social','rooms','settings']
-  const idx = pages.indexOf(id)
-  if (idx >= 0) document.querySelectorAll('.nav-item')[idx]?.classList.add('active')
-  _activePageId = id
-  try { document.body.setAttribute('data-active-page', id) } catch {}
-  syncSearchBarCollapsedState()
-  if (_deferredPageRenderRaf) cancelAnimationFrame(_deferredPageRenderRaf)
-  _deferredPageRenderRaf = requestAnimationFrame(() => {
-    _deferredPageRenderRaf = 0
-    runDeferredPageRender(id)
-  })
-  if (id === 'home') {
-    queueMicrotask(() => {
-      try {
-        if (isVisualFloatedLayout()) {
-          refreshHomeDashboardLayoutAfterContentChange()
-        }
-      } catch (_) {}
-      requestAnimationFrame(() => {
-        try {
-          resizeHomeVisualizerCanvas()
-        } catch (_) {}
-        try {
-          alignHomeHeaderToPlay()
-        } catch (_) {}
-        try {
-          scheduleMainShiftRemeasure()
-        } catch (_) {}
-      })
-    })
-  }
-}
-
-// РІвЂќР‚РІвЂќР‚РІвЂќР‚ PLAYER РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
-/** РљР»СЋС‡ РґР»СЏ Р»РѕРєР°Р»СЊРЅРѕРіРѕ РєСЌС€Р° РїРѕС‚РѕРєР° (Spotify / SoundCloud / Audius). */
-function getStreamCacheKey(track) {
-  if (!track || typeof track !== 'object') return ''
-  const src = String(track.source || '').toLowerCase()
-  if (src !== 'soundcloud' && src !== 'audius' && src !== 'spotify') return ''
-  const id = String(track.spotifyId || track.id || '').trim()
-  if (!id) return ''
-  return `${src}:${id}`
-}
-
-async function playTrackObj(track, opts = {}) {
-  if (_roomState?.roomId && !_roomState?.host && !opts?.remoteSync) {
-    enqueueSharedTrack(track)
-    return
-  }
-  const reqId = ++_playRequestSeq
-  const isStale = () => reqId !== _playRequestSeq
-  track = sanitizeTrack(track)
-  const forcedCover = getEffectiveCoverUrl(track)
-  if (forcedCover) {
-    track = Object.assign({}, track, {
-      _sourceCover: track?._sourceCover || track?.cover || '',
-      cover: forcedCover,
-      _customCover: true
-    })
-  }
-  console.log('TRACK:', track)
-  const originalRequestTrack = track
-  const tryAlternateYoutubeVersion = async () => {
-    try {
-      const q = `${originalRequestTrack?.title || track.title} ${originalRequestTrack?.artist || track.artist}`.trim()
-      const ytResults = await searchYouTube(q).catch(() => [])
-      if (isStale()) return true
-      const candidate = Array.isArray(ytResults)
-        ? (ytResults.find((t) => t?.ytId && t.ytId !== track?.ytId) || null)
-        : null
-      if (!candidate || !candidate.ytId) return false
-      showToast('YouTube: РёСЃС…РѕРґРЅС‹Р№ СЂРѕР»РёРє РѕРіСЂР°РЅРёС‡РµРЅ, РїСЂРѕР±СѓСЋ Р°Р»СЊС‚РµСЂРЅР°С‚РёРІРЅСѓСЋ РІРµСЂСЃРёСЋ')
-      await playTrackObj(Object.assign({}, candidate, {
-        title: originalRequestTrack?.title || candidate.title,
-        artist: originalRequestTrack?.artist || candidate.artist,
-        cover: getEffectiveCoverUrl(originalRequestTrack) || originalRequestTrack?.cover || candidate.cover
-      }))
-      return true
-    } catch {
-      return false
-    }
-  }
-  // Spotify playback fallback through SoundCloud/Audius first.
-  if (track.source === 'spotify' && !track.url) {
-    showToast('\uD83C\uDFB5 РС‰Сѓ РІ SoundCloud/Audius...')
-    try {
-      const query = `${track.title} ${track.artist}`.trim()
-      if (isStale()) return
-      const s = getSettings()
-      const scResults = await searchSoundCloud(query, s.soundcloudClientId).catch(() => [])
-      if (isStale()) return
-      if (scResults?.length > 0) {
-        return playTrackObj(Object.assign({}, scResults[0], {
-          title: track.title,
-          artist: track.artist,
-          cover: getEffectiveCoverUrl(track) || track.cover || scResults[0].cover
-        }))
-      }
-      const audResults = await searchAudius(query).catch(() => [])
-      if (isStale()) return
-      if (audResults?.length > 0) {
-        return playTrackObj(Object.assign({}, audResults[0], {
-          title: track.title,
-          artist: track.artist,
-          cover: getEffectiveCoverUrl(track) || track.cover || audResults[0].cover
-        }))
-      }
-      showToast('Spotify: РЅРµ РЅР°Р№РґРµРЅРѕ РІ SoundCloud/Audius', true)
-      return
-    } catch (e) {
-      showToast('Spotify: ' + e.message, true)
-      return
-    }
-  }
-
-  currentTrack = track
-  const newTrackKey = `${track.source}:${track.id}`
-  const st = getListenStats()
-  if (st.lastTrackKey !== newTrackKey) saveListenStats({ totalTracks: Number(st.totalTracks || 0) + 1, lastTrackKey: newTrackKey })
-  pushListenHistory(track)
-  if (_activePageId === 'home') renderMyWave()
-  let streamUrl = track.url
-  let streamEngine = null
-  const nameEl = document.getElementById('player-name')
-  const artistEl = document.getElementById('player-artist')
-  const playBtn = document.getElementById('play-btn')
-  if (nameEl) nameEl.textContent = track.title || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ'
-  const setStage = (text) => { if (artistEl) artistEl.textContent = text }
-  setStage('Р—Р°РіСЂСѓР·РєР°вЂ¦')
-  if (playBtn) playBtn.innerHTML = '<svg class="ui-icon spin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9"/><path d="M12 7v5l3 2"/></svg>'
-
-  if (String(track.source || '').toLowerCase() === 'yandex' && !/^https?:\/\//i.test(String(streamUrl || '')) && track.id && window.api?.yandexStream) {
-    const ymTok = String(getSettings()?.yandexToken || '').trim()
-    if (!ymTok) {
-      showToast('РЇРЅРґРµРєСЃ: СѓРєР°Р¶Рё С‚РѕРєРµРЅ РІ РЅР°СЃС‚СЂРѕР№РєР°С…', true)
-      if (playBtn) playBtn.innerHTML = ICONS.play
-      setStage('РЇРЅРґРµРєСЃ: РЅСѓР¶РµРЅ С‚РѕРєРµРЅ')
-      return
-    }
-    setStage('РЇРЅРґРµРєСЃ: РїРѕР»СѓС‡Р°СЋ РїРѕС‚РѕРєвЂ¦')
-    const ymRes = await window.api.yandexStream(String(track.id), ymTok).catch((e) => ({ ok: false, error: e?.message || String(e) }))
-    if (isStale()) return
-    if (!ymRes?.ok || !ymRes.url) {
-      showToast('РЇРЅРґРµРєСЃ: ' + (ymRes?.error || 'РЅРµ СѓРґР°Р»РѕСЃСЊ РїРѕР»СѓС‡РёС‚СЊ РїРѕС‚РѕРє'), true)
-      if (playBtn) playBtn.innerHTML = ICONS.play
-      setStage('РЇРЅРґРµРєСЃ: РѕС€РёР±РєР°')
-      return
-    }
-    track = Object.assign({}, track, { url: ymRes.url })
-    streamUrl = track.url
-    currentTrack = track
-  }
-
-  // SoundCloud transcoding URL -> direct stream URL
-  if (track.source === 'soundcloud' && track.scTranscoding && window.api?.scStream) {
-    const res = await window.api.scStream(track.scTranscoding, track.scClientId).catch(e => ({ ok: false, error: e.message }))
-    if (isStale()) return
-    if (res.ok && res.url) {
-      streamUrl = res.url
-      track = Object.assign({}, track, { url: streamUrl })
-      currentTrack = track
-    } else {
-      showToast('SoundCloud: ' + (res.error || 'РѕС€РёР±РєР°'), true)
-      if (playBtn) playBtn.innerHTML = ICONS.play
-      return
-    }
-  }
-
-  // YouTube stream URL via main process
-  if (track.source === 'youtube' && track.ytId && window.api?.youtubeStream) {
-    if (streamUrl && /^https?:\/\//i.test(streamUrl)) {
-      streamEngine = track._streamInst || null
-      setStage('YouTube: РїРѕС‚РѕРє РіРѕС‚РѕРІ')
-    } else {
-      setStage('YouTube: РїРѕР»СѓС‡Р°СЋ РїРѕС‚РѕРєвЂ¦')
-      const res = await withTimeout(
-        window.api.youtubeStream(track.ytId, _ytInstanceCache, { forceFresh: false }),
-        35000,
-        'youtube stream timeout'
-      ).catch(e => ({ ok: false, error: e.message }))
-      if (isStale()) return
-      if (res.ok && res.url) {
-        streamUrl = res.url
-        track = Object.assign({}, track, { url: streamUrl })
-        currentTrack = track
-        streamEngine = res.inst || null
-        if (res.inst) _ytInstanceCache = res.inst
-        console.log('STREAM URL:', streamUrl, 'engine:', res.inst || 'unknown', 'cached:', Boolean(res.cached))
-      } else {
-        if (res?.code === 'AGE_RESTRICTED' || res?.code === 'BOT_CHECK' || /РІРѕР·СЂР°СЃС‚РЅ|РЅСѓР¶РЅС‹ cookies|confirm your age|not a bot/i.test(String(res?.error || ''))) {
-          const switched = await tryAlternateYoutubeVersion()
-          if (switched || isStale()) return
-        }
-        setStage('YouTube: РѕС€РёР±РєР°, РїСЂРѕР±СѓСЋ РµС‰С‘ СЂР°Р·вЂ¦')
-        // One quick retry with fresh URL before failing the track.
-        const fresh = await withTimeout(
-          window.api.youtubeStream(track.ytId, _ytInstanceCache, { forceFresh: true }),
-          12000,
-          'fresh youtube stream timeout'
-        ).catch(e => ({ ok: false, error: e.message }))
-        if (isStale()) return
-        if (fresh.ok && fresh.url) {
-          streamUrl = fresh.url
-          track = Object.assign({}, track, { url: streamUrl })
-          currentTrack = track
-          streamEngine = fresh.inst || null
-          if (fresh.inst) _ytInstanceCache = fresh.inst
-          console.log('FRESH STREAM URL (after fail):', streamUrl, 'engine:', fresh.inst || 'unknown')
-        } else {
-          const switched = await tryAlternateYoutubeVersion()
-          if (switched || isStale()) return
-          showToast('YouTube: ' + (fresh.error || res.error || 'РѕС€РёР±РєР°'), true)
-          if (playBtn) playBtn.innerHTML = ICONS.play
-          setStage('YouTube: РѕС€РёР±РєР°')
-          return
-        }
-      }
-    }
-  }
-
-  if (!streamUrl) {
-    showToast('РќРµС‚ Р°СѓРґРёРѕ РїРѕС‚РѕРєР°', true)
-    if (playBtn) playBtn.innerHTML = ICONS.play
-    return
-  }
-
-  let usedStreamCache = false
-  const streamCacheKey = getStreamCacheKey(track)
-  let remoteUrlForCache = streamUrl
-  let finalUrl = streamUrl
-
-  if (
-    streamCacheKey &&
-    window.api?.streamCacheLookup &&
-    track.source !== 'youtube' &&
-    /^https?:\/\//i.test(streamUrl) &&
-    !/127\.0\.0\.1|localhost/i.test(streamUrl)
-  ) {
-    setStage('РљСЌС€: РїСЂРѕРІРµСЂРєР°вЂ¦')
-    const hit = await window.api.streamCacheLookup({ cacheKey: streamCacheKey }).catch(() => ({ hit: false }))
-    if (isStale()) return
-    if (hit?.hit && hit.url) {
-      finalUrl = hit.url
-      usedStreamCache = true
-      setStage('РљСЌС€: РІРѕСЃРїСЂРѕРёР·РІРµРґРµРЅРёРµ')
-    }
-  }
-
-  // External streams are played via local proxy for CORS/Range compatibility.
-  if (!usedStreamCache) {
-    // For yt-dlp direct googlevideo links, direct playback is often more stable than proxy.
-    if (window.api?.proxySetUrl && shouldProxyThisStreamUrl(streamUrl, track.source) && streamEngine !== 'yt-dlp') {
-      setStage('РџСЂРѕРєСЃРё: РїРѕРґРіРѕС‚РѕРІРєР°вЂ¦')
-      try {
-        finalUrl = await window.api.proxySetUrl(streamUrl)
-      } catch (e) {
-        console.warn('proxySetUrl failed, fallback to direct stream:', e?.message || e)
-        finalUrl = streamUrl
-      }
-    }
-    console.log('PLAY URL:', finalUrl)
-
-    // Quick probe: helps decide if URL is dead/403 before we even try audio.
-    if (window.api?.probeStreamUrl && /^https?:\/\//i.test(streamUrl) && streamEngine !== 'yt-dlp') {
-      try {
-        setStage('РџСЂРѕРІРµСЂРєР° РїРѕС‚РѕРєР°вЂ¦')
-        const p = await withTimeout(window.api.probeStreamUrl(streamUrl), 9000, 'probe timeout').catch(() => null)
-        if (isStale()) return
-        if (p && p.ok) {
-          console.log('STREAM PROBE:', p.status, p.headers)
-          // Common failure in 2026: 403 from googlevideo. Force fresh URL immediately.
-          if (p.status === 403 && track.source === 'youtube' && track.ytId && window.api?.youtubeStream) {
-            _ytInstanceCache = null
-            const fresh = await withTimeout(
-              window.api.youtubeStream(track.ytId, _ytInstanceCache, { forceFresh: true }),
-              12000,
-              'fresh youtube stream timeout'
-            ).catch(err => ({ ok: false, error: err.message }))
-            if (isStale()) return
-            if (fresh.ok && fresh.url) {
-              streamUrl = fresh.url
-              remoteUrlForCache = streamUrl
-              if (fresh.inst) _ytInstanceCache = fresh.inst
-              finalUrl = (window.api?.proxySetUrl && shouldProxyThisStreamUrl(streamUrl, track.source)) ? await window.api.proxySetUrl(streamUrl) : streamUrl
-              console.log('FRESH URL AFTER 403 PROBE:', streamUrl, 'engine:', fresh.inst || 'unknown')
-              setStage('YouTube: РѕР±РЅРѕРІРёР» РїРѕС‚РѕРє, Р·Р°РїСѓСЃРєР°СЋвЂ¦')
-            } else {
-              showToast('YouTube 403: РѕР±РЅРѕРІРё yt-dlp (РќР°СЃС‚СЂРѕР№РєРё в†’ РСЃС‚РѕС‡РЅРёРєРё) РёР»Рё РїРѕРїСЂРѕР±СѓР№ РґСЂСѓРіРѕР№ С‚СЂРµРє', true)
-              setStage('YouTube: 403')
-            }
-          }
-        }
-      } catch {}
-    }
-  } else {
-    console.log('PLAY URL (offline cache):', finalUrl)
-  }
-
-  const waitForPlaybackProgress = (ms = 10000) => new Promise((resolve) => {
-    const startedAt = audio.currentTime || 0
-    const finish = (ok) => {
-      clearTimeout(t)
-      audio.removeEventListener('timeupdate', onTime)
-      audio.removeEventListener('playing', onPlaying)
-      audio.removeEventListener('canplay', onCanPlay)
-      resolve(ok)
-    }
-    const onTime = () => {
-      if ((audio.currentTime || 0) > startedAt + 0.05) {
-        finish(true)
-      }
-    }
-    const onPlaying = () => {
-      if (!audio.paused) finish(true)
-    }
-    const onCanPlay = () => {
-      if (!audio.paused && audio.readyState >= 2) finish(true)
-    }
-    const t = setTimeout(() => {
-      const advanced = (audio.currentTime || 0) > startedAt + 0.05
-      const playable = !audio.paused && audio.readyState >= 2
-      finish(Boolean(advanced || playable))
-    }, ms)
-    audio.addEventListener('timeupdate', onTime, { once: false })
-    audio.addEventListener('playing', onPlaying, { once: true })
-    audio.addEventListener('canplay', onCanPlay, { once: false })
-  })
-
-  const tryStartPlayback = async (url) => {
-    if (isStale()) throw new Error('stale playback request')
-    setStage('РЎС‚Р°СЂС‚ РІРѕСЃРїСЂРѕРёР·РІРµРґРµРЅРёСЏвЂ¦')
-    audio.src = url
-    await audio.play()
-    // If nothing starts within ~5s, treat it as a dead stream and switch strategy.
-    return waitForPlaybackProgress(5200)
-  }
-
-  let started = false
-  try {
-    started = await tryStartPlayback(finalUrl)
-    if (!started) throw new Error('playback timeout')
-  } catch (e) {
-    if (String(e?.message || '').includes('stale playback request')) return
-    // Retry path for YouTube: switch between direct/proxied strategies.
-    if (track.source === 'youtube') {
-      try {
-        const alternateUrl = finalUrl === streamUrl
-          ? ((window.api?.proxySetUrl && shouldProxyThisStreamUrl(streamUrl, track.source)) ? await window.api.proxySetUrl(streamUrl) : streamUrl)
-          : streamUrl
-        started = await tryStartPlayback(alternateUrl)
-        if (!started) throw new Error('alternate playback timeout')
-      } catch (e2) {
-        if (String(e2?.message || '').includes('stale playback request')) return
-        // Last chance: request a fresh stream URL and retry.
-        try {
-          // Avoid sticky dead instance/cache on retries.
-          _ytInstanceCache = null
-          const fresh = await withTimeout(
-            window.api.youtubeStream(track.ytId, _ytInstanceCache, { forceFresh: true }),
-            12000,
-            'fresh youtube stream timeout'
-          ).catch(err => ({ ok: false, error: err.message }))
-          if (fresh.ok && fresh.url) {
-            streamUrl = fresh.url
-            if (fresh.inst) _ytInstanceCache = fresh.inst
-            console.log('FRESH STREAM URL:', streamUrl, 'engine:', fresh.inst || 'unknown')
-            const freshProxy = window.api?.proxySetUrl && shouldProxyThisStreamUrl(streamUrl, track.source) ? await window.api.proxySetUrl(streamUrl) : streamUrl
-            started = await tryStartPlayback(freshProxy)
-            if (!started) throw new Error('fresh stream timeout')
-          } else {
-            throw new Error(fresh.error || 'fresh stream failed')
-          }
-        } catch (e3) {
-          if (String(e3?.message || '').includes('stale playback request')) return
-          try {
-            const switched = await tryAlternateYoutubeVersion()
-            if (switched || isStale()) return
-          } catch {}
-          showToast('РћС€РёР±РєР° РІРѕСЃРїСЂРѕРёР·РІРµРґРµРЅРёСЏ: ' + (e3?.message || e2?.message || e?.message || 'unknown'), true)
-          if (playBtn) playBtn.innerHTML = ICONS.play
-          return
-        }
-      }
-    } else {
-      showToast('РћС€РёР±РєР° РІРѕСЃРїСЂРѕРёР·РІРµРґРµРЅРёСЏ: ' + (e?.message || 'unknown'), true)
-      if (playBtn) playBtn.innerHTML = ICONS.play
-      return
-    }
-  }
-
-  if (
-    streamCacheKey &&
-    !usedStreamCache &&
-    started &&
-    remoteUrlForCache &&
-    /^https?:\/\//i.test(remoteUrlForCache) &&
-    !/127\.0\.0\.1|localhost/i.test(remoteUrlForCache) &&
-    window.api?.streamCacheStore
-  ) {
-    window.api.streamCacheStore({ cacheKey: streamCacheKey, url: remoteUrlForCache }).catch(() => {})
-  }
-
-  if (nameEl) nameEl.textContent = track.title || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ'
-  if (artistEl) artistEl.textContent = track.artist || 'вЂ”'
-  const cover = document.getElementById('player-cover')
-  const effectiveCover = getEffectiveCoverUrl(track)
-  if (playBtn) playBtn.innerHTML = ICONS.pause
-  const pmIcon = document.getElementById('pm-play-icon')
-  if (pmIcon) pmIcon.innerHTML = PM_PAUSE_INNER
-  updatePlayerLikeBtn()
-  // Р С›Р В±Р Р…Р С•Р Р†Р В»РЎРЏР ВµР С titlebar
-  const tinfo = document.getElementById('titlebar-track-info')
-  if (tinfo) tinfo.textContent = track.title + (track.artist ? ' РІР‚вЂќ ' + track.artist : '')
-  const deferHeavyPlaybackUi = () => {
-    try {
-      applyCoverArt(cover, effectiveCover, track.bg || 'linear-gradient(135deg,#7c3aed,#a855f7)')
-      updateYandexPlayerTheme(track)
-      if (effectiveCover) updateOrbsFromCover(effectiveCover)
-      updateBackground()
-    } catch (_) {}
-  }
-  if (typeof requestAnimationFrame === 'function') {
-    requestAnimationFrame(() => requestAnimationFrame(deferHeavyPlaybackUi))
-  } else {
-    setTimeout(deferHeavyPlaybackUi, 16)
-  }
-  // Р РЋР С‘Р Р…РЎвЂ¦РЎР‚Р С•Р Р…Р С‘Р В·Р С‘РЎР‚РЎС“Р ВµР С fullscreen Р С—Р В»Р ВµР ВµРЎР‚
-  syncPlayerModeUI()
-  syncTrackCoverStatus()
-  alignHomeHeaderToPlay()
-  // Р вЂ”Р В°Р С–РЎР‚РЎС“Р В¶Р В°Р ВµР С lyrics Р ВµРЎРѓР В»Р С‘ Р С—Р В°Р Р…Р ВµР В»РЎРЉ Р С•РЎвЂљР С”РЎР‚РЎвЂ№РЎвЂљР В°
-  if (_lyricsOpen) loadLyrics(track)
-  prewarmNextQueueTrack()
-  renderRoomNowPlaying()
-  renderRoomQueue()
-  _currentTrackStartedAt = Math.floor(Date.now() / 1000)
-  pushLastFmNowPlaying(track)
-  updateDiscordPresence(track, _roomState)
-  broadcastPlaybackSync(true)
-  syncHomeCloneUI()
-}
-
-function prewarmNextQueueTrack() {
-  try {
-    if (!window.api?.youtubeStream) return
-    const next = queue[queueIndex + 1]
-    if (!next || next.source !== 'youtube' || !next.ytId) return
-    const key = String(next.ytId)
-    const lastAt = Number(_ytPrewarmAt.get(key) || 0)
-    if (Date.now() - lastAt < 90000) return
-    _ytPrewarmAt.set(key, Date.now())
-    window.api.youtubeStream(next.ytId, _ytInstanceCache, { forceFresh: false })
-      .then((res) => {
-        if (!res?.ok || !res?.url) return
-        const idx = queueIndex + 1
-        const cur = queue[idx]
-        if (!cur || cur.ytId !== next.ytId) return
-        queue[idx] = Object.assign({}, cur, { url: res.url, _streamInst: res.inst || null })
-      })
-      .catch(() => {})
-  } catch {}
-}
-
-function togglePlay() {
-  if (!audio.src) return
-  const playBtn = document.getElementById('play-btn')
-  const isRoomParticipant = Boolean(_roomState?.roomId)
-  if (audio.paused) {
-    audio.play()
-    if (_audioCtx?.state === 'suspended') _audioCtx.resume().catch(() => {})
-    if (playBtn) playBtn.innerHTML = ICONS.pause
-    const icon = document.getElementById('pm-play-icon')
-    if (icon) icon.innerHTML = PM_PAUSE_INNER
-  } else {
-    audio.pause()
-    if (playBtn) playBtn.innerHTML = ICONS.play
-    const icon = document.getElementById('pm-play-icon')
-    if (icon) icon.innerHTML = PM_PLAY_INNER
-  }
-  if (isRoomParticipant) {
-    _socialPeer?.send?.({
-      type: 'room-control-toggle',
-      roomId: _roomState.roomId,
-      paused: Boolean(audio.paused),
-      currentTime: Number(audio.currentTime || 0),
-    })
-    saveRoomStateToServer({
-      playback_state: { paused: Boolean(audio.paused), currentTime: Number(audio.currentTime || 0) },
-      playback_ts: Date.now(),
-    }).catch(() => {})
-  }
-  if (_roomState?.host) broadcastPlaybackSync(true)
-}
-
-function seekTo(val) {
-  if (!canControlQueue()) {
-    showHostOnlyToast()
-    return
-  }
-  if (audio.duration) audio.currentTime = val * audio.duration
-}
-function setVolume(val) {
-  const slider = Math.max(0, Math.min(1, Number(val) || 0))
-  // Perceptual curve: mid slider is quieter, fine-grained low-volume control.
-  const volume = Math.max(0, Math.min(1, slider * slider))
-  audio.volume = volume
-  const v1 = document.getElementById('volume')
-  const v2 = document.getElementById('pm-volume')
-  const v3 = document.getElementById('pm-cover-volume')
-  if (v1) v1.value = slider
-  if (v2) v2.value = slider
-  if (v3) v3.value = slider
-  try { localStorage.setItem('flow_volume_slider', String(slider)) } catch {}
-}
-function pickRandomQueueIndex() {
-  if (!queue.length) return -1
-  if (queue.length === 1) return 0
-  let idx = queueIndex
-  for (let i = 0; i < 8; i++) {
-    const candidate = Math.floor(Math.random() * queue.length)
-    if (candidate !== queueIndex) { idx = candidate; break }
-  }
-  return idx
-}
-
-function prevTrack() {
-  if (!canControlQueue()) {
-    showHostOnlyToast()
-    return
-  }
-  if (!queue.length) return
-  const resetThreshold = Math.max(1, Math.min(10, (Number(audio.duration) || 0) / 3 || 10))
-  if (audio.currentTime > resetThreshold) { audio.currentTime = 0; return }
-  const allowShuffle = playbackMode.shuffle && queueScope === 'liked'
-  if (allowShuffle) {
-    queueIndex = pickRandomQueueIndex()
-    if (queueIndex >= 0) playTrackObj(queue[queueIndex])
-    return
-  }
-  if (queueIndex > 0) {
-    queueIndex--
-  } else if (playbackMode.repeat === 'all') {
-    queueIndex = queue.length - 1
-  } else {
-    audio.currentTime = 0
-    return
-  }
-  playTrackObj(queue[queueIndex])
-}
-
-function nextTrack(autoEnded = false) {
-  if (!canControlQueue() && !autoEnded) {
-    showHostOnlyToast()
-    return
-  }
-  if (!queue.length) return
-  if (
-    queueScope === 'myWave' &&
-    !autoEnded &&
-    currentTrack &&
-    Number(audio?.duration || 0) > 2 &&
-    Number(audio?.currentTime || 0) < (WE?.WAVE_EARLY_SKIP_SEC ?? 14)
-  ) {
-    recordWaveEarlySkip(currentTrack)
-  }
-  if (autoEnded && playbackMode.repeat === 'one') {
-    audio.currentTime = 0
-    audio.play().catch(() => {})
-    return
-  }
-  const allowShuffle = playbackMode.shuffle && queueScope === 'liked'
-  if (allowShuffle) {
-    queueIndex = pickRandomQueueIndex()
-    if (queueIndex >= 0) playTrackObj(queue[queueIndex])
-    return
-  }
-  if (queueIndex < queue.length - 1) {
-    queueIndex++
-    playTrackObj(queue[queueIndex])
-    maybePreloadMyWave(false)
-    return
-  }
-  if (queueScope === 'myWave') {
-    maybePreloadMyWave(true)
-    showToast('Р’РѕР»РЅР° РёС‰РµС‚ РїСЂРѕРґРѕР»Р¶РµРЅРёРµ...')
-    return
-  }
-  if (playbackMode.repeat === 'all') {
-    queueIndex = 0
-    playTrackObj(queue[queueIndex])
-    return
-  }
-  const playBtn = document.getElementById('play-btn')
-  if (playBtn) playBtn.innerHTML = ICONS.play
-}
-
-audio.ontimeupdate = () => {
-  // Keep general UI updates lightweight, but make lyrics sync feel tighter.
-  const shouldSyncUi = (performance.now() - _lastUiSyncAt) >= 90
-  // Р’Рѕ РІСЂРµРјСЏ play РєР°СЂР°РѕРєРµ РєСЂСѓС‚РёС‚СЃСЏ РІ RAF вЂ” РІС‚РѕСЂРѕР№ РІС‹Р·РѕРІ РёР· timeupdate РґР°С‘С‚ Р»РёС€РЅРёР№ main-thread Рё СЂС‹РІРєРё UI.
-  if (_lyricsOpen && _lyricsData.length && audio.paused) syncLyrics(getLyricsSmoothedTime())
-  if (shouldSyncUi) {
-    _lastUiSyncAt = performance.now()
-    const p = document.getElementById('progress')
-    if (p && audio.duration) p.value = audio.currentTime / audio.duration
-
-    const pmp = document.getElementById('pm-progress')
-    if (pmp && audio.duration) pmp.value = audio.currentTime / audio.duration
-
-    const cur = fmtTime(audio.currentTime)
-    const tot = fmtTime(audio.duration)
-    const el1 = document.getElementById('time-current'); if (el1) el1.textContent = cur
-    const el2 = document.getElementById('time-total');   if (el2) el2.textContent = tot
-    const el3 = document.getElementById('pm-time-current'); if (el3) el3.textContent = cur
-    const el4 = document.getElementById('pm-time-total');   if (el4) el4.textContent = tot
-
-    syncHomeClonePlaybackProgress()
-    patchProfileNowPlayingProgress()
-
-    if (_profile?.username && !audio.paused && audio.duration) {
-      const now = Date.now()
-      if (!_listenTickAt) _listenTickAt = now
-      const delta = Math.max(0, now - _listenTickAt) / 1000
-      _listenTickAt = now
-      if (delta > 0 && delta < 4) {
-        const st = getListenStats()
-        saveListenStats({ totalSeconds: Number(st.totalSeconds || 0) + delta })
-      }
-    }
-  }
-  if (queueScope === 'myWave' && !audio.paused && queue.length - queueIndex - 1 <= 3) maybePreloadMyWave(false)
-  broadcastPlaybackSync(false)
-}
-audio.onended = () => {
-  stopLyricsSyncLoop()
-  _listenTickAt = 0
-  const playBtn = document.getElementById('play-btn')
-  if (playBtn) playBtn.innerHTML = ICONS.play
-  if (currentTrack) scrobbleLastFm(currentTrack)
-  if (isRoomClientRestricted()) return
-  if (_roomState?.roomId && _roomState?.host && sharedQueue.length) {
-    const nextRoomTrack = sharedQueue.shift()
-    renderRoomQueue()
-    broadcastQueueUpdate()
-    saveRoomStateToServer({ shared_queue: sharedQueue, playback_ts: Date.now() }).catch(() => {})
-    if (nextRoomTrack) {
-      playTrackObj(nextRoomTrack, { fromSharedQueue: true }).catch(() => {})
-      return
-    }
-  }
-  if (queueScope === 'myWave' && currentTrack) recordWavePositiveListen(currentTrack)
-  nextTrack(true)
-}
-
-// РІвЂќР‚РІвЂќР‚РІвЂќР‚ SEARCH РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
-function normalizeInvokeError(err) {
-  const raw = String(err?.message || err || '')
-  return raw.replace(/^Error invoking remote method '[^']+': Error:\s*/i, '').trim()
-}
-
-function isCredentialError(message, source) {
-  const msg = String(message || '').toLowerCase()
-  if (source === 'vk') return msg.includes('token') || msg.includes('kate') || msg.includes('access') || msg.includes('python runtime') || msg.includes('selenium') || msg.includes('webdriver')
-  if (source === 'soundcloud') return msg.includes('client id') || msg.includes('token') || msg.includes('401') || msg.includes('403')
-  if (source === 'spotify') return msg.includes('bearer') || msg.includes('token') || msg.includes('401') || msg.includes('403')
-  return false
-}
-
-function pickFallbackSource(failedSource) {
-  const order = ['youtube']
-  return order.find((src) => src !== failedSource && providers[src]) || null
-}
-
-async function searchHybridTracks(q, settings) {
-  if (window.api?.serverSearch) {
-    const payload = await withTimeout(window.api.serverSearch(q, {
-      spotifyToken: settings?.spotifyToken || '',
-      soundcloudClientId: settings?.soundcloudClientId || ''
-    }), 10000, null)
-    if (payload?.ok) return { mode: payload.mode || 'hybrid', tracks: sanitizeTrackList(payload.tracks || []) }
-    if (payload && !payload.ok) throw new Error(payload.error || 'РџРѕРёСЃРє РЅР° СЃРµСЂРІРµСЂРµ РЅРµ РґР°Р» СЂРµР·СѓР»СЊС‚Р°С‚РѕРІ')
-    throw new Error('РЎРµСЂРІРµСЂРЅС‹Р№ РїРѕРёСЃРє РЅРµРґРѕСЃС‚СѓРїРµРЅ')
-  }
-  throw new Error('РЎРµСЂРІРµСЂРЅС‹Р№ РїРѕРёСЃРє РЅРµРґРѕСЃС‚СѓРїРµРЅ РІ СЌС‚РѕР№ РІРµСЂСЃРёРё РїСЂРёР»РѕР¶РµРЅРёСЏ')
-}
-
-function searchLoadingPlaceholderLine(settings = getSettings()) {
-  const src = String(settings?.activeSource || currentSource || 'hybrid').toLowerCase()
-  if (src === 'yandex' || src === 'ya' || src === 'ym') return 'РџРѕРёСЃРє: РЇРЅРґРµРєСЃ РњСѓР·С‹РєР°...'
-  if (src === 'vk') return 'РџРѕРёСЃРє: Р’РљРѕРЅС‚Р°РєС‚Рµ...'
-  if (src === 'hitmo' || src === 'hm') return 'РџРѕРёСЃРє: HitMo...'
-  if (src === 'youtube' || src === 'yt') return 'РџРѕРёСЃРє: YouTube...'
-  return 'РџРѕРёСЃРє: Spotify в†’ SoundCloud в†’ Audius...'
-}
-
-function searchTracks(queryOverride = '') {
-  if (typeof queryOverride === 'string' && queryOverride.trim()) {
-    return searchTracksDirect(queryOverride.trim(), getSettings())
-  }
-  clearTimeout(searchDebounceTimer)
-  let q = document.getElementById('search-input').value.trim()
-  const container = document.getElementById('search-results')
-  if (!q) { container.innerHTML = ''; return }
-
-  container.innerHTML = `<div class="search-loading"><div class="spinner"></div><span>${searchLoadingPlaceholderLine()}</span></div>`
-
-  searchDebounceTimer = setTimeout(async () => {
-    const s = getSettings()
-    const key = getSearchCacheKey(q, s)
-    const cached = cacheGet(key)
-    if (cached) {
-      _lastSearchMode = cached.mode || 'hybrid'
-      renderResults(cached.tracks || [])
-      return
-    }
-
-    try {
-      const src = String(s.activeSource || currentSource || 'hybrid').toLowerCase()
-      let results = []
-      let mode = 'hybrid'
-      if (src === 'hitmo' || src === 'hm') {
-        results = sanitizeTrackList(await searchHitmo(q))
-        mode = 'hitmo'
-      } else if (src === 'youtube' || src === 'yt') {
-        if (!window.api?.youtubeSearch) throw new Error('YouTube РїРѕРёСЃРє РґРѕСЃС‚СѓРїРµРЅ С‚РѕР»СЊРєРѕ РІ Electron')
-        const ytList = await window.api.youtubeSearch(q)
-        if (!Array.isArray(ytList)) throw new Error('YouTube: РЅРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РѕС‚РІРµС‚')
-        results = sanitizeTrackList(ytList.map((t) => ({
-          title: t?.title || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ',
-          artist: t?.artist || 'YouTube',
-          ytId: t?.ytId || t?.id || '',
-          url: t?.url || null,
-          cover: t?.cover || null,
-          bg: t?.bg || 'linear-gradient(135deg,#ff0000,#cc0000)',
-          source: 'youtube',
-          id: String(t?.id || t?.ytId || `${t?.title || ''}:${t?.artist || ''}`)
-        }))).filter((t) => t.ytId)
-        mode = 'youtube'
-      } else if (src === 'yandex' || src === 'ya' || src === 'ym') {
-        const token = String(s.yandexToken || '').trim()
-        if (!token) throw new Error('РЇРЅРґРµРєСЃ: СѓРєР°Р¶Рё С‚РѕРєРµРЅ РњСѓР·С‹РєРё РІ РЅР°СЃС‚СЂРѕР№РєР°С…')
-        if (!window.api?.yandexSearch) throw new Error('РЇРЅРґРµРєСЃ РїРѕРёСЃРє РЅРµРґРѕСЃС‚СѓРїРµРЅ РІ СЌС‚РѕР№ СЃР±РѕСЂРєРµ')
-        const ymList = await withTimeout(window.api.yandexSearch(q, token), 22000, 'yandex search timeout').catch((e) => {
-          throw new Error(normalizeInvokeError(e) || 'С‚Р°Р№РјР°СѓС‚ РїРѕРёСЃРєР°')
-        })
-        if (!Array.isArray(ymList)) throw new Error('РЇРЅРґРµРєСЃ: РЅРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РѕС‚РІРµС‚')
-        results = sanitizeTrackList(ymList)
-        mode = 'yandex'
-      } else if (src === 'vk') {
-        const token = String(s.vkToken || '').trim()
-        if (!token) throw new Error('VK: СѓРєР°Р¶Рё С‚РѕРєРµРЅ РІ РЅР°СЃС‚СЂРѕР№РєР°С… в†’ РСЃС‚РѕС‡РЅРёРєРё в†’ Р’РљРѕРЅС‚Р°РєС‚Рµ')
-        if (!window.api?.vkSearch) throw new Error('VK РїРѕРёСЃРє РґРѕСЃС‚СѓРїРµРЅ С‚РѕР»СЊРєРѕ РІ РїСЂРёР»РѕР¶РµРЅРёРё Electron')
-        const vkList = await withTimeout(searchVK(q, token), 60000, 'vk search timeout').catch((e) => {
-          throw new Error(normalizeInvokeError(e) || 'С‚Р°Р№РјР°СѓС‚ РїРѕРёСЃРєР°')
-        })
-        if (!Array.isArray(vkList)) throw new Error('VK: РЅРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РѕС‚РІРµС‚')
-        results = sanitizeTrackList(vkList)
-        mode = 'vk'
-      } else {
-        const hybrid = await searchHybridTracks(q, s)
-        results = sanitizeTrackList(hybrid.tracks || [])
-        mode = hybrid.mode || 'hybrid'
-      }
-      _lastSearchMode = mode
-      cacheSet(key, { mode: _lastSearchMode, tracks: results })
-      renderResults(results)
-    } catch (err) {
-      const message = sanitizeDisplayText(normalizeInvokeError(err))
-      container.innerHTML = `<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.8 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0Z"/></svg></div><p>${message}</p><small>РСЃС‚РѕС‡РЅРёРє: ${getSourceLabel()}</small><div style="display:flex;gap:8px;justify-content:center;margin-top:12px"><button class="btn-small" onclick="searchTracks()">РџРѕРІС‚РѕСЂРёС‚СЊ</button><button class="btn-small" onclick="openPage('settings')">РќР°СЃС‚СЂРѕР№РєРё</button></div></div>`
-    }
-  }, 350)
-}
-
-async function searchTracksDirect(query, settings = getSettings()) {
-  const q = String(query || '').trim()
-  if (!q) return []
-  const src = String(settings?.activeSource || currentSource || 'hybrid').toLowerCase()
-  if (src === 'hitmo' || src === 'hm') return sanitizeTrackList(await searchHitmo(q))
-  if (src === 'yandex' || src === 'ya' || src === 'ym') {
-    const token = String(settings?.yandexToken || '').trim()
-    if (!token) throw new Error('РЇРЅРґРµРєСЃ: СѓРєР°Р¶Рё С‚РѕРєРµРЅ РњСѓР·С‹РєРё РІ РЅР°СЃС‚СЂРѕР№РєР°С…')
-    if (!window.api?.yandexSearch) throw new Error('РЇРЅРґРµРєСЃ РїРѕРёСЃРє РЅРµРґРѕСЃС‚СѓРїРµРЅ РІ СЌС‚РѕР№ СЃР±РѕСЂРєРµ')
-    const ymList = await withTimeout(window.api.yandexSearch(q, token), 22000, 'yandex search timeout').catch((e) => {
-      throw new Error(normalizeInvokeError(e) || 'С‚Р°Р№РјР°СѓС‚ РїРѕРёСЃРєР°')
-    })
-    if (!Array.isArray(ymList)) throw new Error('РЇРЅРґРµРєСЃ: РЅРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РѕС‚РІРµС‚')
-    _lastSearchMode = 'yandex'
-    return sanitizeTrackList(ymList)
-  }
-  if (src === 'vk') {
-    const token = String(settings?.vkToken || '').trim()
-    if (!token) throw new Error('VK: СѓРєР°Р¶Рё С‚РѕРєРµРЅ РІ РЅР°СЃС‚СЂРѕР№РєР°С… в†’ РСЃС‚РѕС‡РЅРёРєРё в†’ Р’РљРѕРЅС‚Р°РєС‚Рµ')
-    if (!window.api?.vkSearch) throw new Error('VK РїРѕРёСЃРє РґРѕСЃС‚СѓРїРµРЅ С‚РѕР»СЊРєРѕ РІ РїСЂРёР»РѕР¶РµРЅРёРё Electron')
-    const vkList = await withTimeout(searchVK(q, token), 60000, 'vk search timeout').catch((e) => {
-      throw new Error(normalizeInvokeError(e) || 'С‚Р°Р№РјР°СѓС‚ РїРѕРёСЃРєР°')
-    })
-    if (!Array.isArray(vkList)) throw new Error('VK: РЅРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РѕС‚РІРµС‚')
-    _lastSearchMode = 'vk'
-    return sanitizeTrackList(vkList)
-  }
-  if (src === 'youtube' || src === 'yt') {
-    if (!window.api?.youtubeSearch) throw new Error('YouTube РїРѕРёСЃРє РґРѕСЃС‚СѓРїРµРЅ С‚РѕР»СЊРєРѕ РІ Electron')
-    const result = await window.api.youtubeSearch(q)
-    if (!Array.isArray(result)) throw new Error('YouTube: unexpected response')
-    return sanitizeTrackList(result.map((t) => ({
-      title: t?.title || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ',
-      artist: t?.artist || 'YouTube',
-      ytId: t?.ytId || t?.id || '',
-      url: t?.url || null,
-      cover: t?.cover || null,
-      bg: t?.bg || 'linear-gradient(135deg,#ff0000,#cc0000)',
-      source: 'youtube',
-      id: String(t?.id || t?.ytId || `${t?.title || ''}:${t?.artist || ''}`)
-    }))).filter((t) => t.ytId)
-  }
-  const hybrid = await searchHybridTracks(q, settings)
-  return sanitizeTrackList(hybrid?.tracks || [])
-}
-function renderResults(results) {
-  results = sanitizeTrackList(results)
-  const container = document.getElementById('search-results')
-  const meta = document.getElementById('search-results-meta')
-  const countEl = document.getElementById('results-count')
-  const srcEl = document.getElementById('results-source-label')
-  if (!results?.length) {
-    container.innerHTML = `<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg></div><p>РќРёС‡РµРіРѕ РЅРµ РЅР°Р№РґРµРЅРѕ</p><small>РџРѕРїСЂРѕР±СѓР№ РґСЂСѓРіРѕР№ Р·Р°РїСЂРѕСЃ РёР»Рё РёСЃС‚РѕС‡РЅРёРє</small></div>`
-    if (meta) meta.style.display = 'none'
-    return
-  }
-  queue = results; queueIndex = 0; queueScope = 'search'
-  if (meta) { meta.style.display = 'flex'; }
-  if (countEl) countEl.textContent = `${results.length} С‚СЂРµРєРѕРІ`
-  if (srcEl) srcEl.textContent = getSourceLabel()
-  container.innerHTML = ''
-  results.forEach((track, i) => {
-    const el = makeTrackEl(track, true, false)
-    el.addEventListener('click', () => { queueIndex=i; playTrackObj(track) })
-    container.appendChild(el)
-  })
-}
-
-function getSourceLabel() {
-  if (_lastSearchMode === 'spotify') return 'Spotify'
-  if (_lastSearchMode === 'soundcloud') return 'SoundCloud'
-  if (_lastSearchMode === 'audius') return 'Audius'
-  if (_lastSearchMode === 'youtube') return 'YouTube'
-  if (_lastSearchMode === 'yandex') return 'РЇРЅРґРµРєСЃ РњСѓР·С‹РєР°'
-  if (_lastSearchMode === 'vk') return 'Р’РљРѕРЅС‚Р°РєС‚Рµ'
-  if (_lastSearchMode === 'hitmo') return 'HitMo'
-  return 'Spotify в†’ SoundCloud в†’ Audius'
-}
-
-async function searchAudius(q) {
-  if (!window.api?.audiusSearch) throw new Error('Audius РґРѕСЃС‚СѓРїРµРЅ С‚РѕР»СЊРєРѕ РІ Electron РїСЂРёР»РѕР¶РµРЅРёРё')
-  const result = await window.api.audiusSearch(q)
-  if (!Array.isArray(result)) throw new Error('Audius: РЅРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РѕС‚РІРµС‚')
-  return result.map((t) => ({
-    title: t.title || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ',
-    artist: t.artist || 'вЂ”',
-    url: t.url || null,
-    cover: t.cover || null,
-    bg: t.bg || 'linear-gradient(135deg,#2dd4bf,#0ea5e9)',
-    source: 'audius',
-    id: t.id || `${t.title || ''}:${t.artist || ''}`
-  })).filter((t) => t.url)
-}
-
-// РІвЂќР‚РІвЂќР‚РІвЂќР‚ SOUNDCLOUD РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
-let _scAutoClientId = null
-
-async function getScClientId(manualId) {
-  if (manualId) return manualId
-  if (_scAutoClientId) return _scAutoClientId
-  if (window.api?.scFetchClientId) {
-    showToast('Р СџР С•Р В»РЎС“РЎвЂЎР В°РЎР‹ SoundCloud Client ID...')
-    const r = await window.api.scFetchClientId()
-    if (r.ok && r.clientId) { _scAutoClientId = r.clientId; return _scAutoClientId }
-    throw new Error('Р СњР Вµ РЎС“Р Т‘Р В°Р В»Р С•РЎРѓРЎРЉ Р С—Р С•Р В»РЎС“РЎвЂЎР С‘РЎвЂљРЎРЉ SC Client ID: ' + (r.error||''))
-  }
-  throw new Error('SoundCloud: Р Р…Р ВµРЎвЂљ Client ID РІР‚вЂќ РЎС“Р С”Р В°Р В¶Р С‘ Р Р† Р Р…Р В°РЎРѓРЎвЂљРЎР‚Р С•Р в„–Р С”Р В°РЎвЂ¦ РІС™в„ўРїС‘РЏ')
-}
-
-async function searchSoundCloud(q, manualClientId) {
-  const clientId = await getScClientId(manualClientId)
-  if (!window.api?.scSearch) throw new Error('SoundCloud СЃРµСЂРІРµСЂРЅС‹Р№ РїРѕРёСЃРє РЅРµРґРѕСЃС‚СѓРїРµРЅ')
-  const result = await window.api.scSearch(q, clientId)
-  if (!result.ok) {
-    if (result.expired && !manualClientId) {
-      _scAutoClientId = null
-      const freshId = await getScClientId(null)
-      const retry = await window.api.scSearch(q, freshId)
-      if (!retry.ok) throw new Error('SoundCloud: ' + retry.error)
-      return mapScTracks(retry.tracks, freshId)
-    }
-    throw new Error('SoundCloud: ' + result.error)
-  }
-  return mapScTracks(result.tracks, clientId)
-}
-
-async function mapScTracks(tracks, clientId) {
-  const results = []
-  for (const t of tracks) {
-    if (!t.streamable) continue
-    let transcodingUrl = null
-    if (t.media?.transcodings?.length > 0) {
-      const prog = t.media.transcodings.find(tr => tr.format?.protocol === 'progressive')
-      const tr = prog || t.media.transcodings[0]
-      if (tr) transcodingUrl = tr.url
-    }
-    results.push({
-      title: t.title, artist: t.user?.username || 'РІР‚вЂќ',
-      url: t.stream_url ? `${t.stream_url}?client_id=${clientId}` : null,
-      scTranscoding: transcodingUrl, scClientId: clientId,
-      cover: t.artwork_url ? t.artwork_url.replace('large','t300x300') : null,
-      bg: 'linear-gradient(135deg,#f26f23,#ff5500)', source: 'soundcloud', id: String(t.id)
-    })
-    if (results.length >= 20) break
-  }
-  return results
-}
-
-// РІвЂќР‚РІвЂќР‚РІвЂќР‚ VK РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
-async function searchVK(q, token) {
-  if (!token) throw new Error('РЈРєР°Р¶Рё С‚РѕРєРµРЅ Р’РљРѕРЅС‚Р°РєС‚Рµ РІ РЅР°СЃС‚СЂРѕР№РєР°С…')
-  if (window.api?.vkSearch) {
-    let result
-    try {
-      result = await window.api.vkSearch(q, token, Boolean(getSettings().vkSeleniumBridge))
-    } catch (err) {
-      throw new Error(normalizeInvokeError(err))
-    }
-    if (!Array.isArray(result)) throw new Error('VK: unexpected response')
-    return result
-  }
-  const res = await fetch(`https://api.vk.com/method/audio.search?q=${encodeURIComponent(q)}&access_token=${token}&v=5.131&count=20`)
-  if (!res.ok) throw new Error(`VK error ${res.status}`)
-  const data = await res.json()
-  if (data.error) {
-    const c = data.error.error_code
-    if (c===5) throw new Error('VK: С‚РѕРєРµРЅ РЅРµРґРµР№СЃС‚РІРёС‚РµР»РµРЅ вЂ” РѕР±РЅРѕРІРё РІ РЅР°СЃС‚СЂРѕР№РєР°С…')
-    if (c===15) throw new Error('VK: РЅСѓР¶РµРЅ С‚РѕРєРµРЅ Kate Mobile')
-    throw new Error('VK: ' + data.error.error_msg)
-  }
-  return (data.response?.items||[]).filter(t=>t?.url).map(t => ({
-    title: t.title||'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ', artist: t.artist||'вЂ”', url: t.url,
-    cover: t.album?.thumb?.photo_300||null, bg: 'linear-gradient(135deg,#4680c2,#5b9bd5)', source:'vk', id:String(t.id)
-  }))
-}
-
-// РІвЂќР‚РІвЂќР‚РІвЂќР‚ HITMO РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
-async function searchHitmo(q) {
-  if (!window.api?.hitmoSearch) throw new Error('Hitmo СЃРµСЂРІРµСЂРЅС‹Р№ РїРѕРёСЃРє РЅРµРґРѕСЃС‚СѓРїРµРЅ')
-  const result = await window.api.hitmoSearch(q)
-  if (!result.ok) throw new Error('Hitmo: ' + (result.error || 'РѕС€РёР±РєР° РїРѕРёСЃРєР°'))
-  return result.tracks
-}
-
-function parseHitmoResults(html) {
-  const parser = new DOMParser()
-  const doc = parser.parseFromString(html, 'text/html')
-  const tracks = []
-
-  // Hitmo uses .play-track or similar list items
-  const items = doc.querySelectorAll('.song-item, .track-item, .music-item, [data-url], [data-mp3]')
-
-  items.forEach(item => {
-    // Try to get mp3 url
-    const audioUrl = item.getAttribute('data-mp3') || item.getAttribute('data-url') ||
-      item.querySelector('[data-mp3]')?.getAttribute('data-mp3') ||
-      item.querySelector('a[href$=".mp3"]')?.href
-
-    // Title and artist
-    const titleEl = item.querySelector('.song-title, .track-name, .title, h3, h4, .name')
-    const artistEl = item.querySelector('.song-artist, .artist, .performer, .author')
-
-    // Cover image
-    const imgEl = item.querySelector('img[src], [data-src]')
-    const coverUrl = imgEl?.src || imgEl?.getAttribute('data-src') || null
-
-    if (!audioUrl && !titleEl) return
-
-    const rawTitle = titleEl?.textContent?.trim() || item.getAttribute('data-title') || 'Р вЂР ВµР В· Р Р…Р В°Р В·Р Р†Р В°Р Р…Р С‘РЎРЏ'
-    const rawArtist = artistEl?.textContent?.trim() || item.getAttribute('data-artist') || 'РІР‚вЂќ'
-
-    tracks.push({
-      title: rawTitle,
-      artist: rawArtist,
-      url: audioUrl || null,
-      cover: coverUrl,
-      bg: 'linear-gradient(135deg,#ff2e88,#a020f0)',
-      source: 'hitmo',
-      id: audioUrl || (rawTitle + rawArtist)
-    })
-
-    if (tracks.length >= 25) return
-  })
-
-  // If selector didn't find items, try a more generic approach
-  if (tracks.length === 0) {
-    // Try JSON data embedded in page
-    const scripts = doc.querySelectorAll('script')
-    scripts.forEach(s => {
-      const text = s.textContent
-      // look for track list JSON
-      const jsonMatch = text.match(/tracks\s*[:=]\s*(\[.*?\])/s) || text.match(/trackList\s*[:=]\s*(\[.*?\])/s)
-      if (jsonMatch) {
-        try {
-          const data = JSON.parse(jsonMatch[1])
-          data.forEach(t => {
-            tracks.push({
-              title: t.title || t.name || 'Р вЂР ВµР В· Р Р…Р В°Р В·Р Р†Р В°Р Р…Р С‘РЎРЏ',
-              artist: t.artist || t.performer || 'РІР‚вЂќ',
-              url: t.url || t.mp3 || t.src || null,
-              cover: t.cover || t.image || t.img || null,
-              bg: 'linear-gradient(135deg,#ff2e88,#a020f0)',
-              source: 'hitmo',
-              id: t.id || (t.title + t.artist)
-            })
-          })
-        } catch(e) {}
-      }
-    })
-  }
-
-  if (tracks.length === 0) {
-    throw new Error('Hitmo: Р Р…Р С‘РЎвЂЎР ВµР С–Р С• Р Р…Р Вµ Р Р…Р В°Р в„–Р Т‘Р ВµР Р…Р С• Р С‘Р В»Р С‘ РЎРѓРЎвЂљРЎР‚РЎС“Р С”РЎвЂљРЎС“РЎР‚Р В° РЎРѓРЎвЂљРЎР‚Р В°Р Р…Р С‘РЎвЂ РЎвЂ№ Р С‘Р В·Р СР ВµР Р…Р С‘Р В»Р В°РЎРѓРЎРЉ. Р СџР С•Р С—РЎР‚Р С•Р В±РЎС“Р в„– YouTube.')
-  }
-
-  return tracks
-}
-
-// РІвЂќР‚РІвЂќР‚РІвЂќР‚ YOUTUBE РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
-let _ytInstanceCache = null
-
-async function searchYouTube(q) {
-  if (!window.api?.youtubeSearch) throw new Error('YouTube Р Т‘Р С•РЎРѓРЎвЂљРЎС“Р С—Р ВµР Р… РЎвЂљР С•Р В»РЎРЉР С”Р С• Р Р† Electron Р С—РЎР‚Р С‘Р В»Р С•Р В¶Р ВµР Р…Р С‘Р С‘')
-  const result = await window.api.youtubeSearch(q)
-  if (!result.ok) throw new Error(result.error || 'YouTube: Р С•РЎв‚¬Р С‘Р В±Р С”Р В° Р С—Р С•Р С‘РЎРѓР С”Р В°')
-  if (!Array.isArray(result.tracks) || result.tracks.length === 0) return []
-  _ytInstanceCache = result.instance
-  const tracks = result.tracks
-  if (window.api?.youtubePrefetchStreams) {
-    const ids = tracks.slice(0, 8).map(t => t.ytId).filter(Boolean)
-    if (ids.length) window.api.youtubePrefetchStreams(ids, _ytInstanceCache).catch(() => {})
-  }
-  return tracks
-}
-
-function setYtDlpStatus(text, sub = '') {
-  const el = document.getElementById('ytdlp-status')
-  const subEl = document.getElementById('ytdlp-sub')
-  if (el) el.textContent = text
-  if (subEl) subEl.textContent = sub || ''
-}
-
-async function refreshYtDlpStatus() {
-  if (!window.api?.ytdlpInfo) return
-  try {
-    const info = await window.api.ytdlpInfo()
-    if (!info?.ok) {
-      setYtDlpStatus('РћС€РёР±РєР° РїСЂРѕРІРµСЂРєРё', sanitizeDisplayText(info?.error || 'unknown'))
-      return
-    }
-    const p = info.resolved?.path
-    const v = info.resolved?.version
-    if (p) setYtDlpStatus(`Р“РѕС‚РѕРІ: ${v || 'РІРµСЂСЃРёСЏ РЅРµРёР·РІРµСЃС‚РЅР°'}`, p)
-    else setYtDlpStatus('РќРµ РЅР°Р№РґРµРЅ', 'РќР°Р¶РјРё вЂњРћР±РЅРѕРІРёС‚СЊ yt-dlpвЂќ РёР»Рё СѓСЃС‚Р°РЅРѕРІРё: winget install yt-dlp.yt-dlp')
-  } catch (e) {
-    setYtDlpStatus('РћС€РёР±РєР° РїСЂРѕРІРµСЂРєРё', sanitizeDisplayText(e?.message || String(e)))
-  }
-}
-
-async function updateYtDlpNow() {
-  const btn = document.getElementById('ytdlp-update-btn')
-  if (btn) { btn.disabled = true; btn.textContent = 'РћР±РЅРѕРІР»СЏСЋ...' }
-  try {
-    if (!window.api?.ytdlpUpdate) throw new Error('РќРµРґРѕСЃС‚СѓРїРЅРѕ (С‚РѕР»СЊРєРѕ РІ Electron)')
-    const r = await window.api.ytdlpUpdate()
-    if (!r?.ok) throw new Error(r?.error || 'update failed')
-    const v = r?.info?.resolved?.version || r?.info?.managed?.version || r?.result?.version || null
-    showToast(v ? `yt-dlp РѕР±РЅРѕРІР»С‘РЅ: ${v}` : 'yt-dlp РѕР±РЅРѕРІР»С‘РЅ')
-  } catch (e) {
-    showToast('yt-dlp: ' + sanitizeDisplayText(e?.message || String(e)), true)
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'РћР±РЅРѕРІРёС‚СЊ yt-dlp' }
-    refreshYtDlpStatus().catch(() => {})
-  }
-}
-
-// РІвЂќР‚РІвЂќР‚РІвЂќР‚ SPOTIFY РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
-async function searchSpotify(q, token) {
-  if (!token) throw new Error('Р Р€Р С”Р В°Р В¶Р С‘ Spotify Bearer РЎвЂљР С•Р С”Р ВµР Р… Р Р† Р Р…Р В°РЎРѓРЎвЂљРЎР‚Р С•Р в„–Р С”Р В°РЎвЂ¦ РІС™в„ўРїС‘РЏ')
-  const res = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track&limit=20&market=RU`, {
-    headers: { 'Authorization': `Bearer ${token}` }
-  })
-  if (res.status===401) throw new Error('Spotify: РЎвЂљР С•Р С”Р ВµР Р… Р С‘РЎРѓРЎвЂљРЎвЂР С” РІР‚вЂќ Р С•Р В±Р Р…Р С•Р Р†Р С‘ Р Р† Р Р…Р В°РЎРѓРЎвЂљРЎР‚Р С•Р в„–Р С”Р В°РЎвЂ¦ РІС™в„ўРїС‘РЏ')
-  if (res.status===403) throw new Error('Spotify: Р Р…Р ВµРЎвЂљ Р Т‘Р С•РЎРѓРЎвЂљРЎС“Р С—Р В° РІС™в„ўРїС‘РЏ')
-  if (!res.ok) throw new Error(`Spotify Р С•РЎв‚¬Р С‘Р В±Р С”Р В° ${res.status}`)
-  const data = await res.json()
-  return (data.tracks?.items||[]).map(t => ({
-    title: t.name, artist: t.artists?.map(a=>a.name).join(', ')||'РІР‚вЂќ',
-    cover: t.album?.images?.[0]?.url||null, url: null,
-    bg: 'linear-gradient(135deg,#1db954,#1aa34a)',
-    source: 'spotify', id: t.id, spotifyId: t.id
-  }))
-}
-
-// РІвЂќР‚РІвЂќР‚РІвЂќР‚ LIKES РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
-function getLiked() { return JSON.parse(localStorage.getItem('flow_liked')) || [] }
-function isLiked(track) { return getLiked().some(t => t.id===track.id && t.source===track.source) }
-
-function likeTrack(track) {
-  let liked = getLiked()
-  if (isLiked(track)) {
-    liked = liked.filter((t) => !(t.id === track.id && t.source === track.source))
-    showToast('Р Р€Р В±РЎР‚Р В°Р Р…Р С• Р С‘Р В· Р В»РЎР‹Р В±Р С‘Р СРЎвЂ№РЎвЂ¦')
-  } else {
-    liked.push(track)
-    showToast('Р вЂќР С•Р В±Р В°Р Р†Р В»Р ВµР Р…Р С• Р Р† Р В»РЎР‹Р В±Р С‘Р СРЎвЂ№Р Вµ РІв„ўТђ')
-  }
-  localStorage.setItem('flow_liked', JSON.stringify(liked))
-  syncLikeButtonsInVisibleLists()
-  updatePlayerLikeBtn()
-  requestAnimationFrame(() => {
-    renderLiked()
-  })
-}
-
-function syncLikeButtonsInVisibleLists() {
-  document.querySelectorAll('.track-like[data-track-json]').forEach((btn) => {
-    let track = null
-    try { track = JSON.parse(btn.getAttribute('data-track-json') || '{}') } catch {}
-    if (!track) return
-    const liked = isLiked(track)
-    btn.classList.toggle('liked', liked)
-    btn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE
-  })
-}
-
-function likeCurrentTrack() { if (currentTrack) likeTrack(currentTrack) }
-
-function updatePlayerLikeBtn() {
-  const btn = document.getElementById('player-like-btn'); if (!btn||!currentTrack) return
-  const liked = isLiked(currentTrack)
-  btn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE
-  btn.classList.toggle('liked', liked)
-  const pmBtn = document.getElementById('pm-like-btn')
-  const pmCoverBtn = document.getElementById('pm-cover-like-btn')
-  if (pmBtn) { pmBtn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; pmBtn.classList.toggle('liked', liked) }
-  if (pmCoverBtn) { pmCoverBtn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; pmCoverBtn.classList.toggle('liked', liked) }
-}
-
-let _likedRenderToken = 0
-function renderLiked() {
-  const token = ++_likedRenderToken
-  const liked = getLiked()
-  document.body.classList.toggle('flow-heavy-liked', liked.length >= 220)
-  const container = document.getElementById('liked-list'); if (!container) return
-  if (!liked.length) { container.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.35-9.5-8A5.5 5.5 0 0 1 12 5.1 5.5 5.5 0 0 1 21.5 13c-2.5 3.65-9.5 8-9.5 8Z"/></svg></div><p>РўС‹ РµС‰Рµ РЅРµ Р»Р°Р№РєРЅСѓР» РЅРё РѕРґРЅРѕРіРѕ С‚СЂРµРєР°</p></div>`; return }
-  container.innerHTML = ''
-  let i = 0
-  const chunkSize = 18
-  const renderChunk = () => {
-    if (token !== _likedRenderToken) return
-    const fragment = document.createDocumentFragment()
-    for (let n = 0; n < chunkSize && i < liked.length; n++, i++) {
-      const rowIndex = i
-      const track = liked[rowIndex]
-      const el = makeTrackEl(track, true, false)
-      el.addEventListener('click', () => {
-        queue = liked.slice()
-        queueIndex = rowIndex
-        queueScope = 'liked'
-        playTrackObj(track)
-      })
-      fragment.appendChild(el)
-    }
-    container.appendChild(fragment)
-    if (i < liked.length) setTimeout(renderChunk, 0)
-  }
-  renderChunk()
-}
-
-// РІвЂќР‚РІвЂќР‚РІвЂќР‚ PLAYLISTS РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
-function getPlaylists() { return JSON.parse(localStorage.getItem('flow_playlists')) || [] }
-function savePlaylists(pls) { localStorage.setItem('flow_playlists', JSON.stringify(pls)) }
-function normalizePlaylist(pl) {
-  const source = pl && typeof pl === 'object' ? pl : {}
-  return {
-    name: String(source.name || 'Playlist').trim() || 'Playlist',
-    description: String(source.description || '').trim(),
-    coverData: source.coverData || null,
-    tracks: Array.isArray(source.tracks) ? source.tracks : [],
-  }
-}
-
-function createPlaylist(nameFromUi = '') {
-  const name = String(nameFromUi || '').trim()
-  if (!name) return openLibraryActionModal('create')
-  const pls = getPlaylists()
-  pls.push(normalizePlaylist({ name: name.trim(), tracks: [] }))
-  savePlaylists(pls)
-  renderPlaylists()
-}
-window.createPlaylist = createPlaylist
-
-function deletePlaylist(idx) {
-  if (!confirm('Р Р€Р Т‘Р В°Р В»Р С‘РЎвЂљРЎРЉ Р С—Р В»Р ВµР в„–Р В»Р С‘РЎРѓРЎвЂљ?')) return
-  const pls = getPlaylists(); pls.splice(idx,1); savePlaylists(pls); renderPlaylists()
-}
-
-function getTrackDedupeKey(track = {}) {
-  const source = String(track.source || '').trim().toLowerCase()
-  const id = String(track.id || track.ytId || track.url || '').trim().toLowerCase()
-  if (source && id) return `${source}:${id}`
-  const artist = String(track.artist || '').trim().toLowerCase()
-  const title = String(track.title || '').trim().toLowerCase()
-  return `${artist}:${title}`.replace(/\s+/g, ' ')
-}
-
-function removeOpenPlaylistDuplicates() {
-  const idx = Number(openPlaylistIndex)
-  const pls = getPlaylists().map(normalizePlaylist)
-  const pl = pls[idx]
-  if (!pl) return
-  const seen = new Set()
-  const nextTracks = []
-  let removed = 0
-  ;(pl.tracks || []).forEach((track) => {
-    const key = getTrackDedupeKey(track)
-    if (key && seen.has(key)) {
-      removed++
-      return
-    }
-    if (key) seen.add(key)
-    nextTracks.push(track)
-  })
-  if (!removed) return showToast('Р”СѓР±Р»РµР№ РІ РїР»РµР№Р»РёСЃС‚Рµ РЅРµС‚')
-  pls[idx].tracks = nextTracks
-  savePlaylists(pls)
-  openPlaylist(idx)
-  renderPlaylists()
-  showToast(`РЈРґР°Р»РµРЅРѕ РґСѓР±Р»РµР№: ${removed}`)
-}
-
-function openPlaylist(idx) {
-  openPlaylistIndex = idx
-  const pl = normalizePlaylist(getPlaylists()[idx])
-  if (!pl) return
-  document.body.classList.toggle('flow-heavy-playlist', (pl.tracks || []).length >= 180)
-  const playlistCover = sanitizeMediaByGifMode(pl.coverData || '', 'playlist')
-  document.getElementById('playlist-view-name').textContent = pl.name
-  const metaEl = document.getElementById('playlist-view-meta')
-  if (metaEl) metaEl.textContent = pl.description || `${pl.tracks.length} С‚СЂРµРєРѕРІ`
-  const coverEl = document.getElementById('playlist-view-cover')
-  if (coverEl) {
-    coverEl.style.backgroundImage = playlistCover ? `url(${playlistCover})` : ''
-    coverEl.innerHTML = playlistCover ? '' : '<svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'
-  }
-  document.getElementById('playlists-list').classList.add('hidden')
-  document.querySelector('.section-header')?.classList.add('hidden')
-  const viewEl = document.getElementById('playlist-view')
-  if (viewEl) {
-    viewEl.classList.remove('hidden')
-    viewEl.classList.remove('is-opening')
-    requestAnimationFrame(() => viewEl.classList.add('is-opening'))
-  }
-  const container = document.getElementById('playlist-tracks')
-  if (!pl.tracks.length) { container.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div><p>РџР»РµР№Р»РёСЃС‚ РїСѓСЃС‚</p></div>`; return }
-  container.innerHTML=''
-  const token = ++_openPlaylistTrackRenderToken
-  let cursor = 0
-  const chunkSize = pl.tracks.length > 250 ? 28 : 18
-  const renderChunk = () => {
-    if (token !== _openPlaylistTrackRenderToken) return
-    const fragment = document.createDocumentFragment()
-    for (let n = 0; n < chunkSize && cursor < pl.tracks.length; n++, cursor++) {
-      const trackIndex = cursor
-      const track = pl.tracks[trackIndex]
-      const row = document.createElement('div')
-      row.className = 'playlist-track-row'
-      row.dataset.idx = String(trackIndex)
-      row.draggable = true
-      row.addEventListener('dragover', (e) => { e.preventDefault(); row.classList.add('drag-over') })
-      row.addEventListener('dragleave', () => row.classList.remove('drag-over'))
-      row.addEventListener('drop', (e) => {
-        e.preventDefault()
-        row.classList.remove('drag-over')
-        const toIndex = Number(row.dataset.idx)
-        reorderPlaylistTrack(openPlaylistIndex, _playlistDragIndex, toIndex)
-      })
-      row.addEventListener('dragend', () => {
-        _playlistDragIndex = -1
-        row.classList.remove('drag-over')
-        row.classList.remove('dragging')
-      })
-      const handle = document.createElement('button')
-      handle.className = 'playlist-track-handle'
-      handle.title = 'РџРµСЂРµС‚Р°С‰РёС‚СЊ'
-      handle.innerHTML = '<span>в‹®в‹®</span>'
-      handle.addEventListener('dragstart', (e) => {
-        _playlistDragIndex = trackIndex
-        row.classList.add('dragging')
-        if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
-      })
-      const el = makeTrackEl(track, false, false)
-      el.classList.add('playlist-track-card')
-      el.addEventListener('click', () => {
-        queue = pl.tracks.slice()
-        queueIndex = trackIndex
-        queueScope = 'playlist'
-        playTrackObj(track)
-      })
-      const actions = document.createElement('div')
-      actions.className = 'playlist-track-actions'
-      actions.innerHTML = `
-        <button class="playlist-track-action" title="Р РµРґР°РєС‚РёСЂРѕРІР°С‚СЊ С‚СЂРµРє">вњЋ</button>
-        <button class="playlist-track-action danger" title="РЈРґР°Р»РёС‚СЊ РёР· РїР»РµР№Р»РёСЃС‚Р°">вњ•</button>
-      `
-      actions.children[0].addEventListener('click', (event) => {
-        event.preventDefault()
-        event.stopPropagation()
-        editPlaylistTrack(openPlaylistIndex, trackIndex)
-      })
-      actions.children[1].addEventListener('click', (event) => {
-        event.preventDefault()
-        event.stopPropagation()
-        removeTrackFromPlaylist(openPlaylistIndex, trackIndex)
-      })
-      row.appendChild(handle)
-      row.appendChild(el)
-      row.appendChild(actions)
-      fragment.appendChild(row)
-    }
-    container.appendChild(fragment)
-    if (cursor < pl.tracks.length) setTimeout(renderChunk, 0)
-  }
-  requestAnimationFrame(renderChunk)
-}
-
-function closePlaylist() {
-  openPlaylistIndex=null
-  document.body.classList.remove('flow-heavy-playlist')
-  _openPlaylistTrackRenderToken++
-  const viewEl = document.getElementById('playlist-view')
-  if (viewEl) {
-    viewEl.classList.add('hidden')
-    viewEl.classList.remove('is-opening')
-  }
-  document.getElementById('playlists-list').classList.remove('hidden')
-  document.querySelector('.section-header')?.classList.remove('hidden')
-}
-
-function normalizeImportQuery(title, artist) {
-  const rawTitle = String(title || '').replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim()
-  const t = smartCleaning.smartCleanTrackTitle ? smartCleaning.smartCleanTrackTitle(rawTitle) : rawTitle
-  const a = String(artist || '').replace(/\s+/g, ' ').trim()
-  return `${a} ${t}`.trim()
-}
-
-function buildImportQueries(title, artist) {
-  const t = String(title || '').trim()
-  const a = String(artist || '').trim()
-  const base = normalizeImportQuery(t, a)
-  const variants = [
-    base,
-    `${a} - ${t}`.trim(),
-    `${t} ${a}`.trim(),
-    t,
-  ].filter(Boolean)
-  return [...new Set(variants)]
-}
-
-function cleanImportText(value) {
-  return String(value || '')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&amp;/g, '&')
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-function importDelay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-let _importProgressOpenedAt = 0
-async function closeImportProgressSafe(minVisibleMs = 900) {
-  const elapsed = Date.now() - Number(_importProgressOpenedAt || 0)
-  if (elapsed < minVisibleMs) await importDelay(minVisibleMs - elapsed)
-  closeImportProgress()
-}
-
-async function processPlaylistImport(trackList, imported = {}) {
-  const srcTracks = Array.isArray(trackList) ? trackList : []
-  const maxTracks = Math.min(srcTracks.length, 120)
-  const collected = []
-  const notFound = []
-  const preferYandex = String(imported?.service || '').trim().toLowerCase() === 'yandex'
-  openImportProgress(maxTracks)
-  try {
-    for (let i = 0; i < maxTracks; i++) {
-      const it = srcTracks[i] || {}
-      const directOriginalId = String(it?.original_id || it?.originalId || '').trim()
-      const queries = buildImportQueries(it.title, it.artist)
-      const query = queries[0] || ''
-      updateImportProgress(i, maxTracks, `РС‰Сѓ: ${it.artist || 'вЂ”'} - ${it.title || 'вЂ”'}${notFound.length ? ` | РЅРµ РЅР°Р№РґРµРЅРѕ: ${notFound.slice(-3).join('; ')}` : ''}`)
-      if (preferYandex && directOriginalId) {
-        collected.push({
-          title: it.title || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ',
-          artist: it.artist || 'вЂ”',
-          duration: Number(it?.duration || 0) || null,
-          cover: it?.cover || null,
-          source: 'yandex',
-          id: directOriginalId,
-        })
-        updateImportProgress(i + 1, maxTracks, `РРјРїРѕСЂС‚: ${i + 1} РёР· ${maxTracks}${notFound.length ? ` | РЅРµ РЅР°Р№РґРµРЅРѕ: ${notFound.slice(-3).join('; ')}` : ''}`)
-        await importDelay(180)
-        continue
-      }
-      if (!query) {
-        notFound.push(`Track ${i + 1}`)
-        continue
-      }
-      try {
-        let first = null
-        const settings = getSettings()
-        for (const q of queries) {
-          // 1) Same chain as regular search bar.
-          const hybrid = await searchHybridTracks(q, settings).catch(() => ({ tracks: [] }))
-          const found = sanitizeTrackList(hybrid?.tracks || [])
-          if (Array.isArray(found) && found.length) {
-            first = found[0]
-            break
-          }
-          // 2) Direct YouTube fallback (often more forgiving for imports).
-          if (window.api?.youtubeSearch) {
-            const yt = await window.api.youtubeSearch(q).catch(() => [])
-            const ytSafe = sanitizeTrackList(Array.isArray(yt) ? yt : [])
-            if (ytSafe.length) {
-              first = ytSafe[0]
-              break
-            }
-          }
-        }
-        if (first) {
-          const picked = Object.assign({}, first, {
-            title: it.title || first.title,
-            artist: it.artist || first.artist
-          })
-          if (preferYandex && directOriginalId && String(picked.source || '').toLowerCase() === 'yandex') {
-            picked.id = directOriginalId
-          }
-          collected.push(picked)
-        } else {
-          const row = `${it.artist || 'вЂ”'} - ${it.title || 'вЂ”'}`
-          notFound.push(row)
-          console.warn('РќРµ СѓРґР°Р»РѕСЃСЊ РЅР°Р№С‚Рё:', row)
-        }
-      } catch (trackErr) {
-        const row = `${it.artist || 'вЂ”'} - ${it.title || 'вЂ”'}`
-        notFound.push(row)
-        console.warn('РћС€РёР±РєР° РїРѕРёСЃРєР°, РїСЂРѕРїСѓСЃРє:', row, trackErr?.message || trackErr)
-      }
-      updateImportProgress(i + 1, maxTracks, `РРјРїРѕСЂС‚: ${i + 1} РёР· ${maxTracks}${notFound.length ? ` | РЅРµ РЅР°Р№РґРµРЅРѕ: ${notFound.slice(-3).join('; ')}` : ''}`)
-      await importDelay(300 + Math.floor(Math.random() * 201))
-    }
-    const pls = getPlaylists()
-    const name = `${imported.name || 'Imported Playlist'} [${imported.service || 'import'}]`
-    const importedCover = String(imported?.cover || '').trim()
-    const fallbackCover = String(collected.find((t) => t?.cover)?.cover || '').trim()
-    pls.push(normalizePlaylist({ name, coverData: importedCover || fallbackCover || null, tracks: collected }))
-    savePlaylists(pls)
-    renderPlaylists()
-    openPage('library')
-    if (notFound.length) {
-      const report = notFound.slice(0, 12).join('; ')
-      updateImportProgress(maxTracks, maxTracks, `Р“РѕС‚РѕРІРѕ. РќРµ РЅР°Р№РґРµРЅРѕ ${notFound.length}: ${report}${notFound.length > 12 ? '...' : ''}`)
-      await importDelay(1600)
-    }
-  } finally {
-    closeImportProgress()
-  }
-  return { added: collected.length, missed: notFound.length, total: maxTracks }
-}
-
-function collectImportTracksDeep(value, out = [], limit = 500) {
-  if (out.length >= limit || value == null) return out
-  if (Array.isArray(value)) {
-    if (
-      value.length >= 5
-      && Number.isFinite(Number(value[0]))
-      && Number.isFinite(Number(value[1]))
-      && typeof value[3] === 'string'
-      && typeof value[4] === 'string'
-    ) {
-      out.push({
-        title: cleanImportText(value[3]),
-        artist: cleanImportText(value[4]),
-        duration: Number(value[5] || 0) || null,
-        original_id: `${value[1]}_${value[0]}`,
-      })
-    }
-    for (const item of value) {
-      if (out.length >= limit) break
-      collectImportTracksDeep(item, out, limit)
-    }
-    return out
-  }
-  if (typeof value === 'object') {
-    const title = value.title || value.name
-    const artist = value.artist || value.performer || value.author || value.subtitle
-    if (title && artist) {
-      out.push({
-        title: cleanImportText(title),
-        artist: cleanImportText(artist),
-        duration: Number(value.duration || value.durationSec || 0) || null,
-        original_id: value.original_id || value.originalId || value.id || '',
-      })
-    }
-    for (const item of Object.values(value)) {
-      if (out.length >= limit) break
-      collectImportTracksDeep(item, out, limit)
-    }
-  }
-  return out
-}
-
-function parseTrackRowsFromText(text) {
-  const raw = String(text || '').trim()
-  if (!raw) return []
-  try {
-    const parsed = JSON.parse(raw.replace(/^<!--/, '').trim())
-    const jsonTracks = collectImportTracksDeep(parsed)
-    if (jsonTracks.length) return jsonTracks
-  } catch {}
-
-  const rows = []
-  const lines = raw.split(/\r?\n/)
-  for (const line of lines) {
-    let value = line
-      .replace(/^\s*\d+[\).:-]\s*/, '')
-      .replace(/\s+/g, ' ')
-      .trim()
-    if (!value) continue
-    value = value.replace(/^["'`]+|["'`]+$/g, '').trim()
-    const parts = value.split(/\s+(?:-|вЂ“|вЂ”|\||вЂў)\s+/)
-    let artist = ''
-    let title = ''
-    if (parts.length >= 2) {
-      artist = parts.shift().trim()
-      title = parts.join(' - ').trim()
-    } else {
-      const comma = value.split(/\s*,\s*/)
-      if (comma.length >= 2 && comma[0].length <= 80) {
-        artist = comma.shift().trim()
-        title = comma.join(', ').trim()
-      } else {
-        title = value
-      }
-    }
-    if (!title) continue
-    rows.push({ artist: artist || '', title })
-  }
-  const seen = new Set()
-  return rows.filter((item) => {
-    const key = `${String(item.artist || '').toLowerCase()}::${String(item.title || '').toLowerCase()}`
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  })
-}
-
-function openTextPlaylistImportModal() {
-  const modal = document.getElementById('text-import-modal')
-  const input = document.getElementById('text-import-input')
-  const name = document.getElementById('text-import-name')
-  if (!modal || !input) return showToast('РћРєРЅРѕ РёРјРїРѕСЂС‚Р° С‚РµРєСЃС‚РѕРј РЅРµ РЅР°Р№РґРµРЅРѕ', true)
-  input.value = ''
-  if (name) name.value = ''
-  modal.classList.remove('hidden')
-  requestAnimationFrame(() => input.focus())
-}
-window.openTextPlaylistImportModal = openTextPlaylistImportModal
-
-function closeTextPlaylistImportModal() {
-  document.getElementById('text-import-modal')?.classList.add('hidden')
-}
-window.closeTextPlaylistImportModal = closeTextPlaylistImportModal
-
-async function importPlaylistFromText(text, name = '') {
-  const tracks = parseTrackRowsFromText(text)
-  if (!tracks.length) {
-    showToast('РќРµ РЅР°С€С‘Р» СЃС‚СЂРѕРє СЃ artist/title', true)
-    return
-  }
-  showToast(`РќР°С€С‘Р» СЃС‚СЂРѕРє: ${tracks.length}. Р—Р°РїСѓСЃРєР°СЋ РїРѕРёСЃРє Flow...`)
-  const stats = await processPlaylistImport(tracks, {
-    name: name || 'VK Artist Title',
-    service: 'text',
-  })
-  showToast(`РРјРїРѕСЂС‚ С‚РµРєСЃС‚РѕРј Р·Р°РІРµСЂС€РµРЅ. Р”РѕР±Р°РІР»РµРЅРѕ ${stats.added}, РЅРµ РЅР°Р№РґРµРЅРѕ ${stats.missed}`)
-}
-window.importPlaylistFromText = importPlaylistFromText
-
-async function submitTextPlaylistImportModal() {
-  const input = document.getElementById('text-import-input')
-  const name = document.getElementById('text-import-name')
-  const text = String(input?.value || '').trim()
-  if (!text) return showToast('Р’СЃС‚Р°РІСЊ СЃРїРёСЃРѕРє С‚СЂРµРєРѕРІ', true)
-  closeTextPlaylistImportModal()
-  await importPlaylistFromText(text, String(name?.value || '').trim()).catch((err) => {
-    showToast(`РРјРїРѕСЂС‚ С‚РµРєСЃС‚РѕРј: ${sanitizeDisplayText(err?.message || String(err))}`, true)
-  })
-}
-window.submitTextPlaylistImportModal = submitTextPlaylistImportModal
-
-async function importPlaylistFromLink(urlFromUi = '') {
-  showToast('РћС‚РєСЂС‹РІР°СЋ РёРјРїРѕСЂС‚ РїР»РµР№Р»РёСЃС‚Р°...')
-  const url = String(urlFromUi || '').trim()
-  if (!url) return openLibraryActionModal('import')
-  if (!window.api?.importPlaylistLink) {
-    showToast('РРјРїРѕСЂС‚ РґРѕСЃС‚СѓРїРµРЅ С‚РѕР»СЊРєРѕ РІ Electron', true)
-    return
-  }
-  const settings = getSettings()
-  const isYandexLink = /(^|\/\/)(music\.)?yandex\.[^/]+\/users\/[^/]+\/playlists\/[^/?#]+/i.test(url)
-  if (isYandexLink && !settings.yandexToken) {
-    showToast('Р”Р»СЏ РёРјРїРѕСЂС‚Р° РЇРЅРґРµРєСЃ РњСѓР·С‹РєРё РЅСѓР¶РµРЅ Р°РєС‚РёРІРЅС‹Р№ OAuth token', true)
-    openPage('settings')
-    switchSettingsTab('sources')
-    setTimeout(() => document.getElementById('ym-token-val')?.focus(), 120)
-    return
-  }
-  showToast('РРјРїРѕСЂС‚РёСЂСѓСЋ РїР»РµР№Р»РёСЃС‚...')
-  openImportProgress(0)
-  _importProgressOpenedAt = Date.now()
-  setImportProgressIndeterminate(true)
-  const isVkLink = /(^|\/\/)(m\.)?vk\.com\//i.test(url)
-  updateImportProgress(0, 0, isVkLink ? 'РћС‚РїСЂР°РІР»СЏСЋ VK РїР»РµР№Р»РёСЃС‚ РЅР° Р Р¤ СЃРµСЂРІРµСЂ Рё РїРѕР»СѓС‡Р°СЋ СЃРїРёСЃРѕРє С‚СЂРµРєРѕРІ...' : (isYandexLink ? 'Р§РёС‚Р°СЋ РїР»РµР№Р»РёСЃС‚ РЇРЅРґРµРєСЃ РњСѓР·С‹РєРё РїРѕ OAuth token...' : 'Р Р°Р·Р±РёСЂР°СЋ СЃСЃС‹Р»РєСѓ Рё РїРѕР»СѓС‡Р°СЋ СЃРїРёСЃРѕРє С‚СЂРµРєРѕРІ...'))
-  const imported = await window.api.importPlaylistLink(url.trim(), {
-    spotify: settings.spotifyToken || '',
-    yandex: settings.yandexToken || '',
-    vk: isVkLink ? getCurrentVkTokenForImport() : (settings.vkToken || ''),
-    serverBaseUrl: settings.proxyBaseUrl || '',
-    allowVkSeleniumBridge: Boolean(settings.vkSeleniumBridge),
-  }).catch((e) => ({ ok: false, error: e?.message || String(e) }))
-  setImportProgressIndeterminate(false)
-
-  if (!imported?.ok) {
-    const errorText = sanitizeDisplayText(imported?.error || 'РѕС€РёР±РєР°')
-    const needsVkAuth = isVkLink && /auth_required|access_token|user authorization|authorization/i.test(errorText)
-    if (needsVkAuth) {
-      updateImportProgress(0, 0, 'VK РЅРµ РѕС‚РґР°Р» РїР»РµР№Р»РёСЃС‚ Р±РµР· Р°РІС‚РѕСЂРёР·Р°С†РёРё. РћС‚РєСЂРѕР№ РќР°СЃС‚СЂРѕР№РєРё -> РСЃС‚РѕС‡РЅРёРєРё -> VK Рё РІРѕР№РґРё РІ VK РґР»СЏ РёРјРїРѕСЂС‚Р°.')
-      await closeImportProgressSafe(1800)
-      showToast('Р”Р»СЏ СЌС‚РѕРіРѕ VK РїР»РµР№Р»РёСЃС‚Р° РЅСѓР¶РµРЅ РІС…РѕРґ РІ VK / С‚РѕРєРµРЅ', true)
-      openPage('settings')
-      switchSettingsTab('sources')
-      setTimeout(() => {
-        switchSrcTab('vk')
-        document.getElementById('vk-token-val')?.focus()
-      }, 120)
-      return
-    }
-    if (isYandexLink && /yandex token required|oauth|token/i.test(errorText)) {
-      updateImportProgress(0, 0, 'РЇРЅРґРµРєСЃ РњСѓР·С‹РєР° С‚СЂРµР±СѓРµС‚ Р°РєС‚РёРІРЅС‹Р№ OAuth token. РћС‚РєСЂРѕР№ РСЃС‚РѕС‡РЅРёРєРё Рё СЃРѕС…СЂР°РЅРё С‚РѕРєРµРЅ.')
-      await closeImportProgressSafe(1800)
-      showToast('Р”Р»СЏ РЇРЅРґРµРєСЃ РњСѓР·С‹РєРё РЅСѓР¶РµРЅ OAuth token', true)
-      openPage('settings')
-      switchSettingsTab('sources')
-      setTimeout(() => document.getElementById('ym-token-val')?.focus(), 120)
-      return
-    }
-    updateImportProgress(0, 0, `РћС€РёР±РєР°: ${errorText}`)
-    await closeImportProgressSafe(1200)
-    showToast('РРјРїРѕСЂС‚: ' + errorText, true)
-    return
-  }
-
-  const srcTracks = Array.isArray(imported.tracks) ? imported.tracks : []
-  if (!srcTracks.length) {
-    updateImportProgress(0, 0, 'Р’ РїР»РµР№Р»РёСЃС‚Рµ РЅРµ РЅР°Р№РґРµРЅРѕ С‚СЂРµРєРѕРІ')
-    await closeImportProgressSafe(1200)
-    showToast('Р’ РїР»РµР№Р»РёСЃС‚Рµ РЅРµ РЅР°Р№РґРµРЅРѕ С‚СЂРµРєРѕРІ', true)
-    return
-  }
-
-  try {
-    if (imported?.via === 'flow-vk-server') showToast(`VK СЃРµСЂРІРµСЂ РІРµСЂРЅСѓР» С‚СЂРµРєРѕРІ: ${srcTracks.length}`)
-    const stats = await processPlaylistImport(srcTracks, imported)
-    showToast(`РРјРїРѕСЂС‚ Р·Р°РІРµСЂС€РµРЅ. Р”РѕР±Р°РІР»РµРЅРѕ ${stats.added} С‚СЂРµРєРѕРІ, ${stats.missed} РЅРµ РЅР°Р№РґРµРЅРѕ`)
-  } catch (err) {
-    updateImportProgress(0, 0, `РћС€РёР±РєР°: ${sanitizeDisplayText(err?.message || String(err))}`)
-    await closeImportProgressSafe(1200)
-    showToast(`РРјРїРѕСЂС‚ СЃРѕСЂРІР°Р»СЃСЏ: ${sanitizeDisplayText(err?.message || String(err))}`, true)
-  }
-}
-window.importPlaylistFromLink = importPlaylistFromLink
-
-async function importPlaylistLinkFromBar() {
-  const input = document.getElementById('playlist-link-import-input')
-  if (!input) return showToast('РџРѕР»Рµ СЃСЃС‹Р»РєРё РЅРµ РЅР°Р№РґРµРЅРѕ', true)
-  const url = String(input?.value || '').trim()
-  if (!url) return showToast('Р’СЃС‚Р°РІСЊ СЃСЃС‹Р»РєСѓ РЅР° РїР»РµР№Р»РёСЃС‚ VK РёР»Рё РЇРЅРґРµРєСЃ РњСѓР·С‹РєРё', true)
-  try {
-    await importPlaylistFromLink(url)
-  } catch (err) {
-    showToast(`РРјРїРѕСЂС‚: ${sanitizeDisplayText(err?.message || String(err))}`, true)
-  }
-}
-window.importPlaylistLinkFromBar = importPlaylistLinkFromBar
-window.importVkPlaylistToFlow = importPlaylistLinkFromBar
-
-function addToPlaylist(track) {
-  const pls = getPlaylists().map(normalizePlaylist)
-  openPlaylistPickerModal({
-    mode: 'add-track-playlist',
-    title: 'Р”РѕР±Р°РІРёС‚СЊ С‚СЂРµРє РІ РїР»РµР№Р»РёСЃС‚',
-    items: pls.map((p, idx) => ({ id: String(idx), label: `${p.name} (${p.tracks.length})` })),
-    payload: { track }
-  })
-}
-
-let _playlistRenderToken = 0
-let _openPlaylistTrackRenderToken = 0
-function renderPlaylists() {
-  const token = ++_playlistRenderToken
-  const pls = getPlaylists().map(normalizePlaylist)
-  const container = document.getElementById('playlists-list'); if (!container) return
-  if (!pls.length) { container.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg></div><p>РќРµС‚ РїР»РµР№Р»РёСЃС‚РѕРІ вЂ” СЃРѕР·РґР°Р№ РїРµСЂРІС‹Р№!</p></div>`; return }
-  container.innerHTML=''
-  let idx = 0
-  const chunkSize = 12
-  const renderChunk = () => {
-    if (token !== _playlistRenderToken) return
-    const fragment = document.createDocumentFragment()
-    for (let n = 0; n < chunkSize && idx < pls.length; n++, idx++) {
-      const currentIdx = idx
-      const pl = pls[currentIdx]
-      const el = document.createElement('div'); el.className='playlist-card'
-      const playlistCover = sanitizeMediaByGifMode(pl.coverData || '', 'playlist')
-      const coverStyle = ''
-      el.innerHTML=`
-        <div class="playlist-icon" style="${coverStyle}" title="РџР»РµР№Р»РёСЃС‚">${playlistCover ? '' : '<svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'}</div>
-        <div class="playlist-info" onclick="openPlaylist(${currentIdx})" style="cursor:pointer">
-          <span class="playlist-name">${pl.name}</span>
-          <span class="playlist-count">${pl.tracks.length} С‚СЂРµРєРѕРІ${pl.description ? ` вЂў ${pl.description}` : ''}</span>
-        </div>
-        <div class="playlist-card-actions">
-          <button class="playlist-del" onclick="event.stopPropagation();editPlaylistMeta(${currentIdx})" title="Р РµРґР°РєС‚РёСЂРѕРІР°С‚СЊ">вњЋ</button>
-          <button class="playlist-del" onclick="event.stopPropagation();deletePlaylist(${currentIdx})">${ICONS.close}</button>
-        </div>`
-      if (playlistCover) {
-        const icon = el.querySelector('.playlist-icon')
-        observeLazyCoverBackground(icon, playlistCover, '', `playlist:${currentIdx}`)
-      }
-      el.addEventListener('click', () => openPlaylist(currentIdx))
-      fragment.appendChild(el)
-    }
-    container.appendChild(fragment)
-    if (idx < pls.length) setTimeout(renderChunk, 0)
-  }
-  requestAnimationFrame(renderChunk)
-}
-
-function playOpenPlaylist() {
-  if (openPlaylistIndex == null) return
-  const pl = normalizePlaylist(getPlaylists()[openPlaylistIndex])
-  if (!pl?.tracks?.length) return showToast('РџР»РµР№Р»РёСЃС‚ РїСѓСЃС‚', true)
-  queue = pl.tracks.slice()
-  queueIndex = 0
-  queueScope = 'playlist'
-  playTrackObj(queue[0]).catch(() => {})
-}
-
-function shuffleOpenPlaylist() {
-  if (openPlaylistIndex == null) return
-  const pl = normalizePlaylist(getPlaylists()[openPlaylistIndex])
-  if (!pl?.tracks?.length) return showToast('РџР»РµР№Р»РёСЃС‚ РїСѓСЃС‚', true)
-  const shuffled = pl.tracks.slice().sort(() => Math.random() - 0.5)
-  queue = shuffled
-  queueIndex = 0
-  queueScope = 'playlist'
-  playTrackObj(queue[0]).catch(() => {})
-}
-
-function editOpenPlaylist() {
-  if (openPlaylistIndex == null) return
-  editPlaylistMeta(openPlaylistIndex)
-  // Keep cover change inside the same edit flow.
-  setTimeout(() => {
-    const shouldPickCover = confirm('РЎРјРµРЅРёС‚СЊ РѕР±Р»РѕР¶РєСѓ РїР»РµР№Р»РёСЃС‚Р° СЃРµР№С‡Р°СЃ?')
-    if (shouldPickCover) pickPlaylistCover(openPlaylistIndex)
-  }, 40)
-}
-
-function exportPlaylistsFile() {
-  try {
-    const payload = {
-      format: 'flow-playlists-v1',
-      exportedAt: new Date().toISOString(),
-      playlists: getPlaylists().map(normalizePlaylist),
-    }
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
-    const stamp = new Date().toISOString().slice(0, 10)
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = `flow-playlists-${stamp}.json`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(link.href)
-    showToast('РџР»РµР№Р»РёСЃС‚С‹ СЌРєСЃРїРѕСЂС‚РёСЂРѕРІР°РЅС‹')
-  } catch (err) {
-    showToast(`РћС€РёР±РєР° СЌРєСЃРїРѕСЂС‚Р°: ${err?.message || err}`, true)
-  }
-}
-
-function pickPlaylistImportFile() {
-  const input = document.getElementById('playlist-import-file')
-  if (!input) return
-  input.click()
-}
-
-function importPlaylistsFile(input) {
-  const file = input?.files?.[0]
-  if (!file) return
-  const reader = new FileReader()
-  reader.onload = () => {
-    try {
-      const payload = JSON.parse(String(reader.result || '{}'))
-      const raw = Array.isArray(payload) ? payload : payload?.playlists
-      if (!Array.isArray(raw)) throw new Error('РќРµРІРµСЂРЅС‹Р№ С„РѕСЂРјР°С‚ С„Р°Р№Р»Р°')
-      const imported = raw.map(normalizePlaylist).filter((pl) => pl?.name)
-      if (!imported.length) throw new Error('Р’ С„Р°Р№Р»Рµ РЅРµС‚ РїР»РµР№Р»РёСЃС‚РѕРІ')
-      const current = getPlaylists().map(normalizePlaylist)
-      savePlaylists([...current, ...imported])
-      renderPlaylists()
-      showToast(`РРјРїРѕСЂС‚РёСЂРѕРІР°РЅРѕ РїР»РµР№Р»РёСЃС‚РѕРІ: ${imported.length}`)
-    } catch (err) {
-      showToast(`РћС€РёР±РєР° РёРјРїРѕСЂС‚Р°: ${err?.message || err}`, true)
-    } finally {
-      input.value = ''
-    }
-  }
-  reader.readAsText(file)
-}
-
-function removeTrackFromPlaylist(playlistIndex, trackIndex) {
-  const pls = getPlaylists().map(normalizePlaylist)
-  if (!pls[playlistIndex]) return
-  pls[playlistIndex].tracks.splice(trackIndex, 1)
-  savePlaylists(pls)
-  openPlaylist(playlistIndex)
-  renderPlaylists()
-}
-
-function editPlaylistTrack(playlistIndex, trackIndex) {
-  const pls = getPlaylists().map(normalizePlaylist)
-  const track = pls[playlistIndex]?.tracks?.[trackIndex]
-  if (!track) return
-  openPlaylistEditModal('track-meta', {
-    playlistIndex,
-    trackIndex,
-    title: track.title || '',
-    artist: track.artist || '',
-  })
-}
-
-function reorderPlaylistTrack(playlistIndex, fromIndex, toIndex) {
-  if (playlistIndex == null || fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return
-  const pls = getPlaylists().map(normalizePlaylist)
-  const list = pls[playlistIndex]?.tracks
-  if (!Array.isArray(list) || fromIndex >= list.length || toIndex >= list.length) return
-  const [moved] = list.splice(fromIndex, 1)
-  list.splice(toIndex, 0, moved)
-  savePlaylists(pls)
-  openPlaylist(playlistIndex)
-}
-
-async function setPlaylistCoverFromFile(idx, file) {
-  if (!file || !file.type.startsWith('image/')) return showToast('РќСѓР¶РµРЅ С„Р°Р№Р» РёР·РѕР±СЂР°Р¶РµРЅРёСЏ', true)
-  const dataUrl = await readFileAsDataUrl(file).catch(() => '')
-  if (!dataUrl) return showToast('РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРѕС‡РёС‚Р°С‚СЊ РёР·РѕР±СЂР°Р¶РµРЅРёРµ', true)
-  const pls = getPlaylists().map(normalizePlaylist)
-  if (!pls[idx]) return
-  pls[idx].coverData = dataUrl
-  savePlaylists(pls)
-  renderPlaylists()
-  showToast('РћР±Р»РѕР¶РєР° РїР»РµР№Р»РёСЃС‚Р° РѕР±РЅРѕРІР»РµРЅР°')
-}
-
-function pickPlaylistCover(idx) {
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = 'image/*'
-  input.onchange = async () => {
-    const file = input.files?.[0]
-    if (file) await setPlaylistCoverFromFile(idx, file)
-  }
-  input.click()
-}
-
-function editPlaylistMeta(idx) {
-  const pls = getPlaylists().map(normalizePlaylist)
-  const playlist = pls[idx]
-  if (!playlist) return
-  openPlaylistEditModal('playlist-meta', {
-    playlistIndex: idx,
-    name: playlist.name || '',
-    description: playlist.description || '',
-  })
-}
-
-// РІвЂќР‚РІвЂќР‚РІвЂќР‚ TRACK CARD РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
-const SRC_LABELS = { soundcloud:'SC', vk:'VK', hitmo:'HM', youtube:'YT', spotify:'SP' }
-
-function makeTrackEl(track, showPlaylist=false, bindDefaultPlay=true) {
-  track = sanitizeTrack(track)
-  const el = document.createElement('div'); el.className='track-card'
-  const liked = isLiked(track)
-  const trackJson = JSON.stringify(track).replace(/"/g,'&quot;')
-  const trackCover = getListCoverUrl(track)
-  const fallbackBg = track.bg||'linear-gradient(135deg,#7c3aed,#a855f7)'
-  const coverStyle = `background:${fallbackBg};`
-  const srcLbl = SRC_LABELS[track.source]||''
-  const badge = srcLbl ? `<span class="track-source track-source-${track.source}">${srcLbl}</span>` : ''
-  el.innerHTML=`
-    <div class="track-cover" style="${coverStyle}">${trackCover?'':'<svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'}
-      <div class="cover-overlay"><div class="cover-play-icon"><svg class="ctrl-play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M9 8 L17 12 L9 16 Z"/></svg></div></div>
-    </div>
-    <div class="track-info">
-      <span class="track-name">${track.title}</span>
-      <span class="track-artist">${track.artist||'РІР‚вЂќ'} ${badge}</span>
-    </div>
-    <button class="track-like ${liked?'liked':''}" data-track-json="${trackJson}" onclick="event.stopPropagation();likeTrack(${trackJson})">${liked ? HEART_FILLED : HEART_OUTLINE}</button>
-    <button class="track-like" onclick="event.stopPropagation();findSimilarTracks(${trackJson})" title="РќР°Р№С‚Рё РїРѕС…РѕР¶РёРµ">${ICON_SIMILAR}</button>
-    ${showPlaylist?`<button class="track-like" onclick="event.stopPropagation();addToPlaylist(${trackJson})" title="Р вЂ™ Р С—Р В»Р ВµР в„–Р В»Р С‘РЎРѓРЎвЂљ">${ICONS.plus}</button>`:''}
-    <button class="track-play"><svg class="ctrl-play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M9 8 L17 12 L9 16 Z"/></svg></button>`
-  if (trackCover) {
-    const coverEl = el.querySelector('.track-cover')
-    observeLazyCoverBackground(coverEl, trackCover, fallbackBg, getTrackKey(track))
-  }
-  if (bindDefaultPlay) {
-    el.addEventListener('click', () => {
-      queue = [track]
-      queueIndex = 0
-      queueScope = 'generic'
-      playTrackObj(track)
-    })
-  }
-  return el
-}
-
-function findSimilarTracks(track = null) {
-  const t = sanitizeTrack(track || currentTrack || {})
-  const query = [t.artist, t.title].filter(Boolean).join(' ').trim()
-  if (!query) return showToast('РЎРЅР°С‡Р°Р»Р° РІС‹Р±РµСЂРё С‚СЂРµРє', true)
-  openPage('search')
-  const input = document.getElementById('search-input')
-  if (input) input.value = query
-  showToast('РС‰Сѓ РїРѕС…РѕР¶РёРµ С‚СЂРµРєРё')
-  searchTracks()
-}
-
-// РІвЂќР‚РІвЂќР‚РІвЂќР‚ LYRICS РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
-let _lyricsData = []       // [{time, text}] Р Т‘Р В»РЎРЏ synced
-let _lyricsActiveIdx = -1
-let _lyricsOpen = false
-let _lyricsSettingsOpen = false
-let _lyricsObserver = null
-let _lyricsLastPaintAt = 0
-
-/** РРЅС‚РµСЂРІР°Р» СЃРѕРіР»Р°СЃРѕРІР°РЅРёСЏ СЃ С‡Р°СЃС‚РѕС‚РѕР№ РєР°РґСЂРѕРІ (~60вЂ“165 Р“С†); РєР°СЂР°РѕРєРµ РёРґС‘С‚ РЅР° РєР°Р¶РґС‹Р№ RAF. */
-let _lyricsFrameBudgetCachedMs = null
-function refreshLyricsFrameBudgetCache() {
-  _lyricsFrameBudgetCachedMs = null
-}
-function getLyricsFrameBudgetMs() {
-  if (_lyricsFrameBudgetCachedMs != null) return _lyricsFrameBudgetCachedMs
-  try {
-    const rr = Number(typeof window !== 'undefined' && window.screen?.refreshRate)
-    if (Number.isFinite(rr) && rr >= 30 && rr <= 360) {
-      _lyricsFrameBudgetCachedMs = Math.max(4, Math.floor(1000 / rr))
-      return _lyricsFrameBudgetCachedMs
-    }
-  } catch (_) {}
-  _lyricsFrameBudgetCachedMs = 1000 / 60
-  return _lyricsFrameBudgetCachedMs
-}
-if (typeof window !== 'undefined') {
-  window.addEventListener('resize', refreshLyricsFrameBudgetCache, { passive: true })
-}
-let _lyricsRafId = 0
-/** РЎРіР»Р°Р¶РёРІР°РЅРёРµ РІСЂРµРјРµРЅРё РјРµР¶РґСѓ В«СЃС‚СѓРїРµРЅСЊРєР°РјРёВ» currentTime РґР»СЏ РєР°СЂР°РѕРєРµ (lerp РїРѕ performance.now). */
-const LYRICS_TIME_DRIFT_RESYNC_SEC = 0.1
-let _lyricsSmoothedTimeAnchor = { audio: 0, perfMs: 0 }
-
-function getLyricsSmoothedTime() {
-  try {
-    if (!audio || audio.paused || audio.ended) {
-      const t = Number(audio?.currentTime || 0)
-      _lyricsSmoothedTimeAnchor = { audio: t, perfMs: performance.now() }
-      return t
-    }
-    const now = performance.now()
-    const actual = Number(audio.currentTime || 0)
-    if (!_lyricsSmoothedTimeAnchor.perfMs) {
-      _lyricsSmoothedTimeAnchor = { audio: actual, perfMs: now }
-      return actual
-    }
-    const predicted = _lyricsSmoothedTimeAnchor.audio + (now - _lyricsSmoothedTimeAnchor.perfMs) / 1000
-    if (Math.abs(actual - predicted) > LYRICS_TIME_DRIFT_RESYNC_SEC) {
-      _lyricsSmoothedTimeAnchor = { audio: actual, perfMs: now }
-      return actual
-    }
-    return predicted
-  } catch {
-    return Number(audio?.currentTime || 0)
-  }
-}
-
-function stopLyricsSyncLoop() {
-  if (_lyricsRafId) cancelAnimationFrame(_lyricsRafId)
-  _lyricsRafId = 0
-}
-
-function startLyricsSyncLoop() {
-  if (_lyricsRafId) return
-  const tick = () => {
-    try {
-      if (document.body.classList.contains('flow-opt-game-sleep')) {
-        _lyricsRafId = 0
-        return
-      }
-    } catch (_) {}
-    if (!_lyricsOpen || !_lyricsData.length || audio.paused) {
-      _lyricsRafId = 0
-      return
-    }
-    syncLyrics(getLyricsSmoothedTime())
-    _lyricsRafId = requestAnimationFrame(tick)
-  }
-  _lyricsRafId = requestAnimationFrame(tick)
-}
-
-/** РљРѕРЅС‚РµР№РЅРµСЂ СЃРѕ СЃС‚СЂРѕРєР°РјРё С‚РµРєСЃС‚Р° вЂ” С‚РѕР»СЊРєРѕ РІРёРґРёРјР°СЏ РїР°РЅРµР»СЊ (РёРЅР°С‡Рµ РєР°СЂР°РѕРєРµ РєР°Р¶РґС‹Р№ РєР°РґСЂ РїСЂР°РІРёС‚ РґРІР° РґРµСЂРµРІР° DOM). */
-function getLyricsSyncRoot() {
-  try {
-    const pmShell = document.getElementById('pm-lyrics-shell')
-    const pmContent = document.getElementById('pm-lyrics-content')
-    if (pmShell && !pmShell.classList.contains('hidden') && pmContent) return pmContent
-    const sidePanel = document.getElementById('lyrics-panel')
-    const sideContent = document.getElementById('lyrics-content')
-    if (sidePanel && !sidePanel.classList.contains('hidden') && sideContent) return sideContent
-    return pmContent || sideContent || null
-  } catch (_) {
-    return null
-  }
-}
-
-function getKaraokeLineDuration(idx) {
-  if (idx < 0 || idx >= _lyricsData.length) return 0
-  const start = Number(_lyricsData[idx]?.time || 0)
-  const nextStartRaw = Number(_lyricsData[idx + 1]?.time)
-  const nextStart = Number.isFinite(nextStartRaw) ? nextStartRaw : (start + 2.4)
-  const gapDuration = Math.max(0.35, nextStart - start)
-  const chars = Math.max(1, String(_lyricsData[idx]?.text || '').length)
-  const readingDuration = Math.max(0.85, Math.min(3.8, chars * 0.085))
-  // Long instrumental gaps should freeze on the line instead of stretching highlight.
-  return Math.min(gapDuration, readingDuration)
-}
-
-function observeLyricsVisibility(target) {
-  if (!target || typeof IntersectionObserver !== 'function') return
-  if (_lyricsObserver) _lyricsObserver.disconnect()
-  _lyricsObserver = new IntersectionObserver((entries) => {
-    entries.forEach((entry) => {
-      if (entry.isIntersecting) entry.target.classList.add('is-visible')
-      else entry.target.classList.remove('is-visible')
-    })
-  }, { root: target, threshold: 0.12 })
-  target.querySelectorAll('.lyrics-line').forEach((line) => _lyricsObserver.observe(line))
-}
-
-function normalizeLyricsPlaybackMode(raw) {
-  const m = String(raw || '')
-  if (m === 'karaoke') return 'karaoke'
-  if (m === 'focus') return 'focus'
-  if (m === 'scale') return 'scale'
-  if (m === 'neon') return 'neon'
-  return 'standard'
-}
-
-/** РџСЂРµСЃРµС‚С‹ РєРЅРѕРїРѕРє В«AВ» РґР»СЏ РїРѕРґСЃРІРµС‚РєРё РІС‹Р±РѕСЂР° РІ РїРѕРїР°РїРµ. */
-const _LYRICS_SIZE_PRESETS = [16, 22, 28, 38]
-
-function getLyricsVisualSettings() {
-  const v = getVisual()
-  const src = v.lyrics || {}
-  return {
-    scrollMode: src.scrollMode === 'line' ? 'line' : 'smooth',
-    align: src.align === 'center' ? 'center' : 'left',
-    playbackMode: normalizeLyricsPlaybackMode(src.playbackMode),
-    effect: src.effect === 'glow' ? 'glow' : (src.effect === 'contrast' ? 'contrast' : 'soft'),
-    size: Math.max(13, Math.min(42, Number(src.size || 16))),
-    blur: Math.max(0, Math.min(8, Number(src.blur || 4))),
-  }
-}
-
-let _lyricsCfgQuickMemo = null
-function getLyricsVisualSettingsQuick() {
-  const now = typeof performance !== 'undefined' ? performance.now() : Date.now()
-  if (_lyricsCfgQuickMemo && now - _lyricsCfgQuickMemo.at < 800) return _lyricsCfgQuickMemo.cfg
-  const cfg = getLyricsVisualSettings()
-  _lyricsCfgQuickMemo = { at: now, cfg }
-  return cfg
-}
-
-function applyLyricsVisualSettings() {
-  _lyricsCfgQuickMemo = null
-  const cfg = getLyricsVisualSettings()
-  document.documentElement.style.setProperty('--lyrics-size', `${cfg.size}px`)
-  document.documentElement.style.setProperty('--lyrics-blur', `${cfg.blur}px`)
-  document.body.classList.toggle('lyrics-align-center', cfg.align === 'center')
-  document.body.classList.toggle('lyrics-align-left', cfg.align !== 'center')
-  document.body.classList.remove('lyrics-mode-standard', 'lyrics-mode-karaoke', 'lyrics-mode-focus', 'lyrics-mode-scale', 'lyrics-mode-neon')
-  document.body.classList.add(`lyrics-mode-${cfg.playbackMode}`)
-  document.body.classList.remove('lyrics-effect-soft', 'lyrics-effect-glow', 'lyrics-effect-contrast')
-  document.body.classList.add(`lyrics-effect-${cfg.effect}`)
-  document.querySelectorAll('.pm-lyrics-opt[data-playback]').forEach((btn) => {
-    btn.classList.toggle('is-active', btn.getAttribute('data-playback') === cfg.playbackMode)
-  })
-  document.querySelectorAll('.pm-lyrics-opt[data-effect]').forEach((btn) => {
-    btn.classList.toggle('is-active', btn.getAttribute('data-effect') === cfg.effect)
-  })
-  const scrollSmooth = document.getElementById('pm-lyrics-scroll-smooth')
-  const scrollLine = document.getElementById('pm-lyrics-scroll-line')
-  if (scrollSmooth) scrollSmooth.classList.toggle('is-active', cfg.scrollMode === 'smooth')
-  if (scrollLine) scrollLine.classList.toggle('is-active', cfg.scrollMode === 'line')
-  const leftBtn = document.getElementById('pm-lyrics-align-left')
-  const centerBtn = document.getElementById('pm-lyrics-align-center')
-  if (leftBtn) leftBtn.classList.toggle('is-active', cfg.align === 'left')
-  if (centerBtn) centerBtn.classList.toggle('is-active', cfg.align === 'center')
-  let near = _LYRICS_SIZE_PRESETS[0]
-  let best = Math.abs(cfg.size - near)
-  for (const s of _LYRICS_SIZE_PRESETS) {
-    const d = Math.abs(cfg.size - s)
-    if (d < best) {
-      best = d
-      near = s
-    }
-  }
-  document.querySelectorAll('.pm-lyrics-size-a').forEach((btn) => {
-    btn.classList.toggle('is-active', Number(btn.dataset.size) === near)
-  })
-}
-
-function setLyricsPlaybackMode(mode) {
-  const safe = normalizeLyricsPlaybackMode(mode)
-  const v = getVisual()
-  const lyrics = Object.assign({}, v.lyrics || {}, { playbackMode: safe })
-  saveVisual({ lyrics })
-  applyLyricsVisualSettings()
-}
-
-function setLyricsEffect(effect) {
-  const safe = effect === 'glow' ? 'glow' : (effect === 'contrast' ? 'contrast' : 'soft')
-  const v = getVisual()
-  const lyrics = Object.assign({}, v.lyrics || {}, { effect: safe })
-  saveVisual({ lyrics })
-  applyLyricsVisualSettings()
-}
-
-function setLyricsScrollMode(mode) {
-  const v = getVisual()
-  const lyrics = Object.assign({}, v.lyrics || {}, { scrollMode: mode === 'line' ? 'line' : 'smooth' })
-  saveVisual({ lyrics })
-  applyLyricsVisualSettings()
-}
-
-function setLyricsAlign(mode) {
-  const v = getVisual()
-  const lyrics = Object.assign({}, v.lyrics || {}, { align: mode === 'center' ? 'center' : 'left' })
-  saveVisual({ lyrics })
-  applyLyricsVisualSettings()
-}
-
-function setLyricsSize(value) {
-  const v = getVisual()
-  const size = Math.max(13, Math.min(42, Number(value || 16)))
-  const lyrics = Object.assign({}, v.lyrics || {}, { size })
-  saveVisual({ lyrics })
-  applyLyricsVisualSettings()
-}
-
-function toggleLyrics() {
-  _lyricsOpen = !_lyricsOpen
-  if (!_lyricsOpen) {
-    stopLyricsSyncLoop()
-    _lyricsSettingsOpen = false
-    document.getElementById('pm-lyrics-controls-panel')?.classList.add('hidden')
-  }
-  refreshLyricsPanelsVisibility()
-  document.getElementById('lyrics-btn')?.classList.toggle('active', _lyricsOpen)
-  document.getElementById('pm-cover-lyrics-btn')?.classList.toggle('active', _lyricsOpen)
-  if (_lyricsOpen && currentTrack) {
-    loadLyrics(currentTrack)
-    startLyricsSyncLoop()
-  }
-}
-
-function closeLyricsSettingsPanel() {
-  if (!_lyricsSettingsOpen) return
-  _lyricsSettingsOpen = false
-  document.getElementById('pm-lyrics-controls-panel')?.classList.add('hidden')
-}
-
-function toggleLyricsSettingsPanel() {
-  _lyricsSettingsOpen = !_lyricsSettingsOpen
-  const panel = document.getElementById('pm-lyrics-controls-panel')
-  if (panel) panel.classList.toggle('hidden', !_lyricsSettingsOpen)
-}
-
-document.addEventListener('click', (event) => {
-  if (!_lyricsSettingsOpen) return
-  const wrap = document.querySelector('.pm-lyrics-settings-wrap')
-  if (wrap?.contains(event.target)) return
-  closeLyricsSettingsPanel()
-})
-
-document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape') closeLyricsSettingsPanel()
-})
-
-function togglePmLyricsFromCover() {
-  toggleLyrics()
-}
-
-function togglePmVolumePopover(event) {
-  if (event?.stopPropagation) event.stopPropagation()
-  const pop = document.getElementById('pm-cover-volume-pop')
-  if (!pop) return
-  pop.classList.toggle('hidden')
-}
-
-document.addEventListener('click', (event) => {
-  const pop = document.getElementById('pm-cover-volume-pop')
-  if (!pop || pop.classList.contains('hidden')) return
-  const btn = document.getElementById('pm-cover-volume-btn')
-  if (pop.contains(event.target) || btn?.contains(event.target)) return
-  pop.classList.add('hidden')
-})
-
-function parseLRC(lrc) {
-  const lines = lrc.split('\n')
-  return lines.map(line => {
-    const m = line.match(/\[(\d+):(\d+\.\d+)\](.*)/)
-    if (!m) return null
-    return { time: parseInt(m[1]) * 60 + parseFloat(m[2]), text: m[3].trim() }
-  }).filter(x => x && x.text)
-}
-
-async function loadLyrics(track) {
-  const container = document.getElementById('lyrics-content')
-  const pmContainer = document.getElementById('pm-lyrics-content')
-  const titleEl = document.getElementById('lyrics-track-name')
-  const pmTitleEl = document.getElementById('pm-lyrics-track-name')
-  if (!container && !pmContainer) return
-  _lyricsData = []
-  _lyricsActiveIdx = -1
-  _lyricsSmoothedTimeAnchor = { audio: 0, perfMs: 0 }
-  if (titleEl) titleEl.textContent = track.title || 'вЂ”'
-  if (pmTitleEl) pmTitleEl.textContent = track.title || 'вЂ”'
-  if (container) container.innerHTML = '<div class="lyrics-loading"><div class="spinner"></div><span>Р—Р°РіСЂСѓР·РєР° С‚РµРєСЃС‚Р°...</span></div>'
-  if (pmContainer) pmContainer.innerHTML = '<div class="lyrics-loading"><div class="spinner"></div><span>Р—Р°РіСЂСѓР·РєР° С‚РµРєСЃС‚Р°...</span></div>'
-  if (!window.api?.getLyrics) {
-    if (container) container.innerHTML = '<div class="lyrics-empty">РўРµРєСЃС‚ РґРѕСЃС‚СѓРїРµРЅ С‚РѕР»СЊРєРѕ РІ Electron</div>'
-    if (pmContainer) pmContainer.innerHTML = '<div class="lyrics-empty">РўРµРєСЃС‚ РґРѕСЃС‚СѓРїРµРЅ С‚РѕР»СЊРєРѕ РІ Electron</div>'
-    return
-  }
-  const res = await window.api.getLyrics(track.title, track.artist || '', audio.duration || 0)
-  if (!res.ok) {
-    if (container) container.innerHTML = '<div class="lyrics-empty">РўРµРєСЃС‚ РЅРµ РЅР°Р№РґРµРЅ</div>'
-    if (pmContainer) pmContainer.innerHTML = '<div class="lyrics-empty">РўРµРєСЃС‚ РЅРµ РЅР°Р№РґРµРЅ</div>'
-    return
-  }
-  if (res.synced) {
-    _lyricsData = parseLRC(res.synced)
-    const renderSynced = (target) => {
-      if (!target) return
-      target.innerHTML = ''
-      const topSpacer = document.createElement('div')
-      topSpacer.className = 'lyrics-spacer'
-      target.appendChild(topSpacer)
-      _lyricsData.forEach((line, i) => {
-        const div = document.createElement('div')
-        div.className = 'lyrics-line'
-        div.dataset.idx = String(i)
-        div.innerHTML = ''
-        ;[...String(line.text || '')].forEach((ch, chIdx) => {
-          const span = document.createElement('span')
-          span.className = 'lyrics-char'
-          span.dataset.charIdx = String(chIdx)
-          span.textContent = ch === ' ' ? '\u00A0' : ch
-          div.appendChild(span)
-        })
-        div.onclick = () => {
-          if (isRoomClientRestricted()) return showToast('РўРѕР»СЊРєРѕ С…РѕСЃС‚ СѓРїСЂР°РІР»СЏРµС‚ РїР»РµРµСЂРѕРј', true)
-          audio.currentTime = line.time
-        }
-        target.appendChild(div)
-      })
-      const bottomSpacer = document.createElement('div')
-      bottomSpacer.className = 'lyrics-spacer'
-      target.appendChild(bottomSpacer)
-      observeLyricsVisibility(target)
-    }
-    renderSynced(container)
-    renderSynced(pmContainer)
-    if (_lyricsOpen) startLyricsSyncLoop()
-  } else if (res.plain) {
-    _lyricsData = []
-    const plain = `<div class="lyrics-plain">${res.plain.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>`
-    if (container) container.innerHTML = plain
-    if (pmContainer) pmContainer.innerHTML = plain
-  } else {
-    if (container) container.innerHTML = '<div class="lyrics-empty">РўРµРєСЃС‚ РЅРµ РЅР°Р№РґРµРЅ</div>'
-    if (pmContainer) pmContainer.innerHTML = '<div class="lyrics-empty">РўРµРєСЃС‚ РЅРµ РЅР°Р№РґРµРЅ</div>'
-  }
-}
-
-function findLyricsLineIndexAtTime(t) {
-  const arr = _lyricsData
-  const n = arr.length
-  if (!n) return -1
-  const tt = Number(t)
-  const t0 = Number(arr[0].time || 0)
-  if (tt < t0) return -1
-  const lastT = Number(arr[n - 1].time || 0)
-  if (tt >= lastT) return n - 1
-  let lo = 0
-  let hi = n - 1
-  let ans = 0
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1
-    if (Number(arr[mid].time || 0) <= tt) {
-      ans = mid
-      lo = mid + 1
-    } else hi = mid - 1
-  }
-  return ans
-}
-
-function syncLyrics(currentTime) {
-  try {
-    if (document.body.classList.contains('flow-opt-game-sleep')) return
-  } catch (_) {}
-  if (!_lyricsData.length) return
-  const root = getLyricsSyncRoot()
-  if (!root) return
-  const cfg = getLyricsVisualSettingsQuick()
-  const idx = findLyricsLineIndexAtTime(currentTime)
-  const idxChanged = idx !== _lyricsActiveIdx
-  const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()
-  const karaokeHighRate = cfg.playbackMode === 'karaoke' && idx >= 0
-  const frameBudget = getLyricsFrameBudgetMs()
-  // РџСЂРё РЅРµ-РєР°СЂР°РѕРєРµ РЅРµ С‡Р°С‰Рµ РѕРґРЅРѕРіРѕ СЌРєСЂР°РЅРЅРѕРіРѕ РєР°РґСЂР° (60/90/120/144 Р“С†), РєР°СЂР°РѕРєРµ вЂ” РєР°Р¶РґС‹Р№ RAF.
-  if (!idxChanged && now - _lyricsLastPaintAt < frameBudget && !karaokeHighRate) return
-  _lyricsLastPaintAt = now
-  if (idxChanged) {
-    _lyricsActiveIdx = idx
-    root.querySelectorAll('.lyrics-line').forEach((el) => {
-      try {
-        delete el.dataset.kPaintSig
-      } catch (_) {}
-      const i = Number(el.dataset.idx || -1)
-      el.classList.toggle('active', i === idx)
-      el.classList.toggle('past', i >= 0 && i < idx)
-      el.classList.toggle('future', i > idx)
-    })
-  }
-  if (cfg.playbackMode === 'karaoke') {
-    if (idxChanged) {
-      root.querySelectorAll('.lyrics-line:not(.active) .lyrics-char.karaoke-on, .lyrics-line:not(.active) .lyrics-char.karaoke-next').forEach((el) => {
-        el.classList.remove('karaoke-on', 'karaoke-next')
-        el.style.removeProperty('--karaoke-frac')
-      })
-    }
-    const start = idx >= 0 ? Number(_lyricsData[idx]?.time || 0) : 0
-    const duration = Math.max(0.35, idx >= 0 ? getKaraokeLineDuration(idx) : 0.35)
-    const progress = idx >= 0 ? Math.max(0, Math.min(1, (currentTime - start) / duration)) : 0
-    const lineEl = root.querySelector('.lyrics-line.active')
-    if (lineEl) {
-      const chars = lineEl.querySelectorAll('.lyrics-char')
-      if (chars.length) {
-        const spread = progress * chars.length
-        const activeCount = Math.max(0, Math.min(chars.length, Math.floor(spread)))
-        const nextFrac = Math.max(0, Math.min(1, spread - activeCount))
-        const qFrac = Math.round(nextFrac * 40) / 40
-        const qProg = Math.round(progress * 240) / 240
-        const paintSig = `${activeCount}|${qFrac}|${qProg}`
-        if (lineEl.dataset.kPaintSig !== paintSig) {
-          lineEl.dataset.kPaintSig = paintSig
-          lineEl.style.setProperty('--line-progress', `${(qProg * 100).toFixed(2)}%`)
-          chars.forEach((charEl, cIdx) => {
-            charEl.classList.toggle('karaoke-on', cIdx < activeCount)
-            const isNext = cIdx === activeCount && activeCount < chars.length
-            charEl.classList.toggle('karaoke-next', isNext)
-            if (isNext) charEl.style.setProperty('--karaoke-frac', qFrac.toFixed(3))
-            else charEl.style.removeProperty('--karaoke-frac')
-          })
-        }
-      }
-    }
-  } else if (idxChanged) {
-    root.querySelectorAll('.lyrics-char.karaoke-on, .lyrics-char.karaoke-next').forEach((el) => {
-      el.classList.remove('karaoke-on', 'karaoke-next')
-      el.style.removeProperty('--karaoke-frac')
-    })
-    root.querySelectorAll('.lyrics-line').forEach((lineEl) => lineEl.style.removeProperty('--line-progress'))
-  }
-  if (idx >= 0) {
-    const el = root.querySelector('.lyrics-line.active')
-    if (el && idxChanged) {
-      const scrollBeh =
-        cfg.playbackMode === 'karaoke' ? 'auto' : cfg.scrollMode === 'smooth' ? 'smooth' : 'auto'
-      el.scrollIntoView({ behavior: scrollBeh, block: 'center', inline: 'nearest' })
-    }
-  }
-}
-
-// РІвЂќР‚РІвЂќР‚РІвЂќР‚ SC TEST РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
-async function testScAutoId() {
-  const btn = document.getElementById('sc-test-btn'); const msg = document.getElementById('sc-msg')
-  if (!btn||!msg) return
-  btn.textContent='РІРЏС– Р СџРЎР‚Р С•Р Р†Р ВµРЎР‚РЎРЏРЎР‹...'; btn.disabled=true; msg.textContent=''; msg.className='token-msg'
-  try {
-    if (!window.api?.scFetchClientId) { msg.textContent='Р СћР С•Р В»РЎРЉР С”Р С• Р Р† Electron'; msg.className='token-msg token-msg-err'; return }
-    _scAutoClientId = null
-    const r = await window.api.scFetchClientId()
-    if (r.ok && r.clientId) {
-      _scAutoClientId = r.clientId
-      msg.textContent=`РІСљвЂњ Р СџР С•Р Т‘Р С”Р В»РЎР‹РЎвЂЎР ВµР Р…Р С•! ID: ${r.clientId.slice(0,8)}РІР‚СћРІР‚СћРІР‚СћРІР‚Сћ`; msg.className='token-msg token-msg-ok'
-      const el = document.getElementById('sc-status'); if (el) el.className='token-status token-ok'
-      const tx = document.getElementById('sc-status-text'); if (tx) tx.textContent='Р СџР С•Р Т‘Р С”Р В»РЎР‹РЎвЂЎР ВµР Р…Р С•'
-    } else { msg.textContent='РІСљвЂ” '+(r.error||'Р Р…Р ВµР С‘Р В·Р Р†Р ВµРЎРѓРЎвЂљР Р…Р С•'); msg.className='token-msg token-msg-err' }
-  } catch(e) { msg.textContent='РІСљвЂ” '+e.message; msg.className='token-msg token-msg-err' }
-  btn.textContent='СЂСџвЂќвЂћ Р СџРЎР‚Р С•Р Р†Р ВµРЎР‚Р С‘РЎвЂљРЎРЉ Р С—Р С•Р Т‘Р С”Р В»РЎР‹РЎвЂЎР ВµР Р…Р С‘Р Вµ Р С” SoundCloud'; btn.disabled=false
-}
-
-function setupAppDragAndDrop() {
-  if (typeof dragDrop.setupGlobalDragDrop !== 'function') return
-  dragDrop.setupGlobalDragDrop({
-    onMp3: (file) => {
-      const objectUrl = URL.createObjectURL(file)
-      const meta = smartCleaning.splitArtistAndTitle
-        ? smartCleaning.splitArtistAndTitle(file.name)
-        : { artist: 'Р›РѕРєР°Р»СЊРЅС‹Р№ С„Р°Р№Р»', title: String(file.name || '').replace(/\.[a-z0-9]+$/i, '') }
-      const localTrack = sanitizeTrack({
-        title: meta.title,
-        artist: meta.artist,
-        url: objectUrl,
-        source: 'local',
-        id: `local:${file.name}:${file.size}:${file.lastModified}`,
-        bg: 'linear-gradient(135deg,#7c3aed,#a855f7)',
-      })
-      playTrackObj(localTrack).catch((err) => showToast(`Р¤Р°Р№Р» РЅРµ РїСЂРѕРёРіСЂР°РЅ: ${err?.message || err}`, true))
-      showToast(`Р›РѕРєР°Р»СЊРЅС‹Р№ С‚СЂРµРє: ${meta.title}`)
-    },
-    onGif: async (file) => {
-      try {
-        const mediaUrl = await saveCustomMediaFile(file, 'background')
-        saveVisual({ customBg: mediaUrl, bgType: 'custom' })
-        setBgType('custom')
-        showToast('GIF СѓСЃС‚Р°РЅРѕРІР»РµРЅ РєР°Рє С„РѕРЅ')
-      } catch (err) {
-        showToast(`GIF РЅРµ СЃРѕС…СЂР°РЅС‘РЅ: ${sanitizeDisplayText(err?.message || err)}`, true)
-      }
-    },
-    onInvalid: () => showToast('РџРѕРґРґРµСЂР¶РёРІР°СЋС‚СЃСЏ С‚РѕР»СЊРєРѕ .mp3 Рё .gif', true),
-  })
-}
-
-// РІвЂќР‚РІвЂќР‚РІвЂќР‚ INIT + HOTKEYS РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
-window.addEventListener('DOMContentLoaded', () => {
-  window.addEventListener(
-    'beforeunload',
-    () => {
-      try {
-        teardownAudioAnalyzer()
-      } catch (_) {}
-    },
-    { passive: true },
-  )
-  enableMojibakeAutoFix()
-  startApp()
-  try { document.body.setAttribute('data-active-page', _activePageId || 'home') } catch {}
-  applyUiTextOverrides()
-  refreshHomeDashboardLayoutAfterContentChange()
-  setupHomeDashboardDragAndDrop()
-  document.addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape' || !document.body.classList.contains('home-layout-edit')) return
-    try {
-      _teardownSidebarPanelDrag()
-    } catch (_) {}
-    document.body.classList.remove('home-layout-edit', 'flow-edit-enabled')
-    syncHomeLayoutEditButton()
-    teardownHomeDashboardDrag(true)
-    persistHomeDashboardLayoutFromDom()
-    if (isVisualFloatedLayout()) {
-      applyHomeBlockGeometry(cloneHomeGeometry(loadHomeBlockGeometryRaw()))
-    }
-    pulseHomeVisualLayoutSync()
-    queueMicrotask(() => scheduleMainShiftRemeasure())
-  })
-  {
-    const fySaved = parseInt(localStorage.getItem(FLOW_SIDEBAR_FLOAT_Y_LS) || '0', 10)
-    applySidebarFloatYPx(Number.isFinite(fySaved) ? fySaved : 0)
-  }
-  setupSidebarResize()
-  setupFloatedMainContentResize()
-  setupFloatedMainPaneDrag()
-  setupSidebarPanelEditDrag()
-  setupMainPaneShift()
-  try {
-    syncFlowLayoutCoords()
-  } catch (_) {}
-  setupCardTilt()
-  const savedSlider = Number(localStorage.getItem('flow_volume_slider') || '0.8')
-  setVolume(Number.isFinite(savedSlider) ? savedSlider : 0.8)
-  syncHomeCloneUI()
-  syncHomeWidgetUI()
-  applyHomeSliderStyle()
-  startHomeVisualizerLoop()
-  alignHomeHeaderToPlay()
-  window.addEventListener('resize', () => {
-    reclampHomeGeometryOnResize()
-    alignHomeHeaderToPlay()
-    resizeHomeVisualizerCanvas()
-  })
-  fixNodeTextMojibake(document.body)
-  setTimeout(applyUiTextOverrides, 300)
-  setTimeout(applyUiTextOverrides, 1200)
-  refreshYtDlpStatus().catch(() => {})
-  const createBtn = document.getElementById('btn-create-playlist')
-  if (createBtn) createBtn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); createPlaylist() })
-  const importTextBtn = document.getElementById('btn-import-text-playlist')
-  if (importTextBtn) importTextBtn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); openTextPlaylistImportModal() })
-  const importLinkBtn = document.getElementById('btn-import-playlist-link')
-  if (importLinkBtn) importLinkBtn.addEventListener('click', (e) => {
-    e.preventDefault()
-    e.stopPropagation()
-    importPlaylistLinkFromBar()
-  })
-  const playlistLinkInput = document.getElementById('playlist-link-import-input')
-  if (playlistLinkInput) {
-    playlistLinkInput.addEventListener('keydown', (e) => {
-      if (e.key !== 'Enter') return
-      e.preventDefault()
-      importPlaylistLinkFromBar()
-    })
-  }
-  const inviteInput = document.getElementById('invite-input')
-  if (inviteInput) {
-    inviteInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault()
-        submitInviteJoin()
-      }
-    })
-  }
-  const playlistEditNameInput = document.getElementById('playlist-edit-name-input')
-  const playlistEditDescInput = document.getElementById('playlist-edit-desc-input')
-  const onPlaylistEditEnter = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      submitPlaylistEditModal()
-    }
-  }
-  if (playlistEditNameInput) playlistEditNameInput.addEventListener('keydown', onPlaylistEditEnter)
-  if (playlistEditDescInput) playlistEditDescInput.addEventListener('keydown', onPlaylistEditEnter)
-  const libraryActionInput = document.getElementById('library-action-input')
-  if (libraryActionInput) {
-    libraryActionInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault()
-        submitLibraryActionModal()
-      }
-    })
-  }
-  const roomSearchInput = document.getElementById('room-queue-search')
-  if (roomSearchInput) {
-    roomSearchInput.addEventListener('keydown', (e) => {
-      if (e.key !== 'Enter') return
-      e.preventDefault()
-      if (_roomSearchResults.length) addRoomSearchTrack(0)
-    })
-  }
-  if (window.api?.appVersion) {
-    window.api.appVersion().then((r) => {
-      if (!r?.ok || !r?.version) return
-      const logo = document.getElementById('titlebar-logo')
-      if (logo) logo.textContent = `Flow v${r.version}`
-      const welcomeSub = document.querySelector('#page-home .content-sub')
-      if (welcomeSub) welcomeSub.textContent = `Р’С‹Р±РµСЂРё РёСЃС‚РѕС‡РЅРёРє Рё РЅР°С‡РЅРё СЃР»СѓС€Р°С‚СЊ вЂў Р±РёР»Рґ ${r.version}`
-      showToast(`Р—Р°РїСѓС‰РµРЅ Р±РёР»Рґ v${r.version}`)
-    }).catch(() => {})
-  }
-  if (window.api?.isWindowMaximized) {
-    window.api.isWindowMaximized().then((m) => syncTitlebarMaximizeIcon(Boolean(m))).catch(() => {})
-  }
-  window.addEventListener('resize', () => {
-    window.api?.isWindowMaximized?.()?.then?.((m) => syncTitlebarMaximizeIcon(Boolean(m)))?.catch?.(() => {})
-  })
-
-  if (window.api?.youtubeEngineStatus) {
-    window.api.youtubeEngineStatus()
-      .then((s) => {
-        if (!s?.ytdlp) {
-          showToast('YouTube engine: yt-dlp РЅРµ РЅР°Р№РґРµРЅ. РџРѕСЃС‚Р°РІСЊ: winget install yt-dlp.yt-dlp', true)
-          console.warn('YouTube engine status:', s)
-        } else {
-          console.log('YouTube engine ready:', s.ytdlpPath)
-        }
-      })
-      .catch((e) => console.warn('youtubeEngineStatus failed:', e?.message || e))
-  }
-  syncIntegrationsUI()
-  setupAppDragAndDrop()
-  if (window.api?.onDiscordJoinSecret) {
-    window.api.onDiscordJoinSecret((secret) => {
-      const roomId = resolveInviteToRoomId(secret)
-      if (!roomId || !_socialPeer) return
-      joinRoomById(roomId)
-      showToast(`Discord Join: РїРѕРґРєР»СЋС‡РµРЅРёРµ Рє ${roomId}`)
-    })
-  }
-
-  audio.addEventListener('play', () => {
-    if (_lyricsOpen) startLyricsSyncLoop()
-  })
-  audio.addEventListener('pause', () => {
-    stopLyricsSyncLoop()
-  })
-
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') {
-      const modal = document.getElementById('invite-modal')
-      if (modal && !modal.classList.contains('hidden')) {
-        e.preventDefault()
-        closeInviteModal()
-        return
-      }
-      const editModal = document.getElementById('playlist-edit-modal')
-      if (editModal && !editModal.classList.contains('hidden')) {
-        e.preventDefault()
-        closePlaylistEditModal()
-        return
-      }
-      const profileEditModal = document.getElementById('profile-edit-modal')
-      if (profileEditModal && !profileEditModal.classList.contains('hidden')) {
-        e.preventDefault()
-        closeProfileEditModal()
-        return
-      }
-      const libraryModal = document.getElementById('library-action-modal')
-      if (libraryModal && !libraryModal.classList.contains('hidden')) {
-        e.preventDefault()
-        closeLibraryActionModal()
-        return
-      }
-      const textImportModal = document.getElementById('text-import-modal')
-      if (textImportModal && !textImportModal.classList.contains('hidden')) {
-        e.preventDefault()
-        closeTextPlaylistImportModal()
-        return
-      }
-      const peerModal = document.getElementById('peer-profile-modal')
-      if (peerModal && !peerModal.classList.contains('hidden')) {
-        e.preventDefault()
-        closePeerProfile()
-        return
-      }
-      if (_playerModeActive) {
-        e.preventDefault()
-        exitPlayerMode()
-        return
-      }
-    }
-    const tag = document.activeElement?.tagName
-    if (tag==='INPUT'||tag==='TEXTAREA') return
-
-    if (e.code==='Space') { e.preventDefault(); togglePlay() }
-    if (canControlQueue() && e.key==='ArrowRight' && audio.duration) audio.currentTime = Math.min(audio.currentTime+10, audio.duration)
-    if (canControlQueue() && e.key==='ArrowLeft'  && audio.duration) audio.currentTime = Math.max(audio.currentTime-10, 0)
-
-    // РСЃС‚РѕС‡РЅРёРє С„РёРєСЃРёСЂРѕРІР°РЅ: Spotify -> YouTube
-  })
-})
-
-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     

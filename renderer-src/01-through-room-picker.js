@@ -2548,8 +2548,11 @@ const YANDEX_MUSIC_TOKEN_GUIDE_URL = 'https://yandex-music.readthedocs.io/en/mai
 const YANDEX_MUSIC_OAUTH_URL = 'https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41195d'
 const VKHOST_TOKEN_PAGE = 'https://vkhost.github.io/'
 const FLOW_YANDEX_TELEGRAPH_GUIDE_URL = 'https://telegra.ph/Kak-podklyuchit-YAndeks-Muzyku-vo-Flow-05-03'
-/** После публикации статьи на Telegraph вставь сюда полный https://telegra.ph/... — откроется он; иначе — локальный гайд из сборки. */
+/** Необязательно: если опубликуешь Telegraph — вставь полный https://telegra.ph/... (имеет приоритет над GitHub). */
 const FLOW_VK_TELEGRAPH_GUIDE_URL = ''
+/** Публичный гайд по токену VK (HTML в репозитории). */
+const FLOW_VK_GUIDE_GITHUB_BLOB =
+  'https://github.com/ioqeeqo-create/FlowPleerLoww/blob/master/assets/guides/vk-token-dlya-flow.html'
 
 function openFlowYandexTelegraphGuide() {
   openUrl(FLOW_YANDEX_TELEGRAPH_GUIDE_URL)
@@ -2557,9 +2560,13 @@ function openFlowYandexTelegraphGuide() {
 window.openFlowYandexTelegraphGuide = openFlowYandexTelegraphGuide
 
 function openFlowVkTelegraphGuide() {
-  const remote = String(FLOW_VK_TELEGRAPH_GUIDE_URL || '').trim()
-  if (remote && /^https?:\/\//i.test(remote)) {
-    openUrl(remote)
+  const tele = String(FLOW_VK_TELEGRAPH_GUIDE_URL || '').trim()
+  if (tele && /^https?:\/\//i.test(tele)) {
+    openUrl(tele)
+    return
+  }
+  if (String(FLOW_VK_GUIDE_GITHUB_BLOB || '').trim()) {
+    openUrl(FLOW_VK_GUIDE_GITHUB_BLOB.trim())
     return
   }
   try {
