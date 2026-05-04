@@ -43,6 +43,9 @@ const audio = (audioPlayer.createPlayerAudio || ((onErr) => {
     }
     const syncPlayingClass = () => {
       document.body.classList.toggle('audio-playing', Boolean(audio && !audio.paused && !audio.ended))
+      try {
+        refreshNowPlayingTrackHighlight()
+      } catch (_) {}
     }
     const onPlay = () => {
       syncPlayingClass()
@@ -857,6 +860,33 @@ function isSameTrackLoose(a, b) {
   const bKeys = getTrackCoverKeys(b)
   if (bKeys.some((k) => aKeys.has(k))) return true
   return normalizeTrackSignature(a) === normalizeTrackSignature(b)
+}
+
+function refreshNowPlayingTrackHighlight() {
+  const playing = Boolean(audio && !audio.paused && !audio.ended)
+  document.querySelectorAll('.track-card.is-now-playing').forEach((el) => el.classList.remove('is-now-playing'))
+  document.querySelectorAll('.playlist-track-row.is-now-playing').forEach((el) => el.classList.remove('is-now-playing'))
+  if (!currentTrack) return
+
+  const markCard = (card) => {
+    if (!card) return
+    card.classList.toggle('is-now-playing', playing)
+    const row = card.closest('.playlist-track-row')
+    if (row) row.classList.toggle('is-now-playing', playing)
+  }
+
+  const curKey = getTrackKey(currentTrack)
+  document.querySelectorAll('.track-card[data-flow-track-key]').forEach((card) => {
+    const key = String(card.getAttribute('data-flow-track-key') || '')
+    if (!key || key !== curKey) return
+    let t = null
+    try {
+      const enc = card.getAttribute('data-flow-track-json')
+      if (enc) t = JSON.parse(decodeURIComponent(enc))
+    } catch (_) {}
+    if (t && !isSameTrackLoose(currentTrack, t)) return
+    markCard(card)
+  })
 }
 
 function applyCustomCoverToCollections(baseTrack, coverUrl) {
@@ -2491,10 +2521,183 @@ function openUrl(url) {
 const YANDEX_MUSIC_TOKEN_GUIDE_URL = 'https://yandex-music.readthedocs.io/en/main/token.html'
 const YANDEX_MUSIC_OAUTH_URL = 'https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41195d'
 const VKHOST_TOKEN_PAGE = 'https://vkhost.github.io/'
+const FLOW_YANDEX_TELEGRAPH_GUIDE_URL = 'https://telegra.ph/Kak-podklyuchit-YAndeks-Muzyku-vo-Flow-05-03'
+/** После публикации статьи на Telegraph вставь сюда полный https://telegra.ph/... — откроется он; иначе — локальный гайд из сборки. */
+const FLOW_VK_TELEGRAPH_GUIDE_URL = ''
+
+function openFlowYandexTelegraphGuide() {
+  openUrl(FLOW_YANDEX_TELEGRAPH_GUIDE_URL)
+}
+window.openFlowYandexTelegraphGuide = openFlowYandexTelegraphGuide
+
+function openFlowVkTelegraphGuide() {
+  const remote = String(FLOW_VK_TELEGRAPH_GUIDE_URL || '').trim()
+  if (remote && /^https?:\/\//i.test(remote)) {
+    openUrl(remote)
+    return
+  }
+  try {
+    const href = String(window.location?.href || '')
+    if (href) {
+      const u = new URL('assets/guides/vk-token-dlya-flow.html', href)
+      openUrl(u.href)
+      return
+    }
+  } catch (_) {}
+  openUrl(VKHOST_TOKEN_PAGE)
+}
+window.openFlowVkTelegraphGuide = openFlowVkTelegraphGuide
+
+function forceSettingsSectionOpen(key) {
+  const sectionKey = String(key || '').trim()
+  if (!sectionKey || !Object.prototype.hasOwnProperty.call(SETTINGS_SECTION_COLLAPSED_DEFAULTS, sectionKey)) return
+  const merged = getMergedSettingsSectionsState()
+  merged[sectionKey] = false
+  saveSettingsSectionsState(merged)
+  applySettingsSectionsState()
+}
+
+function openAdvancedSourceSections() {
+  switchSettingsCategory('accounts')
+  ;['accountYoutube', 'accountSpotify', 'accountSoundcloud', 'accountVk', 'accountYandex'].forEach(forceSettingsSectionOpen)
+  requestAnimationFrame(() => {
+    document.querySelector('[data-settings-section="accountYoutube"]')?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  })
+}
+window.openAdvancedSourceSections = openAdvancedSourceSections
+
+function setAuthDrawerOpen(sourceKey) {
+  const stack = document.getElementById('auth-source-stack')
+  if (!stack) return
+  if (!sourceKey) {
+    stack.querySelectorAll('.auth-source-row.is-open').forEach((row) => row.classList.remove('is-open'))
+    stack.querySelectorAll('.auth-source-drawer').forEach((d) => d.setAttribute('aria-hidden', 'true'))
+    return
+  }
+  stack.querySelectorAll('.auth-source-row').forEach((row) => {
+    const on = row.getAttribute('data-auth-row') === sourceKey
+    row.classList.toggle('is-open', on)
+    const drawer = row.querySelector('.auth-source-drawer')
+    if (drawer) drawer.setAttribute('aria-hidden', on ? 'false' : 'true')
+  })
+}
+
+function onAuthSourceTileClick(evt, kind) {
+  const k = String(kind || '')
+  if (k === 'spotify') {
+    evt?.preventDefault?.()
+    const row = document.querySelector(`.auth-source-row[data-auth-row="spotify"]`)
+    const nextOpen = !row?.classList.contains('is-open')
+    setAuthDrawerOpen(nextOpen ? 'spotify' : null)
+    return
+  }
+
+  if (k === 'hybrid') setActiveSource('hybrid')
+  if (k === 'yandex') setActiveSource('yandex')
+  if (k === 'vk') setActiveSource('vk')
+
+  const row = document.querySelector(`.auth-source-row[data-auth-row="${k}"]`)
+  const nextOpen = !row?.classList.contains('is-open')
+  setAuthDrawerOpen(nextOpen ? k : null)
+
+  if (nextOpen && (k === 'yandex' || k === 'vk')) {
+    if (k === 'yandex') syncYmTokenFieldsFromMain()
+    if (k === 'vk') syncVkTokenFieldsFromMain()
+  }
+}
+window.onAuthSourceTileClick = onAuthSourceTileClick
+
+function syncYmTokenFieldsFromMain() {
+  const a = document.getElementById('ym-token-val')
+  const b = document.getElementById('ym-token-val-compact')
+  if (a && b) {
+    b.value = a.value
+    b.type = a.type
+  }
+}
+
+function syncYmTokenFieldsFromCompact() {
+  const a = document.getElementById('ym-token-val')
+  const b = document.getElementById('ym-token-val-compact')
+  if (a && b) {
+    a.value = b.value
+    a.type = b.type
+  }
+}
+
+function syncVkTokenFieldsFromMain() {
+  const a = document.getElementById('vk-token-val')
+  const b = document.getElementById('vk-token-val-compact')
+  if (a && b) {
+    b.value = a.value
+    b.type = a.type
+  }
+}
+
+function syncVkTokenFieldsFromCompact() {
+  const a = document.getElementById('vk-token-val')
+  const b = document.getElementById('vk-token-val-compact')
+  if (a && b) {
+    a.value = b.value
+    a.type = b.type
+  }
+}
+window.syncYmTokenFieldsFromCompact = syncYmTokenFieldsFromCompact
+window.syncVkTokenFieldsFromCompact = syncVkTokenFieldsFromCompact
+
+function mirrorTokenMsg(srcId, dstId) {
+  const src = document.getElementById(srcId)
+  const dst = document.getElementById(dstId)
+  if (!src || !dst) return
+  dst.textContent = src.textContent || ''
+  dst.className = src.className || 'token-msg'
+}
+
+function applyYandexTokenFromCompact() {
+  syncYmTokenFieldsFromCompact()
+  applyYandexToken()
+  mirrorTokenMsg('ym-msg', 'ym-msg-compact')
+}
+window.applyYandexTokenFromCompact = applyYandexTokenFromCompact
+
+function checkYandexTokenFromCompact() {
+  syncYmTokenFieldsFromCompact()
+  void checkYandexToken().then(() => mirrorTokenMsg('ym-msg', 'ym-msg-compact')).catch(() => mirrorTokenMsg('ym-msg', 'ym-msg-compact'))
+}
+window.checkYandexTokenFromCompact = checkYandexTokenFromCompact
+
+function applyVkTokenFromCompact() {
+  syncVkTokenFieldsFromCompact()
+  applyVkToken()
+  mirrorTokenMsg('vk-msg', 'vk-msg-compact')
+}
+window.applyVkTokenFromCompact = applyVkTokenFromCompact
+
+function checkVkTokenFromCompact() {
+  syncVkTokenFieldsFromCompact()
+  void checkVkToken().then(() => mirrorTokenMsg('vk-msg', 'vk-msg-compact')).catch(() => mirrorTokenMsg('vk-msg', 'vk-msg-compact'))
+}
+window.checkVkTokenFromCompact = checkVkTokenFromCompact
 
 function toggleToken(id) {
   const inp = document.getElementById(id)
   if (inp) inp.type = inp.type === 'password' ? 'text' : 'password'
+  if (id === 'ym-token-val-compact') {
+    const main = document.getElementById('ym-token-val')
+    if (main) main.type = inp.type
+  }
+  if (id === 'ym-token-val') {
+    const c = document.getElementById('ym-token-val-compact')
+    if (c) c.type = inp.type
+  }
+  if (id === 'vk-token-val-compact') {
+    const main = document.getElementById('vk-token-val')
+    if (main) main.type = inp.type
+  }
+  if (id === 'vk-token-val') {
+    const c = document.getElementById('vk-token-val-compact')
+    if (c) c.type = inp.type
+  }
 }
 
 function switchSrcTab(tab) {
@@ -2568,6 +2771,7 @@ async function checkVkToken() {
       msg.textContent = 'Вставь токен в поле ниже или нажми «сохранить» после вставки'
       msg.className = 'token-msg token-msg-err'
     }
+    mirrorTokenMsg('vk-msg', 'vk-msg-compact')
     return
   }
   if (!window.api?.vkValidateToken) {
@@ -2575,6 +2779,7 @@ async function checkVkToken() {
       msg.textContent = 'Проверка доступна только в Electron'
       msg.className = 'token-msg token-msg-err'
     }
+    mirrorTokenMsg('vk-msg', 'vk-msg-compact')
     return
   }
   if (msg) {
@@ -2601,6 +2806,7 @@ async function checkVkToken() {
             msg.textContent = line
             msg.className = 'token-msg token-msg-err'
           }
+          mirrorTokenMsg('vk-msg', 'vk-msg-compact')
           return
         }
         const ac = r.audioCode != null ? ` (код ${r.audioCode})` : ''
@@ -2619,6 +2825,7 @@ async function checkVkToken() {
             msg.textContent = line
             msg.className = 'token-msg token-msg-warn'
           }
+          mirrorTokenMsg('vk-msg', 'vk-msg-compact')
           return
         }
 
@@ -2645,6 +2852,7 @@ async function checkVkToken() {
       msg.className = 'token-msg token-msg-err'
     }
   }
+  mirrorTokenMsg('vk-msg', 'vk-msg-compact')
 }
 
 async function startVkBrowserAuth() {
@@ -2684,7 +2892,8 @@ function applyVkToken(token) {
   let t =
     token != null && String(token).trim() !== ''
       ? String(token).trim()
-      : String(document.getElementById('vk-token-val')?.value || '').trim()
+      : String(document.getElementById('vk-token-val-compact')?.value || '').trim() ||
+        String(document.getElementById('vk-token-val')?.value || '').trim()
   if (!t) {
     showToast('Введи или вставь VK токен', true)
     const mEl = document.getElementById('vk-msg')
@@ -2692,6 +2901,7 @@ function applyVkToken(token) {
       mEl.textContent = 'Поле токена пустое'
       mEl.className = 'token-msg token-msg-err'
     }
+    mirrorTokenMsg('vk-msg', 'vk-msg-compact')
     return
   }
   const extracted = t.match(/access_token=([^&]+)/)
@@ -2699,13 +2909,21 @@ function applyVkToken(token) {
   saveSettingsRaw({ vkToken: t })
   const field = document.getElementById('vk-token-val')
   if (field) field.value = t
+  const compact = document.getElementById('vk-token-val-compact')
+  if (compact) {
+    compact.value = t
+    compact.type = field?.type || compact.type
+  }
   updateVkStatus(t)
   showToast('VK токен сохранен')
   if (window.api?.vkValidateToken) void checkVkToken().catch(() => {})
+  mirrorTokenMsg('vk-msg', 'vk-msg-compact')
 }
 
 function getCurrentVkTokenForImport() {
-  const fieldToken = String(document.getElementById('vk-token-val')?.value || '').trim()
+  const fieldToken =
+    String(document.getElementById('vk-token-val-compact')?.value || '').trim() ||
+    String(document.getElementById('vk-token-val')?.value || '').trim()
   let token = fieldToken || String(getSettings().vkToken || '').trim()
   const m = token.match(/access_token=([^&]+)/)
   if (m) token = m[1]
@@ -2743,18 +2961,29 @@ function applySpotifyToken() {
 }
 
 function applyYandexToken() {
-  let token = document.getElementById('ym-token-val')?.value.trim()
+  let token =
+    String(document.getElementById('ym-token-val-compact')?.value || '').trim() ||
+    String(document.getElementById('ym-token-val')?.value || '').trim()
   const msg = document.getElementById('ym-msg')
   const m = token.match(/access_token=([^&#]+)/)
   if (m) token = decodeURIComponent(m[1])
   if (!token) {
     if (msg) { msg.textContent = 'Вставь access_token или полный redirect URL после OAuth-входа'; msg.className = 'token-msg token-msg-err' }
+    mirrorTokenMsg('ym-msg', 'ym-msg-compact')
     showToast('Введи токен Яндекс Музыки', true)
     return
   }
   saveSettingsRaw({ yandexToken: token })
+  const main = document.getElementById('ym-token-val')
+  const compact = document.getElementById('ym-token-val-compact')
+  if (main) main.value = token
+  if (compact) {
+    compact.value = token
+    compact.type = main?.type || compact.type
+  }
   updateYandexStatus(token)
   if (msg) { msg.textContent = 'Токен сохранен. Теперь можно импортировать плейлисты Яндекс Музыки по ссылке.'; msg.className = 'token-msg token-msg-ok' }
+  mirrorTokenMsg('ym-msg', 'ym-msg-compact')
   showToast('Токен Яндекс Музыки сохранен')
 }
 
@@ -2768,7 +2997,10 @@ function openYandexOAuthTokenPage() {
 
 async function checkYandexToken() {
   const msg = document.getElementById('ym-msg')
-  let tok = document.getElementById('ym-token-val')?.value.trim() || String(getSettings().yandexToken || '').trim()
+  let tok =
+    String(document.getElementById('ym-token-val-compact')?.value || '').trim() ||
+    String(document.getElementById('ym-token-val')?.value || '').trim() ||
+    String(getSettings().yandexToken || '').trim()
   const m = tok.match(/access_token=([^&#]+)/)
   if (m) tok = decodeURIComponent(m[1])
   tok = String(tok || '').trim()
@@ -2777,6 +3009,7 @@ async function checkYandexToken() {
       msg.textContent = 'Вставь токен или сохрани его галочкой выше'
       msg.className = 'token-msg token-msg-err'
     }
+    mirrorTokenMsg('ym-msg', 'ym-msg-compact')
     return
   }
   if (!window.api?.yandexValidateToken) {
@@ -2784,6 +3017,7 @@ async function checkYandexToken() {
       msg.textContent = 'Проверка доступна только в Electron'
       msg.className = 'token-msg token-msg-err'
     }
+    mirrorTokenMsg('ym-msg', 'ym-msg-compact')
     return
   }
   if (msg) {
@@ -2807,6 +3041,7 @@ async function checkYandexToken() {
       msg.className = 'token-msg token-msg-err'
     }
   }
+  mirrorTokenMsg('ym-msg', 'ym-msg-compact')
 }
 
 function updateYandexStatus(token) {
@@ -2856,6 +3091,12 @@ function setActiveSource(src) {
   if (!ALLOWED_ACTIVE_SOURCES.has(normalized)) normalized = 'hybrid'
   saveSettingsRaw({ activeSource: normalized })
   searchCache.clear()
+  try {
+    syncSearchSourceRows()
+    syncAuthSourceStackActive()
+    syncSearchSourcePills()
+    updateSourceBadge()
+  } catch (_) {}
 }
 
 function syncVkSeleniumBridgeToggle() {
@@ -2874,6 +3115,10 @@ function loadSettingsPage() {
   const s = getSettings()
   const ids = { 'sc-custom-val': s.soundcloudClientId, 'vk-token-val': s.vkToken, 'sp-token-val': s.spotifyToken, 'ym-token-val': s.yandexToken }
   for (const [id, val] of Object.entries(ids)) { const el = document.getElementById(id); if (el && val) el.value = val }
+  syncYmTokenFieldsFromMain()
+  syncVkTokenFieldsFromMain()
+  mirrorTokenMsg('ym-msg', 'ym-msg-compact')
+  mirrorTokenMsg('vk-msg', 'vk-msg-compact')
   updateScStatus(s.soundcloudClientId)
   updateVkStatus(s.vkToken)
   syncVkSeleniumBridgeToggle()
@@ -2891,6 +3136,7 @@ function loadSettingsPage() {
     switchSettingsCategory(_settingsCategory)
     applyOptimizationSettings()
     syncSearchSourceRows()
+    syncAuthSourceStackActive()
     updateSourceBadge()
   })
 }
@@ -3370,9 +3616,23 @@ function updateSourceBadge() {
 
 function syncSearchSourceRows() {
   const resolved = normalizeStoredActiveSource(getSettings()?.activeSource || 'hybrid')
-  const sel = '.source-mode-card[data-src="hybrid"], .source-mode-card[data-src="yandex"], .source-mode-card[data-src="vk"]'
+  const sel =
+    '#page-search .source-mode-grid .source-mode-card[data-src="hybrid"], ' +
+    '#page-search .source-mode-grid .source-mode-card[data-src="yandex"], ' +
+    '#page-search .source-mode-grid .source-mode-card[data-src="vk"]'
   document.querySelectorAll(sel).forEach((btn) => {
     const ds = String(btn.getAttribute('data-src') || '')
+    btn.classList.toggle('active', ds === resolved)
+  })
+}
+
+function syncAuthSourceStackActive() {
+  const resolved = normalizeStoredActiveSource(getSettings()?.activeSource || 'hybrid')
+  const stack = document.getElementById('auth-source-stack')
+  if (!stack) return
+  stack.querySelectorAll('.auth-source-tile.source-mode-card[data-src]').forEach((btn) => {
+    const ds = String(btn.getAttribute('data-src') || '')
+    if (!ds || ds === 'spotify-dev') return
     btn.classList.toggle('active', ds === resolved)
   })
 }
@@ -3386,7 +3646,6 @@ function switchSearchSource(src) {
         ? 'vk'
         : 'hybrid'
   setActiveSource(normalized)
-  syncSearchSourceRows()
   const msg =
     normalized === 'yandex'
       ? 'Источник: Яндекс Музыка (нужен токен в Настройках → Источники)'

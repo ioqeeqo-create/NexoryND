@@ -863,20 +863,88 @@
         <div class="glass-card" style="padding:18px;border-radius:18px;margin-top:8px;max-width:760px;">
           <div class="vs-section-title" style="margin-bottom:8px;">Источники</div>
           <div style="color:var(--muted);font-size:14px;line-height:1.55;margin-bottom:14px;">Откуда брать результаты поиска: классический Flow (сервер), Яндекс Музыка или ВКонтакте (нужен токен с аудио).</div>
-          <div class="source-mode-grid" style="margin:0 0 14px;">
-            <button class="source-mode-card" data-src="hybrid" onclick="setActiveSource('hybrid')" title="Flow classic">
-              <span class="source-mode-icon">F</span>
-              <span class="source-mode-label">classic</span>
-            </button>
-            <button class="source-mode-card" data-src="yandex" onclick="setActiveSource('yandex')" title="Яндекс">
-              <span class="source-mode-icon source-mode-icon-ya">✶</span>
-              <span class="source-mode-label">Ya</span>
-            </button>
-            <button class="source-mode-card" data-src="vk" onclick="setActiveSource('vk')" title="ВКонтакте">
-              <span class="source-mode-icon" style="font-size:13px;font-weight:800;background:linear-gradient(135deg,#4680c2,#5b9bd5);color:#fff">VK</span>
-              <span class="source-mode-label">VK</span>
-            </button>
+          <div class="auth-token-guide-row">
+            <button type="button" class="btn-small auth-token-guide-btn auth-token-guide-btn--half" onclick="openFlowYandexTelegraphGuide()" title="Открыть в браузере">Яндекс · Telegraph</button>
+            <button type="button" class="btn-small auth-token-guide-btn auth-token-guide-btn--half" onclick="openFlowVkTelegraphGuide()" title="Открыть в браузере">VK · Telegraph</button>
           </div>
+
+          <div class="auth-source-stack" id="auth-source-stack">
+            <div class="auth-source-row" data-auth-row="hybrid">
+              <button type="button" class="auth-source-tile auth-source-tile--flow source-mode-card" data-src="hybrid" onclick="onAuthSourceTileClick(event, 'hybrid')" title="Классический Flow">
+                <span class="auth-source-tile-img-wrap"><img class="auth-source-tile-img" src="assets/auth/flow.png" alt="Flow" /></span>
+                <span class="source-mode-label">Flow</span>
+              </button>
+              <div class="auth-source-drawer" data-auth-drawer="hybrid" aria-hidden="true">
+                <div class="auth-source-drawer-inner">
+                  <input class="token-field flow-input auth-readonly-line" readonly value="Работает" />
+                  <div class="auth-source-hint">Серверный гибридный поиск и потоки без отдельного токена.</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="auth-source-row" data-auth-row="yandex">
+              <button type="button" class="auth-source-tile auth-source-tile--yandex source-mode-card" data-src="yandex" onclick="onAuthSourceTileClick(event, 'yandex')" title="Яндекс Музыка">
+                <span class="auth-source-tile-img-wrap"><img class="auth-source-tile-img" src="assets/auth/yandex.png" alt="Яндекс Музыка" /></span>
+                <span class="source-mode-label">Яндекс</span>
+              </button>
+              <div class="auth-source-drawer" data-auth-drawer="yandex" aria-hidden="true">
+                <div class="auth-source-drawer-inner">
+                  <div class="token-field-wrap">
+                    <input id="ym-token-val-compact" type="password" class="token-field" placeholder="Вставь access_token или полный redirect URL..." oninput="syncYmTokenFieldsFromCompact()">
+                    <button class="token-field-eye" type="button" onclick="toggleToken('ym-token-val-compact')" title="Показать/скрыть">
+                      <svg class="ui-icon sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </button>
+                    <button class="token-field-apply" type="button" onclick="applyYandexTokenFromCompact()" title="Сохранить">
+                      <svg class="ui-icon sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><polyline points="20 6 9 17 4 12"/></svg>
+                    </button>
+                  </div>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 0;">
+                    <button class="btn-small" type="button" onclick="checkYandexTokenFromCompact()">Проверить токен</button>
+                  </div>
+                  <div id="ym-msg-compact" class="token-msg" style="display:block;margin-top:8px;" role="status" aria-live="polite"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="auth-source-row" data-auth-row="vk">
+              <button type="button" class="auth-source-tile auth-source-tile--vk source-mode-card" data-src="vk" onclick="onAuthSourceTileClick(event, 'vk')" title="ВКонтакте">
+                <span class="auth-source-tile-img-wrap"><img class="auth-source-tile-img" src="assets/auth/vk.png" alt="VK" /></span>
+                <span class="source-mode-label">VK</span>
+              </button>
+              <div class="auth-source-drawer" data-auth-drawer="vk" aria-hidden="true">
+                <div class="auth-source-drawer-inner">
+                  <div class="token-field-wrap">
+                    <input id="vk-token-val-compact" type="password" class="token-field" placeholder="Вставь VK токен..." oninput="syncVkTokenFieldsFromCompact()">
+                    <button class="token-field-eye" type="button" onclick="toggleToken('vk-token-val-compact')" title="Показать/скрыть">
+                      <svg class="ui-icon sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </button>
+                    <button class="token-field-apply" type="button" onclick="applyVkTokenFromCompact()" title="Сохранить">
+                      <svg class="ui-icon sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><polyline points="20 6 9 17 4 12"/></svg>
+                    </button>
+                  </div>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 0;">
+                    <button class="btn-small" type="button" onclick="checkVkTokenFromCompact()">Проверить токен</button>
+                  </div>
+                  <div id="vk-msg-compact" class="token-msg" style="display:block;margin-top:8px;" role="status" aria-live="polite"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="auth-source-row" data-auth-row="spotify">
+              <button type="button" class="auth-source-tile auth-source-tile--spotify source-mode-card" data-src="spotify-dev" onclick="onAuthSourceTileClick(event, 'spotify')" title="Spotify">
+                <span class="auth-source-tile-img-wrap"><img class="auth-source-tile-img" src="assets/auth/spotify.png" alt="Spotify" /></span>
+                <span class="source-mode-label">Spotify</span>
+              </button>
+              <div class="auth-source-drawer" data-auth-drawer="spotify" aria-hidden="true">
+                <div class="auth-source-drawer-inner">
+                  <input class="token-field flow-input auth-readonly-line" readonly value="В разработке" />
+                  <div class="auth-source-hint">Интеграция Spotify для этого блока пока не готова.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button type="button" class="btn-small auth-advanced-sources-btn" onclick="openAdvancedSourceSections()" style="margin:12px 0 14px;">Расширенные настройки (YouTube, Spotify Bearer, VK-логин…)</button>
 
           <div class="vs-section glass-card vs-collapsible collapsed" data-settings-section="accountYoutube" style="margin:10px 0 16px;">
             <button type="button" class="vs-section-head" onclick="toggleSettingsSection('accountYoutube')" aria-expanded="false">

@@ -5221,6 +5221,9 @@ async function playTrackObj(track, opts = {}) {
   updateDiscordPresence(track, _roomState)
   broadcastPlaybackSync(true)
   syncHomeCloneUI()
+  try {
+    refreshNowPlayingTrackHighlight()
+  } catch (_) {}
 }
 
 function scheduleNextTrackPrewarm(referenceTrack = null) {
@@ -5341,6 +5344,9 @@ function togglePlay() {
     audio.pause()
   }
   syncTransportPlayPauseUi()
+  try {
+    refreshNowPlayingTrackHighlight()
+  } catch (_) {}
   if (isRoomParticipant) {
     _socialPeer?.send?.({
       type: 'room-control-toggle',
@@ -5717,6 +5723,9 @@ function renderResults(results) {
     el.addEventListener('click', () => { queueIndex=i; playTrackObj(track) })
     container.appendChild(el)
   })
+  try {
+    refreshNowPlayingTrackHighlight()
+  } catch (_) {}
 }
 
 function getSourceLabel() {
@@ -6056,6 +6065,9 @@ function renderLiked() {
       fragment.appendChild(el)
     }
     container.appendChild(fragment)
+    try {
+      refreshNowPlayingTrackHighlight()
+    } catch (_) {}
     if (i < liked.length) setTimeout(renderChunk, 0)
   }
   renderChunk()
@@ -6213,6 +6225,9 @@ function openPlaylist(idx) {
       fragment.appendChild(row)
     }
     container.appendChild(fragment)
+    try {
+      refreshNowPlayingTrackHighlight()
+    } catch (_) {}
     if (cursor < pl.tracks.length) setTimeout(renderChunk, 0)
   }
   requestAnimationFrame(renderChunk)
@@ -6396,7 +6411,13 @@ async function processPlaylistImport(trackList, imported = {}) {
     const name = `${imported.name || 'Imported Playlist'} [${imported.service || 'import'}]`
     const normalizedName = String(name).trim().toLowerCase()
     const existingIdx = pls.findIndex((p) => String(p?.name || '').trim().toLowerCase() === normalizedName)
-    const nextPlaylist = normalizePlaylist({ name, tracks: collected })
+    const importedCover = String(imported?.cover || '').trim()
+    const fallbackCover = String(collected.find((t) => t?.cover)?.cover || '').trim()
+    const nextPlaylist = normalizePlaylist({
+      name,
+      coverData: importedCover || fallbackCover || null,
+      tracks: collected,
+    })
     if (existingIdx >= 0) pls[existingIdx] = nextPlaylist
     else pls.push(nextPlaylist)
     savePlaylists(pls)
@@ -6852,6 +6873,10 @@ const SRC_LABELS = { soundcloud: 'SC', vk: 'VK', hitmo: 'HM', youtube: 'YT', spo
 function makeTrackEl(track, showPlaylist=false, bindDefaultPlay=true) {
   track = sanitizeTrack(track)
   const el = document.createElement('div'); el.className='track-card'
+  try {
+    el.setAttribute('data-flow-track-key', getTrackKey(track))
+    el.setAttribute('data-flow-track-json', encodeURIComponent(JSON.stringify(track)))
+  } catch (_) {}
   const liked = isLiked(track)
   const trackJson = JSON.stringify(track).replace(/"/g,'&quot;')
   const trackCover = getListCoverUrl(track)
