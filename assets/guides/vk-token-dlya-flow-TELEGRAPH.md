@@ -43,8 +43,10 @@
 
 ---
 
-**Публичная ссылка на гайд (HTML в репо):**  
-https://github.com/ioqeeqo-create/FlowPleerLoww/blob/master/assets/guides/vk-token-dlya-flow.html  
+**Публичная ссылка на гайд (HTML в репо, ветка с актуальной сборкой):**  
+https://github.com/ioqeeqo-create/FlowPleerLoww/blob/cursor/liquid-glass-room-widget-0756/assets/guides/vk-token-dlya-flow.html  
+
+После слияния в `master` можно заменить на `.../blob/master/assets/guides/vk-token-dlya-flow.html`.
 
 В коде: `FLOW_VK_GUIDE_GITHUB_BLOB` + опционально `FLOW_VK_TELEGRAPH_GUIDE_URL` после публикации Telegraph.
 

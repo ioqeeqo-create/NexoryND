@@ -2496,7 +2496,7 @@ const FLOW_YANDEX_TELEGRAPH_GUIDE_URL = 'https://telegra.ph/Kak-podklyuchit-YAnd
 /** Необязательно: Telegraph-статья по VK — полный https://telegra.ph/... (приоритет над GitHub). */
 const FLOW_VK_TELEGRAPH_GUIDE_URL = ''
 const FLOW_VK_GUIDE_GITHUB_BLOB =
-  'https://github.com/ioqeeqo-create/FlowPleerLoww/blob/master/assets/guides/vk-token-dlya-flow.html'
+  'https://github.com/ioqeeqo-create/FlowPleerLoww/blob/cursor/liquid-glass-room-widget-0756/assets/guides/vk-token-dlya-flow.html'
 
 function openFlowYandexTelegraphGuide() {
   openUrl(FLOW_YANDEX_TELEGRAPH_GUIDE_URL)
