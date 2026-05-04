@@ -1,6 +1,8 @@
 ;(function initFlowSocialBackend() {
-  const DEFAULT_BASE = 'http://85.239.34.229:3847'
-  const DEFAULT_SECRET = 'ed33640b3cd6ca2418ebb2016d9f234db18fb58a25564a1c889363eb1d997dd4'
+  /** Публичный Nginx :80 → flow-social-server; с телефона/браузера не :3847. */
+  const DEFAULT_BASE = 'http://85.239.34.229/social'
+  /** Должен совпадать с FLOW_SOCIAL_SECRET на VPS (у тебя flowflow). */
+  const DEFAULT_SECRET = 'flowflow'
   const listeners = new Set()
   let ws = null
   let reconnectTimer = null
