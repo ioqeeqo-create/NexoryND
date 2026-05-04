@@ -43,11 +43,10 @@
 
 ---
 
-**Публичная ссылка на гайд (HTML в репо, ветка с актуальной сборкой):**  
+**Telegraph (основная ссылка в приложении):**  
+https://telegra.ph/Kak-podklyuchit-VKontakte-vo-Flow-05-04  
+
+**Резерв (HTML в репо):**  
 https://github.com/ioqeeqo-create/FlowPleerLoww/blob/cursor/liquid-glass-room-widget-0756/assets/guides/vk-token-dlya-flow.html  
 
-После слияния в `master` можно заменить на `.../blob/master/assets/guides/vk-token-dlya-flow.html`.
-
-В коде: `FLOW_VK_GUIDE_GITHUB_BLOB` + опционально `FLOW_VK_TELEGRAPH_GUIDE_URL` после публикации Telegraph.
-
-После публикации на Telegraph подставь полный `https://telegra.ph/...` в `FLOW_VK_TELEGRAPH_GUIDE_URL` в `renderer-src/01-through-room-picker.js` и пересобери `renderer.js` — тогда откроется Telegraph вместо GitHub.
+В коде: `FLOW_VK_TELEGRAPH_GUIDE_URL` (Telegraph) → иначе `FLOW_VK_GUIDE_GITHUB_BLOB` → иначе локальный `assets/guides/...`.

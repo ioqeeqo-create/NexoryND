@@ -865,7 +865,7 @@
           <div style="color:var(--muted);font-size:14px;line-height:1.55;margin-bottom:14px;">Откуда брать результаты поиска: классический Flow (сервер), Яндекс Музыка или ВКонтакте (нужен токен с аудио).</div>
           <div class="auth-token-guide-row">
             <button type="button" class="btn-small auth-token-guide-btn auth-token-guide-btn--half" onclick="openFlowYandexTelegraphGuide()" title="Открыть в браузере">Яндекс · Telegraph</button>
-            <button type="button" class="btn-small auth-token-guide-btn auth-token-guide-btn--half" onclick="openFlowVkTelegraphGuide()" title="Гайд: токен VK (GitHub)">VK · гайд</button>
+            <button type="button" class="btn-small auth-token-guide-btn auth-token-guide-btn--half" onclick="openFlowVkTelegraphGuide()" title="Открыть гайд VK (Telegraph)">VK · Telegraph</button>
           </div>
 
           <div class="auth-source-stack" id="auth-source-stack">
@@ -924,7 +924,7 @@
                   </div>
                   <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 0;">
                     <button class="btn-small" type="button" onclick="checkVkTokenFromCompact()">Проверить токен</button>
-                    <button class="btn-small" type="button" onclick="openFlowVkTelegraphGuide()" title="Пошаговая инструкция">Гайд VK</button>
+                    <button class="btn-small" type="button" onclick="openFlowVkTelegraphGuide()" title="Telegraph: как подключить ВКонтакте во Flow">VK · Telegraph</button>
                   </div>
                   <div id="vk-msg-compact" class="token-msg" style="display:block;margin-top:8px;" role="status" aria-live="polite"></div>
                 </div>
@@ -1021,7 +1021,7 @@
               <button class="btn-small" id="vk-get-btn" onclick="getVkToken()">Войти в VK и получить токен</button>
               <button class="btn-small" id="vk-browser-auth-btn" onclick="startVkBrowserAuth()">Открыть вход VK в браузере</button>
               <button class="btn-small" onclick="openVkHostTokenPage()">Открыть vkhost.github.io</button>
-              <button class="btn-small" type="button" onclick="openFlowVkTelegraphGuide()" title="Пошаговая инструкция">Гайд VK (шаги)</button>
+              <button class="btn-small" type="button" onclick="openFlowVkTelegraphGuide()" title="Telegraph: как подключить ВКонтакте во Flow">VK · Telegraph</button>
             </div>
 
             <div style="font-size:12px;color:var(--muted);margin:12px 0 6px;">Токен VK (можно вставить вручную)</div>

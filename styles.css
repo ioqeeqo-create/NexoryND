@@ -6941,15 +6941,9 @@ body.layout-top-nav[data-toast-position="bottom-left"] .toast {
 .spin-icon { animation: spin 0.9s linear infinite; }
 
 /* ═══════════════════════════════════════════════════════════
-   HITMO / SEARCH — PREMIUM REDESIGN v6
+   SEARCH — PREMIUM REDESIGN v6
    Glassmorphism · Glow · Hover overlays · Apple Music vibes
 ═══════════════════════════════════════════════════════════ */
-
-/* ── Track source badge for Hitmo ── */
-.track-source-hitmo {
-  background: rgba(255,46,136,0.18);
-  color: #ff6eb5;
-}
 
 /* ── SEARCH PAGE OVERHAUL ── */
 #page-search .content-header {
@@ -7391,21 +7385,6 @@ body:not(.audio-playing) .track-card.is-now-playing {
   box-shadow: 0 6px 20px rgba(255,46,136,0.4);
 }
 
-/* Hitmo badge in settings */
-.hitmo-free-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: linear-gradient(135deg, rgba(255,46,136,0.15), rgba(160,32,240,0.1));
-  border: 1px solid rgba(255,46,136,0.3);
-  color: #ff6eb5;
-  padding: 4px 10px;
-  border-radius: 20px;
-  font-size: 11px;
-  font-weight: 600;
-  margin-bottom: 12px;
-}
-
 /* Empty state for search — nicer */
 .empty-state {
   text-align: center;
@@ -7421,13 +7400,6 @@ body:not(.audio-playing) .track-card.is-now-playing {
   display: flex; align-items: center; gap: 14px;
   color: var(--muted); padding: 28px 4px;
   font-size: 13px;
-}
-
-/* Hitmo glow accent on active source pills */
-.search-source-pill[data-src="hitmo"].active {
-  background: rgba(255,46,136,0.18);
-  border-color: rgba(255,46,136,0.5);
-  box-shadow: 0 0 16px rgba(255,46,136,0.25);
 }
 
 /* Theme variants */

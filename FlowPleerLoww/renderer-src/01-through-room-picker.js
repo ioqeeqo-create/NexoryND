@@ -2193,7 +2193,7 @@ const providers = {
 }
 
 /** Активный источник в настройках: гибрид отдельно от одиночных провайдеров в `providers`. */
-const ALLOWED_ACTIVE_SOURCES = new Set(['hybrid', 'spotify', 'soundcloud', 'audius', 'hitmo', 'yandex', 'vk'])
+const ALLOWED_ACTIVE_SOURCES = new Set(['hybrid', 'spotify', 'soundcloud', 'audius', 'yandex', 'vk'])
 
 function normalizeStoredActiveSource(rawSrc) {
   const raw = String(rawSrc || 'hybrid').toLowerCase()
@@ -2201,7 +2201,7 @@ function normalizeStoredActiveSource(rawSrc) {
   if (raw === 'yt' || raw === 'youtube') return 'hybrid'
   if (raw === 'ya' || raw === 'ym') return 'yandex'
   if (raw === 'sc') return 'soundcloud'
-  if (raw === 'hm') return 'hitmo'
+  if (raw === 'hm' || raw === 'hitmo') return 'hybrid'
   if (raw === 'vkontakte') return 'vk'
   if (ALLOWED_ACTIVE_SOURCES.has(raw)) return raw
   return 'hybrid'
@@ -2493,8 +2493,8 @@ const YANDEX_MUSIC_TOKEN_GUIDE_URL = 'https://yandex-music.readthedocs.io/en/mai
 const YANDEX_MUSIC_OAUTH_URL = 'https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41195d'
 const VKHOST_TOKEN_PAGE = 'https://vkhost.github.io/'
 const FLOW_YANDEX_TELEGRAPH_GUIDE_URL = 'https://telegra.ph/Kak-podklyuchit-YAndeks-Muzyku-vo-Flow-05-03'
-/** Необязательно: Telegraph-статья по VK — полный https://telegra.ph/... (приоритет над GitHub). */
-const FLOW_VK_TELEGRAPH_GUIDE_URL = ''
+/** Опубликованный гайд VK (Telegraph); имеет приоритет над GitHub. */
+const FLOW_VK_TELEGRAPH_GUIDE_URL = 'https://telegra.ph/Kak-podklyuchit-VKontakte-vo-Flow-05-04'
 const FLOW_VK_GUIDE_GITHUB_BLOB =
   'https://github.com/ioqeeqo-create/FlowPleerLoww/blob/cursor/liquid-glass-room-widget-0756/assets/guides/vk-token-dlya-flow.html'
 
@@ -2531,7 +2531,7 @@ function toggleToken(id) {
 }
 
 function switchSrcTab(tab) {
-  ;['sc','vk','hm','yt','sp'].forEach(t => {
+  ;['sc','vk','yt','sp'].forEach(t => {
     document.getElementById('srctab-'+t)?.classList.toggle('active', t === tab)
     const p = document.getElementById('panel-'+t)
     if (p) { p.classList.toggle('hidden', t !== tab); p.classList.toggle('active', t === tab) }
@@ -2870,7 +2870,7 @@ function setActiveSource(src) {
   let normalized =
     raw === 'yt' || raw === 'youtube' ? 'hybrid' :
     raw === 'sc' ? 'soundcloud' :
-    raw === 'hm' ? 'hitmo' :
+    raw === 'hm' || raw === 'hitmo' ? 'hybrid' :
     raw === 'ya' || raw === 'ym' ? 'yandex' :
     raw === 'vkontakte' ? 'vk' :
     raw
@@ -3384,7 +3384,6 @@ function updateSourceBadge() {
   else if (raw === 'spotify') txt = 'Spotify'
   else if (raw === 'soundcloud') txt = 'SoundCloud'
   else if (raw === 'audius') txt = 'Audius'
-  else if (raw === 'hitmo') txt = 'Hitmo'
   const b1 = document.getElementById('source-badge'); if (b1) b1.textContent = txt
   const b2 = document.getElementById('source-badge-search'); if (b2) b2.textContent = txt
 }

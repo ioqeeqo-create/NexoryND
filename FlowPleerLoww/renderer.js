@@ -2193,7 +2193,7 @@ const providers = {
 }
 
 /** Активный источник в настройках: гибрид отдельно от одиночных провайдеров в `providers`. */
-const ALLOWED_ACTIVE_SOURCES = new Set(['hybrid', 'spotify', 'soundcloud', 'audius', 'hitmo', 'yandex', 'vk'])
+const ALLOWED_ACTIVE_SOURCES = new Set(['hybrid', 'spotify', 'soundcloud', 'audius', 'yandex', 'vk'])
 
 function normalizeStoredActiveSource(rawSrc) {
   const raw = String(rawSrc || 'hybrid').toLowerCase()
@@ -2201,7 +2201,7 @@ function normalizeStoredActiveSource(rawSrc) {
   if (raw === 'yt' || raw === 'youtube') return 'hybrid'
   if (raw === 'ya' || raw === 'ym') return 'yandex'
   if (raw === 'sc') return 'soundcloud'
-  if (raw === 'hm') return 'hitmo'
+  if (raw === 'hm' || raw === 'hitmo') return 'hybrid'
   if (raw === 'vkontakte') return 'vk'
   if (ALLOWED_ACTIVE_SOURCES.has(raw)) return raw
   return 'hybrid'
@@ -2493,8 +2493,8 @@ const YANDEX_MUSIC_TOKEN_GUIDE_URL = 'https://yandex-music.readthedocs.io/en/mai
 const YANDEX_MUSIC_OAUTH_URL = 'https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41195d'
 const VKHOST_TOKEN_PAGE = 'https://vkhost.github.io/'
 const FLOW_YANDEX_TELEGRAPH_GUIDE_URL = 'https://telegra.ph/Kak-podklyuchit-YAndeks-Muzyku-vo-Flow-05-03'
-/** Необязательно: Telegraph-статья по VK — полный https://telegra.ph/... (приоритет над GitHub). */
-const FLOW_VK_TELEGRAPH_GUIDE_URL = ''
+/** Опубликованный гайд VK (Telegraph); имеет приоритет над GitHub. */
+const FLOW_VK_TELEGRAPH_GUIDE_URL = 'https://telegra.ph/Kak-podklyuchit-VKontakte-vo-Flow-05-04'
 const FLOW_VK_GUIDE_GITHUB_BLOB =
   'https://github.com/ioqeeqo-create/FlowPleerLoww/blob/cursor/liquid-glass-room-widget-0756/assets/guides/vk-token-dlya-flow.html'
 
@@ -2531,7 +2531,7 @@ function toggleToken(id) {
 }
 
 function switchSrcTab(tab) {
-  ;['sc','vk','hm','yt','sp'].forEach(t => {
+  ;['sc','vk','yt','sp'].forEach(t => {
     document.getElementById('srctab-'+t)?.classList.toggle('active', t === tab)
     const p = document.getElementById('panel-'+t)
     if (p) { p.classList.toggle('hidden', t !== tab); p.classList.toggle('active', t === tab) }
@@ -2870,7 +2870,7 @@ function setActiveSource(src) {
   let normalized =
     raw === 'yt' || raw === 'youtube' ? 'hybrid' :
     raw === 'sc' ? 'soundcloud' :
-    raw === 'hm' ? 'hitmo' :
+    raw === 'hm' || raw === 'hitmo' ? 'hybrid' :
     raw === 'ya' || raw === 'ym' ? 'yandex' :
     raw === 'vkontakte' ? 'vk' :
     raw
@@ -3384,7 +3384,6 @@ function updateSourceBadge() {
   else if (raw === 'spotify') txt = 'Spotify'
   else if (raw === 'soundcloud') txt = 'SoundCloud'
   else if (raw === 'audius') txt = 'Audius'
-  else if (raw === 'hitmo') txt = 'Hitmo'
   const b1 = document.getElementById('source-badge'); if (b1) b1.textContent = txt
   const b2 = document.getElementById('source-badge-search'); if (b2) b2.textContent = txt
 }
@@ -4601,7 +4600,7 @@ function resolvePeerAvatarByUsername(username = '') {
 
 /** Бейдж как на карточках треков: SoundCloud — оранжевый «SC» (совпадает с .track-source-soundcloud). */
 function profileListeningSourcePillHtml(trackHint) {
-  const LABELS = { soundcloud: 'SC', vk: 'VK', hitmo: 'HM', youtube: 'YT', spotify: 'SP' }
+  const LABELS = { soundcloud: 'SC', vk: 'VK', youtube: 'YT', spotify: 'SP' }
   const src =
     trackHint && typeof trackHint.source === 'string' && LABELS[trackHint.source] ? trackHint.source : ''
   if (!src) {
@@ -9508,7 +9507,6 @@ function searchLoadingPlaceholderLine(settings = getSettings()) {
   const src = String(settings?.activeSource || currentSource || 'hybrid').toLowerCase()
   if (src === 'yandex' || src === 'ya' || src === 'ym') return 'Поиск: Яндекс Музыка...'
   if (src === 'vk') return 'Поиск: ВКонтакте...'
-  if (src === 'hitmo' || src === 'hm') return 'Поиск: HitMo...'
   if (src === 'youtube' || src === 'yt') return 'Поиск: YouTube...'
   return 'Поиск: Spotify → SoundCloud → Audius...'
 }
@@ -9538,10 +9536,7 @@ function searchTracks(queryOverride = '') {
       const src = String(s.activeSource || currentSource || 'hybrid').toLowerCase()
       let results = []
       let mode = 'hybrid'
-      if (src === 'hitmo' || src === 'hm') {
-        results = sanitizeTrackList(await searchHitmo(q))
-        mode = 'hitmo'
-      } else if (src === 'youtube' || src === 'yt') {
+      if (src === 'youtube' || src === 'yt') {
         if (!window.api?.youtubeSearch) throw new Error('YouTube поиск доступен только в Electron')
         const ytList = await window.api.youtubeSearch(q)
         if (!Array.isArray(ytList)) throw new Error('YouTube: некорректный ответ')
@@ -9595,7 +9590,6 @@ async function searchTracksDirect(query, settings = getSettings()) {
   const q = String(query || '').trim()
   if (!q) return []
   const src = String(settings?.activeSource || currentSource || 'hybrid').toLowerCase()
-  if (src === 'hitmo' || src === 'hm') return sanitizeTrackList(await searchHitmo(q))
   if (src === 'yandex' || src === 'ya' || src === 'ym') {
     const token = String(settings?.yandexToken || '').trim()
     if (!token) throw new Error('Яндекс: укажи токен Музыки в настройках')
@@ -9666,7 +9660,6 @@ function getSourceLabel() {
   if (_lastSearchMode === 'youtube') return 'YouTube'
   if (_lastSearchMode === 'yandex') return 'Яндекс Музыка'
   if (_lastSearchMode === 'vk') return 'ВКонтакте'
-  if (_lastSearchMode === 'hitmo') return 'HitMo'
   return 'Spotify → SoundCloud → Audius'
 }
 
@@ -9765,88 +9758,6 @@ async function searchVK(q, token) {
     title: t.title||'Без названия', artist: t.artist||'—', url: t.url,
     cover: t.album?.thumb?.photo_300||null, bg: 'linear-gradient(135deg,#4680c2,#5b9bd5)', source:'vk', id:String(t.id)
   }))
-}
-
-// в”Ђв”Ђв”Ђ HITMO в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-async function searchHitmo(q) {
-  if (!window.api?.hitmoSearch) throw new Error('Hitmo серверный поиск недоступен')
-  const result = await window.api.hitmoSearch(q)
-  if (!result.ok) throw new Error('Hitmo: ' + (result.error || 'ошибка поиска'))
-  return result.tracks
-}
-
-function parseHitmoResults(html) {
-  const parser = new DOMParser()
-  const doc = parser.parseFromString(html, 'text/html')
-  const tracks = []
-
-  // Hitmo uses .play-track or similar list items
-  const items = doc.querySelectorAll('.song-item, .track-item, .music-item, [data-url], [data-mp3]')
-
-  items.forEach(item => {
-    // Try to get mp3 url
-    const audioUrl = item.getAttribute('data-mp3') || item.getAttribute('data-url') ||
-      item.querySelector('[data-mp3]')?.getAttribute('data-mp3') ||
-      item.querySelector('a[href$=".mp3"]')?.href
-
-    // Title and artist
-    const titleEl = item.querySelector('.song-title, .track-name, .title, h3, h4, .name')
-    const artistEl = item.querySelector('.song-artist, .artist, .performer, .author')
-
-    // Cover image
-    const imgEl = item.querySelector('img[src], [data-src]')
-    const coverUrl = imgEl?.src || imgEl?.getAttribute('data-src') || null
-
-    if (!audioUrl && !titleEl) return
-
-    const rawTitle = titleEl?.textContent?.trim() || item.getAttribute('data-title') || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ'
-    const rawArtist = artistEl?.textContent?.trim() || item.getAttribute('data-artist') || 'вЂ”'
-
-    tracks.push({
-      title: rawTitle,
-      artist: rawArtist,
-      url: audioUrl || null,
-      cover: coverUrl,
-      bg: 'linear-gradient(135deg,#ff2e88,#a020f0)',
-      source: 'hitmo',
-      id: audioUrl || (rawTitle + rawArtist)
-    })
-
-    if (tracks.length >= 25) return
-  })
-
-  // If selector didn't find items, try a more generic approach
-  if (tracks.length === 0) {
-    // Try JSON data embedded in page
-    const scripts = doc.querySelectorAll('script')
-    scripts.forEach(s => {
-      const text = s.textContent
-      // look for track list JSON
-      const jsonMatch = text.match(/tracks\s*[:=]\s*(\[.*?\])/s) || text.match(/trackList\s*[:=]\s*(\[.*?\])/s)
-      if (jsonMatch) {
-        try {
-          const data = JSON.parse(jsonMatch[1])
-          data.forEach(t => {
-            tracks.push({
-              title: t.title || t.name || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ',
-              artist: t.artist || t.performer || 'вЂ”',
-              url: t.url || t.mp3 || t.src || null,
-              cover: t.cover || t.image || t.img || null,
-              bg: 'linear-gradient(135deg,#ff2e88,#a020f0)',
-              source: 'hitmo',
-              id: t.id || (t.title + t.artist)
-            })
-          })
-        } catch(e) {}
-      }
-    })
-  }
-
-  if (tracks.length === 0) {
-    throw new Error('Hitmo: РЅРёС‡РµРіРѕ РЅРµ РЅР°Р№РґРµРЅРѕ РёР»Рё СЃС‚СЂСѓРєС‚СѓСЂР° СЃС‚СЂР°РЅРёС†С‹ РёР·РјРµРЅРёР»Р°СЃСЊ. РџРѕРїСЂРѕР±СѓР№ YouTube.')
-  }
-
-  return tracks
 }
 
 // в”Ђв”Ђв”Ђ YOUTUBE в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
@@ -10734,7 +10645,7 @@ function editPlaylistMeta(idx) {
 }
 
 // в”Ђв”Ђв”Ђ TRACK CARD в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-const SRC_LABELS = { soundcloud:'SC', vk:'VK', hitmo:'HM', youtube:'YT', spotify:'SP' }
+const SRC_LABELS = { soundcloud:'SC', vk:'VK', youtube:'YT', spotify:'SP' }
 
 function makeTrackEl(track, showPlaylist=false, bindDefaultPlay=true) {
   track = sanitizeTrack(track)
