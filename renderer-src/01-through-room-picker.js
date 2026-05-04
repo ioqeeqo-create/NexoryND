@@ -1490,9 +1490,9 @@ function setAccent(a1, a2) {
   document.documentElement.style.setProperty('--accent', a1)
   document.documentElement.style.setProperty('--accent2', a2)
   syncAccentSwatchSelection(a1, a2)
-  // update gorb colors
-  document.getElementById('gorb1').style.background = `radial-gradient(circle,${a1},transparent 70%)`
-  document.getElementById('gorb2').style.background = `radial-gradient(circle,${a2},transparent 70%)`
+  // update gorb colors (flat wash — без радиального градиента)
+  document.getElementById('gorb1').style.background = `color-mix(in srgb, ${a1} 24%, transparent)`
+  document.getElementById('gorb2').style.background = `color-mix(in srgb, ${a2} 24%, transparent)`
   const o1 = document.getElementById('orb1-color')
   const o2 = document.getElementById('orb2-color')
   if (o1) o1.value = a1
@@ -1507,8 +1507,8 @@ function setOrbColor(idx, color) {
   const c2 = idx === 2 ? color : (v.orb2Color || v.accent2)
   const g1 = document.getElementById('gorb1')
   const g2 = document.getElementById('gorb2')
-  if (g1) g1.style.background = `radial-gradient(circle,${c1},transparent 70%)`
-  if (g2) g2.style.background = `radial-gradient(circle,${c2},transparent 70%)`
+  if (g1) g1.style.background = `color-mix(in srgb, ${c1} 24%, transparent)`
+  if (g2) g2.style.background = `color-mix(in srgb, ${c2} 24%, transparent)`
 }
 
 function toggleEffect(name) {
@@ -1572,15 +1572,15 @@ function updateOrbsFromCover(coverUrl) {
       const c1 = `rgb(${r},${g},${b})`
       const c2 = `rgb(${Math.min(255,r+60)},${Math.min(255,g+30)},${Math.min(255,b+80)})`
       if (effects.dyncolor) {
-        document.getElementById('gorb1').style.background = `radial-gradient(circle,${c1},transparent 70%)`
-        document.getElementById('gorb2').style.background = `radial-gradient(circle,${c2},transparent 70%)`
+        document.getElementById('gorb1').style.background = `color-mix(in srgb, ${c1} 24%, transparent)`
+        document.getElementById('gorb2').style.background = `color-mix(in srgb, ${c2} 24%, transparent)`
       }
       if (effects.accentFromCover) {
         document.documentElement.style.setProperty('--accent', c1)
         document.documentElement.style.setProperty('--accent2', c2)
       }
       if (document.getElementById('pm-cover-glow')) {
-        document.getElementById('pm-cover-glow').style.background = `radial-gradient(circle,${c1},transparent 70%)`
+        document.getElementById('pm-cover-glow').style.background = `color-mix(in srgb, ${c1} 28%, transparent)`
       }
       if (v.bgType === 'cover') updateBackground()
     } catch(e) {}
@@ -1592,9 +1592,7 @@ function setYandexPlayerThemeFromRgb(r, g, b) {
   const root = document.documentElement
   const clamp = (n) => Math.max(0, Math.min(255, Math.round(n)))
   const base = `rgb(${clamp(r * 0.72)}, ${clamp(g * 0.66)}, ${clamp(b * 0.6)})`
-  const hi = `rgb(${clamp(r * 0.9 + 46)}, ${clamp(g * 0.84 + 40)}, ${clamp(b * 0.78 + 34)})`
-  const lo = `rgb(${clamp(r * 0.38)}, ${clamp(g * 0.34)}, ${clamp(b * 0.32)})`
-  root.style.setProperty('--yandex-player-bg', `linear-gradient(90deg, ${lo}, ${base} 32%, ${hi} 64%, ${base})`)
+  root.style.setProperty('--yandex-player-bg', base)
   root.style.setProperty('--yandex-player-card', `rgba(${clamp(r * 0.26)}, ${clamp(g * 0.24)}, ${clamp(b * 0.23)}, 0.58)`)
   root.style.setProperty('--yandex-player-glow', `rgba(${clamp(r)}, ${clamp(g)}, ${clamp(b)}, 0.26)`)
 }
@@ -1604,11 +1602,11 @@ function updateYandexPlayerTheme(track = currentTrack) {
   const fallback = String(track?.bg || '').trim()
   const coverUrl = getEffectiveCoverUrl(track)
   if (!coverUrl) {
-    if (fallback && /^linear-gradient|^radial-gradient/i.test(fallback)) {
-      document.documentElement.style.setProperty('--yandex-player-bg', fallback)
-    } else {
-      document.documentElement.style.setProperty('--yandex-player-bg', 'linear-gradient(90deg, #3b1d12, #6b2f14 52%, #8a411c)')
-    }
+    const solidFallback =
+      fallback && !/^linear-gradient|^radial-gradient/i.test(String(fallback).trim())
+        ? String(fallback).trim()
+        : '#482618'
+    document.documentElement.style.setProperty('--yandex-player-bg', solidFallback)
     document.documentElement.style.setProperty('--yandex-player-card', 'rgba(31, 18, 14, 0.5)')
     document.documentElement.style.setProperty('--yandex-player-glow', 'rgba(251, 255, 40, 0.12)')
     return
@@ -1677,8 +1675,8 @@ function initVisualSettings() {
   const orb2 = v.orb2Color || v.accent2
   const g1 = document.getElementById('gorb1')
   const g2 = document.getElementById('gorb2')
-  if (g1) g1.style.background = `radial-gradient(circle,${orb1},transparent 70%)`
-  if (g2) g2.style.background = `radial-gradient(circle,${orb2},transparent 70%)`
+  if (g1) g1.style.background = `color-mix(in srgb, ${orb1} 24%, transparent)`
+  if (g2) g2.style.background = `color-mix(in srgb, ${orb2} 24%, transparent)`
   const o1 = document.getElementById('orb1-color')
   const o2 = document.getElementById('orb2-color')
   if (o1) o1.value = orb1
@@ -1945,7 +1943,7 @@ function syncPlayerModeUI() {
     const effectiveCover = getEffectiveCoverUrl(t)
     if (effectiveCover) {
       applyCoverArt(pmCover, effectiveCover, t.bg || 'linear-gradient(135deg,#7c3aed,#a855f7)')
-      if (pmGlow) pmGlow.style.background = `radial-gradient(circle, ${orb1}, transparent 70%)`
+      if (pmGlow) pmGlow.style.background = `color-mix(in srgb, ${orb1} 28%, transparent)`
       if (pmBg) {
         pmBg.style.backgroundImage = `url(${effectiveCover})`
         pmBg.style.backgroundSize = 'cover'
@@ -1956,10 +1954,10 @@ function syncPlayerModeUI() {
       pmCover.style.backgroundImage = ''
       pmCover.style.background = t.bg || 'linear-gradient(135deg,#7c3aed,#a855f7)'
       pmCover.innerHTML = COVER_ICON
-      if (pmGlow) pmGlow.style.background = `radial-gradient(circle, ${orb2}, transparent 70%)`
+      if (pmGlow) pmGlow.style.background = `color-mix(in srgb, ${orb2} 28%, transparent)`
       if (pmBg) {
         pmBg.style.backgroundImage = 'none'
-        pmBg.style.background = `radial-gradient(circle at 18% 24%, ${orb1}55 0%, transparent 46%), radial-gradient(circle at 82% 20%, ${orb2}44 0%, transparent 44%), linear-gradient(145deg, #07090f 0%, #0b0e15 45%, #06080d 100%)`
+        pmBg.style.background = '#07090f'
       }
     }
     const liked = isLiked(t)
@@ -2309,6 +2307,34 @@ function shouldUseProxyStream() {
   const s = getSettings()
   const mode = String(s.proxyBaseUrl || '').trim().toLowerCase()
   return mode !== 'off' && mode !== FLOW_SERVER_DEFAULT_URL.toLowerCase()
+}
+
+/** VK/Яндекс часто отвечают 403 без Referer как в браузере — локальный прокси в main нужен даже при дефолтном flow server. */
+function shouldForceStreamProxyForUrl(url, source) {
+  const src = String(source || '').toLowerCase()
+  if (src === 'vk' || src === 'yandex') return true
+  try {
+    const h = new URL(String(url || '')).hostname.toLowerCase()
+    if (
+      h.includes('vk.com') ||
+      h.includes('vk-cdn') ||
+      h.includes('vkuseraudio') ||
+      h.includes('userapi.com') ||
+      h.includes('vkuservideo') ||
+      h.includes('vk-portal') ||
+      h.includes('api.vk.ru')
+    )
+      return true
+    if (h.includes('strm.yandex')) return true
+    if (h.includes('yandex.net') && (h.includes('storage') || h.includes('strm'))) return true
+    if (h === 'api.music.yandex.net' || h.includes('music.yandex')) return true
+  } catch (_) {}
+  return false
+}
+
+function shouldProxyThisStreamUrl(url, source) {
+  if (!/^https?:\/\//i.test(String(url || ''))) return false
+  return shouldUseProxyStream() || shouldForceStreamProxyForUrl(url, source)
 }
 
 function saveSettingsRaw(patch) {

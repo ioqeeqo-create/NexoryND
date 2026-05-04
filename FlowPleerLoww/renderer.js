@@ -11,16 +11,16 @@ const audio = (audioPlayer.createPlayerAudio || ((onErr) => {
     src: audio.currentSrc || audio.src || null
   })
   try {
-    const code = audio.error?.code ? `код ${audio.error.code}` : 'код неизвестен'
+    const code = audio.error?.code ? `РєРѕРґ ${audio.error.code}` : 'РєРѕРґ РЅРµРёР·РІРµСЃС‚РµРЅ'
     const src = audio.currentSrc || audio.src || ''
-    showToast(`Ошибка аудио (${code})`, true)
+    showToast(`РћС€РёР±РєР° Р°СѓРґРёРѕ (${code})`, true)
     if (src) console.warn('AUDIO SRC:', src)
   } catch {}
 })
 
 ;(function playbackPerfBackgroundHook() {
   try {
-    /** Тяжёлый blur/фон в том же тике, что и старт декода, бьёт по UI; откладываем только на play. В старой репе этого хука не было — лишние updateBackground на pause/emptied убраны. */
+    /** РўСЏР¶С‘Р»С‹Р№ blur/С„РѕРЅ РІ С‚РѕРј Р¶Рµ С‚РёРєРµ, С‡С‚Рѕ Рё СЃС‚Р°СЂС‚ РґРµРєРѕРґР°, Р±СЊС‘С‚ РїРѕ UI; РѕС‚РєР»Р°РґС‹РІР°РµРј С‚РѕР»СЊРєРѕ РЅР° play. Р’ СЃС‚Р°СЂРѕР№ СЂРµРїРµ СЌС‚РѕРіРѕ С…СѓРєР° РЅРµ Р±С‹Р»Рѕ вЂ” Р»РёС€РЅРёРµ updateBackground РЅР° pause/emptied СѓР±СЂР°РЅС‹. */
     let deferBgScheduled = false
     const deferHeavyBackdrop = () => {
       if (deferBgScheduled) return
@@ -43,9 +43,6 @@ const audio = (audioPlayer.createPlayerAudio || ((onErr) => {
     }
     const syncPlayingClass = () => {
       document.body.classList.toggle('audio-playing', Boolean(audio && !audio.paused && !audio.ended))
-      try {
-        refreshNowPlayingTrackHighlight()
-      } catch (_) {}
     }
     const onPlay = () => {
       syncPlayingClass()
@@ -70,8 +67,6 @@ let _playerModeActive = false
 let _lastSearchMode = 'hybrid'
 let _playRequestSeq = 0
 const _ytPrewarmAt = new Map()
-const _queuePrewarmAt = new Map()
-let _queuePrewarmTimer = null
 const _coverLoadState = new Map()
 
 const defaultPlayback = { shuffle: false, repeat: 'off' } // repeat: off | all | one
@@ -96,9 +91,6 @@ let _roomServerHeartbeatTimer = null
 let _roomServerFullSyncTimer = null
 let _profilesRealtimeUnsub = null
 let _lastAppliedServerPlaybackTs = 0
-/** Монотонный номер sync от хоста — гость отбрасывает только устаревшие пакеты, не «равные по ts» с pause. */
-let _lastPlaybackSyncSeq = 0
-let _hostPlaybackSyncSeq = 0
 let _lastRoomServerLoadAt = 0
 let _friendPresence = new Map()
 let _friendsPollTimer = null
@@ -109,8 +101,6 @@ let _libraryActionMode = null
 let _playlistPickerContext = null
 let _playlistPickerSelection = new Set()
 let _listenTickAt = 0
-let _listenStatsPendingSec = 0
-let _listenStatsLastFlushAt = 0
 let _peerProfiles = new Map()
 let _roomMembers = new Map()
 let sharedQueue = []
@@ -140,7 +130,7 @@ const FLOW_SOCIAL_DEFAULT_API_BASE = 'http://85.239.34.229/social'
 const FLOW_SOCIAL_DEFAULT_API_SECRET = 'flowflow'
 const FRIEND_NOTIFY_COOLDOWN_MS = 90 * 1000
 const PROFILE_CACHE_TTL_MS = 60 * 1000
-/** Ленивый API «Моя волна» (реализация в src/modules/wave-engine.js). */
+/** Р›РµРЅРёРІС‹Р№ API В«РњРѕСЏ РІРѕР»РЅР°В» (СЂРµР°Р»РёР·Р°С†РёСЏ РІ src/modules/wave-engine.js). */
 let _waveEngineApi = null
 function waveEngine() {
   if (!_waveEngineApi && WE?.createWaveEngine) {
@@ -296,7 +286,7 @@ function showHostOnlyToast() {
   const now = Date.now()
   if (now - _lastHostOnlyToastAt < 1100) return
   _lastHostOnlyToastAt = now
-  showToast('Только хост управляет плеером', true)
+  showToast('РўРѕР»СЊРєРѕ С…РѕСЃС‚ СѓРїСЂР°РІР»СЏРµС‚ РїР»РµРµСЂРѕРј', true)
 }
 
 function updateHostLockUi() {
@@ -334,9 +324,9 @@ function updateRoomUi() {
   const roleBadgeEl = document.getElementById('room-role-badge')
   if (countEl) {
     if (_roomState?.roomId && _socialPeer) {
-      countEl.textContent = `Участники: ${_socialPeer.peersCount()}/3`
+      countEl.textContent = `РЈС‡Р°СЃС‚РЅРёРєРё: ${_socialPeer.peersCount()}/3`
     } else {
-      countEl.textContent = 'Участники: —/3'
+      countEl.textContent = 'РЈС‡Р°СЃС‚РЅРёРєРё: вЂ”/3'
     }
   }
   if (roleBadgeEl) {
@@ -364,7 +354,7 @@ function syncSocialWidgetState() {
   const active = Boolean(_roomState?.roomId)
   widget.classList.toggle('is-active', active)
   widget.classList.toggle('is-empty', !active)
-  widget.setAttribute('aria-label', active ? 'Панель комнаты' : 'Создать комнату')
+  widget.setAttribute('aria-label', active ? 'РџР°РЅРµР»СЊ РєРѕРјРЅР°С‚С‹' : 'РЎРѕР·РґР°С‚СЊ РєРѕРјРЅР°С‚Сѓ')
 }
 
 function handleSocialWidgetClick(event) {
@@ -451,7 +441,7 @@ const PM_PLAY_INNER = '<path fill="currentColor" d="M9 8 L17 12 L9 16 Z"/>'
 const PM_PAUSE_INNER = '<rect fill="currentColor" x="7.25" y="5.75" width="4" height="12.5" rx="1.15"/><rect fill="currentColor" x="12.75" y="5.75" width="4" height="12.5" rx="1.15"/>'
 const ICON_SIMILAR = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M14.83 14.83a4 4 0 0 1-6.63 1.1 4 4 0 0 1 1.53-6.73 4 4 0 0 1 5 .37l5.74 5.32"/><path d="M9.17 9.17a4 4 0 0 0 6.63-1.1 4 4 0 0 0-1.53 6.73 4 4 0 0 0-5-.37l-5.74-5.32"/></svg>'
 
-// в”Ђв”Ђв”Ђ VISUAL SETTINGS в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// РІвЂќР‚РІвЂќР‚РІвЂќР‚ VISUAL SETTINGS РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
 const defaultVisual = {
   bgType: 'gradient',      // 'gradient' | 'cover' | 'custom'
   blur: 18, bright: 20, glass: 8, panelBlur: 24,
@@ -476,7 +466,7 @@ const defaultVisual = {
   lyrics: { scrollMode: 'smooth', align: 'left', size: 16, blur: 4 }
 }
 
-/** Кэш parse localStorage — getVisual() вызывается очень часто (в т.ч. каждый кадр домашнего визуализатора). */
+/** РљСЌС€ parse localStorage вЂ” getVisual() РІС‹Р·С‹РІР°РµС‚СЃСЏ РѕС‡РµРЅСЊ С‡Р°СЃС‚Рѕ (РІ С‚.С‡. РєР°Р¶РґС‹Р№ РєР°РґСЂ РґРѕРјР°С€РЅРµРіРѕ РІРёР·СѓР°Р»РёР·Р°С‚РѕСЂР°). */
 let _flowVisualMemo = null
 
 function getVisual() {
@@ -528,7 +518,7 @@ function setToastPosition(position) {
   const safe = getToastPosition(position)
   saveVisual({ toastPosition: safe })
   applyToastPosition(safe)
-  showToast(safe === 'default' ? 'Уведомления: как сейчас' : 'Позиция уведомлений сохранена')
+  showToast(safe === 'default' ? 'РЈРІРµРґРѕРјР»РµРЅРёСЏ: РєР°Рє СЃРµР№С‡Р°СЃ' : 'РџРѕР·РёС†РёСЏ СѓРІРµРґРѕРјР»РµРЅРёР№ СЃРѕС…СЂР°РЅРµРЅР°')
 }
 
 function toggleSettingsFold(id) {
@@ -551,8 +541,8 @@ function syncFontControls() {
   if (toggle) toggle.classList.toggle('active', Boolean(v.customFontApplyTitle))
   const status = document.getElementById('custom-font-status')
   if (status) {
-    if (mode === 'custom' && v.customFontName) status.textContent = `Свой шрифт: ${v.customFontName}`
-    else status.textContent = 'Используется системный шрифт'
+    if (mode === 'custom' && v.customFontName) status.textContent = `РЎРІРѕР№ С€СЂРёС„С‚: ${v.customFontName}`
+    else status.textContent = 'РСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ СЃРёСЃС‚РµРјРЅС‹Р№ С€СЂРёС„С‚'
   }
 }
 
@@ -586,16 +576,16 @@ function applyFontSettings(silent = true) {
       _customFontLoadedKey = v.customFontData
       applyVars()
       syncFontControls()
-      if (!silent) showToast('Свой шрифт применён')
+      if (!silent) showToast('РЎРІРѕР№ С€СЂРёС„С‚ РїСЂРёРјРµРЅС‘РЅ')
     }).catch(() => {
       setDefault()
       syncFontControls()
-      if (!silent) showToast('Не удалось загрузить шрифт, оставлен стандартный', true)
+      if (!silent) showToast('РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ С€СЂРёС„С‚, РѕСЃС‚Р°РІР»РµРЅ СЃС‚Р°РЅРґР°СЂС‚РЅС‹Р№', true)
     })
   } catch {
     setDefault()
     syncFontControls()
-    if (!silent) showToast('Не удалось загрузить шрифт, оставлен стандартный', true)
+    if (!silent) showToast('РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ С€СЂРёС„С‚, РѕСЃС‚Р°РІР»РµРЅ СЃС‚Р°РЅРґР°СЂС‚РЅС‹Р№', true)
   }
 }
 
@@ -610,7 +600,7 @@ function setCustomFont(input) {
   if (!file) return
   const okExt = /\.(ttf|otf|woff2?|TTF|OTF|WOFF2?)$/.test(file.name || '')
   if (!okExt) {
-    showToast('Поддерживаются .ttf / .otf / .woff / .woff2', true)
+    showToast('РџРѕРґРґРµСЂР¶РёРІР°СЋС‚СЃСЏ .ttf / .otf / .woff / .woff2', true)
     input.value = ''
     return
   }
@@ -645,7 +635,7 @@ function normalizeVisualThemeMode(mode) {
   return 'minimal'
 }
 
-/** Свободная геометрия блоков главной и конструктор — только в теме UI «Минимал» (floated). */
+/** РЎРІРѕР±РѕРґРЅР°СЏ РіРµРѕРјРµС‚СЂРёСЏ Р±Р»РѕРєРѕРІ РіР»Р°РІРЅРѕР№ Рё РєРѕРЅСЃС‚СЂСѓРєС‚РѕСЂ вЂ” С‚РѕР»СЊРєРѕ РІ С‚РµРјРµ UI В«РњРёРЅРёРјР°Р»В» (floated). */
 function isVisualFloatedLayout() {
   return normalizeVisualThemeMode(getVisual().visualMode) === 'floated'
 }
@@ -667,7 +657,7 @@ function syncHomeLayoutConstructorUi() {
   if (wrap) wrap.style.display = isVisualFloatedLayout() ? '' : 'none'
 }
 
-/** После смены темы UI: статичная главная в минимализме или восстановление макета в минимале. */
+/** РџРѕСЃР»Рµ СЃРјРµРЅС‹ С‚РµРјС‹ UI: СЃС‚Р°С‚РёС‡РЅР°СЏ РіР»Р°РІРЅР°СЏ РІ РјРёРЅРёРјР°Р»РёР·РјРµ РёР»Рё РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёРµ РјР°РєРµС‚Р° РІ РјРёРЅРёРјР°Р»Рµ. */
 function syncDashboardLayoutToVisualMode() {
   syncHomeLayoutConstructorUi()
   if (!isVisualFloatedLayout()) {
@@ -706,7 +696,7 @@ function syncDashboardLayoutToVisualMode() {
   refreshHomeDashboardLayoutAfterContentChange()
 }
 
-/** Тихий сброс главной после «Минимализм» → «Минимал», без тоста (убирает «кашу» из старых координат). */
+/** РўРёС…РёР№ СЃР±СЂРѕСЃ РіР»Р°РІРЅРѕР№ РїРѕСЃР»Рµ В«РњРёРЅРёРјР°Р»РёР·РјВ» в†’ В«РњРёРЅРёРјР°Р»В», Р±РµР· С‚РѕСЃС‚Р° (СѓР±РёСЂР°РµС‚ В«РєР°С€СѓВ» РёР· СЃС‚Р°СЂС‹С… РєРѕРѕСЂРґРёРЅР°С‚). */
 function quietResetHomeDashboardAfterMinimalismSwitch() {
   try {
     localStorage.removeItem(FLOW_HOME_BLOCK_GEOMETRY_LS)
@@ -766,7 +756,7 @@ function setVisualMode(mode) {
       window.flowFloatedMainPaneDrag?.refreshFromStorage?.()
     } catch (_) {}
   })
-  showToast(safe === 'yandex' ? 'Режим: Яндекс' : (safe === 'floated' ? 'Режим: минимал' : 'Режим: минимализм'))
+  showToast(safe === 'yandex' ? 'Р РµР¶РёРј: РЇРЅРґРµРєСЃ' : (safe === 'floated' ? 'Р РµР¶РёРј: РјРёРЅРёРјР°Р»' : 'Р РµР¶РёРј: РјРёРЅРёРјР°Р»РёР·Рј'))
 }
 
 async function toggleWindowMaximize() {
@@ -784,8 +774,8 @@ function syncTitlebarMaximizeIcon(isMaximized) {
   if (expand) expand.style.display = isMaximized ? 'none' : 'block'
   if (restore) restore.style.display = isMaximized ? 'block' : 'none'
   if (wrap) {
-    wrap.setAttribute('title', isMaximized ? 'Восстановить' : 'Развернуть')
-    wrap.setAttribute('aria-label', isMaximized ? 'Восстановить окно' : 'Развернуть окно')
+    wrap.setAttribute('title', isMaximized ? 'Р’РѕСЃСЃС‚Р°РЅРѕРІРёС‚СЊ' : 'Р Р°Р·РІРµСЂРЅСѓС‚СЊ')
+    wrap.setAttribute('aria-label', isMaximized ? 'Р’РѕСЃСЃС‚Р°РЅРѕРІРёС‚СЊ РѕРєРЅРѕ' : 'Р Р°Р·РІРµСЂРЅСѓС‚СЊ РѕРєРЅРѕ')
   }
 }
 
@@ -803,7 +793,7 @@ function setCardDensity(density) {
   const safe = density === 'compact' ? 'compact' : 'comfort'
   saveVisual({ cardDensity: safe })
   applyCardDensity(safe)
-  showToast(safe === 'compact' ? 'Плотность: компактно' : 'Плотность: комфортно')
+  showToast(safe === 'compact' ? 'РџР»РѕС‚РЅРѕСЃС‚СЊ: РєРѕРјРїР°РєС‚РЅРѕ' : 'РџР»РѕС‚РЅРѕСЃС‚СЊ: РєРѕРјС„РѕСЂС‚РЅРѕ')
 }
 
 function savePlaybackMode() {
@@ -860,33 +850,6 @@ function isSameTrackLoose(a, b) {
   const bKeys = getTrackCoverKeys(b)
   if (bKeys.some((k) => aKeys.has(k))) return true
   return normalizeTrackSignature(a) === normalizeTrackSignature(b)
-}
-
-function refreshNowPlayingTrackHighlight() {
-  const playing = Boolean(audio && !audio.paused && !audio.ended)
-  document.querySelectorAll('.track-card.is-now-playing').forEach((el) => el.classList.remove('is-now-playing'))
-  document.querySelectorAll('.playlist-track-row.is-now-playing').forEach((el) => el.classList.remove('is-now-playing'))
-  if (!currentTrack) return
-
-  const markCard = (card) => {
-    if (!card) return
-    card.classList.toggle('is-now-playing', playing)
-    const row = card.closest('.playlist-track-row')
-    if (row) row.classList.toggle('is-now-playing', playing)
-  }
-
-  const curKey = getTrackKey(currentTrack)
-  document.querySelectorAll('.track-card[data-flow-track-key]').forEach((card) => {
-    const key = String(card.getAttribute('data-flow-track-key') || '')
-    if (!key || key !== curKey) return
-    let t = null
-    try {
-      const enc = card.getAttribute('data-flow-track-json')
-      if (enc) t = JSON.parse(decodeURIComponent(enc))
-    } catch (_) {}
-    if (t && !isSameTrackLoose(currentTrack, t)) return
-    markCard(card)
-  })
 }
 
 function applyCustomCoverToCollections(baseTrack, coverUrl) {
@@ -1211,7 +1174,7 @@ function applyCoverArt(el, coverUrl, fallbackBg) {
   })
 }
 
-/** То же число, что `--ui-scale` и слайдер «Масштаб UI»; на стеке конструктора задаёт `--home-construct-zoom` (без transform). */
+/** РўРѕ Р¶Рµ С‡РёСЃР»Рѕ, С‡С‚Рѕ `--ui-scale` Рё СЃР»Р°Р№РґРµСЂ В«РњР°СЃС€С‚Р°Р± UIВ»; РЅР° СЃС‚РµРєРµ РєРѕРЅСЃС‚СЂСѓРєС‚РѕСЂР° Р·Р°РґР°С‘С‚ `--home-construct-zoom` (Р±РµР· transform). */
 function syncHomeConstructStackScalePct(pctRaw) {
   const pct = Number(pctRaw)
   const clamped = Number.isFinite(pct) ? Math.max(80, Math.min(130, pct)) : 100
@@ -1232,7 +1195,7 @@ function pulseHomeVisualLayoutSync() {
   })
 }
 
-/** При воспроизведении сильнее уменьшаем blur фона — меньше нагрузка на GPU. */
+/** РџСЂРё РІРѕСЃРїСЂРѕРёР·РІРµРґРµРЅРёРё СЃРёР»СЊРЅРµРµ СѓРјРµРЅСЊС€Р°РµРј blur С„РѕРЅР° вЂ” РјРµРЅСЊС€Рµ РЅР°РіСЂСѓР·РєР° РЅР° GPU. */
 function effectiveBackdropBlurPx(baseBlurPx) {
   const b = Number(baseBlurPx)
   if (!Number.isFinite(b) || b < 0) return 18
@@ -1307,7 +1270,6 @@ function toggleGifMode(category) {
 function updateBackground() {
   try {
     if (document.body.classList.contains('flow-opt-game-sleep')) return
-    if (shouldIsolateHostTrackVisualsFromRoomGuest()) return
   } catch (_) {}
   const v = getVisual()
   const coverBlur = document.getElementById('bg-cover-blur')
@@ -1343,9 +1305,9 @@ async function loadCustomBg(input) {
     saveVisual({ customBg: mediaUrl })
     refreshCustomBgPreview(file.name)
     updateBackground()
-    showToast('Фон установлен')
+    showToast('Р¤РѕРЅ СѓСЃС‚Р°РЅРѕРІР»РµРЅ')
   } catch (err) {
-    showToast(`Не удалось сохранить фон: ${sanitizeDisplayText(err?.message || err)}`, true)
+    showToast(`РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ С„РѕРЅ: ${sanitizeDisplayText(err?.message || err)}`, true)
   } finally {
     input.value = ''
   }
@@ -1362,7 +1324,7 @@ function clearCustomBg() {
   saveVisual({ customBg: null })
   refreshCustomBgPreview()
   updateBackground()
-  showToast('Фон убран')
+  showToast('Р¤РѕРЅ СѓР±СЂР°РЅ')
 }
 
 function setMediaPreviewBox(prefix, mediaUrl, text, keepVisible = false) {
@@ -1373,13 +1335,13 @@ function setMediaPreviewBox(prefix, mediaUrl, text, keepVisible = false) {
   const hasMedia = Boolean(mediaUrl)
   box.classList.toggle('hidden', !hasMedia && !keepVisible)
   thumb.style.backgroundImage = hasMedia ? `url(${mediaUrl})` : ''
-  sub.textContent = text || (hasMedia ? 'Выбран файл' : 'Ничего не выбрано')
+  sub.textContent = text || (hasMedia ? 'Р’С‹Р±СЂР°РЅ С„Р°Р№Р»' : 'РќРёС‡РµРіРѕ РЅРµ РІС‹Р±СЂР°РЅРѕ')
 }
 
 function refreshCustomBgPreview(fileName = '') {
   const v = getVisual()
   const media = v.customBg || ''
-  const label = fileName || (media ? 'Текущий пользовательский фон' : 'Ничего не выбрано')
+  const label = fileName || (media ? 'РўРµРєСѓС‰РёР№ РїРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРёР№ С„РѕРЅ' : 'РќРёС‡РµРіРѕ РЅРµ РІС‹Р±СЂР°РЅРѕ')
   setMediaPreviewBox('custom-bg', media, label)
 }
 
@@ -1428,9 +1390,9 @@ async function setHomeWidgetImage(input) {
     homeWidget.mode = 'image'
     saveVisual({ homeWidget })
     syncHomeWidgetUI()
-    showToast('Виджет сохранён')
+    showToast('Р’РёРґР¶РµС‚ СЃРѕС…СЂР°РЅС‘РЅ')
   } catch (err) {
-    showToast(`Не удалось сохранить виджет: ${sanitizeDisplayText(err?.message || err)}`, true)
+    showToast(`РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РІРёРґР¶РµС‚: ${sanitizeDisplayText(err?.message || err)}`, true)
   } finally {
     input.value = ''
   }
@@ -1490,9 +1452,9 @@ function setAccent(a1, a2) {
   document.documentElement.style.setProperty('--accent', a1)
   document.documentElement.style.setProperty('--accent2', a2)
   syncAccentSwatchSelection(a1, a2)
-  // update gorb colors
-  document.getElementById('gorb1').style.background = `radial-gradient(circle,${a1},transparent 70%)`
-  document.getElementById('gorb2').style.background = `radial-gradient(circle,${a2},transparent 70%)`
+  // update gorb colors (flat wash вЂ” Р±РµР· СЂР°РґРёР°Р»СЊРЅРѕРіРѕ РіСЂР°РґРёРµРЅС‚Р°)
+  document.getElementById('gorb1').style.background = `color-mix(in srgb, ${a1} 24%, transparent)`
+  document.getElementById('gorb2').style.background = `color-mix(in srgb, ${a2} 24%, transparent)`
   const o1 = document.getElementById('orb1-color')
   const o2 = document.getElementById('orb2-color')
   if (o1) o1.value = a1
@@ -1507,8 +1469,8 @@ function setOrbColor(idx, color) {
   const c2 = idx === 2 ? color : (v.orb2Color || v.accent2)
   const g1 = document.getElementById('gorb1')
   const g2 = document.getElementById('gorb2')
-  if (g1) g1.style.background = `radial-gradient(circle,${c1},transparent 70%)`
-  if (g2) g2.style.background = `radial-gradient(circle,${c2},transparent 70%)`
+  if (g1) g1.style.background = `color-mix(in srgb, ${c1} 24%, transparent)`
+  if (g2) g2.style.background = `color-mix(in srgb, ${c2} 24%, transparent)`
 }
 
 function toggleEffect(name) {
@@ -1535,23 +1497,7 @@ function applyEffects(effects) {
   if (orbs) orbs.style.opacity = effects.orbs ? '1' : '0'
 }
 
-/** Гость в руме слушает трек хоста — не перекрашиваем весь UI (фон, орбы, акценты) из обложки трека. */
-function shouldIsolateHostTrackVisualsFromRoomGuest() {
-  try {
-    return Boolean(
-      typeof currentTrack !== 'undefined' &&
-      currentTrack &&
-      currentTrack._flowSkipGlobalThemeFromTrack &&
-      _roomState?.roomId &&
-      !_roomState?.host
-    )
-  } catch (_) {
-    return false
-  }
-}
-
 function updateOrbsFromCover(coverUrl) {
-  if (shouldIsolateHostTrackVisualsFromRoomGuest()) return
   const v = getVisual()
   const effects = Object.assign({ dyncolor: false, accentFromCover: false }, v.effects || {})
   if ((!effects.dyncolor && !effects.accentFromCover) || !coverUrl) return
@@ -1572,15 +1518,15 @@ function updateOrbsFromCover(coverUrl) {
       const c1 = `rgb(${r},${g},${b})`
       const c2 = `rgb(${Math.min(255,r+60)},${Math.min(255,g+30)},${Math.min(255,b+80)})`
       if (effects.dyncolor) {
-        document.getElementById('gorb1').style.background = `radial-gradient(circle,${c1},transparent 70%)`
-        document.getElementById('gorb2').style.background = `radial-gradient(circle,${c2},transparent 70%)`
+        document.getElementById('gorb1').style.background = `color-mix(in srgb, ${c1} 24%, transparent)`
+        document.getElementById('gorb2').style.background = `color-mix(in srgb, ${c2} 24%, transparent)`
       }
       if (effects.accentFromCover) {
         document.documentElement.style.setProperty('--accent', c1)
         document.documentElement.style.setProperty('--accent2', c2)
       }
       if (document.getElementById('pm-cover-glow')) {
-        document.getElementById('pm-cover-glow').style.background = `radial-gradient(circle,${c1},transparent 70%)`
+        document.getElementById('pm-cover-glow').style.background = `color-mix(in srgb, ${c1} 28%, transparent)`
       }
       if (v.bgType === 'cover') updateBackground()
     } catch(e) {}
@@ -1592,23 +1538,20 @@ function setYandexPlayerThemeFromRgb(r, g, b) {
   const root = document.documentElement
   const clamp = (n) => Math.max(0, Math.min(255, Math.round(n)))
   const base = `rgb(${clamp(r * 0.72)}, ${clamp(g * 0.66)}, ${clamp(b * 0.6)})`
-  const hi = `rgb(${clamp(r * 0.9 + 46)}, ${clamp(g * 0.84 + 40)}, ${clamp(b * 0.78 + 34)})`
-  const lo = `rgb(${clamp(r * 0.38)}, ${clamp(g * 0.34)}, ${clamp(b * 0.32)})`
-  root.style.setProperty('--yandex-player-bg', `linear-gradient(90deg, ${lo}, ${base} 32%, ${hi} 64%, ${base})`)
+  root.style.setProperty('--yandex-player-bg', base)
   root.style.setProperty('--yandex-player-card', `rgba(${clamp(r * 0.26)}, ${clamp(g * 0.24)}, ${clamp(b * 0.23)}, 0.58)`)
   root.style.setProperty('--yandex-player-glow', `rgba(${clamp(r)}, ${clamp(g)}, ${clamp(b)}, 0.26)`)
 }
 
 function updateYandexPlayerTheme(track = currentTrack) {
-  if (shouldIsolateHostTrackVisualsFromRoomGuest()) return
   const fallback = String(track?.bg || '').trim()
   const coverUrl = getEffectiveCoverUrl(track)
   if (!coverUrl) {
-    if (fallback && /^linear-gradient|^radial-gradient/i.test(fallback)) {
-      document.documentElement.style.setProperty('--yandex-player-bg', fallback)
-    } else {
-      document.documentElement.style.setProperty('--yandex-player-bg', 'linear-gradient(90deg, #3b1d12, #6b2f14 52%, #8a411c)')
-    }
+    const solidFallback =
+      fallback && !/^linear-gradient|^radial-gradient/i.test(String(fallback).trim())
+        ? String(fallback).trim()
+        : '#482618'
+    document.documentElement.style.setProperty('--yandex-player-bg', solidFallback)
     document.documentElement.style.setProperty('--yandex-player-card', 'rgba(31, 18, 14, 0.5)')
     document.documentElement.style.setProperty('--yandex-player-glow', 'rgba(251, 255, 40, 0.12)')
     return
@@ -1677,8 +1620,8 @@ function initVisualSettings() {
   const orb2 = v.orb2Color || v.accent2
   const g1 = document.getElementById('gorb1')
   const g2 = document.getElementById('gorb2')
-  if (g1) g1.style.background = `radial-gradient(circle,${orb1},transparent 70%)`
-  if (g2) g2.style.background = `radial-gradient(circle,${orb2},transparent 70%)`
+  if (g1) g1.style.background = `color-mix(in srgb, ${orb1} 24%, transparent)`
+  if (g2) g2.style.background = `color-mix(in srgb, ${orb2} 24%, transparent)`
   const o1 = document.getElementById('orb1-color')
   const o2 = document.getElementById('orb2-color')
   if (o1) o1.value = orb1
@@ -1721,7 +1664,7 @@ function initVisualSettings() {
 }
 
 function reorderVisualSettingsSections() {
-  /* Плеер вынесен в отдельную категорию настроек; порядок секций задаётся в HTML. */
+  /* РџР»РµРµСЂ РІС‹РЅРµСЃРµРЅ РІ РѕС‚РґРµР»СЊРЅСѓСЋ РєР°С‚РµРіРѕСЂРёСЋ РЅР°СЃС‚СЂРѕРµРє; РїРѕСЂСЏРґРѕРє СЃРµРєС†РёР№ Р·Р°РґР°С‘С‚СЃСЏ РІ HTML. */
 }
 
 function toggleNavActiveHighlight() {
@@ -1757,7 +1700,7 @@ function setSidebarPosition(position) {
   const safe = position === 'top' ? 'top' : 'left'
   saveVisual({ sidebarPosition: safe })
   applySidebarPosition(safe)
-  showToast(safe === 'top' ? 'Меню перемещено наверх' : 'Меню возвращено влево')
+  showToast(safe === 'top' ? 'РњРµРЅСЋ РїРµСЂРµРјРµС‰РµРЅРѕ РЅР°РІРµСЂС…' : 'РњРµРЅСЋ РІРѕР·РІСЂР°С‰РµРЅРѕ РІР»РµРІРѕ')
 }
 
 function getSafeToastPosition(position) {
@@ -1777,10 +1720,10 @@ function setToastPosition(position) {
   const safe = getSafeToastPosition(position)
   saveVisual({ toastPosition: safe })
   applyToastPosition(safe)
-  showToast('Позиция уведомлений сохранена')
+  showToast('РџРѕР·РёС†РёСЏ СѓРІРµРґРѕРјР»РµРЅРёР№ СЃРѕС…СЂР°РЅРµРЅР°')
 }
 
-/** true = секция свёрнута (как в блоках аккаунтов). Всегда храним полный объект ключей. */
+/** true = СЃРµРєС†РёСЏ СЃРІС‘СЂРЅСѓС‚Р° (РєР°Рє РІ Р±Р»РѕРєР°С… Р°РєРєР°СѓРЅС‚РѕРІ). Р’СЃРµРіРґР° С…СЂР°РЅРёРј РїРѕР»РЅС‹Р№ РѕР±СЉРµРєС‚ РєР»СЋС‡РµР№. */
 const SETTINGS_SECTION_COLLAPSED_DEFAULTS = {
   interface: true,
   background: true,
@@ -1824,7 +1767,7 @@ function getMergedSettingsSectionsState() {
   return out
 }
 
-/** Дописывает в localStorage все ключи (убирает баг «кликнул одну — остальные схлопнулись»). */
+/** Р”РѕРїРёСЃС‹РІР°РµС‚ РІ localStorage РІСЃРµ РєР»СЋС‡Рё (СѓР±РёСЂР°РµС‚ Р±Р°Рі В«РєР»РёРєРЅСѓР» РѕРґРЅСѓ вЂ” РѕСЃС‚Р°Р»СЊРЅС‹Рµ СЃС…Р»РѕРїРЅСѓР»РёСЃСЊВ»). */
 function normalizeSettingsSectionsPersistence() {
   saveSettingsSectionsState(getMergedSettingsSectionsState())
 }
@@ -1872,14 +1815,14 @@ function switchSettingsCategory(cat) {
   applyUiTextOverrides()
 }
 
-/** Совместимость со старыми вызовами switchSettingsTab('visual'|'sources'|'integrations'). */
+/** РЎРѕРІРјРµСЃС‚РёРјРѕСЃС‚СЊ СЃРѕ СЃС‚Р°СЂС‹РјРё РІС‹Р·РѕРІР°РјРё switchSettingsTab('visual'|'sources'|'integrations'). */
 function switchSettingsTab(tab) {
   const mapped = SETTINGS_TAB_TO_CATEGORY[tab] || tab
   switchSettingsCategory(mapped)
 }
 window.switchSettingsCategory = switchSettingsCategory
 
-// в”Ђв”Ђв”Ђ FULLSCREEN PLAYER MODE в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// РІвЂќР‚РІвЂќР‚РІвЂќР‚ FULLSCREEN PLAYER MODE РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
 function enterPlayerMode() {
   _playerModeActive = true
   const pm = document.getElementById('player-mode')
@@ -1916,7 +1859,7 @@ function refreshLyricsPanelsVisibility() {
     if (sidePanel) sidePanel.classList.toggle('hidden', !_lyricsOpen)
     pmRoot?.classList.remove('lyrics-mode')
   }
-  // После смены видимой панели подтянуть состояние строк в новом дереве (раньше обновлялось только скрытое).
+  // РџРѕСЃР»Рµ СЃРјРµРЅС‹ РІРёРґРёРјРѕР№ РїР°РЅРµР»Рё РїРѕРґС‚СЏРЅСѓС‚СЊ СЃРѕСЃС‚РѕСЏРЅРёРµ СЃС‚СЂРѕРє РІ РЅРѕРІРѕРј РґРµСЂРµРІРµ (СЂР°РЅСЊС€Рµ РѕР±РЅРѕРІР»СЏР»РѕСЃСЊ С‚РѕР»СЊРєРѕ СЃРєСЂС‹С‚РѕРµ).
   try {
     if (_lyricsOpen && _lyricsData?.length && typeof syncLyrics === 'function' && typeof getLyricsSmoothedTime === 'function') {
       queueMicrotask(() => syncLyrics(getLyricsSmoothedTime()))
@@ -1940,12 +1883,12 @@ function syncPlayerModeUI() {
   const orb2 = v.orb2Color || v.accent2 || '#9ca3af'
 
   if (t) {
-    pmTitle.textContent  = t.title || 'РќРµРёР·РІРµСЃС‚РЅРѕ'
-    pmArtist.textContent = t.artist || 'вЂ”'
+    pmTitle.textContent  = t.title || 'Р СњР ВµР С‘Р В·Р Р†Р ВµРЎРѓРЎвЂљР Р…Р С•'
+    pmArtist.textContent = t.artist || 'РІР‚вЂќ'
     const effectiveCover = getEffectiveCoverUrl(t)
     if (effectiveCover) {
       applyCoverArt(pmCover, effectiveCover, t.bg || 'linear-gradient(135deg,#7c3aed,#a855f7)')
-      if (pmGlow) pmGlow.style.background = `radial-gradient(circle, ${orb1}, transparent 70%)`
+      if (pmGlow) pmGlow.style.background = `color-mix(in srgb, ${orb1} 28%, transparent)`
       if (pmBg) {
         pmBg.style.backgroundImage = `url(${effectiveCover})`
         pmBg.style.backgroundSize = 'cover'
@@ -1956,10 +1899,10 @@ function syncPlayerModeUI() {
       pmCover.style.backgroundImage = ''
       pmCover.style.background = t.bg || 'linear-gradient(135deg,#7c3aed,#a855f7)'
       pmCover.innerHTML = COVER_ICON
-      if (pmGlow) pmGlow.style.background = `radial-gradient(circle, ${orb2}, transparent 70%)`
+      if (pmGlow) pmGlow.style.background = `color-mix(in srgb, ${orb2} 28%, transparent)`
       if (pmBg) {
         pmBg.style.backgroundImage = 'none'
-        pmBg.style.background = `radial-gradient(circle at 18% 24%, ${orb1}55 0%, transparent 46%), radial-gradient(circle at 82% 20%, ${orb2}44 0%, transparent 44%), linear-gradient(145deg, #07090f 0%, #0b0e15 45%, #06080d 100%)`
+        pmBg.style.background = '#07090f'
       }
     }
     const liked = isLiked(t)
@@ -1977,7 +1920,7 @@ function syncPlayerModeUI() {
   if (pmCoverLyrics) pmCoverLyrics.classList.toggle('active', _lyricsOpen)
 }
 
-// в”Ђв”Ђв”Ђ TIME FORMATTING в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// РІвЂќР‚РІвЂќР‚РІвЂќР‚ TIME FORMATTING РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
 function fmtTime(sec) {
   if (!sec || isNaN(sec)) return '0:00'
   const m = Math.floor(sec / 60)
@@ -1996,21 +1939,21 @@ function withTimeout(promise, ms, label = 'timeout') {
 
 function looksLikeMojibake(value) {
   if (!value || typeof value !== 'string') return false
-  return /(?:[ÃÂÐÑРС]{2,}|Р[А-яЁёA-Za-z0-9]|С[А-яЁёA-Za-z0-9]|Ð.|Ñ.|Ã.|Â.|рџ|вЂ|сГ|Г[А-яЁёA-Za-z0-9]|�)/.test(value)
+  return /(?:[ГѓГ‚ГђГ‘Р РЎ]{2,}|Р [Рђ-СЏРЃС‘A-Za-z0-9]|РЎ[Рђ-СЏРЃС‘A-Za-z0-9]|Гђ.|Г‘.|Гѓ.|Г‚.|СЂСџ|РІР‚|СЃР“|Р“[Рђ-СЏРЃС‘A-Za-z0-9]|пїЅ)/.test(value)
 }
 
 function mojibakeScore(value) {
   if (!value) return 0
   let score = 0
-  score += (value.match(/Р[А-яЁёA-Za-z0-9]/g) || []).length
-  score += (value.match(/С[А-яЁёA-Za-z0-9]/g) || []).length
-  score += (value.match(/Ð.|Ñ.|рџ|вЂ/g) || []).length
-  score += (value.match(/�/g) || []).length * 3
+  score += (value.match(/Р [Рђ-СЏРЃС‘A-Za-z0-9]/g) || []).length
+  score += (value.match(/РЎ[Рђ-СЏРЃС‘A-Za-z0-9]/g) || []).length
+  score += (value.match(/Гђ.|Г‘.|СЂСџ|РІР‚/g) || []).length
+  score += (value.match(/пїЅ/g) || []).length * 3
   return score
 }
 
 function cyrillicScore(value) {
-  return (value?.match(/[А-Яа-яЁё]/g) || []).length
+  return (value?.match(/[Рђ-РЇР°-СЏРЃС‘]/g) || []).length
 }
 
 const CP1251_TO_BYTE = (() => {
@@ -2075,34 +2018,34 @@ function decodeMojibakeCandidate(value) {
 }
 
 const COMMON_MOJIBAKE_FIXES = [
-  ['в¬Ў', '⬢'],
-  ['вЂ”', '—'],
-  ['в™Є', '♪'],
-  ['в™Ў', '♡'],
-  ['в™Ґ', '♥'],
-  ['вњ•', '✕'],
-  ['вњ…', '✅'],
-  ['вљЎ', '⚡'],
-  ['вљ™пёЏ', '⚙️'],
-  ['в†©', '↩'],
-  ['в†’', '→'],
-  ['в–¶', '▶'],
-  ['вЏё', '⏸'],
-  ['вЏ®', '⏮'],
-  ['вЏ­', '⏭'],
-  ['в•Ќ', '╌'],
-  ['в›¶', '⛶'],
-  ['рџ‘‹', '👋'],
-  ['рџЋµ', '🎵'],
-  ['рџЋ§', '🎧'],
-  ['рџ–ј', '🖼'],
-  ['рџ’§', '💧'],
-  ['рџЋЁ', '🎨'],
-  ['рџ”„', '🔄'],
-  ['рџ”¶', '🔶'],
-  ['рџ”µ', '🔵'],
-  ['рџ“Ѓ', '📁'],
-  ['рџ”Ќ', '🔍'],
+  ['РІВ¬РЋ', 'в¬ў'],
+  ['РІР‚вЂќ', 'вЂ”'],
+  ['РІв„ўР„', 'в™Є'],
+  ['РІв„ўРЋ', 'в™Ў'],
+  ['РІв„ўТђ', 'в™Ґ'],
+  ['РІСљвЂў', 'вњ•'],
+  ['РІСљвЂ¦', 'вњ…'],
+  ['РІС™РЋ', 'вљЎ'],
+  ['РІС™в„ўРїС‘РЏ', 'вљ™пёЏ'],
+  ['РІвЂ В©', 'в†©'],
+  ['РІвЂ вЂ™', 'в†’'],
+  ['РІвЂ“В¶', 'в–¶'],
+  ['РІРЏС‘', 'вЏё'],
+  ['РІРЏВ®', 'вЏ®'],
+  ['РІРЏВ­', 'вЏ­'],
+  ['РІвЂўРЊ', 'в•Њ'],
+  ['РІвЂєВ¶', 'в›¶'],
+  ['СЂСџвЂвЂ№', 'рџ‘‹'],
+  ['СЂСџР‹Вµ', 'рџЋµ'],
+  ['СЂСџР‹В§', 'рџЋ§'],
+  ['СЂСџвЂ“С', 'рџ–ј'],
+  ['СЂСџвЂ™В§', 'рџ’§'],
+  ['СЂСџР‹РЃ', 'рџЋЁ'],
+  ['СЂСџвЂќвЂћ', 'рџ”„'],
+  ['СЂСџвЂќВ¶', 'рџ”¶'],
+  ['СЂСџвЂќВµ', 'рџ”µ'],
+  ['СЂСџвЂњРѓ', 'рџ“Ѓ'],
+  ['СЂСџвЂќРЊ', 'рџ”Ќ'],
 ]
 
 function applyCommonMojibakeFixes(value) {
@@ -2128,12 +2071,12 @@ function sanitizeDisplayText(value) {
 function sanitizeTrack(track) {
   if (!track || typeof track !== 'object') return track
   const cleanTitle = smartCleaning.smartCleanTrackTitle
-    ? smartCleaning.smartCleanTrackTitle(track.title || 'Без названия')
-    : (track.title || 'Без названия')
+    ? smartCleaning.smartCleanTrackTitle(track.title || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ')
+    : (track.title || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ')
   return {
     ...track,
-    title: sanitizeDisplayText(cleanTitle) || 'Без названия',
-    artist: sanitizeDisplayText(track.artist || '—') || '—'
+    title: sanitizeDisplayText(cleanTitle) || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ',
+    artist: sanitizeDisplayText(track.artist || 'вЂ”') || 'вЂ”'
   }
 }
 
@@ -2211,7 +2154,7 @@ function enableMojibakeAutoFix() {
 
 
 
-// в”Ђв”Ђв”Ђ SEARCH CACHE в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// РІвЂќР‚РІвЂќР‚РІвЂќР‚ SEARCH CACHE РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
 const searchCache = new Map()
 const SEARCH_CACHE_TTL_MS = 2 * 60 * 1000
 function cacheGet(key) {
@@ -2242,19 +2185,19 @@ function getSearchCacheKey(query, settings = getSettings()) {
   return `${src}:${q}:${tokenSig}`
 }
 
-// в”Ђв”Ђв”Ђ PROVIDERS в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// РІвЂќР‚РІвЂќР‚РІвЂќР‚ PROVIDERS РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
 const providers = {
   youtube:    (q)    => searchYouTube(q),
   spotify:    (q, s) => searchSpotify(q, s.spotifyToken),
   audius:     (q)    => searchAudius(q),
 }
 
-/** Активный источник в настройках: гибрид отдельно от одиночных провайдеров в `providers`. */
+/** РђРєС‚РёРІРЅС‹Р№ РёСЃС‚РѕС‡РЅРёРє РІ РЅР°СЃС‚СЂРѕР№РєР°С…: РіРёР±СЂРёРґ РѕС‚РґРµР»СЊРЅРѕ РѕС‚ РѕРґРёРЅРѕС‡РЅС‹С… РїСЂРѕРІР°Р№РґРµСЂРѕРІ РІ `providers`. */
 const ALLOWED_ACTIVE_SOURCES = new Set(['hybrid', 'spotify', 'soundcloud', 'audius', 'hitmo', 'yandex', 'vk'])
 
 function normalizeStoredActiveSource(rawSrc) {
   const raw = String(rawSrc || 'hybrid').toLowerCase()
-  // Основной рабочий поиск — серверный Spotify → SoundCloud → Audius; YouTube как activeSource не используем.
+  // РћСЃРЅРѕРІРЅРѕР№ СЂР°Р±РѕС‡РёР№ РїРѕРёСЃРє вЂ” СЃРµСЂРІРµСЂРЅС‹Р№ Spotify в†’ SoundCloud в†’ Audius; YouTube РєР°Рє activeSource РЅРµ РёСЃРїРѕР»СЊР·СѓРµРј.
   if (raw === 'yt' || raw === 'youtube') return 'hybrid'
   if (raw === 'ya' || raw === 'ym') return 'yandex'
   if (raw === 'sc') return 'soundcloud'
@@ -2264,7 +2207,7 @@ function normalizeStoredActiveSource(rawSrc) {
   return 'hybrid'
 }
 
-// в”Ђв”Ђв”Ђ SETTINGS в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// РІвЂќР‚РІвЂќР‚РІвЂќР‚ SETTINGS РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
 function normalizeFlowServerUrl(value = '') {
   let raw = String(value || '').trim()
   if (!raw) raw = FLOW_SERVER_DEFAULT_URL
@@ -2311,6 +2254,34 @@ function shouldUseProxyStream() {
   return mode !== 'off' && mode !== FLOW_SERVER_DEFAULT_URL.toLowerCase()
 }
 
+/** VK/РЇРЅРґРµРєСЃ С‡Р°СЃС‚Рѕ РѕС‚РІРµС‡Р°СЋС‚ 403 Р±РµР· Referer РєР°Рє РІ Р±СЂР°СѓР·РµСЂРµ вЂ” Р»РѕРєР°Р»СЊРЅС‹Р№ РїСЂРѕРєСЃРё РІ main РЅСѓР¶РµРЅ РґР°Р¶Рµ РїСЂРё РґРµС„РѕР»С‚РЅРѕРј flow server. */
+function shouldForceStreamProxyForUrl(url, source) {
+  const src = String(source || '').toLowerCase()
+  if (src === 'vk' || src === 'yandex') return true
+  try {
+    const h = new URL(String(url || '')).hostname.toLowerCase()
+    if (
+      h.includes('vk.com') ||
+      h.includes('vk-cdn') ||
+      h.includes('vkuseraudio') ||
+      h.includes('userapi.com') ||
+      h.includes('vkuservideo') ||
+      h.includes('vk-portal') ||
+      h.includes('api.vk.ru')
+    )
+      return true
+    if (h.includes('strm.yandex')) return true
+    if (h.includes('yandex.net') && (h.includes('storage') || h.includes('strm'))) return true
+    if (h === 'api.music.yandex.net' || h.includes('music.yandex')) return true
+  } catch (_) {}
+  return false
+}
+
+function shouldProxyThisStreamUrl(url, source) {
+  if (!/^https?:\/\//i.test(String(url || ''))) return false
+  return shouldUseProxyStream() || shouldForceStreamProxyForUrl(url, source)
+}
+
 function saveSettingsRaw(patch) {
   const s = getSettings()
   const updated = Object.assign(s, patch)
@@ -2322,9 +2293,9 @@ function saveSettingsRaw(patch) {
   } catch (_) {}
 }
 
-/** Состояние окна из Electron (свёрнуто и т.д.) — для оптимизаций панели и фона. */
+/** РЎРѕСЃС‚РѕСЏРЅРёРµ РѕРєРЅР° РёР· Electron (СЃРІС‘СЂРЅСѓС‚Рѕ Рё С‚.Рґ.) вЂ” РґР»СЏ РѕРїС‚РёРјРёР·Р°С†РёР№ РїР°РЅРµР»Рё Рё С„РѕРЅР°. */
 let _flowElectronMinimized = false
-/** На Windows Chromium часто не даёт visibility:hidden при Alt+Tab — ориентируемся ещё и на blur окна. */
+/** РќР° Windows Chromium С‡Р°СЃС‚Рѕ РЅРµ РґР°С‘С‚ visibility:hidden РїСЂРё Alt+Tab вЂ” РѕСЂРёРµРЅС‚РёСЂСѓРµРјСЃСЏ РµС‰С‘ Рё РЅР° blur РѕРєРЅР°. */
 let _flowElectronFocused = true
 let _flowOptimizationChannelBound = false
 
@@ -2486,7 +2457,7 @@ function setupCompactSearchListeners() {
   })
 }
 
-/** Компактный / Zen UI: узкий скелет, иконки в меню, мини-поиск. */
+/** РљРѕРјРїР°РєС‚РЅС‹Р№ / Zen UI: СѓР·РєРёР№ СЃРєРµР»РµС‚, РёРєРѕРЅРєРё РІ РјРµРЅСЋ, РјРёРЅРё-РїРѕРёСЃРє. */
 function applyCompactUi(enabled) {
   const on = typeof enabled === 'boolean' ? enabled : Boolean(getSettings().compactUi)
   document.body.classList.toggle('flow-compact-ui', on)
@@ -2510,7 +2481,7 @@ function toggleCompactUi() {
   const next = !getSettings().compactUi
   saveSettingsRaw({ compactUi: next })
   applyCompactUi(next)
-  showToast(next ? 'Компактный режим включён' : 'Компактный режим выключен')
+  showToast(next ? 'РљРѕРјРїР°РєС‚РЅС‹Р№ СЂРµР¶РёРј РІРєР»СЋС‡С‘РЅ' : 'РљРѕРјРїР°РєС‚РЅС‹Р№ СЂРµР¶РёРј РІС‹РєР»СЋС‡РµРЅ')
 }
 
 function openUrl(url) {
@@ -2521,183 +2492,10 @@ function openUrl(url) {
 const YANDEX_MUSIC_TOKEN_GUIDE_URL = 'https://yandex-music.readthedocs.io/en/main/token.html'
 const YANDEX_MUSIC_OAUTH_URL = 'https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41195d'
 const VKHOST_TOKEN_PAGE = 'https://vkhost.github.io/'
-const FLOW_YANDEX_TELEGRAPH_GUIDE_URL = 'https://telegra.ph/Kak-podklyuchit-YAndeks-Muzyku-vo-Flow-05-03'
-/** После публикации статьи на Telegraph вставь сюда полный https://telegra.ph/... — откроется он; иначе — локальный гайд из сборки. */
-const FLOW_VK_TELEGRAPH_GUIDE_URL = ''
-
-function openFlowYandexTelegraphGuide() {
-  openUrl(FLOW_YANDEX_TELEGRAPH_GUIDE_URL)
-}
-window.openFlowYandexTelegraphGuide = openFlowYandexTelegraphGuide
-
-function openFlowVkTelegraphGuide() {
-  const remote = String(FLOW_VK_TELEGRAPH_GUIDE_URL || '').trim()
-  if (remote && /^https?:\/\//i.test(remote)) {
-    openUrl(remote)
-    return
-  }
-  try {
-    const href = String(window.location?.href || '')
-    if (href) {
-      const u = new URL('assets/guides/vk-token-dlya-flow.html', href)
-      openUrl(u.href)
-      return
-    }
-  } catch (_) {}
-  openUrl(VKHOST_TOKEN_PAGE)
-}
-window.openFlowVkTelegraphGuide = openFlowVkTelegraphGuide
-
-function forceSettingsSectionOpen(key) {
-  const sectionKey = String(key || '').trim()
-  if (!sectionKey || !Object.prototype.hasOwnProperty.call(SETTINGS_SECTION_COLLAPSED_DEFAULTS, sectionKey)) return
-  const merged = getMergedSettingsSectionsState()
-  merged[sectionKey] = false
-  saveSettingsSectionsState(merged)
-  applySettingsSectionsState()
-}
-
-function openAdvancedSourceSections() {
-  switchSettingsCategory('accounts')
-  ;['accountYoutube', 'accountSpotify', 'accountSoundcloud', 'accountVk', 'accountYandex'].forEach(forceSettingsSectionOpen)
-  requestAnimationFrame(() => {
-    document.querySelector('[data-settings-section="accountYoutube"]')?.scrollIntoView({ block: 'start', behavior: 'smooth' })
-  })
-}
-window.openAdvancedSourceSections = openAdvancedSourceSections
-
-function setAuthDrawerOpen(sourceKey) {
-  const stack = document.getElementById('auth-source-stack')
-  if (!stack) return
-  if (!sourceKey) {
-    stack.querySelectorAll('.auth-source-row.is-open').forEach((row) => row.classList.remove('is-open'))
-    stack.querySelectorAll('.auth-source-drawer').forEach((d) => d.setAttribute('aria-hidden', 'true'))
-    return
-  }
-  stack.querySelectorAll('.auth-source-row').forEach((row) => {
-    const on = row.getAttribute('data-auth-row') === sourceKey
-    row.classList.toggle('is-open', on)
-    const drawer = row.querySelector('.auth-source-drawer')
-    if (drawer) drawer.setAttribute('aria-hidden', on ? 'false' : 'true')
-  })
-}
-
-function onAuthSourceTileClick(evt, kind) {
-  const k = String(kind || '')
-  if (k === 'spotify') {
-    evt?.preventDefault?.()
-    const row = document.querySelector(`.auth-source-row[data-auth-row="spotify"]`)
-    const nextOpen = !row?.classList.contains('is-open')
-    setAuthDrawerOpen(nextOpen ? 'spotify' : null)
-    return
-  }
-
-  if (k === 'hybrid') setActiveSource('hybrid')
-  if (k === 'yandex') setActiveSource('yandex')
-  if (k === 'vk') setActiveSource('vk')
-
-  const row = document.querySelector(`.auth-source-row[data-auth-row="${k}"]`)
-  const nextOpen = !row?.classList.contains('is-open')
-  setAuthDrawerOpen(nextOpen ? k : null)
-
-  if (nextOpen && (k === 'yandex' || k === 'vk')) {
-    if (k === 'yandex') syncYmTokenFieldsFromMain()
-    if (k === 'vk') syncVkTokenFieldsFromMain()
-  }
-}
-window.onAuthSourceTileClick = onAuthSourceTileClick
-
-function syncYmTokenFieldsFromMain() {
-  const a = document.getElementById('ym-token-val')
-  const b = document.getElementById('ym-token-val-compact')
-  if (a && b) {
-    b.value = a.value
-    b.type = a.type
-  }
-}
-
-function syncYmTokenFieldsFromCompact() {
-  const a = document.getElementById('ym-token-val')
-  const b = document.getElementById('ym-token-val-compact')
-  if (a && b) {
-    a.value = b.value
-    a.type = b.type
-  }
-}
-
-function syncVkTokenFieldsFromMain() {
-  const a = document.getElementById('vk-token-val')
-  const b = document.getElementById('vk-token-val-compact')
-  if (a && b) {
-    b.value = a.value
-    b.type = a.type
-  }
-}
-
-function syncVkTokenFieldsFromCompact() {
-  const a = document.getElementById('vk-token-val')
-  const b = document.getElementById('vk-token-val-compact')
-  if (a && b) {
-    a.value = b.value
-    a.type = b.type
-  }
-}
-window.syncYmTokenFieldsFromCompact = syncYmTokenFieldsFromCompact
-window.syncVkTokenFieldsFromCompact = syncVkTokenFieldsFromCompact
-
-function mirrorTokenMsg(srcId, dstId) {
-  const src = document.getElementById(srcId)
-  const dst = document.getElementById(dstId)
-  if (!src || !dst) return
-  dst.textContent = src.textContent || ''
-  dst.className = src.className || 'token-msg'
-}
-
-function applyYandexTokenFromCompact() {
-  syncYmTokenFieldsFromCompact()
-  applyYandexToken()
-  mirrorTokenMsg('ym-msg', 'ym-msg-compact')
-}
-window.applyYandexTokenFromCompact = applyYandexTokenFromCompact
-
-function checkYandexTokenFromCompact() {
-  syncYmTokenFieldsFromCompact()
-  void checkYandexToken().then(() => mirrorTokenMsg('ym-msg', 'ym-msg-compact')).catch(() => mirrorTokenMsg('ym-msg', 'ym-msg-compact'))
-}
-window.checkYandexTokenFromCompact = checkYandexTokenFromCompact
-
-function applyVkTokenFromCompact() {
-  syncVkTokenFieldsFromCompact()
-  applyVkToken()
-  mirrorTokenMsg('vk-msg', 'vk-msg-compact')
-}
-window.applyVkTokenFromCompact = applyVkTokenFromCompact
-
-function checkVkTokenFromCompact() {
-  syncVkTokenFieldsFromCompact()
-  void checkVkToken().then(() => mirrorTokenMsg('vk-msg', 'vk-msg-compact')).catch(() => mirrorTokenMsg('vk-msg', 'vk-msg-compact'))
-}
-window.checkVkTokenFromCompact = checkVkTokenFromCompact
 
 function toggleToken(id) {
   const inp = document.getElementById(id)
   if (inp) inp.type = inp.type === 'password' ? 'text' : 'password'
-  if (id === 'ym-token-val-compact') {
-    const main = document.getElementById('ym-token-val')
-    if (main) main.type = inp.type
-  }
-  if (id === 'ym-token-val') {
-    const c = document.getElementById('ym-token-val-compact')
-    if (c) c.type = inp.type
-  }
-  if (id === 'vk-token-val-compact') {
-    const main = document.getElementById('vk-token-val')
-    if (main) main.type = inp.type
-  }
-  if (id === 'vk-token-val') {
-    const c = document.getElementById('vk-token-val-compact')
-    if (c) c.type = inp.type
-  }
 }
 
 function switchSrcTab(tab) {
@@ -2710,10 +2508,10 @@ function switchSrcTab(tab) {
 
 function applyScId() {
   const val = document.getElementById('sc-custom-val')?.value.trim()
-  if (!val) { showToast('Р’РІРµРґРё Client ID', true); return }
+  if (!val) { showToast('Р вЂ™Р Р†Р ВµР Т‘Р С‘ Client ID', true); return }
   saveSettingsRaw({ soundcloudClientId: val })
   updateScStatus(val)
-  showToast('SoundCloud Client ID СЃРѕС…СЂР°РЅС‘РЅ')
+  showToast('SoundCloud Client ID РЎРѓР С•РЎвЂ¦РЎР‚Р В°Р Р…РЎвЂР Р…')
 }
 
 function updateScStatus(clientId) {
@@ -2722,13 +2520,13 @@ function updateScStatus(clientId) {
   const display = document.getElementById('sc-active-display')
   if (clientId) {
     statusEl.className = 'token-status token-ok'
-    document.getElementById('sc-status-text').textContent = 'РќР°СЃС‚СЂРѕРµРЅ'
-    document.getElementById('sc-status-sub').textContent = 'Client ID СЃРѕС…СЂР°РЅС‘РЅ'
-    if (display) { display.textContent = clientId.slice(0,8)+'вЂўвЂўвЂўвЂў'+clientId.slice(-4); display.style.display='block' }
+    document.getElementById('sc-status-text').textContent = 'Р СњР В°РЎРѓРЎвЂљРЎР‚Р С•Р ВµР Р…'
+    document.getElementById('sc-status-sub').textContent = 'Client ID РЎРѓР С•РЎвЂ¦РЎР‚Р В°Р Р…РЎвЂР Р…'
+    if (display) { display.textContent = clientId.slice(0,8)+'РІР‚СћРІР‚СћРІР‚СћРІР‚Сћ'+clientId.slice(-4); display.style.display='block' }
   } else {
     statusEl.className = 'token-status'
-    document.getElementById('sc-status-text').textContent = 'РђРІС‚РѕРјР°С‚РёС‡РµСЃРєРёР№ СЂРµР¶РёРј'
-    document.getElementById('sc-status-sub').textContent = 'Client ID РёР·РІР»РµРєР°РµС‚СЃСЏ СЃРѕ СЃС‚СЂР°РЅРёС†С‹ SC'
+    document.getElementById('sc-status-text').textContent = 'Р С’Р Р†РЎвЂљР С•Р СР В°РЎвЂљР С‘РЎвЂЎР ВµРЎРѓР С”Р С‘Р в„– РЎР‚Р ВµР В¶Р С‘Р С'
+    document.getElementById('sc-status-sub').textContent = 'Client ID Р С‘Р В·Р Р†Р В»Р ВµР С”Р В°Р ВµРЎвЂљРЎРѓРЎРЏ РЎРѓР С• РЎРѓРЎвЂљРЎР‚Р В°Р Р…Р С‘РЎвЂ РЎвЂ№ SC'
     if (display) display.style.display = 'none'
   }
 }
@@ -2741,22 +2539,22 @@ async function getVkToken() {
   const btn = document.getElementById('vk-get-btn')
   const manual = tokenField?.value.trim()
   if (manual && !login) { applyVkToken(manual); return }
-  if (!login || !password) { msg.textContent='Введи логин и пароль'; msg.className='token-msg token-msg-err'; return }
-  btn.textContent='Получаю...'; btn.disabled=true; msg.textContent=''
+  if (!login || !password) { msg.textContent='Р’РІРµРґРё Р»РѕРіРёРЅ Рё РїР°СЂРѕР»СЊ'; msg.className='token-msg token-msg-err'; return }
+  btn.textContent='РџРѕР»СѓС‡Р°СЋ...'; btn.disabled=true; msg.textContent=''
   try {
-    const result = window.api?.getVkToken ? await window.api.getVkToken(login, password) : { ok:false, error:'Только в Electron' }
+    const result = window.api?.getVkToken ? await window.api.getVkToken(login, password) : { ok:false, error:'РўРѕР»СЊРєРѕ РІ Electron' }
     if (result.ok) {
       tokenField.value = result.token
       applyVkToken(result.token)
     } else {
-      msg.textContent = result.error || 'Ошибка'
+      msg.textContent = result.error || 'РћС€РёР±РєР°'
       msg.className = 'token-msg token-msg-err'
     }
   } catch (e) {
     msg.textContent = e.message
     msg.className = 'token-msg token-msg-err'
   }
-  btn.textContent='Получить токен'; btn.disabled=false
+  btn.textContent='РџРѕР»СѓС‡РёС‚СЊ С‚РѕРєРµРЅ'; btn.disabled=false
 }
 
 function openVkHostTokenPage() {
@@ -2768,22 +2566,20 @@ async function checkVkToken() {
   const token = getCurrentVkTokenForImport()
   if (!token) {
     if (msg) {
-      msg.textContent = 'Вставь токен в поле ниже или нажми «сохранить» после вставки'
+      msg.textContent = 'Р’СЃС‚Р°РІСЊ С‚РѕРєРµРЅ РІ РїРѕР»Рµ РЅРёР¶Рµ РёР»Рё РЅР°Р¶РјРё В«СЃРѕС…СЂР°РЅРёС‚СЊВ» РїРѕСЃР»Рµ РІСЃС‚Р°РІРєРё'
       msg.className = 'token-msg token-msg-err'
     }
-    mirrorTokenMsg('vk-msg', 'vk-msg-compact')
     return
   }
   if (!window.api?.vkValidateToken) {
     if (msg) {
-      msg.textContent = 'Проверка доступна только в Electron'
+      msg.textContent = 'РџСЂРѕРІРµСЂРєР° РґРѕСЃС‚СѓРїРЅР° С‚РѕР»СЊРєРѕ РІ Electron'
       msg.className = 'token-msg token-msg-err'
     }
-    mirrorTokenMsg('vk-msg', 'vk-msg-compact')
     return
   }
   if (msg) {
-    msg.textContent = 'Проверяю токен...'
+    msg.textContent = 'РџСЂРѕРІРµСЂСЏСЋ С‚РѕРєРµРЅ...'
     msg.className = 'token-msg'
   }
   try {
@@ -2791,8 +2587,8 @@ async function checkVkToken() {
     if (r?.ok) {
       const who = [r.name, r.userId != null ? `id ${r.userId}` : ''].filter(Boolean).join(', ')
       if (r.audioOk) {
-        let text = who ? `Токен рабочий (${who}).` : 'Токен рабочий.'
-        text += ' Доступ к audio API есть — импорт и поиск по VK должны работать.'
+        let text = who ? `РўРѕРєРµРЅ СЂР°Р±РѕС‡РёР№ (${who}).` : 'РўРѕРєРµРЅ СЂР°Р±РѕС‡РёР№.'
+        text += ' Р”РѕСЃС‚СѓРї Рє audio API РµСЃС‚СЊ вЂ” РёРјРїРѕСЂС‚ Рё РїРѕРёСЃРє РїРѕ VK РґРѕР»Р¶РЅС‹ СЂР°Р±РѕС‚Р°С‚СЊ.'
         if (msg) {
           msg.textContent = text
           msg.className = 'token-msg token-msg-ok'
@@ -2800,40 +2596,26 @@ async function checkVkToken() {
       } else {
         if (r.audioMissingAudioScope) {
           let line = who
-            ? `Профиль OK (${who}), но в токене нет доступа «Аудио» по данным VK. На экране входа нужно явно разрешить музыку/аудио (не только профиль).`
-            : 'В токене по данным VK нет доступа «Аудио». Пройди вход заново и разреши аудио на экране VK ID.'
+            ? `РџСЂРѕС„РёР»СЊ OK (${who}), РЅРѕ РІ С‚РѕРєРµРЅРµ РЅРµС‚ РґРѕСЃС‚СѓРїР° В«РђСѓРґРёРѕВ» РїРѕ РґР°РЅРЅС‹Рј VK. РќР° СЌРєСЂР°РЅРµ РІС…РѕРґР° РЅСѓР¶РЅРѕ СЏРІРЅРѕ СЂР°Р·СЂРµС€РёС‚СЊ РјСѓР·С‹РєСѓ/Р°СѓРґРёРѕ (РЅРµ С‚РѕР»СЊРєРѕ РїСЂРѕС„РёР»СЊ).`
+            : 'Р’ С‚РѕРєРµРЅРµ РїРѕ РґР°РЅРЅС‹Рј VK РЅРµС‚ РґРѕСЃС‚СѓРїР° В«РђСѓРґРёРѕВ». РџСЂРѕР№РґРё РІС…РѕРґ Р·Р°РЅРѕРІРѕ Рё СЂР°Р·СЂРµС€Рё Р°СѓРґРёРѕ РЅР° СЌРєСЂР°РЅРµ VK ID.'
           if (msg) {
             msg.textContent = line
             msg.className = 'token-msg token-msg-err'
           }
-          mirrorTokenMsg('vk-msg', 'vk-msg-compact')
           return
         }
-        const ac = r.audioCode != null ? ` (код ${r.audioCode})` : ''
+        const ac = r.audioCode != null ? ` (РєРѕРґ ${r.audioCode})` : ''
         const detail = r.audioError ? `: ${r.audioError}` : ''
-
-        if (r.audioScopeOkButMethodsBlocked || Number(r.audioCode) === 3) {
-          const maskHint = r.permissionMask != null && (Number(r.permissionMask) & 8) !== 0
-            ? ' В маске прав VK бит «Аудио» есть — это не «не тот токен»: VK всё равно режет audio.* для части аккаунтов.'
-            : ''
-          let line = who
-            ? `Профиль подтверждён (${who}). Официальные методы audio.* недоступны${ac}${detail}.${maskHint}`
-            : `Официальные методы audio.* недоступны${ac}${detail}.${maskHint}`
-          line += ' И новый токен Kate, и токен из веба при этом часто ведут себя одинаково — это ограничение VK, а не «испорченная вставка».'
-          line += ' По умолчанию Flow не открывает Chrome сам: если нужен обход через Chrome+Selenium (Python, selenium, webdriver-manager; профиль %LOCALAPPDATA%\\Flow\\vk_chrome_profile), включи ниже «Обход через Chrome (Selenium)».'
-          if (msg) {
-            msg.textContent = line
-            msg.className = 'token-msg token-msg-warn'
-          }
-          mirrorTokenMsg('vk-msg', 'vk-msg-compact')
-          return
-        }
-
         let line = who
-          ? `Профиль подтверждён (${who}), но аудио в Flow недоступно${ac}${detail}. На vkhost выбери Kate Mobile и право «Аудио».`
-          : `Аудио API недоступно${ac}${detail}. На vkhost — Kate Mobile и право «Аудио».`
+          ? `РџСЂРѕС„РёР»СЊ РїРѕРґС‚РІРµСЂР¶РґС‘РЅ (${who}), РЅРѕ Р°СѓРґРёРѕ РІ Flow РЅРµРґРѕСЃС‚СѓРїРЅРѕ${ac}${detail}. РќР° vkhost РІС‹Р±РµСЂРё Kate Mobile Рё РїСЂР°РІРѕ В«РђСѓРґРёРѕВ».`
+          : `РђСѓРґРёРѕ API РЅРµРґРѕСЃС‚СѓРїРЅРѕ${ac}${detail}. РќР° vkhost вЂ” Kate Mobile Рё РїСЂР°РІРѕ В«РђСѓРґРёРѕВ».`
+        if (r.audioScopeOkButMethodsBlocked) {
+          line += ` РџРѕ РјР°СЃРєРµ РїСЂР°РІ VK Р°СѓРґРёРѕ РІ С‚РѕРєРµРЅРµ РµСЃС‚СЊ вЂ” РЅРѕ РјРµС‚РѕРґС‹ audio.* РЅРµ РїСЂРёРЅРёРјР°СЋС‚СЃСЏ (С‡Р°СЃС‚Рѕ РїРѕР»РёС‚РёРєР° VK РїРѕ Р°РєРєР°СѓРЅС‚Сѓ/РјСѓР·С‹РєРµ). РћР±РѕР№С‚Рё РјРѕР¶РЅРѕ С‚РѕР»СЊРєРѕ РѕР±С…РѕРґРЅС‹РјРё РїСѓС‚СЏРјРё (Python+Chrome/Selenium), РѕС„РёС†РёР°Р»СЊРЅРѕ API РЅРµРґРѕСЃС‚СѓРїРµРЅ. РџРѕ СѓРјРѕР»С‡Р°РЅРёСЋ Flow РЅРµ РѕС‚РєСЂС‹РІР°РµС‚ Chrome СЃР°Рј вЂ” РІРєР»СЋС‡Рё РЅРёР¶Рµ В«РћР±С…РѕРґ С‡РµСЂРµР· Chrome (Selenium)В», РµСЃР»Рё РѕСЃРѕР·РЅР°РЅРЅРѕ С…РѕС‡РµС€СЊ СЌС‚РѕС‚ РїСѓС‚СЊ.`
+        } else if (Number(r.audioCode) === 3) {
+          line += ' РљРѕРґ 3 (В«РјРµС‚РѕРґ РЅРµРґРѕСЃС‚СѓРїРµРЅВ»): РїСЂРёР»РѕР¶РµРЅРёРµ РґРѕР»Р¶РЅРѕ Р±С‹С‚СЊ Kate Mobile РЅР° vkhost (client_id 2685278), РІ scope вЂ” Р°СѓРґРёРѕ. РўРѕРєРµРЅС‹ РѕС‚ РґСЂСѓРіРѕРіРѕ РїСЂРёР»РѕР¶РµРЅРёСЏ РёР»Рё С‚РѕР»СЊРєРѕ СЃ id.vk.com С‡Р°СЃС‚Рѕ РЅРµ РґР°СЋС‚ audio.*. РЎРіРµРЅРµСЂРёСЂСѓР№ РЅРѕРІС‹Р№ С‚РѕРєРµРЅ РЅР° vkhost, РІСЃС‚Р°РІСЊ С†РµР»РёРєРѕРј. РР»Рё В«РћС‚РєСЂС‹С‚СЊ РІС…РѕРґ VK РІ Р±СЂР°СѓР·РµСЂРµВ» РІ Flow (OAuth Kate).'
+        }
         if (Number(r.audioCode) === 6) {
-          line += ' Код 6 — слишком много запросов к VK: подожди 30–60 секунд и нажми проверку снова; не кликай «Проверить токен» много раз подряд.'
+          line += ' РљРѕРґ 6 вЂ” СЃР»РёС€РєРѕРј РјРЅРѕРіРѕ Р·Р°РїСЂРѕСЃРѕРІ Рє VK: РїРѕРґРѕР¶РґРё 30вЂ“60 СЃРµРєСѓРЅРґ Рё РЅР°Р¶РјРё РїСЂРѕРІРµСЂРєСѓ СЃРЅРѕРІР°; РЅРµ РєР»РёРєР°Р№ В«РџСЂРѕРІРµСЂРёС‚СЊ С‚РѕРєРµРЅВ» РјРЅРѕРіРѕ СЂР°Р· РїРѕРґСЂСЏРґ.'
         }
         if (msg) {
           msg.textContent = line
@@ -2841,32 +2623,31 @@ async function checkVkToken() {
         }
       }
     } else if (msg) {
-      const errText = r?.error || 'Токен не подходит'
-      const withCode = r?.code != null ? `${errText} (код ${r.code})` : errText
+      const errText = r?.error || 'РўРѕРєРµРЅ РЅРµ РїРѕРґС…РѕРґРёС‚'
+      const withCode = r?.code != null ? `${errText} (РєРѕРґ ${r.code})` : errText
       msg.textContent = withCode
       msg.className = 'token-msg token-msg-err'
     }
   } catch (e) {
     if (msg) {
-      msg.textContent = e?.message || 'Ошибка проверки'
+      msg.textContent = e?.message || 'РћС€РёР±РєР° РїСЂРѕРІРµСЂРєРё'
       msg.className = 'token-msg token-msg-err'
     }
   }
-  mirrorTokenMsg('vk-msg', 'vk-msg-compact')
 }
 
 async function startVkBrowserAuth() {
   const msg = document.getElementById('vk-msg')
   if (!window.api?.vkBrowserAuth) {
     if (msg) {
-      msg.textContent = 'Браузерная авторизация доступна только в Electron'
+      msg.textContent = 'Р‘СЂР°СѓР·РµСЂРЅР°СЏ Р°РІС‚РѕСЂРёР·Р°С†РёСЏ РґРѕСЃС‚СѓРїРЅР° С‚РѕР»СЊРєРѕ РІ Electron'
       msg.className = 'token-msg token-msg-err'
     }
     return
   }
   try {
     if (msg) {
-      msg.textContent = 'Открыл окно VK. Войди и разреши доступ к аудио для импорта плейлистов.'
+      msg.textContent = 'РћС‚РєСЂС‹Р» РѕРєРЅРѕ VK. Р’РѕР№РґРё Рё СЂР°Р·СЂРµС€Рё РґРѕСЃС‚СѓРї Рє Р°СѓРґРёРѕ РґР»СЏ РёРјРїРѕСЂС‚Р° РїР»РµР№Р»РёСЃС‚РѕРІ.'
       msg.className = 'token-msg'
     }
     const result = await window.api.vkBrowserAuth()
@@ -2877,12 +2658,12 @@ async function startVkBrowserAuth() {
       return
     }
     if (msg) {
-      msg.textContent = result?.error || 'VK авторизация отменена'
+      msg.textContent = result?.error || 'VK Р°РІС‚РѕСЂРёР·Р°С†РёСЏ РѕС‚РјРµРЅРµРЅР°'
       msg.className = 'token-msg token-msg-err'
     }
   } catch (e) {
     if (msg) {
-      msg.textContent = e?.message || 'Не удалось открыть браузер'
+      msg.textContent = e?.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РєСЂС‹С‚СЊ Р±СЂР°СѓР·РµСЂ'
       msg.className = 'token-msg token-msg-err'
     }
   }
@@ -2892,16 +2673,14 @@ function applyVkToken(token) {
   let t =
     token != null && String(token).trim() !== ''
       ? String(token).trim()
-      : String(document.getElementById('vk-token-val-compact')?.value || '').trim() ||
-        String(document.getElementById('vk-token-val')?.value || '').trim()
+      : String(document.getElementById('vk-token-val')?.value || '').trim()
   if (!t) {
-    showToast('Введи или вставь VK токен', true)
+    showToast('Р’РІРµРґРё РёР»Рё РІСЃС‚Р°РІСЊ VK С‚РѕРєРµРЅ', true)
     const mEl = document.getElementById('vk-msg')
     if (mEl) {
-      mEl.textContent = 'Поле токена пустое'
+      mEl.textContent = 'РџРѕР»Рµ С‚РѕРєРµРЅР° РїСѓСЃС‚РѕРµ'
       mEl.className = 'token-msg token-msg-err'
     }
-    mirrorTokenMsg('vk-msg', 'vk-msg-compact')
     return
   }
   const extracted = t.match(/access_token=([^&]+)/)
@@ -2909,21 +2688,13 @@ function applyVkToken(token) {
   saveSettingsRaw({ vkToken: t })
   const field = document.getElementById('vk-token-val')
   if (field) field.value = t
-  const compact = document.getElementById('vk-token-val-compact')
-  if (compact) {
-    compact.value = t
-    compact.type = field?.type || compact.type
-  }
   updateVkStatus(t)
-  showToast('VK токен сохранен')
+  showToast('VK С‚РѕРєРµРЅ СЃРѕС…СЂР°РЅРµРЅ')
   if (window.api?.vkValidateToken) void checkVkToken().catch(() => {})
-  mirrorTokenMsg('vk-msg', 'vk-msg-compact')
 }
 
 function getCurrentVkTokenForImport() {
-  const fieldToken =
-    String(document.getElementById('vk-token-val-compact')?.value || '').trim() ||
-    String(document.getElementById('vk-token-val')?.value || '').trim()
+  const fieldToken = String(document.getElementById('vk-token-val')?.value || '').trim()
   let token = fieldToken || String(getSettings().vkToken || '').trim()
   const m = token.match(/access_token=([^&]+)/)
   if (m) token = m[1]
@@ -2939,13 +2710,13 @@ function updateVkStatus(token) {
   const display = document.getElementById('vk-active-display')
   if (token) {
     el.className='token-status token-ok'
-    document.getElementById('vk-status-text').textContent='Настроен'
-    document.getElementById('vk-status-sub').textContent='Токен сохранен'
+    document.getElementById('vk-status-text').textContent='РќР°СЃС‚СЂРѕРµРЅ'
+    document.getElementById('vk-status-sub').textContent='РўРѕРєРµРЅ СЃРѕС…СЂР°РЅРµРЅ'
     if (display) { display.textContent=token.slice(0,6)+'****'+token.slice(-4); display.style.display='block' }
   } else {
     el.className='token-status'
-    document.getElementById('vk-status-text').textContent='Не настроен'
-    document.getElementById('vk-status-sub').textContent='Настройте по инструкции'
+    document.getElementById('vk-status-text').textContent='РќРµ РЅР°СЃС‚СЂРѕРµРЅ'
+    document.getElementById('vk-status-sub').textContent='РќР°СЃС‚СЂРѕР№С‚Рµ РїРѕ РёРЅСЃС‚СЂСѓРєС†РёРё'
     if (display) display.style.display='none'
   }
 }
@@ -2956,35 +2727,24 @@ function updateVkStatus(token) {
 
 function applySpotifyToken() {
   const token = document.getElementById('sp-token-val')?.value.trim()
-  if (!token) { showToast('Р’РІРµРґРё С‚РѕРєРµРЅ Spotify', true); return }
-  saveSettingsRaw({ spotifyToken: token }); updateSpotifyStatus(token); showToast('Spotify С‚РѕРєРµРЅ СЃРѕС…СЂР°РЅС‘РЅ вњ“')
+  if (!token) { showToast('Р вЂ™Р Р†Р ВµР Т‘Р С‘ РЎвЂљР С•Р С”Р ВµР Р… Spotify', true); return }
+  saveSettingsRaw({ spotifyToken: token }); updateSpotifyStatus(token); showToast('Spotify РЎвЂљР С•Р С”Р ВµР Р… РЎРѓР С•РЎвЂ¦РЎР‚Р В°Р Р…РЎвЂР Р… РІСљвЂњ')
 }
 
 function applyYandexToken() {
-  let token =
-    String(document.getElementById('ym-token-val-compact')?.value || '').trim() ||
-    String(document.getElementById('ym-token-val')?.value || '').trim()
+  let token = document.getElementById('ym-token-val')?.value.trim()
   const msg = document.getElementById('ym-msg')
   const m = token.match(/access_token=([^&#]+)/)
   if (m) token = decodeURIComponent(m[1])
   if (!token) {
-    if (msg) { msg.textContent = 'Вставь access_token или полный redirect URL после OAuth-входа'; msg.className = 'token-msg token-msg-err' }
-    mirrorTokenMsg('ym-msg', 'ym-msg-compact')
-    showToast('Введи токен Яндекс Музыки', true)
+    if (msg) { msg.textContent = 'Р’СЃС‚Р°РІСЊ access_token РёР»Рё РїРѕР»РЅС‹Р№ redirect URL РїРѕСЃР»Рµ OAuth-РІС…РѕРґР°'; msg.className = 'token-msg token-msg-err' }
+    showToast('Р’РІРµРґРё С‚РѕРєРµРЅ РЇРЅРґРµРєСЃ РњСѓР·С‹РєРё', true)
     return
   }
   saveSettingsRaw({ yandexToken: token })
-  const main = document.getElementById('ym-token-val')
-  const compact = document.getElementById('ym-token-val-compact')
-  if (main) main.value = token
-  if (compact) {
-    compact.value = token
-    compact.type = main?.type || compact.type
-  }
   updateYandexStatus(token)
-  if (msg) { msg.textContent = 'Токен сохранен. Теперь можно импортировать плейлисты Яндекс Музыки по ссылке.'; msg.className = 'token-msg token-msg-ok' }
-  mirrorTokenMsg('ym-msg', 'ym-msg-compact')
-  showToast('Токен Яндекс Музыки сохранен')
+  if (msg) { msg.textContent = 'РўРѕРєРµРЅ СЃРѕС…СЂР°РЅРµРЅ. РўРµРїРµСЂСЊ РјРѕР¶РЅРѕ РёРјРїРѕСЂС‚РёСЂРѕРІР°С‚СЊ РїР»РµР№Р»РёСЃС‚С‹ РЇРЅРґРµРєСЃ РњСѓР·С‹РєРё РїРѕ СЃСЃС‹Р»РєРµ.'; msg.className = 'token-msg token-msg-ok' }
+  showToast('РўРѕРєРµРЅ РЇРЅРґРµРєСЃ РњСѓР·С‹РєРё СЃРѕС…СЂР°РЅРµРЅ')
 }
 
 function openYandexTokenGuide() {
@@ -2997,51 +2757,45 @@ function openYandexOAuthTokenPage() {
 
 async function checkYandexToken() {
   const msg = document.getElementById('ym-msg')
-  let tok =
-    String(document.getElementById('ym-token-val-compact')?.value || '').trim() ||
-    String(document.getElementById('ym-token-val')?.value || '').trim() ||
-    String(getSettings().yandexToken || '').trim()
+  let tok = document.getElementById('ym-token-val')?.value.trim() || String(getSettings().yandexToken || '').trim()
   const m = tok.match(/access_token=([^&#]+)/)
   if (m) tok = decodeURIComponent(m[1])
   tok = String(tok || '').trim()
   if (!tok) {
     if (msg) {
-      msg.textContent = 'Вставь токен или сохрани его галочкой выше'
+      msg.textContent = 'Р’СЃС‚Р°РІСЊ С‚РѕРєРµРЅ РёР»Рё СЃРѕС…СЂР°РЅРё РµРіРѕ РіР°Р»РѕС‡РєРѕР№ РІС‹С€Рµ'
       msg.className = 'token-msg token-msg-err'
     }
-    mirrorTokenMsg('ym-msg', 'ym-msg-compact')
     return
   }
   if (!window.api?.yandexValidateToken) {
     if (msg) {
-      msg.textContent = 'Проверка доступна только в Electron'
+      msg.textContent = 'РџСЂРѕРІРµСЂРєР° РґРѕСЃС‚СѓРїРЅР° С‚РѕР»СЊРєРѕ РІ Electron'
       msg.className = 'token-msg token-msg-err'
     }
-    mirrorTokenMsg('ym-msg', 'ym-msg-compact')
     return
   }
   if (msg) {
-    msg.textContent = 'Проверяю токен...'
+    msg.textContent = 'РџСЂРѕРІРµСЂСЏСЋ С‚РѕРєРµРЅ...'
     msg.className = 'token-msg'
   }
   try {
     const r = await window.api.yandexValidateToken(tok)
     if (r?.ok) {
       if (msg) {
-        msg.textContent = r.login ? `Токен рабочий (аккаунт: ${r.login}).` : 'Токен рабочий.'
+        msg.textContent = r.login ? `РўРѕРєРµРЅ СЂР°Р±РѕС‡РёР№ (Р°РєРєР°СѓРЅС‚: ${r.login}).` : 'РўРѕРєРµРЅ СЂР°Р±РѕС‡РёР№.'
         msg.className = 'token-msg token-msg-ok'
       }
     } else if (msg) {
-      msg.textContent = r?.error || 'Токен не подходит'
+      msg.textContent = r?.error || 'РўРѕРєРµРЅ РЅРµ РїРѕРґС…РѕРґРёС‚'
       msg.className = 'token-msg token-msg-err'
     }
   } catch (e) {
     if (msg) {
-      msg.textContent = e?.message || 'Ошибка проверки'
+      msg.textContent = e?.message || 'РћС€РёР±РєР° РїСЂРѕРІРµСЂРєРё'
       msg.className = 'token-msg token-msg-err'
     }
   }
-  mirrorTokenMsg('ym-msg', 'ym-msg-compact')
 }
 
 function updateYandexStatus(token) {
@@ -3052,13 +2806,13 @@ function updateYandexStatus(token) {
   const sub = document.getElementById('ym-status-sub')
   if (token) {
     el.className = 'token-status token-ok'
-    if (text) text.textContent = 'Настроен'
-    if (sub) sub.textContent = 'OAuth token сохранен, импорт Яндекс плейлистов доступен'
+    if (text) text.textContent = 'РќР°СЃС‚СЂРѕРµРЅ'
+    if (sub) sub.textContent = 'OAuth token СЃРѕС…СЂР°РЅРµРЅ, РёРјРїРѕСЂС‚ РЇРЅРґРµРєСЃ РїР»РµР№Р»РёСЃС‚РѕРІ РґРѕСЃС‚СѓРїРµРЅ'
     if (display) { display.textContent = token.slice(0, 6) + '****' + token.slice(-4); display.style.display = 'block' }
   } else {
     el.className = 'token-status'
-    if (text) text.textContent = 'Не настроен'
-    if (sub) sub.textContent = 'Нужен OAuth token для чтения плейлистов'
+    if (text) text.textContent = 'РќРµ РЅР°СЃС‚СЂРѕРµРЅ'
+    if (sub) sub.textContent = 'РќСѓР¶РµРЅ OAuth token РґР»СЏ С‡С‚РµРЅРёСЏ РїР»РµР№Р»РёСЃС‚РѕРІ'
     if (display) display.style.display = 'none'
   }
 }
@@ -3068,13 +2822,13 @@ function updateSpotifyStatus(token) {
   const display = document.getElementById('sp-active-display')
   if (token) {
     el.className='token-status token-ok'
-    document.getElementById('sp-status-text').textContent='РќР°СЃС‚СЂРѕРµРЅ'
-    document.getElementById('sp-status-sub').textContent='Bearer С‚РѕРєРµРЅ СЃРѕС…СЂР°РЅС‘РЅ'
-    if (display) { display.textContent=token.slice(0,6)+'вЂўвЂўвЂўвЂў'+token.slice(-4); display.style.display='block' }
+    document.getElementById('sp-status-text').textContent='Р СњР В°РЎРѓРЎвЂљРЎР‚Р С•Р ВµР Р…'
+    document.getElementById('sp-status-sub').textContent='Bearer РЎвЂљР С•Р С”Р ВµР Р… РЎРѓР С•РЎвЂ¦РЎР‚Р В°Р Р…РЎвЂР Р…'
+    if (display) { display.textContent=token.slice(0,6)+'РІР‚СћРІР‚СћРІР‚СћРІР‚Сћ'+token.slice(-4); display.style.display='block' }
   } else {
     el.className='token-status'
-    document.getElementById('sp-status-text').textContent='РќРµ РЅР°СЃС‚СЂРѕРµРЅ'
-    document.getElementById('sp-status-sub').textContent='РќСѓР¶РµРЅ Bearer С‚РѕРєРµРЅ'
+    document.getElementById('sp-status-text').textContent='Р СњР Вµ Р Р…Р В°РЎРѓРЎвЂљРЎР‚Р С•Р ВµР Р…'
+    document.getElementById('sp-status-sub').textContent='Р СњРЎС“Р В¶Р ВµР Р… Bearer РЎвЂљР С•Р С”Р ВµР Р…'
     if (display) display.style.display='none'
   }
 }
@@ -3091,12 +2845,6 @@ function setActiveSource(src) {
   if (!ALLOWED_ACTIVE_SOURCES.has(normalized)) normalized = 'hybrid'
   saveSettingsRaw({ activeSource: normalized })
   searchCache.clear()
-  try {
-    syncSearchSourceRows()
-    syncAuthSourceStackActive()
-    syncSearchSourcePills()
-    updateSourceBadge()
-  } catch (_) {}
 }
 
 function syncVkSeleniumBridgeToggle() {
@@ -3115,10 +2863,6 @@ function loadSettingsPage() {
   const s = getSettings()
   const ids = { 'sc-custom-val': s.soundcloudClientId, 'vk-token-val': s.vkToken, 'sp-token-val': s.spotifyToken, 'ym-token-val': s.yandexToken }
   for (const [id, val] of Object.entries(ids)) { const el = document.getElementById(id); if (el && val) el.value = val }
-  syncYmTokenFieldsFromMain()
-  syncVkTokenFieldsFromMain()
-  mirrorTokenMsg('ym-msg', 'ym-msg-compact')
-  mirrorTokenMsg('vk-msg', 'vk-msg-compact')
   updateScStatus(s.soundcloudClientId)
   updateVkStatus(s.vkToken)
   syncVkSeleniumBridgeToggle()
@@ -3128,7 +2872,7 @@ function loadSettingsPage() {
   requestAnimationFrame(() => {
     syncPlaybackModeUI()
     syncTrackCoverStatus()
-    setFlowConfigStatus('Экспорт создаёт JSON с визуалом, профилем, плейлистами и настройками.', false)
+    setFlowConfigStatus('Р­РєСЃРїРѕСЂС‚ СЃРѕР·РґР°С‘С‚ JSON СЃ РІРёР·СѓР°Р»РѕРј, РїСЂРѕС„РёР»РµРј, РїР»РµР№Р»РёСЃС‚Р°РјРё Рё РЅР°СЃС‚СЂРѕР№РєР°РјРё.', false)
     syncFontControls()
     syncHomeWidgetUI()
     applyHomeSliderStyle()
@@ -3136,7 +2880,6 @@ function loadSettingsPage() {
     switchSettingsCategory(_settingsCategory)
     applyOptimizationSettings()
     syncSearchSourceRows()
-    syncAuthSourceStackActive()
     updateSourceBadge()
   })
 }
@@ -3151,17 +2894,17 @@ function syncPlaybackModeUI() {
   if (shBtn) shBtn.classList.toggle('active', Boolean(playbackMode.shuffle))
   if (homeShBtn) homeShBtn.classList.toggle('active', Boolean(playbackMode.shuffle))
   if (shSettings) {
-    shSettings.textContent = playbackMode.shuffle ? 'Включена' : 'Выключена'
+    shSettings.textContent = playbackMode.shuffle ? 'Р’РєР»СЋС‡РµРЅР°' : 'Р’С‹РєР»СЋС‡РµРЅР°'
     shSettings.classList.toggle('active', Boolean(playbackMode.shuffle))
   }
-  const repeatLabel = playbackMode.repeat === 'one' ? 'Один трек' : (playbackMode.repeat === 'all' ? 'Очередь' : 'Выкл')
+  const repeatLabel = playbackMode.repeat === 'one' ? 'РћРґРёРЅ С‚СЂРµРє' : (playbackMode.repeat === 'all' ? 'РћС‡РµСЂРµРґСЊ' : 'Р’С‹РєР»')
   if (rpBtn) {
     rpBtn.classList.toggle('active', playbackMode.repeat !== 'off')
-    rpBtn.title = `Повтор: ${repeatLabel}`
+    rpBtn.title = `РџРѕРІС‚РѕСЂ: ${repeatLabel}`
   }
   if (homeRpBtn) {
     homeRpBtn.classList.toggle('active', playbackMode.repeat !== 'off')
-    homeRpBtn.title = `Повтор: ${repeatLabel}`
+    homeRpBtn.title = `РџРѕРІС‚РѕСЂ: ${repeatLabel}`
   }
   if (rpSettings) {
     rpSettings.textContent = repeatLabel
@@ -3173,7 +2916,7 @@ function toggleShuffleMode() {
   playbackMode.shuffle = !playbackMode.shuffle
   savePlaybackMode()
   syncPlaybackModeUI()
-  showToast(playbackMode.shuffle ? 'Перемешка включена' : 'Перемешка выключена')
+  showToast(playbackMode.shuffle ? 'РџРµСЂРµРјРµС€РєР° РІРєР»СЋС‡РµРЅР°' : 'РџРµСЂРµРјРµС€РєР° РІС‹РєР»СЋС‡РµРЅР°')
 }
 
 function toggleRepeatMode() {
@@ -3182,8 +2925,8 @@ function toggleRepeatMode() {
   playbackMode.repeat = order[(idx + 1) % order.length]
   savePlaybackMode()
   syncPlaybackModeUI()
-  const label = playbackMode.repeat === 'one' ? 'один трек' : (playbackMode.repeat === 'all' ? 'очередь' : 'выкл')
-  showToast(`Повтор: ${label}`)
+  const label = playbackMode.repeat === 'one' ? 'РѕРґРёРЅ С‚СЂРµРє' : (playbackMode.repeat === 'all' ? 'РѕС‡РµСЂРµРґСЊ' : 'РІС‹РєР»')
+  showToast(`РџРѕРІС‚РѕСЂ: ${label}`)
 }
 
 function syncTrackCoverStatus() {
@@ -3192,17 +2935,17 @@ function syncTrackCoverStatus() {
   const map = getCustomCoverMap()
   const globalCustom = getGlobalCustomCover(map)
   if (globalCustom) {
-    el.textContent = 'Кастомная обложка используется только в плеере'
+    el.textContent = 'РљР°СЃС‚РѕРјРЅР°СЏ РѕР±Р»РѕР¶РєР° РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ С‚РѕР»СЊРєРѕ РІ РїР»РµРµСЂРµ'
     refreshTrackCoverPreview()
     return
   }
   if (!currentTrack) {
-    el.textContent = 'Выбери трек и задай для него свою обложку'
+    el.textContent = 'Р’С‹Р±РµСЂРё С‚СЂРµРє Рё Р·Р°РґР°Р№ РґР»СЏ РЅРµРіРѕ СЃРІРѕСЋ РѕР±Р»РѕР¶РєСѓ'
     refreshTrackCoverPreview()
     return
   }
   const hasCustom = getTrackCoverKeys(currentTrack).some((k) => Boolean(map[k]))
-  el.textContent = hasCustom ? 'Для текущего трека используется кастомная обложка' : 'Для текущего трека используется обложка из источника'
+  el.textContent = hasCustom ? 'Р”Р»СЏ С‚РµРєСѓС‰РµРіРѕ С‚СЂРµРєР° РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ РєР°СЃС‚РѕРјРЅР°СЏ РѕР±Р»РѕР¶РєР°' : 'Р”Р»СЏ С‚РµРєСѓС‰РµРіРѕ С‚СЂРµРєР° РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ РѕР±Р»РѕР¶РєР° РёР· РёСЃС‚РѕС‡РЅРёРєР°'
   refreshTrackCoverPreview()
 }
 
@@ -3210,7 +2953,7 @@ async function setCustomTrackCover(input) {
   const file = input?.files?.[0]
   if (!file) return
   if (!currentTrack) {
-    showToast('Сначала включи трек', true)
+    showToast('РЎРЅР°С‡Р°Р»Р° РІРєР»СЋС‡Рё С‚СЂРµРє', true)
     input.value = ''
     return
   }
@@ -3229,9 +2972,9 @@ async function setCustomTrackCover(input) {
     renderRoomQueue()
     syncTrackCoverStatus()
     refreshTrackCoverPreview(file.name)
-    showToast('Кастомная обложка сохранена для плеера')
+    showToast('РљР°СЃС‚РѕРјРЅР°СЏ РѕР±Р»РѕР¶РєР° СЃРѕС…СЂР°РЅРµРЅР° РґР»СЏ РїР»РµРµСЂР°')
   } catch (err) {
-    showToast(`Не удалось сохранить обложку: ${sanitizeDisplayText(err?.message || err)}`, true)
+    showToast(`РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РѕР±Р»РѕР¶РєСѓ: ${sanitizeDisplayText(err?.message || err)}`, true)
   } finally {
     input.value = ''
   }
@@ -3250,7 +2993,7 @@ function clearCustomTrackCover() {
   const hasPerTrack = Object.keys(map).some((k) => k !== '__global__' && Boolean(map[k]))
   const hasAny = Boolean(globalCustom) || hasPerTrack
   if (!hasAny) {
-    showToast('Кастомная обложка не задана', true)
+    showToast('РљР°СЃС‚РѕРјРЅР°СЏ РѕР±Р»РѕР¶РєР° РЅРµ Р·Р°РґР°РЅР°', true)
     return
   }
   // Full reset: clear global and legacy per-track bindings.
@@ -3267,23 +3010,23 @@ function clearCustomTrackCover() {
   renderRoomQueue()
   syncTrackCoverStatus()
   refreshTrackCoverPreview()
-  showToast('Кастомная обложка удалена')
+  showToast('РљР°СЃС‚РѕРјРЅР°СЏ РѕР±Р»РѕР¶РєР° СѓРґР°Р»РµРЅР°')
 }
 
 function refreshTrackCoverPreview(fileName = '') {
   const map = getCustomCoverMap()
   const globalCustom = getGlobalCustomCover(map)
   if (globalCustom) {
-    const label = fileName || 'Кастомная обложка плеера'
+    const label = fileName || 'РљР°СЃС‚РѕРјРЅР°СЏ РѕР±Р»РѕР¶РєР° РїР»РµРµСЂР°'
     setMediaPreviewBox('track-cover', globalCustom, label, true)
     return
   }
   if (!currentTrack) {
-    setMediaPreviewBox('track-cover', '', 'Сначала включи трек', true)
+    setMediaPreviewBox('track-cover', '', 'РЎРЅР°С‡Р°Р»Р° РІРєР»СЋС‡Рё С‚СЂРµРє', true)
     return
   }
   const custom = getTrackCoverKeys(currentTrack).map((k) => map[k]).find(Boolean) || ''
-  const label = fileName || (custom ? `Текущий трек: ${currentTrack.title || 'Без названия'}` : 'Для этого трека обложка не задана')
+  const label = fileName || (custom ? `РўРµРєСѓС‰РёР№ С‚СЂРµРє: ${currentTrack.title || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ'}` : 'Р”Р»СЏ СЌС‚РѕРіРѕ С‚СЂРµРєР° РѕР±Р»РѕР¶РєР° РЅРµ Р·Р°РґР°РЅР°')
   setMediaPreviewBox('track-cover', custom, label, true)
 }
 
@@ -3408,17 +3151,17 @@ async function exportFlowConfig() {
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(link.href)
-    setFlowConfigStatus('Flow preset экспортирован. Можно отправлять .flowpreset другу.', false)
-    showToast('Flow preset экспортирован')
+    setFlowConfigStatus('Flow preset СЌРєСЃРїРѕСЂС‚РёСЂРѕРІР°РЅ. РњРѕР¶РЅРѕ РѕС‚РїСЂР°РІР»СЏС‚СЊ .flowpreset РґСЂСѓРіСѓ.', false)
+    showToast('Flow preset СЌРєСЃРїРѕСЂС‚РёСЂРѕРІР°РЅ')
     if (failedEmbed && failedEmbed.length) {
       showToast(
-        `Не удалось встроить ${failedEmbed.length} файл(ов) с диска — на другом ПК их не будет.`,
+        `РќРµ СѓРґР°Р»РѕСЃСЊ РІСЃС‚СЂРѕРёС‚СЊ ${failedEmbed.length} С„Р°Р№Р»(РѕРІ) СЃ РґРёСЃРєР° вЂ” РЅР° РґСЂСѓРіРѕРј РџРљ РёС… РЅРµ Р±СѓРґРµС‚.`,
         true
       )
     }
   } catch (err) {
-    setFlowConfigStatus(`Ошибка экспорта: ${err?.message || err}`, true)
-    showToast('Не удалось экспортировать preset', true)
+    setFlowConfigStatus(`РћС€РёР±РєР° СЌРєСЃРїРѕСЂС‚Р°: ${err?.message || err}`, true)
+    showToast('РќРµ СѓРґР°Р»РѕСЃСЊ СЌРєСЃРїРѕСЂС‚РёСЂРѕРІР°С‚СЊ preset', true)
   }
 }
 
@@ -3428,7 +3171,7 @@ function pickFlowConfigFile() {
   input.click()
 }
 
-/** После записи ключей пресета в localStorage подтянуть in-memory состояние и не затирать flow_visual ползунками формы. */
+/** РџРѕСЃР»Рµ Р·Р°РїРёСЃРё РєР»СЋС‡РµР№ РїСЂРµСЃРµС‚Р° РІ localStorage РїРѕРґС‚СЏРЅСѓС‚СЊ in-memory СЃРѕСЃС‚РѕСЏРЅРёРµ Рё РЅРµ Р·Р°С‚РёСЂР°С‚СЊ flow_visual РїРѕР»Р·СѓРЅРєР°РјРё С„РѕСЂРјС‹. */
 function syncRuntimeCachesAfterPresetImport() {
   try {
     playbackMode = Object.assign({}, defaultPlayback, JSON.parse(localStorage.getItem('flow_playback_mode') || '{}'))
@@ -3471,7 +3214,7 @@ function importFlowConfigFile(input) {
       const preset = normalizeImportedFlowPreset(parsed)
       const storage = preset?.storage
       if (!storage || typeof storage !== 'object') {
-        throw new Error('Неверный формат файла')
+        throw new Error('РќРµРІРµСЂРЅС‹Р№ С„РѕСЂРјР°С‚ С„Р°Р№Р»Р°')
       }
       if (preset.replaceAll) {
         const protectedKeys = new Set([
@@ -3527,10 +3270,10 @@ function importFlowConfigFile(input) {
         if (typeof value === 'string' && value.trim()) localStorage.setItem(key, value)
       })
       syncRuntimeCachesAfterPresetImport()
-      setFlowConfigStatus('Flow preset импортирован. Сессия аккаунта сохранена, перезагрузка не требуется.', false)
-      showToast('Flow preset импортирован')
+      setFlowConfigStatus('Flow preset РёРјРїРѕСЂС‚РёСЂРѕРІР°РЅ. РЎРµСЃСЃРёСЏ Р°РєРєР°СѓРЅС‚Р° СЃРѕС…СЂР°РЅРµРЅР°, РїРµСЂРµР·Р°РіСЂСѓР·РєР° РЅРµ С‚СЂРµР±СѓРµС‚СЃСЏ.', false)
+      showToast('Flow preset РёРјРїРѕСЂС‚РёСЂРѕРІР°РЅ')
       try { applySettingsSectionsState() } catch {}
-      // Важно: не вызывать applyVisualSettings() — она берёт значения из DOM и перезаписывает только что импортированный flow_visual.
+      // Р’Р°Р¶РЅРѕ: РЅРµ РІС‹Р·С‹РІР°С‚СЊ applyVisualSettings() вЂ” РѕРЅР° Р±РµСЂС‘С‚ Р·РЅР°С‡РµРЅРёСЏ РёР· DOM Рё РїРµСЂРµР·Р°РїРёСЃС‹РІР°РµС‚ С‚РѕР»СЊРєРѕ С‡С‚Рѕ РёРјРїРѕСЂС‚РёСЂРѕРІР°РЅРЅС‹Р№ flow_visual.
       try { initVisualSettings() } catch {}
       try { syncIntegrationsUI() } catch {}
       try { applyUiTextOverrides() } catch {}
@@ -3544,8 +3287,8 @@ function importFlowConfigFile(input) {
       try { renderFriends().catch(() => {}) } catch {}
       try { pollFriendsPresence(true).catch(() => {}) } catch {}
     } catch (err) {
-      setFlowConfigStatus(`Ошибка импорта: ${err?.message || err}`, true)
-      showToast('Не удалось импортировать preset', true)
+      setFlowConfigStatus(`РћС€РёР±РєР° РёРјРїРѕСЂС‚Р°: ${err?.message || err}`, true)
+      showToast('РќРµ СѓРґР°Р»РѕСЃСЊ РёРјРїРѕСЂС‚РёСЂРѕРІР°С‚СЊ preset', true)
     } finally {
       input.value = ''
     }
@@ -3603,9 +3346,9 @@ function convertDotifyPresetToFlowStorage(preset) {
 function updateSourceBadge() {
   const raw = normalizeStoredActiveSource(getSettings()?.activeSource || currentSource || 'hybrid')
   currentSource = raw
-  let txt = 'Spotify → SoundCloud → Audius'
-  if (raw === 'yandex') txt = 'Яндекс Музыка'
-  else if (raw === 'vk') txt = 'ВКонтакте'
+  let txt = 'Spotify в†’ SoundCloud в†’ Audius'
+  if (raw === 'yandex') txt = 'РЇРЅРґРµРєСЃ РњСѓР·С‹РєР°'
+  else if (raw === 'vk') txt = 'Р’РљРѕРЅС‚Р°РєС‚Рµ'
   else if (raw === 'spotify') txt = 'Spotify'
   else if (raw === 'soundcloud') txt = 'SoundCloud'
   else if (raw === 'audius') txt = 'Audius'
@@ -3616,23 +3359,9 @@ function updateSourceBadge() {
 
 function syncSearchSourceRows() {
   const resolved = normalizeStoredActiveSource(getSettings()?.activeSource || 'hybrid')
-  const sel =
-    '#page-search .source-mode-grid .source-mode-card[data-src="hybrid"], ' +
-    '#page-search .source-mode-grid .source-mode-card[data-src="yandex"], ' +
-    '#page-search .source-mode-grid .source-mode-card[data-src="vk"]'
+  const sel = '.source-mode-card[data-src="hybrid"], .source-mode-card[data-src="yandex"], .source-mode-card[data-src="vk"]'
   document.querySelectorAll(sel).forEach((btn) => {
     const ds = String(btn.getAttribute('data-src') || '')
-    btn.classList.toggle('active', ds === resolved)
-  })
-}
-
-function syncAuthSourceStackActive() {
-  const resolved = normalizeStoredActiveSource(getSettings()?.activeSource || 'hybrid')
-  const stack = document.getElementById('auth-source-stack')
-  if (!stack) return
-  stack.querySelectorAll('.auth-source-tile.source-mode-card[data-src]').forEach((btn) => {
-    const ds = String(btn.getAttribute('data-src') || '')
-    if (!ds || ds === 'spotify-dev') return
     btn.classList.toggle('active', ds === resolved)
   })
 }
@@ -3646,12 +3375,13 @@ function switchSearchSource(src) {
         ? 'vk'
         : 'hybrid'
   setActiveSource(normalized)
+  syncSearchSourceRows()
   const msg =
     normalized === 'yandex'
-      ? 'Источник: Яндекс Музыка (нужен токен в Настройках → Источники)'
+      ? 'РСЃС‚РѕС‡РЅРёРє: РЇРЅРґРµРєСЃ РњСѓР·С‹РєР° (РЅСѓР¶РµРЅ С‚РѕРєРµРЅ РІ РќР°СЃС‚СЂРѕР№РєР°С… в†’ РСЃС‚РѕС‡РЅРёРєРё)'
       : normalized === 'vk'
-        ? 'Источник: ВКонтакте (токен Kate / OAuth в Настройках → Источники)'
-        : 'Источник: классический поиск (Spotify → SoundCloud → Audius)'
+        ? 'РСЃС‚РѕС‡РЅРёРє: Р’РљРѕРЅС‚Р°РєС‚Рµ (С‚РѕРєРµРЅ Kate / OAuth РІ РќР°СЃС‚СЂРѕР№РєР°С… в†’ РСЃС‚РѕС‡РЅРёРєРё)'
+        : 'РСЃС‚РѕС‡РЅРёРє: РєР»Р°СЃСЃРёС‡РµСЃРєРёР№ РїРѕРёСЃРє (Spotify в†’ SoundCloud в†’ Audius)'
   showToast(msg)
   try {
     if (typeof searchTracks === 'function' && String(document.getElementById('search-input')?.value || '').trim()) searchTracks()
@@ -3684,7 +3414,7 @@ function switchTab(tab) {
   if (loginTab) loginTab.classList.toggle('active', _authMode === 'login')
   if (registerTab) registerTab.classList.toggle('active', _authMode === 'register')
   const btn = document.getElementById('btn-label')
-  if (btn) btn.textContent = _authMode === 'register' ? 'Создать профиль' : 'Войти'
+  if (btn) btn.textContent = _authMode === 'register' ? 'РЎРѕР·РґР°С‚СЊ РїСЂРѕС„РёР»СЊ' : 'Р’РѕР№С‚Рё'
 }
 
 function setAuthError(text = '') {
@@ -3702,7 +3432,7 @@ function setAuthScreensAuthorized(isAuthorized) {
 }
 
 function syncProfileUi() {
-  const username = _profile?.username || 'слушатель'
+  const username = _profile?.username || 'СЃР»СѓС€Р°С‚РµР»СЊ'
   const nameEl = document.getElementById('user-name')
   const avatarEl = document.getElementById('user-avatar')
   const welcomeEl = document.getElementById('welcome-text')
@@ -3719,7 +3449,7 @@ function syncProfileUi() {
       avatarEl.textContent = username.slice(0, 1).toUpperCase()
     }
   }
-  if (welcomeEl) welcomeEl.textContent = `Привет, ${username}`
+  if (welcomeEl) welcomeEl.textContent = `РџСЂРёРІРµС‚, ${username}`
   renderProfilePage()
 }
 
@@ -4101,7 +3831,7 @@ function renderRoomMembers() {
   const el = document.getElementById('room-members-list')
   if (!el) return
   if (!_roomState?.roomId) {
-    el.innerHTML = '<div class="flow-empty-state compact"><strong>Рума не активна</strong><span>Создай комнату или вставь invite друга.</span></div>'
+    el.innerHTML = '<div class="flow-empty-state compact"><strong>Р СѓРјР° РЅРµ Р°РєС‚РёРІРЅР°</strong><span>РЎРѕР·РґР°Р№ РєРѕРјРЅР°С‚Сѓ РёР»Рё РІСЃС‚Р°РІСЊ invite РґСЂСѓРіР°.</span></div>'
     return
   }
   const members = Array.from(_roomMembers.values()).map((m) => {
@@ -4133,8 +3863,8 @@ function renderRoomMembers() {
     const avatar = m.avatarData
       ? `<div class="social-friend-avatar social-friend-avatar-active" style="background-image:url(${m.avatarData})"></div>`
       : `<div class="social-friend-avatar social-friend-avatar-active">${String(m.username || '?').slice(0,1).toUpperCase()}</div>`
-    return `<div class="social-friend-card online" oncontextmenu="openRoomMemberContextMenu(event, '${m.peerId || ''}', '${m.username || ''}')">${avatar}<div class="social-friend-meta"><strong>${m.username || 'user'} ${(isHost || isSelfHost) ? 'HOST' : ''}</strong><span>${m.username === _profile?.username ? 'это вы' : 'в комнате'}</span></div></div>`
-  }).join('') || '<div class="flow-empty-state compact"><strong>Нет участников</strong><span>Подключение появится здесь.</span></div>'
+    return `<div class="social-friend-card online" oncontextmenu="openRoomMemberContextMenu(event, '${m.peerId || ''}', '${m.username || ''}')">${avatar}<div class="social-friend-meta"><strong>${m.username || 'user'} ${(isHost || isSelfHost) ? 'HOST' : ''}</strong><span>${m.username === _profile?.username ? 'СЌС‚Рѕ РІС‹' : 'РІ РєРѕРјРЅР°С‚Рµ'}</span></div></div>`
+  }).join('') || '<div class="flow-empty-state compact"><strong>РќРµС‚ СѓС‡Р°СЃС‚РЅРёРєРѕРІ</strong><span>РџРѕРґРєР»СЋС‡РµРЅРёРµ РїРѕСЏРІРёС‚СЃСЏ Р·РґРµСЃСЊ.</span></div>'
 }
 
 function broadcastRoomMembersState() {
@@ -4176,7 +3906,7 @@ function renderRoomQueue() {
   const el = document.getElementById('room-queue-list')
   if (!el) return
   if (!_roomState?.roomId || !Array.isArray(sharedQueue) || !sharedQueue.length) {
-    el.innerHTML = '<div class="flow-empty-state compact"><strong>Очередь пуста</strong><span>Добавь трек через поиск или из своих треков.</span></div>'
+    el.innerHTML = '<div class="flow-empty-state compact"><strong>РћС‡РµСЂРµРґСЊ РїСѓСЃС‚Р°</strong><span>Р”РѕР±Р°РІСЊ С‚СЂРµРє С‡РµСЂРµР· РїРѕРёСЃРє РёР»Рё РёР· СЃРІРѕРёС… С‚СЂРµРєРѕРІ.</span></div>'
     return
   }
   const canEdit = Boolean(_roomState?.host)
@@ -4209,11 +3939,11 @@ function renderRoomQueue() {
     const coverUrl = getListCoverUrl(t)
     const cover = coverUrl
       ? `<div class="profile-row-cover" style="background-image:url(${coverUrl})"></div>`
-      : `<div class="profile-row-cover profile-row-cover-fallback">♪</div>`
+      : `<div class="profile-row-cover profile-row-cover-fallback">в™Є</div>`
     const controls = canEdit
-      ? `<button class="playlist-track-action danger">✕</button>`
+      ? `<button class="playlist-track-action danger">вњ•</button>`
       : ''
-    row.innerHTML = `${cover}<span>${t.title} — ${t.artist || '—'}</span>${controls}`
+    row.innerHTML = `${cover}<span>${t.title} вЂ” ${t.artist || 'вЂ”'}</span>${controls}`
     row.addEventListener('click', () => {
       if (!_roomState?.host) return
       playSharedQueueTrackAt(i)
@@ -4233,10 +3963,10 @@ function renderRoomNowPlaying() {
   const el = document.getElementById('room-now-playing')
   if (!el) return
   if (!_roomState?.roomId || !currentTrack) {
-    el.textContent = 'Сейчас ничего не играет'
+    el.textContent = 'РЎРµР№С‡Р°СЃ РЅРёС‡РµРіРѕ РЅРµ РёРіСЂР°РµС‚'
     return
   }
-  el.textContent = `Играет сейчас: ${currentTrack.title || 'Без названия'}${currentTrack.artist ? ` — ${currentTrack.artist}` : ''}`
+  el.textContent = `РРіСЂР°РµС‚ СЃРµР№С‡Р°СЃ: ${currentTrack.title || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ'}${currentTrack.artist ? ` вЂ” ${currentTrack.artist}` : ''}`
 }
 
 function playSharedQueueTrackAt(index) {
@@ -4267,7 +3997,7 @@ function enqueueSharedTrack(track) {
     sharedQueue.push(cleanTrack)
     renderRoomQueue()
     broadcastQueueUpdate()
-    return showToast('Трек добавлен в очередь комнаты')
+    return showToast('РўСЂРµРє РґРѕР±Р°РІР»РµРЅ РІ РѕС‡РµСЂРµРґСЊ РєРѕРјРЅР°С‚С‹')
   }
   sharedQueue.push(cleanTrack)
   renderRoomQueue()
@@ -4288,7 +4018,7 @@ function enqueueSharedTrack(track) {
   if (typeof _socialPeer?.sendToPeer === 'function' && _roomState?.hostPeerId) {
     _socialPeer.sendToPeer(_roomState.hostPeerId, payload)
   }
-  showToast('Трек добавлен в очередь комнаты')
+  showToast('РўСЂРµРє РґРѕР±Р°РІР»РµРЅ РІ РѕС‡РµСЂРµРґСЊ РєРѕРјРЅР°С‚С‹')
 }
 
 function removeSharedQueueTrack(index) {
@@ -4334,10 +4064,10 @@ async function searchRoomQueueTracks() {
   const q = String(input.value || '').trim()
   if (!q) {
     _roomSearchResults = []
-    list.innerHTML = '<div class="flow-empty-state compact"><strong>Начни поиск</strong><span>Введи название трека, чтобы добавить его в очередь.</span></div>'
+    list.innerHTML = '<div class="flow-empty-state compact"><strong>РќР°С‡РЅРё РїРѕРёСЃРє</strong><span>Р’РІРµРґРё РЅР°Р·РІР°РЅРёРµ С‚СЂРµРєР°, С‡С‚РѕР±С‹ РґРѕР±Р°РІРёС‚СЊ РµРіРѕ РІ РѕС‡РµСЂРµРґСЊ.</span></div>'
     return
   }
-  list.innerHTML = '<div class="flow-empty-state compact"><strong>Ищу треки...</strong><span>Проверяю доступные источники Flow.</span></div>'
+  list.innerHTML = '<div class="flow-empty-state compact"><strong>РС‰Сѓ С‚СЂРµРєРё...</strong><span>РџСЂРѕРІРµСЂСЏСЋ РґРѕСЃС‚СѓРїРЅС‹Рµ РёСЃС‚РѕС‡РЅРёРєРё Flow.</span></div>'
   clearTimeout(_roomSearchDebounceTimer)
   _roomSearchDebounceTimer = setTimeout(async () => {
     try {
@@ -4345,18 +4075,18 @@ async function searchRoomQueueTracks() {
       const hybrid = await searchHybridTracks(q, s)
       _roomSearchResults = sanitizeTrackList(hybrid?.tracks || []).slice(0, 4)
       if (!_roomSearchResults.length) {
-        list.innerHTML = '<div class="flow-empty-state compact"><strong>Ничего не найдено</strong><span>Попробуй другой запрос или источник.</span></div>'
+        list.innerHTML = '<div class="flow-empty-state compact"><strong>РќРёС‡РµРіРѕ РЅРµ РЅР°Р№РґРµРЅРѕ</strong><span>РџРѕРїСЂРѕР±СѓР№ РґСЂСѓРіРѕР№ Р·Р°РїСЂРѕСЃ РёР»Рё РёСЃС‚РѕС‡РЅРёРє.</span></div>'
         return
       }
       list.innerHTML = _roomSearchResults.map((t, i) => {
         const coverUrl = getListCoverUrl(t)
         const cover = coverUrl
           ? `<div class="profile-row-cover" style="background-image:url(${coverUrl})"></div>`
-          : `<div class="profile-row-cover profile-row-cover-fallback">♪</div>`
-        return `<button class="profile-picker-item" onclick="addRoomSearchTrack(${i})" style="display:flex;align-items:center;gap:8px">${cover}<span>${t.title} — ${t.artist || '—'}</span></button>`
+          : `<div class="profile-row-cover profile-row-cover-fallback">в™Є</div>`
+        return `<button class="profile-picker-item" onclick="addRoomSearchTrack(${i})" style="display:flex;align-items:center;gap:8px">${cover}<span>${t.title} вЂ” ${t.artist || 'вЂ”'}</span></button>`
       }).join('')
     } catch {
-      list.innerHTML = '<div class="flow-empty-state compact"><strong>Ошибка поиска</strong><span>Источник не ответил, попробуй позже.</span></div>'
+      list.innerHTML = '<div class="flow-empty-state compact"><strong>РћС€РёР±РєР° РїРѕРёСЃРєР°</strong><span>РСЃС‚РѕС‡РЅРёРє РЅРµ РѕС‚РІРµС‚РёР», РїРѕРїСЂРѕР±СѓР№ РїРѕР·Р¶Рµ.</span></div>'
     }
   }, 260)
 }
@@ -4370,10 +4100,10 @@ function addRoomSearchTrack(index) {
 function openRoomOwnTracksPicker() {
   openPlaylistPickerModal({
     mode: 'room-own-source',
-    title: 'Свои треки в очередь',
+    title: 'РЎРІРѕРё С‚СЂРµРєРё РІ РѕС‡РµСЂРµРґСЊ',
     items: [
-      { id: 'liked', label: `Любимые (${getLiked().length})` },
-      { id: 'playlists', label: `Плейлисты (${getPlaylists().length})` },
+      { id: 'liked', label: `Р›СЋР±РёРјС‹Рµ (${getLiked().length})` },
+      { id: 'playlists', label: `РџР»РµР№Р»РёСЃС‚С‹ (${getPlaylists().length})` },
     ],
     payload: {}
   })
@@ -4413,7 +4143,7 @@ async function openPeerProfile(username, peerId = '') {
       : `<div class="profile-avatar profile-avatar--disc flow-profile-avatar-face">${escapeHtml(String(uRaw).slice(0, 1).toUpperCase())}</div>`
     const pres = _friendPresence.get(unameKey) || {}
     const friends = Array.isArray(profileData._friends) ? profileData._friends.slice(0, 24) : []
-    const friendsHtml = friends.length ? buildFlowProfileFriendsStripHtml(friends) : '<div class="flow-profile-friends-empty">Нет данных</div>'
+    const friendsHtml = friends.length ? buildFlowProfileFriendsStripHtml(friends) : '<div class="flow-profile-friends-empty">РќРµС‚ РґР°РЅРЅС‹С…</div>'
     const listenTrack =
       pres.online && pres.track?.title
         ? {
@@ -4442,9 +4172,9 @@ async function openPeerProfile(username, peerId = '') {
               </div>
               <div class="flow-profile-identity">
                 <h3 class="flow-profile-display-name">${escapeHtml(uRaw)}</h3>
-                <p class="flow-profile-handle-line">@${escapeHtml(uRaw)} • custom</p>
+                <p class="flow-profile-handle-line">@${escapeHtml(uRaw)} вЂў custom</p>
                 <div class="flow-profile-badge-strip">${getFlowProfileBadgeStripHtml()}</div>
-                <p class="flow-profile-bio">${escapeHtml(profileData.bio || 'Описание отсутствует')}</p>
+                <p class="flow-profile-bio">${escapeHtml(profileData.bio || 'РћРїРёСЃР°РЅРёРµ РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚')}</p>
               </div>
               <div class="flow-profile-friends-zone">
                 <div class="flow-profile-zone-label">Friends</div>
@@ -4460,7 +4190,7 @@ async function openPeerProfile(username, peerId = '') {
       queueMicrotask(() => {
         const c = document.getElementById(listenCoverId)
         if (!c) return
-        c.textContent = '♪'
+        c.textContent = 'в™Є'
         c.style.display = 'flex'
         c.style.alignItems = 'center'
         c.style.justifyContent = 'center'
@@ -4566,9 +4296,9 @@ function syncYandexWaveSettingsLabel() {
   if (!btn) return
   const mode = getMyWaveMode()
   const cfg = WE?.MY_WAVE_MODES?.[mode]
-  const label = sanitizeDisplayText(cfg?.label || 'Настроить')
-  btn.textContent = `☰ ${label}`
-  btn.title = 'Настроить Мою волну'
+  const label = sanitizeDisplayText(cfg?.label || 'РќР°СЃС‚СЂРѕРёС‚СЊ')
+  btn.textContent = `в° ${label}`
+  btn.title = 'РќР°СЃС‚СЂРѕРёС‚СЊ РњРѕСЋ РІРѕР»РЅСѓ'
 }
 
 function renderYandexWaveModes() {
@@ -4577,7 +4307,7 @@ function renderYandexWaveModes() {
   const mode = getMyWaveMode()
   const modes = Object.entries(WE?.MY_WAVE_MODES || {})
   pop.innerHTML = `
-    <div class="yandex-wave-mode-title">Режим Моей волны</div>
+    <div class="yandex-wave-mode-title">Р РµР¶РёРј РњРѕРµР№ РІРѕР»РЅС‹</div>
     <div class="yandex-wave-mode-grid">
       ${modes.map(([id, cfg]) => (
         `<button type="button" class="yandex-wave-mode-btn ${id === mode ? 'active' : ''}" data-wave-mode="${escapeHtml(id)}" onclick="setMyWaveMode('${escapeHtml(id)}'); toggleYandexWaveModes(false)">${escapeHtml(sanitizeDisplayText(cfg.label || id))}</button>`
@@ -4595,7 +4325,6 @@ function toggleYandexWaveModes(force) {
   pop.classList.toggle('hidden', !shouldOpen)
 }
 
-let _lastMyWavePreloadCheckAt = 0
 
 async function maybePreloadMyWave(force = false) {
   if (queueScope !== 'myWave' || _myWaveBuilding || _myWavePreloading) return
@@ -4618,7 +4347,7 @@ async function maybePreloadMyWave(force = false) {
       queue.push(...fresh)
       _myWaveRenderedTracks = queue.slice()
       renderQueue()
-      showToast(`Моя волна дозагрузила ${fresh.length} треков`)
+      showToast(`РњРѕСЏ РІРѕР»РЅР° РґРѕР·Р°РіСЂСѓР·РёР»Р° ${fresh.length} С‚СЂРµРєРѕРІ`)
       if (force && queueIndex >= startLength - 1 && queue[queueIndex + 1]) {
         queueIndex++
         await playTrackObj(queue[queueIndex])
@@ -4635,21 +4364,21 @@ async function maybePreloadMyWave(force = false) {
 async function startMyWave() {
   if (_myWaveBuilding) return
   const seedTracks = getMyWaveSeedTracks()
-  if (seedTracks.length < 3) return showToast('Послушай или лайкни еще несколько треков, чтобы волна поняла вкус', true)
+  if (seedTracks.length < 3) return showToast('РџРѕСЃР»СѓС€Р°Р№ РёР»Рё Р»Р°Р№РєРЅРё РµС‰Рµ РЅРµСЃРєРѕР»СЊРєРѕ С‚СЂРµРєРѕРІ, С‡С‚РѕР±С‹ РІРѕР»РЅР° РїРѕРЅСЏР»Р° РІРєСѓСЃ', true)
   _myWaveBuilding = true
   renderMyWave()
-  showToast('Моя волна подбирает новые треки...')
+  showToast('РњРѕСЏ РІРѕР»РЅР° РїРѕРґР±РёСЂР°РµС‚ РЅРѕРІС‹Рµ С‚СЂРµРєРё...')
   try {
     const tracks = await findMyWaveRecommendations(WE?.MY_WAVE_MIN_TRACKS ?? 10, getMyWaveMode())
-    if (!tracks.length) return showToast('Волна пока не нашла новые треки. Попробуй другой режим или послушай еще музыку', true)
+    if (!tracks.length) return showToast('Р’РѕР»РЅР° РїРѕРєР° РЅРµ РЅР°С€Р»Р° РЅРѕРІС‹Рµ С‚СЂРµРєРё. РџРѕРїСЂРѕР±СѓР№ РґСЂСѓРіРѕР№ СЂРµР¶РёРј РёР»Рё РїРѕСЃР»СѓС€Р°Р№ РµС‰Рµ РјСѓР·С‹РєСѓ', true)
     _myWaveRenderedTracks = tracks.slice()
     queue = tracks.slice()
     queueIndex = 0
     queueScope = 'myWave'
-    showToast(`Моя волна собрала ${tracks.length} новых треков`)
+    showToast(`РњРѕСЏ РІРѕР»РЅР° СЃРѕР±СЂР°Р»Р° ${tracks.length} РЅРѕРІС‹С… С‚СЂРµРєРѕРІ`)
     await playTrackObj(queue[0])
   } catch (err) {
-    showToast(`Моя волна не запустилась: ${sanitizeDisplayText(err?.message || err)}`, true)
+    showToast(`РњРѕСЏ РІРѕР»РЅР° РЅРµ Р·Р°РїСѓСЃС‚РёР»Р°СЃСЊ: ${sanitizeDisplayText(err?.message || err)}`, true)
   } finally {
     _myWaveBuilding = false
     renderMyWave()
@@ -4670,13 +4399,13 @@ function renderMyWave() {
     )).join('')
   }
   if (seedCount < 3) {
-    hintEl.textContent = `Послушай или лайкни еще ${3 - seedCount} трек(ов), чтобы волна поняла твой вкус`
+    hintEl.textContent = `РџРѕСЃР»СѓС€Р°Р№ РёР»Рё Р»Р°Р№РєРЅРё РµС‰Рµ ${3 - seedCount} С‚СЂРµРє(РѕРІ), С‡С‚РѕР±С‹ РІРѕР»РЅР° РїРѕРЅСЏР»Р° С‚РІРѕР№ РІРєСѓСЃ`
   } else if (_myWaveBuilding) {
-    hintEl.textContent = `${modeCfg.label}: ищу новые треки по твоему вкусу...`
+    hintEl.textContent = `${modeCfg.label}: РёС‰Сѓ РЅРѕРІС‹Рµ С‚СЂРµРєРё РїРѕ С‚РІРѕРµРјСѓ РІРєСѓСЃСѓ...`
   } else if (_myWavePreloading) {
-    hintEl.textContent = `${modeCfg.label}: дозагружаю новые треки, чтобы волна не кончалась...`
+    hintEl.textContent = `${modeCfg.label}: РґРѕР·Р°РіСЂСѓР¶Р°СЋ РЅРѕРІС‹Рµ С‚СЂРµРєРё, С‡С‚РѕР±С‹ РІРѕР»РЅР° РЅРµ РєРѕРЅС‡Р°Р»Р°СЃСЊ...`
   } else {
-    hintEl.textContent = `${modeCfg.label}: ${modeCfg.hint}. Нажми запуск, и волна сама соберет новую очередь`
+    hintEl.textContent = `${modeCfg.label}: ${modeCfg.hint}. РќР°Р¶РјРё Р·Р°РїСѓСЃРє, Рё РІРѕР»РЅР° СЃР°РјР° СЃРѕР±РµСЂРµС‚ РЅРѕРІСѓСЋ РѕС‡РµСЂРµРґСЊ`
   }
   listEl.innerHTML = `
     <div class="my-wave-orb mode-${mode} ${_myWaveBuilding || _myWavePreloading ? 'is-loading' : ''}" aria-label="${modeCfg.label}">
@@ -4700,13 +4429,13 @@ function renderRoomsMyWave() {
     `<button class="my-wave-mode ${id === mode ? 'active' : ''}" data-wave-mode="${id}" onclick="setMyWaveMode('${id}')">${cfg.label}</button>`
   )).join('')
   if (seedCount < 3) {
-    hintEl.textContent = `Послушай или лайкни еще ${3 - seedCount} трек(ов), чтобы волна поняла твой вкус`
+    hintEl.textContent = `РџРѕСЃР»СѓС€Р°Р№ РёР»Рё Р»Р°Р№РєРЅРё РµС‰Рµ ${3 - seedCount} С‚СЂРµРє(РѕРІ), С‡С‚РѕР±С‹ РІРѕР»РЅР° РїРѕРЅСЏР»Р° С‚РІРѕР№ РІРєСѓСЃ`
   } else if (_myWaveBuilding) {
-    hintEl.textContent = `${modeCfg.label}: ищу новые треки по твоему вкусу...`
+    hintEl.textContent = `${modeCfg.label}: РёС‰Сѓ РЅРѕРІС‹Рµ С‚СЂРµРєРё РїРѕ С‚РІРѕРµРјСѓ РІРєСѓСЃСѓ...`
   } else if (_myWavePreloading) {
-    hintEl.textContent = `${modeCfg.label}: дозагружаю новые треки, чтобы волна не кончалась...`
+    hintEl.textContent = `${modeCfg.label}: РґРѕР·Р°РіСЂСѓР¶Р°СЋ РЅРѕРІС‹Рµ С‚СЂРµРєРё, С‡С‚РѕР±С‹ РІРѕР»РЅР° РЅРµ РєРѕРЅС‡Р°Р»Р°СЃСЊ...`
   } else {
-    hintEl.textContent = `${modeCfg.label}: ${modeCfg.hint}. Нажми запуск, и волна сама соберет новую очередь`
+    hintEl.textContent = `${modeCfg.label}: ${modeCfg.hint}. РќР°Р¶РјРё Р·Р°РїСѓСЃРє, Рё РІРѕР»РЅР° СЃР°РјР° СЃРѕР±РµСЂРµС‚ РЅРѕРІСѓСЋ РѕС‡РµСЂРµРґСЊ`
   }
   listEl.innerHTML = `
     <div class="my-wave-orb mode-${mode} ${_myWaveBuilding || _myWavePreloading ? 'is-loading' : ''}" aria-label="${modeCfg.label}">
@@ -4734,19 +4463,9 @@ function saveListenStats(patch = {}) {
   scheduleProfileCloudSync()
 }
 
-function flushListenStatsPending(force = false) {
-  const pending = Number(_listenStatsPendingSec || 0)
-  if (!force && pending < 0.9) return
-  if (pending <= 0) return
-  const st = getListenStats()
-  saveListenStats({ totalSeconds: Number(st.totalSeconds || 0) + pending })
-  _listenStatsPendingSec = 0
-  _listenStatsLastFlushAt = Date.now()
-}
-
 function saveProfileCustom(patch = {}) {
   if (!ensureActiveProfile()?.username) {
-    showToast('Сначала войди в профиль', true)
+    showToast('РЎРЅР°С‡Р°Р»Р° РІРѕР№РґРё РІ РїСЂРѕС„РёР»СЊ', true)
     return getProfileCustom()
   }
   const key = `flow_profile_custom_${_profile.username}`
@@ -4848,25 +4567,18 @@ function resolvePeerAvatarByUsername(username = '') {
   }
 }
 
-/** Ключ источника для класса `.track-source-*` и таблицы подписей (ya/ym → yandex). */
-function trackSourceBadgeKey(source) {
-  const s = String(source || '').toLowerCase()
-  if (s === 'ya' || s === 'ym') return 'yandex'
-  return s
-}
-
-/** Бейдж как на карточках треков: SC / Ya и т.д. (цвета в styles.css). */
+/** Р‘РµР№РґР¶ РєР°Рє РЅР° РєР°СЂС‚РѕС‡РєР°С… С‚СЂРµРєРѕРІ: SoundCloud вЂ” РѕСЂР°РЅР¶РµРІС‹Р№ В«SCВ» (СЃРѕРІРїР°РґР°РµС‚ СЃ .track-source-soundcloud). */
 function profileListeningSourcePillHtml(trackHint) {
-  const LABELS = { soundcloud: 'SC', vk: 'VK', hitmo: 'HM', youtube: 'YT', spotify: 'SP', yandex: 'Ya' }
-  const raw = trackHint && typeof trackHint.source === 'string' ? trackHint.source : ''
-  const src = raw ? trackSourceBadgeKey(raw) : ''
-  if (!src || !LABELS[src]) {
+  const LABELS = { soundcloud: 'SC', vk: 'VK', hitmo: 'HM', youtube: 'YT', spotify: 'SP' }
+  const src =
+    trackHint && typeof trackHint.source === 'string' && LABELS[trackHint.source] ? trackHint.source : ''
+  if (!src) {
     return '<span class="flow-profile-src-badge flow-profile-src-badge--muted">SC</span>'
   }
   return `<span class="track-source track-source-${src} flow-profile-src-badge">${LABELS[src]}</span>`
 }
 
-/** @param {object|null} trackHint — нужен ли source для бейджа (плеер без трека → приглушённый SC). */
+/** @param {object|null} trackHint вЂ” РЅСѓР¶РµРЅ Р»Рё source РґР»СЏ Р±РµР№РґР¶Р° (РїР»РµРµСЂ Р±РµР· С‚СЂРµРєР° в†’ РїСЂРёРіР»СѓС€С‘РЅРЅС‹Р№ SC). */
 function flowProfileListeningBrandHtml(trackHint) {
   const pill = profileListeningSourcePillHtml(trackHint)
   return `<div class="flow-profile-listening-head">
@@ -4875,12 +4587,12 @@ function flowProfileListeningBrandHtml(trackHint) {
   </div>`
 }
 
-/** Карточка «Listening to Flow» (аналог отдельного UI-компонента): обложка, прогресс, индикатор в углу. */
+/** РљР°СЂС‚РѕС‡РєР° В«Listening to FlowВ» (Р°РЅР°Р»РѕРі РѕС‚РґРµР»СЊРЅРѕРіРѕ UI-РєРѕРјРїРѕРЅРµРЅС‚Р°): РѕР±Р»РѕР¶РєР°, РїСЂРѕРіСЂРµСЃСЃ, РёРЅРґРёРєР°С‚РѕСЂ РІ СѓРіР»Сѓ. */
 function buildProfileActivityCardHtml(track, progressPct, coverDomId) {
   const pct = Math.max(0, Math.min(100, Number(progressPct) || 0))
   const corner = '<span class="flow-profile-activity-corner-dot" aria-hidden="true"></span>'
   if (!track || !track.title) {
-    return `${corner}${flowProfileListeningBrandHtml(null)}<div class="flow-profile-listening-empty"><span class="flow-profile-listening-dot"></span><span>Сейчас ничего не играет</span></div>`
+    return `${corner}${flowProfileListeningBrandHtml(null)}<div class="flow-profile-listening-empty"><span class="flow-profile-listening-dot"></span><span>РЎРµР№С‡Р°СЃ РЅРёС‡РµРіРѕ РЅРµ РёРіСЂР°РµС‚</span></div>`
   }
   const idAttr = coverDomId ? ` id="${coverDomId}"` : ''
   return `${corner}${flowProfileListeningBrandHtml(track)}
@@ -4888,7 +4600,7 @@ function buildProfileActivityCardHtml(track, progressPct, coverDomId) {
       <div class="flow-profile-listening-cover"${idAttr}></div>
       <div class="flow-profile-listening-meta">
         <p class="flow-profile-listening-title">${escapeHtml(track.title)}</p>
-        <span class="flow-profile-listening-artist">${escapeHtml(track.artist || '—')}</span>
+        <span class="flow-profile-listening-artist">${escapeHtml(track.artist || 'вЂ”')}</span>
         <div class="flow-profile-listening-bar">
           <span class="flow-profile-listening-bar-fill" style="width:${pct}%"></span>
           <span class="flow-profile-listening-knob" style="left:${pct}%"></span>
@@ -4906,18 +4618,18 @@ function formatFlowProfileFavoriteSongHtml(track, opts = {}) {
   const usePanel = opts.panel !== false
   const pc = usePanel ? ' flow-profile-favorite--panel' : ''
   if (!track || !track.title) {
-    return `<div class="flow-profile-favorite flow-profile-favorite--empty${pc}"><span class="flow-profile-favorite-label">Favorite song</span><span class="flow-profile-favorite-empty-note">—</span></div>`
+    return `<div class="flow-profile-favorite flow-profile-favorite--empty${pc}"><span class="flow-profile-favorite-label">Favorite song</span><span class="flow-profile-favorite-empty-note">вЂ”</span></div>`
   }
   const cover = getListCoverUrl(track) || getEffectiveCoverUrl(track) || ''
   const thumb = cover
     ? `<div class="flow-profile-favorite-thumb" style="background-image:url(${cover})"></div>`
-    : `<div class="flow-profile-favorite-thumb flow-profile-favorite-thumb--ph">♪</div>`
-  return `<div class="flow-profile-favorite${pc}"><span class="flow-profile-favorite-label">Favorite song</span><div class="flow-profile-favorite-row">${thumb}<div class="flow-profile-favorite-meta"><span class="flow-profile-favorite-title">${escapeHtml(track.title)}</span><span class="flow-profile-favorite-artist">${escapeHtml(track.artist || '—')}</span></div></div></div>`
+    : `<div class="flow-profile-favorite-thumb flow-profile-favorite-thumb--ph">в™Є</div>`
+  return `<div class="flow-profile-favorite${pc}"><span class="flow-profile-favorite-label">Favorite song</span><div class="flow-profile-favorite-row">${thumb}<div class="flow-profile-favorite-meta"><span class="flow-profile-favorite-title">${escapeHtml(track.title)}</span><span class="flow-profile-favorite-artist">${escapeHtml(track.artist || 'вЂ”')}</span></div></div></div>`
 }
 
 function buildFlowProfileFriendsStripHtml(usernames) {
   const list = Array.isArray(usernames) ? usernames.map((x) => String(x || '').trim()).filter(Boolean) : []
-  if (!list.length) return '<div class="flow-profile-friends-empty">Пока нет друзей</div>'
+  if (!list.length) return '<div class="flow-profile-friends-empty">РџРѕРєР° РЅРµС‚ РґСЂСѓР·РµР№</div>'
   return list
     .map((f) => {
       const av = resolvePeerAvatarByUsername(f)
@@ -4964,7 +4676,7 @@ function renderProfileNowPlaying() {
   }
 }
 
-/** Только полоска прогресса на профиле — без innerHTML и без applyCoverArt (раньше это делалось из timeupdate ~11 раз/с). */
+/** РўРѕР»СЊРєРѕ РїРѕР»РѕСЃРєР° РїСЂРѕРіСЂРµСЃСЃР° РЅР° РїСЂРѕС„РёР»Рµ вЂ” Р±РµР· innerHTML Рё Р±РµР· applyCoverArt (СЂР°РЅСЊС€Рµ СЌС‚Рѕ РґРµР»Р°Р»РѕСЃСЊ РёР· timeupdate ~11 СЂР°Р·/СЃ). */
 function patchProfileNowPlayingProgress() {
   if (_activePageId !== 'profile' || !currentTrack?.title) return
   const box = document.getElementById('profile-now-playing')
@@ -5029,10 +4741,10 @@ function renderProfilePage() {
     presDot.classList.toggle('flow-profile-online-dot--offline', !selfOnline)
   }
   if (displayName) displayName.textContent = _profile.username
-  if (handleLine) handleLine.textContent = `@${_profile.username} • custom`
+  if (handleLine) handleLine.textContent = `@${_profile.username} вЂў custom`
   injectFlowProfileBadgeRow(badgeRow)
   if (favSlot) favSlot.innerHTML = formatFlowProfileFavoriteSongHtml(custom.pinnedTracks?.[0] || null)
-  if (bio) bio.textContent = custom.bio || 'Описание отсутствует'
+  if (bio) bio.textContent = custom.bio || 'РћРїРёСЃР°РЅРёРµ РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚'
   applyProfileBannerTheme(custom.bannerData, custom.profileColor).catch?.(() => {})
   renderProfileNowPlaying()
   if (friendsEl) {
@@ -5073,7 +4785,7 @@ function syncProfileEditModal() {
 }
 
 function openProfileEditModal() {
-  if (!_profile?.username) return showToast('Сначала войди в профиль', true)
+  if (!_profile?.username) return showToast('РЎРЅР°С‡Р°Р»Р° РІРѕР№РґРё РІ РїСЂРѕС„РёР»СЊ', true)
   _profileEditDraft = Object.assign({}, getProfileCustom())
   const modal = document.getElementById('profile-edit-modal')
   const name = document.getElementById('profile-edit-username')
@@ -5102,7 +4814,7 @@ async function pickProfileEditImage(kind) {
     if (!file) return
     const dataUrl = await readFileAsDataUrl(file).catch(() => '')
     const prepared = await prepareProfileImageData(file, dataUrl, kind).catch(() => dataUrl)
-    if (!prepared) return showToast(kind === 'avatar' ? 'Не удалось загрузить аватар' : 'Не удалось загрузить баннер', true)
+    if (!prepared) return showToast(kind === 'avatar' ? 'РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ Р°РІР°С‚Р°СЂ' : 'РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ Р±Р°РЅРЅРµСЂ', true)
     setProfileEditDraft(kind === 'avatar' ? { avatarData: prepared } : { bannerData: prepared })
   }
   input.click()
@@ -5135,9 +4847,9 @@ async function submitProfileEditModal() {
   const result = await syncProfileCloudNow().catch((err) => ({ ok: false, error: err?.message || String(err) }))
   renderFriends().catch(() => {})
   pollFriendsPresence(true).catch(() => {})
-  if (!result?.ok) return showToast(`Профиль сохранён локально, но сервер не ответил: ${result?.error || 'ошибка'}`, true)
+  if (!result?.ok) return showToast(`РџСЂРѕС„РёР»СЊ СЃРѕС…СЂР°РЅС‘РЅ Р»РѕРєР°Р»СЊРЅРѕ, РЅРѕ СЃРµСЂРІРµСЂ РЅРµ РѕС‚РІРµС‚РёР»: ${result?.error || 'РѕС€РёР±РєР°'}`, true)
   closeProfileEditModal()
-  showToast('Профиль сохранён и синхронизирован с сервером')
+  showToast('РџСЂРѕС„РёР»СЊ СЃРѕС…СЂР°РЅС‘РЅ Рё СЃРёРЅС…СЂРѕРЅРёР·РёСЂРѕРІР°РЅ СЃ СЃРµСЂРІРµСЂРѕРј')
 }
 
 async function pickProfileAvatar() {
@@ -5148,7 +4860,7 @@ async function pickProfileAvatar() {
     const file = input.files?.[0]
     if (!file) return
     const dataUrl = await readFileAsDataUrl(file).catch(() => '')
-    if (!dataUrl) return showToast('Не удалось загрузить аватар', true)
+    if (!dataUrl) return showToast('РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ Р°РІР°С‚Р°СЂ', true)
     saveProfileCustom({ avatarData: dataUrl })
     syncProfileUi()
     renderProfilePage()
@@ -5164,7 +4876,7 @@ async function pickProfileBanner() {
     const file = input.files?.[0]
     if (!file) return
     const dataUrl = await readFileAsDataUrl(file).catch(() => '')
-    if (!dataUrl) return showToast('Не удалось загрузить баннер', true)
+    if (!dataUrl) return showToast('РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ Р±Р°РЅРЅРµСЂ', true)
     saveProfileCustom({ bannerData: dataUrl })
     renderProfilePage()
   }
@@ -5175,13 +4887,13 @@ function clearProfileAvatar() {
   saveProfileCustom({ avatarData: null })
   syncProfileUi()
   renderProfilePage()
-  showToast('Аватар удалён')
+  showToast('РђРІР°С‚Р°СЂ СѓРґР°Р»С‘РЅ')
 }
 
 function clearProfileBanner() {
   saveProfileCustom({ bannerData: null })
   renderProfilePage()
-  showToast('Баннер удалён')
+  showToast('Р‘Р°РЅРЅРµСЂ СѓРґР°Р»С‘РЅ')
 }
 
 function editProfileBio() {
@@ -5190,21 +4902,21 @@ function editProfileBio() {
 
 function addPinnedTrack() {
   const tracks = getAllKnownTracks()
-  if (!tracks.length) return showToast('Нет доступных треков для добавления', true)
+  if (!tracks.length) return showToast('РќРµС‚ РґРѕСЃС‚СѓРїРЅС‹С… С‚СЂРµРєРѕРІ РґР»СЏ РґРѕР±Р°РІР»РµРЅРёСЏ', true)
   openPlaylistPickerModal({
     mode: 'profile-track',
-    title: 'Выбери трек в профиль',
-    items: tracks.map((t, idx) => ({ id: String(idx), label: `${t.title} — ${t.artist || '—'}` })),
+    title: 'Р’С‹Р±РµСЂРё С‚СЂРµРє РІ РїСЂРѕС„РёР»СЊ',
+    items: tracks.map((t, idx) => ({ id: String(idx), label: `${t.title} вЂ” ${t.artist || 'вЂ”'}` })),
     payload: { tracks }
   })
 }
 
 function addPinnedPlaylist() {
   const playlists = getPlaylists().map(normalizePlaylist)
-  if (!playlists.length) return showToast('Сначала создай плейлист', true)
+  if (!playlists.length) return showToast('РЎРЅР°С‡Р°Р»Р° СЃРѕР·РґР°Р№ РїР»РµР№Р»РёСЃС‚', true)
   openPlaylistPickerModal({
     mode: 'profile-playlist',
-    title: 'Выбери плейлист в профиль',
+    title: 'Р’С‹Р±РµСЂРё РїР»РµР№Р»РёСЃС‚ РІ РїСЂРѕС„РёР»СЊ',
     items: playlists.map((p, idx) => ({ id: String(idx), label: `${p.name} (${p.tracks.length})` })),
     payload: {}
   })
@@ -5235,7 +4947,7 @@ function openPlaylistPickerModal(ctx) {
   const createRow = document.getElementById('playlist-picker-create-row')
   const applyBtn = document.getElementById('playlist-picker-apply-btn')
   if (!modal || !title || !list || !createRow || !applyBtn) return
-  title.textContent = ctx?.title || 'Выбери'
+  title.textContent = ctx?.title || 'Р’С‹Р±РµСЂРё'
   list.innerHTML = ''
   createRow.style.display = ctx?.mode === 'add-track-playlist' ? 'flex' : 'none'
   applyBtn.style.display = ctx?.multi ? 'inline-flex' : 'none'
@@ -5243,7 +4955,7 @@ function openPlaylistPickerModal(ctx) {
     const btn = document.createElement('button')
     btn.className = 'profile-picker-item'
     if (ctx?.multi) {
-      btn.innerHTML = `<span style="opacity:.92">${item.label}</span><span class="profile-chip" data-picked="0">○</span>`
+      btn.innerHTML = `<span style="opacity:.92">${item.label}</span><span class="profile-chip" data-picked="0">в—‹</span>`
       btn.style.display = 'flex'
       btn.style.justifyContent = 'space-between'
       btn.style.alignItems = 'center'
@@ -5276,7 +4988,7 @@ function togglePlaylistPickerSelection(itemId) {
   if (!row) return
   const chip = row.querySelector('[data-picked]')
   const selected = _playlistPickerSelection.has(id)
-  if (chip) chip.textContent = selected ? '●' : '○'
+  if (chip) chip.textContent = selected ? 'в—Џ' : 'в—‹'
   row.classList.toggle('active', selected)
 }
 
@@ -5284,7 +4996,7 @@ function applyPlaylistPickerSelection() {
   const ctx = _playlistPickerContext
   if (!ctx || !ctx.multi) return
   const ids = Array.from(_playlistPickerSelection)
-  if (!ids.length) return showToast('Выбери минимум один трек', true)
+  if (!ids.length) return showToast('Р’С‹Р±РµСЂРё РјРёРЅРёРјСѓРј РѕРґРёРЅ С‚СЂРµРє', true)
   if (ctx.mode === 'room-own-liked-track-multi' || ctx.mode === 'room-own-playlist-track-multi') {
     const tracks = ctx.payload?.tracks || []
     let added = 0
@@ -5296,7 +5008,7 @@ function applyPlaylistPickerSelection() {
       added++
     })
     closePlaylistPickerModal()
-    showToast(`Добавлено в очередь: ${added}`)
+    showToast(`Р”РѕР±Р°РІР»РµРЅРѕ РІ РѕС‡РµСЂРµРґСЊ: ${added}`)
     return
   }
   closePlaylistPickerModal()
@@ -5312,7 +5024,7 @@ function submitPlaylistPicker(selectedId) {
       const track = ctx.payload.track
       if (!pls[idx].tracks.some((t) => t.id === track.id && t.source === track.source)) pls[idx].tracks.push(track)
       savePlaylists(pls)
-      showToast(`Добавлено в "${pls[idx].name}"`)
+      showToast(`Р”РѕР±Р°РІР»РµРЅРѕ РІ "${pls[idx].name}"`)
     }
   } else if (ctx.mode === 'profile-track') {
     const idx = Number(selectedId)
@@ -5338,9 +5050,9 @@ function submitPlaylistPicker(selectedId) {
       const liked = getLiked()
       openPlaylistPickerModal({
         mode: 'room-own-liked-track-multi',
-        title: 'Выбери треки из любимых',
+        title: 'Р’С‹Р±РµСЂРё С‚СЂРµРєРё РёР· Р»СЋР±РёРјС‹С…',
         multi: true,
-        items: liked.map((t, idx) => ({ id: String(idx), label: `${t.title} — ${t.artist || '—'}` })),
+        items: liked.map((t, idx) => ({ id: String(idx), label: `${t.title} вЂ” ${t.artist || 'вЂ”'}` })),
         payload: { tracks: liked }
       })
       return
@@ -5349,7 +5061,7 @@ function submitPlaylistPicker(selectedId) {
       const pls = getPlaylists().map(normalizePlaylist)
       openPlaylistPickerModal({
         mode: 'room-own-playlist',
-        title: 'Выбери плейлист',
+        title: 'Р’С‹Р±РµСЂРё РїР»РµР№Р»РёСЃС‚',
         items: pls.map((p, idx) => ({ id: String(idx), label: `${p.name} (${p.tracks.length})` })),
         payload: { playlists: pls }
       })
@@ -5365,9 +5077,9 @@ function submitPlaylistPicker(selectedId) {
     if (playlist?.tracks?.length) {
       openPlaylistPickerModal({
         mode: 'room-own-playlist-track-multi',
-        title: `Треки: ${playlist.name}`,
+        title: `РўСЂРµРєРё: ${playlist.name}`,
         multi: true,
-        items: playlist.tracks.map((t, tIdx) => ({ id: String(tIdx), label: `${t.title} — ${t.artist || '—'}` })),
+        items: playlist.tracks.map((t, tIdx) => ({ id: String(tIdx), label: `${t.title} вЂ” ${t.artist || 'вЂ”'}` })),
         payload: { tracks: playlist.tracks }
       })
       return
@@ -5408,7 +5120,7 @@ function renderPinnedTracks() {
   if (!el) return
   const custom = getProfileCustom()
   if (!custom.pinnedTracks?.length) {
-    el.innerHTML = '<div class="flow-empty-state compact"><strong>Любимых треков нет</strong><span>Добавь треки в профиль из меню редактирования.</span></div>'
+    el.innerHTML = '<div class="flow-empty-state compact"><strong>Р›СЋР±РёРјС‹С… С‚СЂРµРєРѕРІ РЅРµС‚</strong><span>Р”РѕР±Р°РІСЊ С‚СЂРµРєРё РІ РїСЂРѕС„РёР»СЊ РёР· РјРµРЅСЋ СЂРµРґР°РєС‚РёСЂРѕРІР°РЅРёСЏ.</span></div>'
     return
   }
   el.innerHTML = ''
@@ -5418,8 +5130,8 @@ function renderPinnedTracks() {
     const coverUrl = getListCoverUrl(track)
     const cover = coverUrl
       ? `<div class="profile-row-cover" style="background-image:url(${coverUrl})"></div>`
-      : `<div class="profile-row-cover profile-row-cover-fallback">♪</div>`
-    row.innerHTML = `${cover}<span>${track.title} — ${track.artist || '—'}</span><button class="playlist-track-action danger">✕</button>`
+      : `<div class="profile-row-cover profile-row-cover-fallback">в™Є</div>`
+    row.innerHTML = `${cover}<span>${track.title} вЂ” ${track.artist || 'вЂ”'}</span><button class="playlist-track-action danger">вњ•</button>`
     row.querySelector('span')?.addEventListener('click', () => playTrackObj(track))
     row.querySelector('button')?.addEventListener('click', () => {
       const next = getProfileCustom()
@@ -5438,14 +5150,14 @@ function renderPinnedPlaylists() {
   const playlists = getPlaylists().map(normalizePlaylist)
   const pinned = (custom.pinnedPlaylists || []).map((idx) => ({ idx, pl: playlists[idx] })).filter((x) => x.pl)
   if (!pinned.length) {
-    el.innerHTML = '<div class="flow-empty-state compact"><strong>Плейлисты не закреплены</strong><span>Закрепи плейлист, чтобы он появился в профиле.</span></div>'
+    el.innerHTML = '<div class="flow-empty-state compact"><strong>РџР»РµР№Р»РёСЃС‚С‹ РЅРµ Р·Р°РєСЂРµРїР»РµРЅС‹</strong><span>Р—Р°РєСЂРµРїРё РїР»РµР№Р»РёСЃС‚, С‡С‚РѕР±С‹ РѕРЅ РїРѕСЏРІРёР»СЃСЏ РІ РїСЂРѕС„РёР»Рµ.</span></div>'
     return
   }
   el.innerHTML = ''
   pinned.forEach((item, i) => {
     const row = document.createElement('div')
     row.className = 'profile-row'
-    row.innerHTML = `<span>${item.pl.name} (${item.pl.tracks.length})</span><button class="playlist-track-action danger">✕</button>`
+    row.innerHTML = `<span>${item.pl.name} (${item.pl.tracks.length})</span><button class="playlist-track-action danger">вњ•</button>`
     row.querySelector('span')?.addEventListener('click', () => openPlaylist(item.idx))
     row.querySelector('button')?.addEventListener('click', () => {
       const next = getProfileCustom()
@@ -5463,11 +5175,11 @@ function ensureFriendInteractionUI() {
     menu.id = 'friend-context-menu'
     menu.className = 'friend-context-menu hidden glass-card'
     menu.innerHTML = `
-      <button class="friend-context-item" onclick="friendMenuOpenProfile()">Зайти в профиль</button>
-      <button class="friend-context-item" onclick="friendMenuJoinRoom()">Присоединиться к руме</button>
-      <button class="friend-context-item" onclick="friendMenuInviteRoom()">Пригласить в комнату</button>
-      <button class="friend-context-item" onclick="friendMenuRefresh()">Обновить</button>
-      <button class="friend-context-item danger" onclick="friendMenuRemoveFriend()">Удалить из друзей</button>
+      <button class="friend-context-item" onclick="friendMenuOpenProfile()">Р—Р°Р№С‚Рё РІ РїСЂРѕС„РёР»СЊ</button>
+      <button class="friend-context-item" onclick="friendMenuJoinRoom()">РџСЂРёСЃРѕРµРґРёРЅРёС‚СЊСЃСЏ Рє СЂСѓРјРµ</button>
+      <button class="friend-context-item" onclick="friendMenuInviteRoom()">РџСЂРёРіР»Р°СЃРёС‚СЊ РІ РєРѕРјРЅР°С‚Сѓ</button>
+      <button class="friend-context-item" onclick="friendMenuRefresh()">РћР±РЅРѕРІРёС‚СЊ</button>
+      <button class="friend-context-item danger" onclick="friendMenuRemoveFriend()">РЈРґР°Р»РёС‚СЊ РёР· РґСЂСѓР·РµР№</button>
     `
     document.body.appendChild(menu)
     document.addEventListener('click', () => closeFriendContextMenu())
@@ -5477,7 +5189,7 @@ function ensureFriendInteractionUI() {
     menu.id = 'room-member-context-menu'
     menu.className = 'friend-context-menu hidden glass-card'
     menu.innerHTML = `
-      <button class="friend-context-item" onclick="transferRoomHostFromMenu()">Передать хоста</button>
+      <button class="friend-context-item" onclick="transferRoomHostFromMenu()">РџРµСЂРµРґР°С‚СЊ С…РѕСЃС‚Р°</button>
     `
     document.body.appendChild(menu)
     document.addEventListener('click', () => closeRoomMemberContextMenu())
@@ -5489,15 +5201,15 @@ function ensureFriendInteractionUI() {
     modal.innerHTML = `
       <div class="flow-modal-backdrop" onclick="declineRoomInvite(false)"></div>
       <div class="flow-modal-card glass-card">
-        <h3>Приглашение в руму</h3>
-        <p id="room-invite-text" style="margin-top:8px;opacity:.9">Друг приглашает тебя в руму</p>
+        <h3>РџСЂРёРіР»Р°С€РµРЅРёРµ РІ СЂСѓРјСѓ</h3>
+        <p id="room-invite-text" style="margin-top:8px;opacity:.9">Р”СЂСѓРі РїСЂРёРіР»Р°С€Р°РµС‚ С‚РµР±СЏ РІ СЂСѓРјСѓ</p>
         <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;opacity:.9">
           <input type="checkbox" id="room-invite-mute15" />
-          Отклонить и не получать приглашения 15 минут
+          РћС‚РєР»РѕРЅРёС‚СЊ Рё РЅРµ РїРѕР»СѓС‡Р°С‚СЊ РїСЂРёРіР»Р°С€РµРЅРёСЏ 15 РјРёРЅСѓС‚
         </label>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
-          <button class="btn-small" onclick="declineRoomInvite(true)">Отклонить</button>
-          <button class="btn-small" onclick="acceptRoomInvite()">Присоединиться</button>
+          <button class="btn-small" onclick="declineRoomInvite(true)">РћС‚РєР»РѕРЅРёС‚СЊ</button>
+          <button class="btn-small" onclick="acceptRoomInvite()">РџСЂРёСЃРѕРµРґРёРЅРёС‚СЊСЃСЏ</button>
         </div>
       </div>
     `
@@ -5529,15 +5241,15 @@ function transferRoomHostFromMenu() {
 
 async function transferRoomHost(peerId = '', username = '') {
   const targetPeerId = String(peerId || '').trim()
-  if (!_roomState?.roomId || !_roomState.host) return showToast('Передавать хоста может только текущий хост', true)
-  if (!targetPeerId || targetPeerId === _socialPeer?.peer?.id) return showToast('Выбери другого участника', true)
+  if (!_roomState?.roomId || !_roomState.host) return showToast('РџРµСЂРµРґР°РІР°С‚СЊ С…РѕСЃС‚Р° РјРѕР¶РµС‚ С‚РѕР»СЊРєРѕ С‚РµРєСѓС‰РёР№ С…РѕСЃС‚', true)
+  if (!targetPeerId || targetPeerId === _socialPeer?.peer?.id) return showToast('Р’С‹Р±РµСЂРё РґСЂСѓРіРѕРіРѕ СѓС‡Р°СЃС‚РЅРёРєР°', true)
   _roomState.host = false
   _roomState.hostPeerId = targetPeerId
   _socialPeer?.sendToPeer?.(targetPeerId, { type: 'room-host-transfer', roomId: _roomState.roomId, hostPeerId: targetPeerId, sharedQueue })
   _socialPeer?.send?.({ type: 'room-host-changed', roomId: _roomState.roomId, hostPeerId: targetPeerId, username })
   await saveRoomStateToServer({ host_peer_id: targetPeerId, shared_queue: sharedQueue }).catch(() => {})
   updateRoomUi()
-  showToast(`Хост передан: ${username || targetPeerId.replace(/^flow-/, '')}`)
+  showToast(`РҐРѕСЃС‚ РїРµСЂРµРґР°РЅ: ${username || targetPeerId.replace(/^flow-/, '')}`)
 }
 
 function openFriendContextMenu(event, username, peerId = '', roomId = '', online = false) {
@@ -5571,7 +5283,7 @@ function friendMenuInviteRoom() {
 function friendMenuJoinRoom() {
   closeFriendContextMenu()
   const roomId = String(_friendContext?.roomId || '').trim()
-  if (!roomId) return showToast('У друга сейчас нет активной румы', true)
+  if (!roomId) return showToast('РЈ РґСЂСѓРіР° СЃРµР№С‡Р°СЃ РЅРµС‚ Р°РєС‚РёРІРЅРѕР№ СЂСѓРјС‹', true)
   joinRoomById(roomId)
 }
 
@@ -5622,7 +5334,7 @@ async function friendMenuRefresh() {
   if (modal && !modal.classList.contains('hidden')) {
     openPeerProfile(username, _friendContext.peerId || '').catch(() => {})
   }
-  showToast('Профиль обновлён')
+  showToast('РџСЂРѕС„РёР»СЊ РѕР±РЅРѕРІР»С‘РЅ')
 }
 
 function friendMenuRemoveFriend() {
@@ -5630,10 +5342,10 @@ function friendMenuRemoveFriend() {
   if (!_profile?.username || !_friendContext?.username || typeof peerSocial.removeFriend !== 'function') return
   const friend = String(_friendContext.username || '').trim().toLowerCase()
   if (!friend) return
-  const ok = confirm(`Удалить ${friend} из друзей?`)
+  const ok = confirm(`РЈРґР°Р»РёС‚СЊ ${friend} РёР· РґСЂСѓР·РµР№?`)
   if (!ok) return
   const result = peerSocial.removeFriend(_profile.username, friend)
-  if (!result?.ok) return showToast(result?.error || 'Не удалось удалить друга', true)
+  if (!result?.ok) return showToast(result?.error || 'РќРµ СѓРґР°Р»РѕСЃСЊ СѓРґР°Р»РёС‚СЊ РґСЂСѓРіР°', true)
   _friendPresence.delete(friend)
   const pid = String(_friendContext.peerId || `flow-${friend}`).trim()
   if (pid) {
@@ -5642,28 +5354,28 @@ function friendMenuRemoveFriend() {
   }
   renderFriends().catch(() => {})
   renderRoomMembers()
-  showToast(`${friend} удалён из друзей`)
+  showToast(`${friend} СѓРґР°Р»С‘РЅ РёР· РґСЂСѓР·РµР№`)
 }
 
 function sendRoomInviteToFriend(username, peerId = '') {
-  if (!_roomState?.roomId) return showToast('Сначала зайди в руму', true)
+  if (!_roomState?.roomId) return showToast('РЎРЅР°С‡Р°Р»Р° Р·Р°Р№РґРё РІ СЂСѓРјСѓ', true)
   const toPeer = String(peerId || `flow-${username}`).trim()
-  if (!toPeer || !_socialPeer?.sendToPeer) return showToast('Друг офлайн', true)
+  if (!toPeer || !_socialPeer?.sendToPeer) return showToast('Р”СЂСѓРі РѕС„Р»Р°Р№РЅ', true)
   _socialPeer.sendToPeer(toPeer, {
     type: 'room-invite',
     roomId: _roomState.roomId,
     fromUsername: _profile?.username || 'user',
   })
-  showToast(`Приглашение отправлено: ${username}`)
+  showToast(`РџСЂРёРіР»Р°С€РµРЅРёРµ РѕС‚РїСЂР°РІР»РµРЅРѕ: ${username}`)
 }
 
 function openRoomInvitePicker() {
   if (!_profile?.username || !peerSocial.getFriends) return
   const friends = peerSocial.getFriends(_profile.username) || []
-  if (!friends.length) return showToast('Список друзей пуст', true)
+  if (!friends.length) return showToast('РЎРїРёСЃРѕРє РґСЂСѓР·РµР№ РїСѓСЃС‚', true)
   openPlaylistPickerModal({
     mode: 'room-invite-friend',
-    title: 'Пригласить друга в руму',
+    title: 'РџСЂРёРіР»Р°СЃРёС‚СЊ РґСЂСѓРіР° РІ СЂСѓРјСѓ',
     items: friends.map((name) => ({ id: String(name), label: name })),
     payload: {}
   })
@@ -5677,7 +5389,7 @@ function showRoomInvitePrompt(invite) {
   const mute = document.getElementById('room-invite-mute15')
   if (!popup || !text || !mute) return
   mute.checked = false
-  text.textContent = `${invite?.fromUsername || 'Друг'} приглашает в руму ${invite?.roomId || ''}`
+  text.textContent = `${invite?.fromUsername || 'Р”СЂСѓРі'} РїСЂРёРіР»Р°С€Р°РµС‚ РІ СЂСѓРјСѓ ${invite?.roomId || ''}`
   popup.classList.remove('hidden')
 }
 
@@ -5696,7 +5408,7 @@ function declineRoomInvite(withMuteChoice = true) {
   const mute = document.getElementById('room-invite-mute15')
   if (withMuteChoice && mute?.checked && fromUser) {
     muteInvitesFrom(fromUser, 15 * 60 * 1000)
-    showToast('Приглашения от пользователя скрыты на 15 минут')
+    showToast('РџСЂРёРіР»Р°С€РµРЅРёСЏ РѕС‚ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ СЃРєСЂС‹С‚С‹ РЅР° 15 РјРёРЅСѓС‚')
   }
   _pendingRoomInvite = null
 }
@@ -5709,18 +5421,18 @@ function showOnboardingIfNeeded() {
   modal.innerHTML = `
     <div class="flow-modal-backdrop" onclick="finishOnboarding()"></div>
     <div class="flow-modal-card glass-card onboarding-card">
-      <div class="onboarding-badge">Flow старт</div>
-      <h3>Добро пожаловать в Flow</h3>
-      <p>Пару важных вещей, чтобы у тебя и друзей всё работало без ручной настройки.</p>
+      <div class="onboarding-badge">Flow СЃС‚Р°СЂС‚</div>
+      <h3>Р”РѕР±СЂРѕ РїРѕР¶Р°Р»РѕРІР°С‚СЊ РІ Flow</h3>
+      <p>РџР°СЂСѓ РІР°Р¶РЅС‹С… РІРµС‰РµР№, С‡С‚РѕР±С‹ Сѓ С‚РµР±СЏ Рё РґСЂСѓР·РµР№ РІСЃС‘ СЂР°Р±РѕС‚Р°Р»Рѕ Р±РµР· СЂСѓС‡РЅРѕР№ РЅР°СЃС‚СЂРѕР№РєРё.</p>
       <div class="onboarding-grid">
-        <div class="onboarding-item"><strong>Аккаунт</strong><span>Логин и пароль сохраняют профиль на сервере, поэтому очистка кэша больше не убивает аккаунт.</span></div>
-        <div class="onboarding-item"><strong>Сервер</strong><span>Адрес уже стоит по умолчанию. Его можно поменять в Настройки → Интеграции.</span></div>
-        <div class="onboarding-item"><strong>Комнаты</strong><span>Создавай руму, кидай invite другу и управляй очередью вместе.</span></div>
-        <div class="onboarding-item"><strong>VK-импорт</strong><span>Flow сервер читает плейлист VK, а приложение ищет эти треки в твоих источниках.</span></div>
+        <div class="onboarding-item"><strong>РђРєРєР°СѓРЅС‚</strong><span>Р›РѕРіРёРЅ Рё РїР°СЂРѕР»СЊ СЃРѕС…СЂР°РЅСЏСЋС‚ РїСЂРѕС„РёР»СЊ РЅР° СЃРµСЂРІРµСЂРµ, РїРѕСЌС‚РѕРјСѓ РѕС‡РёСЃС‚РєР° РєСЌС€Р° Р±РѕР»СЊС€Рµ РЅРµ СѓР±РёРІР°РµС‚ Р°РєРєР°СѓРЅС‚.</span></div>
+        <div class="onboarding-item"><strong>РЎРµСЂРІРµСЂ</strong><span>РђРґСЂРµСЃ СѓР¶Рµ СЃС‚РѕРёС‚ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ. Р•РіРѕ РјРѕР¶РЅРѕ РїРѕРјРµРЅСЏС‚СЊ РІ РќР°СЃС‚СЂРѕР№РєРё в†’ РРЅС‚РµРіСЂР°С†РёРё.</span></div>
+        <div class="onboarding-item"><strong>РљРѕРјРЅР°С‚С‹</strong><span>РЎРѕР·РґР°РІР°Р№ СЂСѓРјСѓ, РєРёРґР°Р№ invite РґСЂСѓРіСѓ Рё СѓРїСЂР°РІР»СЏР№ РѕС‡РµСЂРµРґСЊСЋ РІРјРµСЃС‚Рµ.</span></div>
+        <div class="onboarding-item"><strong>VK-РёРјРїРѕСЂС‚</strong><span>Flow СЃРµСЂРІРµСЂ С‡РёС‚Р°РµС‚ РїР»РµР№Р»РёСЃС‚ VK, Р° РїСЂРёР»РѕР¶РµРЅРёРµ РёС‰РµС‚ СЌС‚Рё С‚СЂРµРєРё РІ С‚РІРѕРёС… РёСЃС‚РѕС‡РЅРёРєР°С….</span></div>
       </div>
       <div class="onboarding-actions">
-        <button class="btn-small" onclick="openSettingsFromOnboarding()">Открыть настройки</button>
-        <button class="btn-main" onclick="finishOnboarding()">Погнали</button>
+        <button class="btn-small" onclick="openSettingsFromOnboarding()">РћС‚РєСЂС‹С‚СЊ РЅР°СЃС‚СЂРѕР№РєРё</button>
+        <button class="btn-main" onclick="finishOnboarding()">РџРѕРіРЅР°Р»Рё</button>
       </div>
     </div>
   `
@@ -5753,16 +5465,16 @@ function ensureSocialUI() {
       <span id="social-status" class="social-status">offline</span>
     </div>
     <div class="social-add-box">
-      <div class="social-section-title">Добавить друга</div>
-      <input id="friend-search-input" class="token-field flow-input" placeholder="Username друга" style="flex:1;min-width:180px" />
-      <button class="btn-small" onclick="addFriendByUsername()">Отправить запрос</button>
+      <div class="social-section-title">Р”РѕР±Р°РІРёС‚СЊ РґСЂСѓРіР°</div>
+      <input id="friend-search-input" class="token-field flow-input" placeholder="Username РґСЂСѓРіР°" style="flex:1;min-width:180px" />
+      <button class="btn-small" onclick="addFriendByUsername()">РћС‚РїСЂР°РІРёС‚СЊ Р·Р°РїСЂРѕСЃ</button>
     </div>
     <div class="social-friends-box">
-      <div class="social-section-title">Входящие заявки</div>
-      <div id="friend-requests-list"><div class="flow-empty-state compact"><strong>Заявок нет</strong><span>Когда кто-то добавит тебя, запрос появится здесь.</span></div></div>
+      <div class="social-section-title">Р’С…РѕРґСЏС‰РёРµ Р·Р°СЏРІРєРё</div>
+      <div id="friend-requests-list"><div class="flow-empty-state compact"><strong>Р—Р°СЏРІРѕРє РЅРµС‚</strong><span>РљРѕРіРґР° РєС‚Рѕ-С‚Рѕ РґРѕР±Р°РІРёС‚ С‚РµР±СЏ, Р·Р°РїСЂРѕСЃ РїРѕСЏРІРёС‚СЃСЏ Р·РґРµСЃСЊ.</span></div></div>
     </div>
     <div class="social-friends-box">
-      <div class="social-section-title">Друзья</div>
+      <div class="social-section-title">Р”СЂСѓР·СЊСЏ</div>
       <div id="friends-list"></div>
     </div>
   `
@@ -5780,47 +5492,47 @@ function ensureRoomsUI() {
     <div class="room-connect-panel">
       <div id="social-widget" class="social-widget is-empty" onclick="handleSocialWidgetClick(event)" onkeydown="handleSocialWidgetKeydown(event)" role="button" tabindex="0">
         <div class="widget-placeholder">
-          <span class="glow-text">Создать комнату</span>
+          <span class="glow-text">РЎРѕР·РґР°С‚СЊ РєРѕРјРЅР°С‚Сѓ</span>
         </div>
         <div class="widget-content">
           <div class="widget-members-area">
             <div class="widget-mini-head">
-              <span class="social-section-title">В комнате</span>
+              <span class="social-section-title">Р’ РєРѕРјРЅР°С‚Рµ</span>
               <span id="room-role-badge" class="room-role-badge room-role-solo">SOLO</span>
             </div>
-            <div id="room-members-list" class="sidebar-users"><div class="flow-empty-state compact"><strong>Комната пустая</strong><span>Создай руму или присоединись по invite.</span></div></div>
+            <div id="room-members-list" class="sidebar-users"><div class="flow-empty-state compact"><strong>РљРѕРјРЅР°С‚Р° РїСѓСЃС‚Р°СЏ</strong><span>РЎРѕР·РґР°Р№ СЂСѓРјСѓ РёР»Рё РїСЂРёСЃРѕРµРґРёРЅРёСЃСЊ РїРѕ invite.</span></div></div>
           </div>
           <div class="actions-menu">
-            <button class="action-btn invite" onclick="event.stopPropagation();openRoomInvitePicker()" title="Пригласить друга"><span>＋</span><small>Пригласить</small></button>
-            <button class="action-btn noop" onclick="event.stopPropagation();showToast('Пока ничего')" title="Пока ничего"><span>ничего</span><small>Пока ничего</small></button>
-            <button class="action-btn leave" onclick="event.stopPropagation();leaveRoom()" title="Покинуть группу"><span>✕</span><small>Покинуть</small></button>
+            <button class="action-btn invite" onclick="event.stopPropagation();openRoomInvitePicker()" title="РџСЂРёРіР»Р°СЃРёС‚СЊ РґСЂСѓРіР°"><span>пј‹</span><small>РџСЂРёРіР»Р°СЃРёС‚СЊ</small></button>
+            <button class="action-btn noop" onclick="event.stopPropagation();showToast('РџРѕРєР° РЅРёС‡РµРіРѕ')" title="РџРѕРєР° РЅРёС‡РµРіРѕ"><span>РЅРёС‡РµРіРѕ</span><small>РџРѕРєР° РЅРёС‡РµРіРѕ</small></button>
+            <button class="action-btn leave" onclick="event.stopPropagation();leaveRoom()" title="РџРѕРєРёРЅСѓС‚СЊ РіСЂСѓРїРїСѓ"><span>вњ•</span><small>РџРѕРєРёРЅСѓС‚СЊ</small></button>
           </div>
         </div>
       </div>
     </div>
     <div class="social-room-box rooms-search-tile">
-      <div class="social-section-title">Поиск в очередь</div>
-      <input id="room-queue-search" class="token-field flow-input" placeholder="Найти трек и добавить в очередь..." oninput="searchRoomQueueTracks()" />
-      <div style="margin-top:8px"><button class="btn-small" onclick="openRoomOwnTracksPicker()">Свои треки</button></div>
+      <div class="social-section-title">РџРѕРёСЃРє РІ РѕС‡РµСЂРµРґСЊ</div>
+      <input id="room-queue-search" class="token-field flow-input" placeholder="РќР°Р№С‚Рё С‚СЂРµРє Рё РґРѕР±Р°РІРёС‚СЊ РІ РѕС‡РµСЂРµРґСЊ..." oninput="searchRoomQueueTracks()" />
+      <div style="margin-top:8px"><button class="btn-small" onclick="openRoomOwnTracksPicker()">РЎРІРѕРё С‚СЂРµРєРё</button></div>
       <div class="rooms-wave-embedded">
         <div class="my-wave rooms-wave-my-wave">
           <div class="my-wave-hero">
-            <div class="my-wave-badge">Моя волна</div>
-            <h3>Волна для комнаты</h3>
-            <p id="rooms-wave-hint">Выбери режим и запусти волну для общей очереди</p>
+            <div class="my-wave-badge">РњРѕСЏ РІРѕР»РЅР°</div>
+            <h3>Р’РѕР»РЅР° РґР»СЏ РєРѕРјРЅР°С‚С‹</h3>
+            <p id="rooms-wave-hint">Р’С‹Р±РµСЂРё СЂРµР¶РёРј Рё Р·Р°РїСѓСЃС‚Рё РІРѕР»РЅСѓ РґР»СЏ РѕР±С‰РµР№ РѕС‡РµСЂРµРґРё</p>
             <div class="my-wave-actions">
-              <button class="my-wave-start" onclick="startMyWave()">Запустить волну</button>
+              <button class="my-wave-start" onclick="startMyWave()">Р—Р°РїСѓСЃС‚РёС‚СЊ РІРѕР»РЅСѓ</button>
               <div class="my-wave-modes" id="rooms-wave-modes"></div>
             </div>
           </div>
           <div class="my-wave-list" id="rooms-wave-list"></div>
         </div>
       </div>
-      <div id="room-search-results" class="profile-picker-list" style="margin-top:8px"><div class="flow-empty-state compact"><strong>Начни поиск</strong><span>Введи название трека, чтобы добавить его в очередь.</span></div></div>
+      <div id="room-search-results" class="profile-picker-list" style="margin-top:8px"><div class="flow-empty-state compact"><strong>РќР°С‡РЅРё РїРѕРёСЃРє</strong><span>Р’РІРµРґРё РЅР°Р·РІР°РЅРёРµ С‚СЂРµРєР°, С‡С‚РѕР±С‹ РґРѕР±Р°РІРёС‚СЊ РµРіРѕ РІ РѕС‡РµСЂРµРґСЊ.</span></div></div>
     </div>
     <div class="social-room-box">
-      <div class="social-section-title">Очередь прослушивания</div>
-      <div id="room-now-playing" class="room-now-playing-line">Сейчас ничего не играет</div>
+      <div class="social-section-title">РћС‡РµСЂРµРґСЊ РїСЂРѕСЃР»СѓС€РёРІР°РЅРёСЏ</div>
+      <div id="room-now-playing" class="room-now-playing-line">РЎРµР№С‡Р°СЃ РЅРёС‡РµРіРѕ РЅРµ РёРіСЂР°РµС‚</div>
       <div id="room-queue-list"></div>
     </div>
   `
@@ -5835,7 +5547,7 @@ async function renderFriends() {
   renderFriendRequests().catch(() => {})
   const list = peerSocial.getFriends(_profile.username)
   if (!list.length) {
-    el.innerHTML = '<div class="flow-empty-state"><strong>Пока нет друзей</strong><span>Добавь друга по username, чтобы видеть онлайн, профиль и комнаты.</span></div>'
+    el.innerHTML = '<div class="flow-empty-state"><strong>РџРѕРєР° РЅРµС‚ РґСЂСѓР·РµР№</strong><span>Р”РѕР±Р°РІСЊ РґСЂСѓРіР° РїРѕ username, С‡С‚РѕР±С‹ РІРёРґРµС‚СЊ РѕРЅР»Р°Р№РЅ, РїСЂРѕС„РёР»СЊ Рё РєРѕРјРЅР°С‚С‹.</span></div>'
     return
   }
   const online = []
@@ -5850,8 +5562,8 @@ async function renderFriends() {
     const avatar = resolvePeerAvatarByUsername(item.name)
     const roomId = item.state.roomId || ''
     const nowPlaying = onlineMode && item.state.track?.title
-      ? `слушает: ${item.state.track.title}${item.state.track.artist ? ` — ${item.state.track.artist}` : ''}`
-      : (onlineMode ? 'в сети' : 'не в сети')
+      ? `СЃР»СѓС€Р°РµС‚: ${item.state.track.title}${item.state.track.artist ? ` вЂ” ${item.state.track.artist}` : ''}`
+      : (onlineMode ? 'РІ СЃРµС‚Рё' : 'РЅРµ РІ СЃРµС‚Рё')
     const avatarHtml = avatar
       ? `<div class="social-friend-avatar" style="background-image:url(${avatar})"></div>`
       : `<div class="social-friend-avatar">${item.name.slice(0, 1).toUpperCase()}</div>`
@@ -5866,10 +5578,10 @@ async function renderFriends() {
     `
   }
   el.innerHTML = `
-    <div class="social-friends-section-title">В сети</div>
-    <div class="social-friends-grid">${online.length ? online.map((item) => fmtFriendCard(item, true)).join('') : '<div class="flow-empty-state compact"><strong>Никого онлайн</strong><span>Flow покажет друга сразу, как он появится в сети.</span></div>'}</div>
-    <div class="social-friends-section-title">Не в сети</div>
-    <div class="social-friends-grid">${offline.length ? offline.map((item) => fmtFriendCard(item, false)).join('') : '<div class="flow-empty-state compact"><strong>Пусто</strong><span>Все друзья сейчас онлайн.</span></div>'}</div>
+    <div class="social-friends-section-title">Р’ СЃРµС‚Рё</div>
+    <div class="social-friends-grid">${online.length ? online.map((item) => fmtFriendCard(item, true)).join('') : '<div class="flow-empty-state compact"><strong>РќРёРєРѕРіРѕ РѕРЅР»Р°Р№РЅ</strong><span>Flow РїРѕРєР°Р¶РµС‚ РґСЂСѓРіР° СЃСЂР°Р·Сѓ, РєР°Рє РѕРЅ РїРѕСЏРІРёС‚СЃСЏ РІ СЃРµС‚Рё.</span></div>'}</div>
+    <div class="social-friends-section-title">РќРµ РІ СЃРµС‚Рё</div>
+    <div class="social-friends-grid">${offline.length ? offline.map((item) => fmtFriendCard(item, false)).join('') : '<div class="flow-empty-state compact"><strong>РџСѓСЃС‚Рѕ</strong><span>Р’СЃРµ РґСЂСѓР·СЊСЏ СЃРµР№С‡Р°СЃ РѕРЅР»Р°Р№РЅ.</span></div>'}</div>
   `
 }
 
@@ -5927,7 +5639,7 @@ function saveFlowSocialBackendSettings() {
     if (_profile?.username) initPeerSocial()
     if (_roomState?.roomId) startRoomServerSync()
   } catch (_) {}
-  showToast('Социальный сервер сохранён')
+  showToast('РЎРѕС†РёР°Р»СЊРЅС‹Р№ СЃРµСЂРІРµСЂ СЃРѕС…СЂР°РЅС‘РЅ')
 }
 
 async function checkFlowSocialBackendStatus() {
@@ -5947,10 +5659,10 @@ async function checkFlowSocialBackendStatus() {
     localStorage.setItem('flow_social_api_secret', secret)
   } catch (_) {}
   if (!base || !secret) {
-    setStatus('Соц-API: укажи URL и секрет', false)
+    setStatus('РЎРѕС†-API: СѓРєР°Р¶Рё URL Рё СЃРµРєСЂРµС‚', false)
     return
   }
-  setStatus('Соц-API: проверяю…')
+  setStatus('РЎРѕС†-API: РїСЂРѕРІРµСЂСЏСЋвЂ¦')
   try {
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), 5500)
@@ -5961,10 +5673,10 @@ async function checkFlowSocialBackendStatus() {
       headers: { Authorization: `Bearer ${secret}` },
     })
     clearTimeout(timer)
-    if (!r.ok) setStatus(`Соц-API: ошибка ${r.status}`, false)
-    else setStatus('Соц-API: OK', true)
+    if (!r.ok) setStatus(`РЎРѕС†-API: РѕС€РёР±РєР° ${r.status}`, false)
+    else setStatus('РЎРѕС†-API: OK', true)
   } catch (_) {
-    setStatus('Соц-API: недоступен (проверь URL, секрет, firewall)', false)
+    setStatus('РЎРѕС†-API: РЅРµРґРѕСЃС‚СѓРїРµРЅ (РїСЂРѕРІРµСЂСЊ URL, СЃРµРєСЂРµС‚, firewall)', false)
   }
 }
 
@@ -5973,7 +5685,7 @@ function saveProxySettings() {
   const proxyBaseUrl = normalizeFlowServerUrl(input?.value || FLOW_SERVER_DEFAULT_URL)
   saveSettingsRaw({ proxyBaseUrl })
   if (input) input.value = proxyBaseUrl
-  showToast('Flow сервер сохранён')
+  showToast('Flow СЃРµСЂРІРµСЂ СЃРѕС…СЂР°РЅС‘РЅ')
   checkFlowServerStatus().catch(() => {})
 }
 
@@ -5991,11 +5703,11 @@ async function checkFlowServerStatus() {
   saveSettingsRaw({ proxyBaseUrl: base })
   if (input) input.value = base
   if (!/^https?:\/\//i.test(base)) {
-    setStatus('Сервер: неверный адрес', false)
+    setStatus('РЎРµСЂРІРµСЂ: РЅРµРІРµСЂРЅС‹Р№ Р°РґСЂРµСЃ', false)
     return { ok: false, ping: null }
   }
   _lastServerStatusCheckAt = Date.now()
-  setStatus('Сервер: проверяю...')
+  setStatus('РЎРµСЂРІРµСЂ: РїСЂРѕРІРµСЂСЏСЋ...')
   const started = performance.now()
   try {
     const ctrl = new AbortController()
@@ -6004,13 +5716,13 @@ async function checkFlowServerStatus() {
     clearTimeout(timer)
     const ping = Math.max(1, Math.round(performance.now() - started))
     if (!rsp.ok) {
-      setStatus(`Сервер: оффлайн (${rsp.status})`, false)
+      setStatus(`РЎРµСЂРІРµСЂ: РѕС„С„Р»Р°Р№РЅ (${rsp.status})`, false)
       return { ok: false, ping }
     }
-    setStatus(`Сервер: онлайн, ping ${ping} ms`, true)
+    setStatus(`РЎРµСЂРІРµСЂ: РѕРЅР»Р°Р№РЅ, ping ${ping} ms`, true)
     return { ok: true, ping }
   } catch {
-    setStatus('Сервер: оффлайн', false)
+    setStatus('РЎРµСЂРІРµСЂ: РѕС„С„Р»Р°Р№РЅ', false)
     return { ok: false, ping: null }
   }
 }
@@ -6025,10 +5737,10 @@ async function checkProxyConnection() {
     else statusEl.style.color = ''
   }
   if (!window.api?.proxySetUrl) {
-    setStatus('Статус: проверка доступна только в Electron', false)
+    setStatus('РЎС‚Р°С‚СѓСЃ: РїСЂРѕРІРµСЂРєР° РґРѕСЃС‚СѓРїРЅР° С‚РѕР»СЊРєРѕ РІ Electron', false)
     return
   }
-  setStatus('Статус: проверяю прокси и источники...')
+  setStatus('РЎС‚Р°С‚СѓСЃ: РїСЂРѕРІРµСЂСЏСЋ РїСЂРѕРєСЃРё Рё РёСЃС‚РѕС‡РЅРёРєРё...')
   const checks = [
     { name: 'SoundCloud CDN', url: 'https://cf-media.sndcdn.com/' },
     { name: 'Audius API', url: 'https://discoveryprovider.audius.co/v1/health_check' },
@@ -6054,27 +5766,27 @@ async function checkProxyConnection() {
     lines.push(`${ok ? 'OK' : 'FAIL'} ${item.name}`)
   }
   const allOk = okCount === checks.length
-  const msg = `Статус: ${okCount}/${checks.length} прошло | ${lines.join(' | ')}`
+  const msg = `РЎС‚Р°С‚СѓСЃ: ${okCount}/${checks.length} РїСЂРѕС€Р»Рѕ | ${lines.join(' | ')}`
   setStatus(msg, allOk ? true : (okCount > 0 ? null : false))
-  showToast(allOk ? 'Прокси проверен: все источники отвечают' : `Прокси проверка: прошло ${okCount}/${checks.length}`, !allOk)
+  showToast(allOk ? 'РџСЂРѕРєСЃРё РїСЂРѕРІРµСЂРµРЅ: РІСЃРµ РёСЃС‚РѕС‡РЅРёРєРё РѕС‚РІРµС‡Р°СЋС‚' : `РџСЂРѕРєСЃРё РїСЂРѕРІРµСЂРєР°: РїСЂРѕС€Р»Рѕ ${okCount}/${checks.length}`, !allOk)
 }
 
 async function connectDiscordRpc() {
   const input = document.getElementById('discord-client-id')
   const clientId = String(input?.value || '').trim()
-  if (!clientId) return showToast('Укажи Discord Client ID', true)
+  if (!clientId) return showToast('РЈРєР°Р¶Рё Discord Client ID', true)
   saveSettingsRaw({ discordClientId: clientId, discordRpcEnabled: true })
-  if (!window.api?.discordRpcConnect) return showToast('RPC доступен только в Electron', true)
+  if (!window.api?.discordRpcConnect) return showToast('RPC РґРѕСЃС‚СѓРїРµРЅ С‚РѕР»СЊРєРѕ РІ Electron', true)
   const r = await window.api.discordRpcConnect(clientId).catch((e) => ({ ok: false, error: e?.message || String(e) }))
-  if (!r?.ok) return showToast(`Discord RPC: ${r?.error || 'ошибка'}`, true)
+  if (!r?.ok) return showToast(`Discord RPC: ${r?.error || 'РѕС€РёР±РєР°'}`, true)
   syncIntegrationsUI()
-  showToast('Discord RPC подключен')
+  showToast('Discord RPC РїРѕРґРєР»СЋС‡РµРЅ')
 }
 
 async function disconnectDiscordRpc() {
   saveSettingsRaw({ discordRpcEnabled: false })
   if (window.api?.discordRpcClear) await window.api.discordRpcClear().catch(() => {})
-  showToast('Discord RPC отключен')
+  showToast('Discord RPC РѕС‚РєР»СЋС‡РµРЅ')
 }
 
 function saveLastFmCredentials() {
@@ -6083,7 +5795,7 @@ function saveLastFmCredentials() {
   const sessionKey = String(document.getElementById('lastfm-session-key')?.value || '').trim()
   saveSettingsRaw({ lastfmApiKey: apiKey, lastfmSharedSecret: sharedSecret, lastfmSessionKey: sessionKey })
   syncIntegrationsUI()
-  showToast('Last.fm данные сохранены')
+  showToast('Last.fm РґР°РЅРЅС‹Рµ СЃРѕС…СЂР°РЅРµРЅС‹')
 }
 
 async function updateDiscordPresence(track, roomInfo = null) {
@@ -6095,7 +5807,7 @@ async function updateDiscordPresence(track, roomInfo = null) {
   }
   await window.api.discordRpcUpdate({
     details: `Listening: ${track.title || 'Unknown'}`,
-    state: `${track.artist || '—'}${roomInfo?.roomId ? ` • room ${roomInfo.roomId}` : ''}`,
+    state: `${track.artist || 'вЂ”'}${roomInfo?.roomId ? ` вЂў room ${roomInfo.roomId}` : ''}`,
     largeImageKey: 'flow',
     largeImageText: 'Flow',
     smallImageKey: 'music',
@@ -6139,7 +5851,7 @@ function initPeerSocial() {
     onStatus: (evt) => {
       if (evt.type === 'ready') setSocialStatus(`online: ${evt.id}`)
       if (evt.type === 'peer-joined') {
-        setRoomStatus(`Рума ${_roomState.roomId || '—'}: участников ${_socialPeer.peersCount()}/3`)
+        setRoomStatus(`Р СѓРјР° ${_roomState.roomId || 'вЂ”'}: СѓС‡Р°СЃС‚РЅРёРєРѕРІ ${_socialPeer.peersCount()}/3`)
         const me = getPublicProfilePayload(_profile?.username)
         if (me && _socialPeer?.peer?.id) _roomMembers.set(_socialPeer.peer.id, me)
         if (evt.peerId && !_roomMembers.has(evt.peerId)) {
@@ -6162,10 +5874,10 @@ function initPeerSocial() {
         broadcastRoomMembersState()
         resetRoomHeartbeat()
         updateRoomUi()
-        if (evt.peerId) showToast(`${String(evt.peerId).replace(/^flow-/, '')}: вошёл в руму`)
+        if (evt.peerId) showToast(`${String(evt.peerId).replace(/^flow-/, '')}: РІРѕС€С‘Р» РІ СЂСѓРјСѓ`)
       }
       if (evt.type === 'peer-left') {
-        setRoomStatus(`Рума ${_roomState.roomId || '—'}: участников ${_socialPeer.peersCount()}/3`)
+        setRoomStatus(`Р СѓРјР° ${_roomState.roomId || 'вЂ”'}: СѓС‡Р°СЃС‚РЅРёРєРѕРІ ${_socialPeer.peersCount()}/3`)
         if (evt.peerId) {
           _roomMembers.delete(evt.peerId)
           _peerProfiles.delete(evt.peerId)
@@ -6173,17 +5885,17 @@ function initPeerSocial() {
         if (!_roomState.host && evt.peerId && evt.peerId === _roomState.hostPeerId) {
           _roomState = { roomId: null, host: true, hostPeerId: null }
           _roomMembers.clear()
-          showToast('Хост покинул комнату. Теперь вы управляете плеером сами')
-          setRoomStatus('Хост отключился, автономный режим активирован')
+          showToast('РҐРѕСЃС‚ РїРѕРєРёРЅСѓР» РєРѕРјРЅР°С‚Сѓ. РўРµРїРµСЂСЊ РІС‹ СѓРїСЂР°РІР»СЏРµС‚Рµ РїР»РµРµСЂРѕРј СЃР°РјРё')
+          setRoomStatus('РҐРѕСЃС‚ РѕС‚РєР»СЋС‡РёР»СЃСЏ, Р°РІС‚РѕРЅРѕРјРЅС‹Р№ СЂРµР¶РёРј Р°РєС‚РёРІРёСЂРѕРІР°РЅ')
         }
         broadcastRoomMembersState()
         resetRoomHeartbeat()
         updateRoomUi()
-        if (evt.peerId) showToast(`${String(evt.peerId).replace(/^flow-/, '')}: вышел из румы`)
+        if (evt.peerId) showToast(`${String(evt.peerId).replace(/^flow-/, '')}: РІС‹С€РµР» РёР· СЂСѓРјС‹`)
       }
       if (evt.type === 'error') {
         setSocialStatus(`error: ${evt.error}`)
-        if (_roomState?.roomId) showToast(`Ошибка соединения: ${evt.error}`, true)
+        if (_roomState?.roomId) showToast(`РћС€РёР±РєР° СЃРѕРµРґРёРЅРµРЅРёСЏ: ${evt.error}`, true)
       }
     },
     onMessage: (msg, fromPeerId) => {
@@ -6193,26 +5905,21 @@ function initPeerSocial() {
         const senderId = String(msg._peerId || fromPeerId || '').trim()
         if (!_roomState.hostPeerId && senderId) _roomState.hostPeerId = senderId
         if (expectedHostId && senderId && senderId !== expectedHostId) return
-        const seq = Number(msg.syncSeq || 0)
-        if (seq && _lastPlaybackSyncSeq && seq < _lastPlaybackSyncSeq) return
-        if (seq) _lastPlaybackSyncSeq = Math.max(_lastPlaybackSyncSeq || 0, seq)
         const ts = Number(msg.playbackTs || msg._ts || 0)
-        if (ts) _lastAppliedServerPlaybackTs = Math.max(_lastAppliedServerPlaybackTs || 0, ts)
+        if (ts && ts <= _lastAppliedServerPlaybackTs) return
+        if (ts) _lastAppliedServerPlaybackTs = ts
         if (msg.track && msg.track.id !== currentTrack?.id) {
           playTrackObj(msg.track, { remoteSync: true }).catch(() => {})
         }
-        if (typeof msg.currentTime === 'number' && Number.isFinite(audio.duration) && audio.duration > 0) {
+        if (typeof msg.currentTime === 'number') {
           const latencySec = Math.max(0, (Date.now() - Number(msg._ts || Date.now())) / 1000)
-          const targetTime = Math.max(0, Math.min(msg.currentTime + latencySec, audio.duration))
-          if (Math.abs(audio.currentTime - targetTime) > 0.12) audio.currentTime = targetTime
+          const targetTime = Math.max(0, msg.currentTime + latencySec)
+          if (Math.abs(audio.currentTime - targetTime) > 0.10) audio.currentTime = targetTime
         }
         if (typeof msg.paused === 'boolean') {
           if (msg.paused && !audio.paused) audio.pause()
           if (!msg.paused && audio.paused) audio.play().catch(() => {})
         }
-        try {
-          syncTransportPlayPauseUi()
-        } catch (_) {}
         if (Array.isArray(msg.sharedQueue)) {
           sharedQueue = msg.sharedQueue
           renderRoomQueue()
@@ -6270,7 +5977,7 @@ function initPeerSocial() {
           broadcastRoomMembersState()
           broadcastQueueUpdate()
           updateRoomUi()
-          showToast('Теперь ты хост комнаты')
+          showToast('РўРµРїРµСЂСЊ С‚С‹ С…РѕСЃС‚ РєРѕРјРЅР°С‚С‹')
         }
       }
       if (msg.type === 'room-host-changed' && msg.roomId === _roomState.roomId && msg.hostPeerId) {
@@ -6278,7 +5985,7 @@ function initPeerSocial() {
         _roomState.hostPeerId = String(msg.hostPeerId || '')
         _roomState.host = myPeerId && _roomState.hostPeerId === myPeerId
         updateRoomUi()
-        if (!_roomState.host) showToast(`Новый хост: ${String(msg.username || msg.hostPeerId).replace(/^flow-/, '')}`)
+        if (!_roomState.host) showToast(`РќРѕРІС‹Р№ С…РѕСЃС‚: ${String(msg.username || msg.hostPeerId).replace(/^flow-/, '')}`)
       }
       if (msg.type === 'room-profile-state' && msg.roomId === _roomState.roomId && msg.profile && msg._peerId) {
         const profileWithPeer = mergeProfileData(_peerProfiles.get(msg._peerId) || getCachedPeerProfile(msg.profile.username), Object.assign({}, msg.profile, { peerId: msg._peerId }), msg._peerId)
@@ -6313,16 +6020,9 @@ function initPeerSocial() {
         renderRoomQueue()
       }
       if (msg.type === 'room-control-toggle' && msg.roomId === _roomState.roomId && msg._peerId && msg._peerId !== _socialPeer?.peer?.id) {
-        if (_roomState?.host && typeof msg.currentTime === 'number' && Number.isFinite(audio.duration) && audio.duration > 0) {
-          const ct = Math.max(0, Math.min(Number(msg.currentTime), audio.duration))
-          if (Math.abs(audio.currentTime - ct) > 1.25) audio.currentTime = ct
-        }
         const shouldPause = Boolean(msg.paused)
         if (shouldPause && !audio.paused) audio.pause()
         if (!shouldPause && audio.paused) audio.play().catch(() => {})
-        try {
-          syncTransportPlayPauseUi()
-        } catch (_) {}
         if (_roomState?.host) {
           broadcastPlaybackSync(true)
           saveRoomStateToServer({
@@ -6358,18 +6058,18 @@ async function submitAuth() {
   const passInput = document.getElementById('auth-password')
   const username = String(input?.value || '').trim()
   const password = String(passInput?.value || '')
-  if (!username) return setAuthError('Введите Username')
-  if (!password) return setAuthError('Введите пароль')
+  if (!username) return setAuthError('Р’РІРµРґРёС‚Рµ Username')
+  if (!password) return setAuthError('Р’РІРµРґРёС‚Рµ РїР°СЂРѕР»СЊ')
   const fn = _authMode === 'register' ? peerSocial.createProfile : peerSocial.loginProfile
-  if (typeof fn !== 'function') return setAuthError('Social модуль не загружен')
+  if (typeof fn !== 'function') return setAuthError('Social РјРѕРґСѓР»СЊ РЅРµ Р·Р°РіСЂСѓР¶РµРЅ')
   let result = await fn(username, password)
   if (!result?.ok && _authMode === 'login' && result?.legacy && typeof peerSocial.migrateLegacyAccount === 'function') {
-    const ok = confirm('Найден старый аккаунт без пароля. Мигрировать его на текущий пароль?')
-    if (!ok) return setAuthError('Миграция отменена')
+    const ok = confirm('РќР°Р№РґРµРЅ СЃС‚Р°СЂС‹Р№ Р°РєРєР°СѓРЅС‚ Р±РµР· РїР°СЂРѕР»СЏ. РњРёРіСЂРёСЂРѕРІР°С‚СЊ РµРіРѕ РЅР° С‚РµРєСѓС‰РёР№ РїР°СЂРѕР»СЊ?')
+    if (!ok) return setAuthError('РњРёРіСЂР°С†РёСЏ РѕС‚РјРµРЅРµРЅР°')
     result = await peerSocial.migrateLegacyAccount(username, password)
-    if (result?.ok) showToast('Аккаунт мигрирован. Теперь вход работает через пароль.')
+    if (result?.ok) showToast('РђРєРєР°СѓРЅС‚ РјРёРіСЂРёСЂРѕРІР°РЅ. РўРµРїРµСЂСЊ РІС…РѕРґ СЂР°Р±РѕС‚Р°РµС‚ С‡РµСЂРµР· РїР°СЂРѕР»СЊ.')
   }
-  if (!result?.ok) return setAuthError(result?.error || 'Ошибка входа')
+  if (!result?.ok) return setAuthError(result?.error || 'РћС€РёР±РєР° РІС…РѕРґР°')
   _profile = result.profile
   setAuthError('')
   try {
@@ -6414,11 +6114,11 @@ async function addFriendByUsername() {
   const friend = String(input?.value || '').trim()
   if (!_profile?.username || !friend || typeof peerSocial.sendFriendRequest !== 'function') return
   const r = await peerSocial.sendFriendRequest(_profile.username, friend)
-  if (!r?.ok) return showToast(r?.error || 'Не удалось отправить запрос', true)
+  if (!r?.ok) return showToast(r?.error || 'РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РїСЂР°РІРёС‚СЊ Р·Р°РїСЂРѕСЃ', true)
   renderFriends().catch(() => {})
   input.value = ''
   const online = await _socialPeer?.probeUser?.(friend, 1500).catch(() => false)
-  showToast(online ? `Запрос в друзья отправлен: ${friend}` : `Запрос в друзья отправлен: ${friend} (доставится при входе)`)
+  showToast(online ? `Р—Р°РїСЂРѕСЃ РІ РґСЂСѓР·СЊСЏ РѕС‚РїСЂР°РІР»РµРЅ: ${friend}` : `Р—Р°РїСЂРѕСЃ РІ РґСЂСѓР·СЊСЏ РѕС‚РїСЂР°РІР»РµРЅ: ${friend} (РґРѕСЃС‚Р°РІРёС‚СЃСЏ РїСЂРё РІС…РѕРґРµ)`)
 }
 
 async function renderFriendRequests() {
@@ -6426,7 +6126,7 @@ async function renderFriendRequests() {
   if (!el || !_profile?.username || typeof peerSocial.getIncomingFriendRequests !== 'function') return
   const reqs = await peerSocial.getIncomingFriendRequests(_profile.username).catch(() => [])
   if (!Array.isArray(reqs) || !reqs.length) {
-    el.innerHTML = '<div class="flow-empty-state compact"><strong>Заявок нет</strong><span>Новые запросы в друзья появятся отдельными карточками.</span></div>'
+    el.innerHTML = '<div class="flow-empty-state compact"><strong>Р—Р°СЏРІРѕРє РЅРµС‚</strong><span>РќРѕРІС‹Рµ Р·Р°РїСЂРѕСЃС‹ РІ РґСЂСѓР·СЊСЏ РїРѕСЏРІСЏС‚СЃСЏ РѕС‚РґРµР»СЊРЅС‹РјРё РєР°СЂС‚РѕС‡РєР°РјРё.</span></div>'
     return
   }
   el.innerHTML = reqs.map((req) => {
@@ -6436,10 +6136,10 @@ async function renderFriendRequests() {
         <div class="social-friend-avatar">${from.slice(0,1).toUpperCase()}</div>
         <div class="social-friend-meta">
           <strong>${from}</strong>
-          <span>Предложение в друзья</span>
+          <span>РџСЂРµРґР»РѕР¶РµРЅРёРµ РІ РґСЂСѓР·СЊСЏ</span>
         </div>
-        <button class="btn-small" onclick="respondFriendRequest('${from}', true)">Принять</button>
-        <button class="btn-small" onclick="respondFriendRequest('${from}', false)">Отклонить</button>
+        <button class="btn-small" onclick="respondFriendRequest('${from}', true)">РџСЂРёРЅСЏС‚СЊ</button>
+        <button class="btn-small" onclick="respondFriendRequest('${from}', false)">РћС‚РєР»РѕРЅРёС‚СЊ</button>
       </div>
     `
   }).join('')
@@ -6448,8 +6148,8 @@ async function renderFriendRequests() {
 async function respondFriendRequest(fromUsername, accept) {
   if (!_profile?.username || typeof peerSocial.respondFriendRequest !== 'function') return
   const r = await peerSocial.respondFriendRequest(_profile.username, fromUsername, Boolean(accept))
-  if (!r?.ok) return showToast(r?.error || 'Ошибка обработки заявки', true)
-  showToast(accept ? 'Друг добавлен' : 'Запрос отклонен')
+  if (!r?.ok) return showToast(r?.error || 'РћС€РёР±РєР° РѕР±СЂР°Р±РѕС‚РєРё Р·Р°СЏРІРєРё', true)
+  showToast(accept ? 'Р”СЂСѓРі РґРѕР±Р°РІР»РµРЅ' : 'Р—Р°РїСЂРѕСЃ РѕС‚РєР»РѕРЅРµРЅ')
   renderFriends().catch(() => {})
   pollFriendsPresence().catch(() => {})
 }
@@ -6457,19 +6157,17 @@ async function respondFriendRequest(fromUsername, accept) {
 function createRoom() {
   if (!_socialPeer) return
   const r = _socialPeer.createRoom()
-  if (!r?.ok) return showToast(r?.error || 'Ошибка создания', true)
+  if (!r?.ok) return showToast(r?.error || 'РћС€РёР±РєР° СЃРѕР·РґР°РЅРёСЏ', true)
   _roomState = { roomId: r.roomId, host: true, hostPeerId: _socialPeer?.peer?.id || r.roomId }
   _roomMembers.clear()
   sharedQueue = []
-  _lastPlaybackSyncSeq = 0
-  _hostPlaybackSyncSeq = 0
   if (_socialPeer?.peer?.id) _roomMembers.set(_socialPeer.peer.id, getPublicProfilePayload(_profile?.username))
-  setRoomStatus(`Рума ${r.roomId}: участников 1/3`)
+  setRoomStatus(`Р СѓРјР° ${r.roomId}: СѓС‡Р°СЃС‚РЅРёРєРѕРІ 1/3`)
   resetRoomHeartbeat()
   startRoomServerSync()
   saveRoomStateToServer({ shared_queue: [], now_playing: null, playback_ts: Date.now() }).catch(() => {})
   updateRoomUi()
-  showToast('Рума создана')
+  showToast('Р СѓРјР° СЃРѕР·РґР°РЅР°')
 }
 
 function joinRoomById(forceRoomId = '') {
@@ -6477,19 +6175,17 @@ function joinRoomById(forceRoomId = '') {
   const roomId = resolveInviteToRoomId(forceRoomId || String(input?.value || '').trim())
   if (!_socialPeer || !roomId) return
   const r = _socialPeer.joinRoom(roomId)
-  if (!r?.ok) return showToast(r?.error || 'Ошибка входа', true)
+  if (!r?.ok) return showToast(r?.error || 'РћС€РёР±РєР° РІС…РѕРґР°', true)
   _roomState = { roomId: r.roomId, host: false, hostPeerId: null }
   _roomMembers.clear()
   sharedQueue = []
-  _lastPlaybackSyncSeq = 0
-  _hostPlaybackSyncSeq = 0
   if (_socialPeer?.peer?.id) _roomMembers.set(_socialPeer.peer.id, getPublicProfilePayload(_profile?.username))
-  setRoomStatus(`Подключение к руме ${r.roomId}...`)
+  setRoomStatus(`РџРѕРґРєР»СЋС‡РµРЅРёРµ Рє СЂСѓРјРµ ${r.roomId}...`)
   resetRoomHeartbeat()
   startRoomServerSync()
   loadRoomStateFromServer().catch(() => {})
   updateRoomUi()
-  showToast('Подключение к руме...')
+  showToast('РџРѕРґРєР»СЋС‡РµРЅРёРµ Рє СЂСѓРјРµ...')
 }
 
 function joinFriendRoom(roomId) {
@@ -6505,22 +6201,19 @@ function leaveRoom() {
   _roomState = { roomId: null, host: false, hostPeerId: null }
   _roomMembers.clear()
   sharedQueue = []
-  _lastPlaybackSyncSeq = 0
-  _hostPlaybackSyncSeq = 0
-  _lastAppliedServerPlaybackTs = 0
   if (_roomHeartbeatTimer) clearInterval(_roomHeartbeatTimer)
   _roomHeartbeatTimer = null
-  setRoomStatus('Рума: не активна')
+  setRoomStatus('Р СѓРјР°: РЅРµ Р°РєС‚РёРІРЅР°')
   updateRoomUi()
-  showToast('Вы покинули руму')
+  showToast('Р’С‹ РїРѕРєРёРЅСѓР»Рё СЂСѓРјСѓ')
 }
 
 function copyInviteLink() {
-  if (!_roomState?.roomId || !_profile?.username) return showToast('Сначала создай/войди в руму', true)
+  if (!_roomState?.roomId || !_profile?.username) return showToast('РЎРЅР°С‡Р°Р»Р° СЃРѕР·РґР°Р№/РІРѕР№РґРё РІ СЂСѓРјСѓ', true)
   const invite = `flow://join/${_profile.username}`
   navigator.clipboard?.writeText(invite)
-    .then(() => showToast(`Invite скопирован: ${invite}`))
-    .catch(() => showToast('Не удалось скопировать invite', true))
+    .then(() => showToast(`Invite СЃРєРѕРїРёСЂРѕРІР°РЅ: ${invite}`))
+    .catch(() => showToast('РќРµ СѓРґР°Р»РѕСЃСЊ СЃРєРѕРїРёСЂРѕРІР°С‚СЊ invite', true))
 }
 
 function openInviteModal() {
@@ -6556,19 +6249,19 @@ function openPlaylistEditModal(mode, payload = {}) {
   if (!nameInput || !descInput) return
   _playlistEditContext = { mode, ...payload }
   if (mode === 'playlist-meta') {
-    if (titleEl) titleEl.textContent = 'Редактировать плейлист'
-    if (nameLabel) nameLabel.textContent = 'Название'
-    if (descLabel) descLabel.textContent = 'Описание'
+    if (titleEl) titleEl.textContent = 'Р РµРґР°РєС‚РёСЂРѕРІР°С‚СЊ РїР»РµР№Р»РёСЃС‚'
+    if (nameLabel) nameLabel.textContent = 'РќР°Р·РІР°РЅРёРµ'
+    if (descLabel) descLabel.textContent = 'РћРїРёСЃР°РЅРёРµ'
     nameInput.value = String(payload.name || '')
     descInput.value = String(payload.description || '')
-    descInput.placeholder = 'Описание плейлиста'
+    descInput.placeholder = 'РћРїРёСЃР°РЅРёРµ РїР»РµР№Р»РёСЃС‚Р°'
   } else {
-    if (titleEl) titleEl.textContent = 'Редактировать трек'
-    if (nameLabel) nameLabel.textContent = 'Название трека'
-    if (descLabel) descLabel.textContent = 'Исполнитель'
+    if (titleEl) titleEl.textContent = 'Р РµРґР°РєС‚РёСЂРѕРІР°С‚СЊ С‚СЂРµРє'
+    if (nameLabel) nameLabel.textContent = 'РќР°Р·РІР°РЅРёРµ С‚СЂРµРєР°'
+    if (descLabel) descLabel.textContent = 'РСЃРїРѕР»РЅРёС‚РµР»СЊ'
     nameInput.value = String(payload.title || '')
     descInput.value = String(payload.artist || '')
-    descInput.placeholder = 'Исполнитель'
+    descInput.placeholder = 'РСЃРїРѕР»РЅРёС‚РµР»СЊ'
   }
   modal.classList.remove('hidden')
   requestAnimationFrame(() => nameInput.focus())
@@ -6616,12 +6309,12 @@ function openLibraryActionModal(mode) {
   if (!modal || !title || !input) return
   _libraryActionMode = mode
   if (mode === 'create') {
-    title.textContent = 'Создать плейлист'
-    input.placeholder = 'Название плейлиста'
+    title.textContent = 'РЎРѕР·РґР°С‚СЊ РїР»РµР№Р»РёСЃС‚'
+    input.placeholder = 'РќР°Р·РІР°РЅРёРµ РїР»РµР№Р»РёСЃС‚Р°'
     input.value = ''
   } else {
-    title.textContent = 'Импорт плейлиста по ссылке'
-    input.placeholder = 'Вставь ссылку на плейлист (Spotify / Yandex / VK)'
+    title.textContent = 'РРјРїРѕСЂС‚ РїР»РµР№Р»РёСЃС‚Р° РїРѕ СЃСЃС‹Р»РєРµ'
+    input.placeholder = 'Р’СЃС‚Р°РІСЊ СЃСЃС‹Р»РєСѓ РЅР° РїР»РµР№Р»РёСЃС‚ (Spotify / Yandex / VK)'
     input.value = ''
   }
   modal.classList.remove('hidden')
@@ -6647,7 +6340,7 @@ async function submitLibraryActionModal() {
 function openImportProgress(total = 0) {
   const modal = document.getElementById('import-progress-modal')
   if (modal) modal.classList.remove('hidden')
-  updateImportProgress(0, total, 'Подготовка...')
+  updateImportProgress(0, total, 'РџРѕРґРіРѕС‚РѕРІРєР°...')
 }
 
 function closeImportProgress() {
@@ -6666,7 +6359,7 @@ function updateImportProgress(done, total, text = '') {
   if (bar) bar.style.width = `${Math.max(0, Math.min(100, pct))}%`
   if (count) count.textContent = `${safeDone}/${safeTotal || 0}`
   if (pctEl) pctEl.textContent = `${pct}%`
-  if (textEl) textEl.textContent = text || 'Импорт...'
+  if (textEl) textEl.textContent = text || 'РРјРїРѕСЂС‚...'
 }
 
 function setImportProgressIndeterminate(enabled) {
@@ -6739,12 +6432,12 @@ function notifyFriendPresenceChange(username, prev = {}, next = {}) {
     return true
   }
   if (!prev.online && next.online && canNotify('online')) {
-    showToast(`${name} теперь онлайн`)
+    showToast(`${name} С‚РµРїРµСЂСЊ РѕРЅР»Р°Р№РЅ`)
   }
   const prevTrack = prev.track ? `${prev.track.artist || ''}:${prev.track.title || ''}` : ''
   const nextTrack = next.track ? `${next.track.artist || ''}:${next.track.title || ''}` : ''
   if (next.online && nextTrack && nextTrack !== prevTrack && canNotify(`track:${nextTrack}`)) {
-    showToast(`${name} слушает: ${next.track.title || 'трек'}${next.track.artist ? ` — ${next.track.artist}` : ''}`)
+    showToast(`${name} СЃР»СѓС€Р°РµС‚: ${next.track.title || 'С‚СЂРµРє'}${next.track.artist ? ` вЂ” ${next.track.artist}` : ''}`)
   }
 }
 
@@ -6753,13 +6446,11 @@ function broadcastPlaybackSync(force = false) {
   const now = Date.now()
   if (!force && now - _lastRoomSyncAt < 700) return
   _lastRoomSyncAt = now
-  _hostPlaybackSyncSeq = Number(_hostPlaybackSyncSeq || 0) + 1
   _socialPeer.send({
     type: 'playback-sync',
     roomId: _roomState.roomId,
     track: currentTrack,
     playbackTs: Date.now(),
-    syncSeq: _hostPlaybackSyncSeq,
     currentTime: Number(audio.currentTime || 0),
     paused: Boolean(audio.paused),
     source: currentTrack?.source || null,
@@ -6773,7 +6464,7 @@ function broadcastPlaybackSync(force = false) {
   }).catch(() => {})
 }
 
-// в”Ђв”Ђв”Ђ APP START в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// РІвЂќР‚РІвЂќР‚РІвЂќР‚ APP START РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
 function startApp() {
   try {
     const s0 = getSettings()
@@ -6843,43 +6534,43 @@ function applyUiTextOverrides() {
     if (el) el.setAttribute(attr, value)
   }
   const nav = document.querySelectorAll('.nav-item')
-  if (nav[0]?.querySelector('.nav-label')) nav[0].querySelector('.nav-label').textContent = 'Главная'
-  if (nav[1]?.querySelector('.nav-label')) nav[1].querySelector('.nav-label').textContent = 'Поиск'
-  if (nav[2]?.querySelector('.nav-label')) nav[2].querySelector('.nav-label').textContent = 'Библиотека'
-  if (nav[3]?.querySelector('.nav-label')) nav[3].querySelector('.nav-label').textContent = 'Любимые'
-  if (nav[4]?.querySelector('.nav-label')) nav[4].querySelector('.nav-label').textContent = 'Друзья'
-  if (nav[5]?.querySelector('.nav-label')) nav[5].querySelector('.nav-label').textContent = 'Комнаты'
-  if (nav[6]?.querySelector('.nav-label')) nav[6].querySelector('.nav-label').textContent = 'Настройки'
-  const currentName = _profile?.username || 'слушатель'
-  set('#welcome-text', `Привет, ${currentName}`)
+  if (nav[0]?.querySelector('.nav-label')) nav[0].querySelector('.nav-label').textContent = 'Р“Р»Р°РІРЅР°СЏ'
+  if (nav[1]?.querySelector('.nav-label')) nav[1].querySelector('.nav-label').textContent = 'РџРѕРёСЃРє'
+  if (nav[2]?.querySelector('.nav-label')) nav[2].querySelector('.nav-label').textContent = 'Р‘РёР±Р»РёРѕС‚РµРєР°'
+  if (nav[3]?.querySelector('.nav-label')) nav[3].querySelector('.nav-label').textContent = 'Р›СЋР±РёРјС‹Рµ'
+  if (nav[4]?.querySelector('.nav-label')) nav[4].querySelector('.nav-label').textContent = 'Р”СЂСѓР·СЊСЏ'
+  if (nav[5]?.querySelector('.nav-label')) nav[5].querySelector('.nav-label').textContent = 'РљРѕРјРЅР°С‚С‹'
+  if (nav[6]?.querySelector('.nav-label')) nav[6].querySelector('.nav-label').textContent = 'РќР°СЃС‚СЂРѕР№РєРё'
+  const currentName = _profile?.username || 'СЃР»СѓС€Р°С‚РµР»СЊ'
+  set('#welcome-text', `РџСЂРёРІРµС‚, ${currentName}`)
   set('#user-name', currentName)
-  set('.user-sub', 'слушатель')
-  setAttr('#search-input', 'placeholder', 'Исполнитель, название трека...')
-  set('#lyrics-track-name', '—')
+  set('.user-sub', 'СЃР»СѓС€Р°С‚РµР»СЊ')
+  setAttr('#search-input', 'placeholder', 'РСЃРїРѕР»РЅРёС‚РµР»СЊ, РЅР°Р·РІР°РЅРёРµ С‚СЂРµРєР°...')
+  set('#lyrics-track-name', 'вЂ”')
   const setText = (selector, value) => {
     const el = document.querySelector(selector)
     if (el) el.textContent = value
   }
-  setText('#page-settings .content-header h2', 'Настройки')
-  setText('#page-settings .content-header .content-sub', 'Выбери раздел слева — настройки сгруппированы по смыслу.')
-  setText('#page-library .content-header h2', 'Библиотека')
-  setText('#page-liked .content-header h2', 'Любимые')
-  setText('#page-profile .content-header h2', 'Профиль')
-  setText('#page-profile .content-sub', 'Твой Flow профиль')
-  setText('#page-rooms .content-header h2', 'Комнаты')
-  setText('#page-rooms .content-sub', 'Совместное прослушивание и общая очередь')
-  setText('#page-search .content-header h2', 'Поиск')
-  setText('#page-search .content-sub', 'Найди трек')
-  setText('#page-library .content-sub', 'Твои плейлисты')
-  setText('#page-liked .content-sub', 'Треки, которые ты лайкнул')
+  setText('#page-settings .content-header h2', 'РќР°СЃС‚СЂРѕР№РєРё')
+  setText('#page-settings .content-header .content-sub', 'Р’С‹Р±РµСЂРё СЂР°Р·РґРµР» СЃР»РµРІР° вЂ” РЅР°СЃС‚СЂРѕР№РєРё СЃРіСЂСѓРїРїРёСЂРѕРІР°РЅС‹ РїРѕ СЃРјС‹СЃР»Сѓ.')
+  setText('#page-library .content-header h2', 'Р‘РёР±Р»РёРѕС‚РµРєР°')
+  setText('#page-liked .content-header h2', 'Р›СЋР±РёРјС‹Рµ')
+  setText('#page-profile .content-header h2', 'РџСЂРѕС„РёР»СЊ')
+  setText('#page-profile .content-sub', 'РўРІРѕР№ Flow РїСЂРѕС„РёР»СЊ')
+  setText('#page-rooms .content-header h2', 'РљРѕРјРЅР°С‚С‹')
+  setText('#page-rooms .content-sub', 'РЎРѕРІРјРµСЃС‚РЅРѕРµ РїСЂРѕСЃР»СѓС€РёРІР°РЅРёРµ Рё РѕР±С‰Р°СЏ РѕС‡РµСЂРµРґСЊ')
+  setText('#page-search .content-header h2', 'РџРѕРёСЃРє')
+  setText('#page-search .content-sub', 'РќР°Р№РґРё С‚СЂРµРє')
+  setText('#page-library .content-sub', 'РўРІРѕРё РїР»РµР№Р»РёСЃС‚С‹')
+  setText('#page-liked .content-sub', 'РўСЂРµРєРё, РєРѕС‚РѕСЂС‹Рµ С‚С‹ Р»Р°Р№РєРЅСѓР»')
 
   const labels = Array.from(document.querySelectorAll('#settings-panel-appearance .vs-label, #settings-panel-playback .vs-label'))
   labels.forEach((el) => {
     const t = (el.textContent || '').trim()
-    if (t.includes('Blur') && t.includes('фона')) el.innerHTML = 'Blur фона <span class="vs-val" id="vs-blur-val">40px</span>'
-    if (t.includes('Яркость') || t.includes('PЏ')) el.innerHTML = 'Яркость фона <span class="vs-val" id="vs-bright-val">50%</span>'
-    if (t.includes('Прозрачн')) el.innerHTML = 'Прозрачность стекла <span class="vs-val" id="vs-glass-val">8%</span>'
-    if (t.includes('панел')) el.innerHTML = 'Blur панелей <span class="vs-val" id="vs-panel-blur-val">30px</span>'
+    if (t.includes('Blur') && t.includes('С„РѕРЅР°')) el.innerHTML = 'Blur С„РѕРЅР° <span class="vs-val" id="vs-blur-val">40px</span>'
+    if (t.includes('РЇСЂРєРѕСЃС‚СЊ') || t.includes('PРЏ')) el.innerHTML = 'РЇСЂРєРѕСЃС‚СЊ С„РѕРЅР° <span class="vs-val" id="vs-bright-val">50%</span>'
+    if (t.includes('РџСЂРѕР·СЂР°С‡РЅ')) el.innerHTML = 'РџСЂРѕР·СЂР°С‡РЅРѕСЃС‚СЊ СЃС‚РµРєР»Р° <span class="vs-val" id="vs-glass-val">8%</span>'
+    if (t.includes('РїР°РЅРµР»')) el.innerHTML = 'Blur РїР°РЅРµР»РµР№ <span class="vs-val" id="vs-panel-blur-val">30px</span>'
   })
 }
 
@@ -6887,17 +6578,17 @@ let scheduleMainShiftRemeasure = () => {}
 
 const FLOW_SIDEBAR_FLOAT_Y_LS = 'flow_sidebar_float_y'
 
-/** Slack L/T/R/B (px): «кусок» правой карточки от максимального прямоугольника в UI «Минимал». */
+/** Slack L/T/R/B (px): В«РєСѓСЃРѕРєВ» РїСЂР°РІРѕР№ РєР°СЂС‚РѕС‡РєРё РѕС‚ РјР°РєСЃРёРјР°Р»СЊРЅРѕРіРѕ РїСЂСЏРјРѕСѓРіРѕР»СЊРЅРёРєР° РІ UI В«РњРёРЅРёРјР°Р»В». */
 const FLOW_MAIN_CARD_SLACK_LS = 'flow_main_card_slack_v1'
 
-/** Сохранённое смещение правой карточки («окна» контента) в UI «Минимал», px. */
+/** РЎРѕС…СЂР°РЅС‘РЅРЅРѕРµ СЃРјРµС‰РµРЅРёРµ РїСЂР°РІРѕР№ РєР°СЂС‚РѕС‡РєРё (В«РѕРєРЅР°В» РєРѕРЅС‚РµРЅС‚Р°) РІ UI В«РњРёРЅРёРјР°Р»В», px. */
 const FLOW_MAIN_PANE_DRAG_LS = 'flow_floated_pane_drag_v1'
 
 function setupFloatedMainContentResize() {
   const root = document.documentElement
   const MAIN_MIN_W = 360
   const MAIN_MIN_H = 240
-  /** Дополнительное «вырастание» карточки у углов: отрицательный slack; общий модуль ограничен. */
+  /** Р”РѕРїРѕР»РЅРёС‚РµР»СЊРЅРѕРµ В«РІС‹СЂР°СЃС‚Р°РЅРёРµВ» РєР°СЂС‚РѕС‡РєРё Сѓ СѓРіР»РѕРІ: РѕС‚СЂРёС†Р°С‚РµР»СЊРЅС‹Р№ slack; РѕР±С‰РёР№ РјРѕРґСѓР»СЊ РѕРіСЂР°РЅРёС‡РµРЅ. */
   const SLACK_NEG_CAP = 72
 
   const modeOk = () =>
@@ -7264,7 +6955,7 @@ function setupFloatedMainContentResize() {
   if (pane && modeOk()) applyStoredOrClear()
 }
 
-/** Рамки по периметру карточки: перетаскивание только из полос (уголки освобождены под ресайз). */
+/** Р Р°РјРєРё РїРѕ РїРµСЂРёРјРµС‚СЂСѓ РєР°СЂС‚РѕС‡РєРё: РїРµСЂРµС‚Р°СЃРєРёРІР°РЅРёРµ С‚РѕР»СЊРєРѕ РёР· РїРѕР»РѕСЃ (СѓРіРѕР»РєРё РѕСЃРІРѕР±РѕР¶РґРµРЅС‹ РїРѕРґ СЂРµСЃР°Р№Р·). */
 function setupFloatedMainPaneDrag() {
   const paneEl = document.getElementById('main-content-pane')
   const hits = paneEl?.querySelectorAll('.main-pane-frame-hit') ?? []
@@ -7275,7 +6966,7 @@ function setupFloatedMainPaneDrag() {
     !document.body.classList.contains('visual-minimal') &&
     !document.body.classList.contains('layout-top-nav')
 
-  /** Высота sticky-shell = видимая область панели, чтобы рамки не «уплывали» при прокрутке контента. */
+  /** Р’С‹СЃРѕС‚Р° sticky-shell = РІРёРґРёРјР°СЏ РѕР±Р»Р°СЃС‚СЊ РїР°РЅРµР»Рё, С‡С‚РѕР±С‹ СЂР°РјРєРё РЅРµ В«СѓРїР»С‹РІР°Р»РёВ» РїСЂРё РїСЂРѕРєСЂСѓС‚РєРµ РєРѕРЅС‚РµРЅС‚Р°. */
   function refreshFrameShellGeometry() {
     try {
       if (!modeOkDrag()) return
@@ -7338,7 +7029,7 @@ function setupFloatedMainPaneDrag() {
     const offX = parseVar('--floated-right-pane-offset-x', 0)
     const mainShift = parseVar('--main-shift-x', 0)
     const insetEnd = parseVar('--main-inset-end', 22)
-    /* Барьер правой панели поменян местами: резерв уходит на правый край. */
+    /* Р‘Р°СЂСЊРµСЂ РїСЂР°РІРѕР№ РїР°РЅРµР»Рё РїРѕРјРµРЅСЏРЅ РјРµСЃС‚Р°РјРё: СЂРµР·РµСЂРІ СѓС…РѕРґРёС‚ РЅР° РїСЂР°РІС‹Р№ РєСЂР°Р№. */
     const minLeft = insetStart + pad
     const maxRight = vw - insetEnd - (paneStack + offX + Math.max(0, mainShift)) - pad
     const minTop = titleH + mainPt + offY + 4
@@ -7526,7 +7217,7 @@ function applySidebarFloatYPx(px) {
       const ph = parseFloat(gcs.getPropertyValue('--player-h')) || 88
       const psb = parseFloat(gcs.getPropertyValue('--player-stack-bottom')) || 0
       const smpt = parseFloat(gcs.getPropertyValue('--screen-main-pt')) || 0
-      /* Симметрия вверх/вниз: одинаковый модуль, clamp ниже в [-maxY, +maxY]. */
+      /* РЎРёРјРјРµС‚СЂРёСЏ РІРІРµСЂС…/РІРЅРёР·: РѕРґРёРЅР°РєРѕРІС‹Р№ РјРѕРґСѓР»СЊ, clamp РЅРёР¶Рµ РІ [-maxY, +maxY]. */
       maxY = Math.max(160, Math.min(560, Math.floor(ih - tb - ph - psb - smpt - 180)))
     }
   } catch (_) {
@@ -7544,7 +7235,7 @@ function applySidebarFloatYPx(px) {
   } catch (_) {}
 }
 
-/** Сброс перетаскивания сайдбара ( Escape / смена страницы ). */
+/** РЎР±СЂРѕСЃ РїРµСЂРµС‚Р°СЃРєРёРІР°РЅРёСЏ СЃР°Р№РґР±Р°СЂР° ( Escape / СЃРјРµРЅР° СЃС‚СЂР°РЅРёС†С‹ ). */
 let _teardownSidebarPanelDrag = () => {}
 
 function setupSidebarResize() {
@@ -7584,7 +7275,7 @@ function setupSidebarResize() {
     const pr = parseFloat(pcs.paddingRight) || 0
     const usable = Math.max(0, r.width - pl - pr)
     const gap = getSidebarGapPx()
-    /* «Минимал»: сдвиг только в пределах окна — не от ширины flex-контейнера (иначе панель «дрожит» при ресайзе). */
+    /* В«РњРёРЅРёРјР°Р»В»: СЃРґРІРёРі С‚РѕР»СЊРєРѕ РІ РїСЂРµРґРµР»Р°С… РѕРєРЅР° вЂ” РЅРµ РѕС‚ С€РёСЂРёРЅС‹ flex-РєРѕРЅС‚РµР№РЅРµСЂР° (РёРЅР°С‡Рµ РїР°РЅРµР»СЊ В«РґСЂРѕР¶РёС‚В» РїСЂРё СЂРµСЃР°Р№Р·Рµ). */
     if (document.body.classList.contains('visual-floated') && !document.body.classList.contains('layout-top-nav')) {
       let insetStart = 0
       let insetEnd = 0
@@ -7603,7 +7294,7 @@ function setupSidebarResize() {
       const vw = typeof window !== 'undefined' ? window.innerWidth : 1200
       const w = Math.max(MIN_W, Math.min(MAX_W, Math.round(sidebarWidthPx)))
       let maxShift = Math.max(0, Math.floor(vw - insetEnd - w - insetStart - 10))
-      /* Невидимый фиолетовый барьер: sb.right не может перейти в старт жёлтой зоны контента. */
+      /* РќРµРІРёРґРёРјС‹Р№ С„РёРѕР»РµС‚РѕРІС‹Р№ Р±Р°СЂСЊРµСЂ: sb.right РЅРµ РјРѕР¶РµС‚ РїРµСЂРµР№С‚Рё РІ СЃС‚Р°СЂС‚ Р¶С‘Р»С‚РѕР№ Р·РѕРЅС‹ РєРѕРЅС‚РµРЅС‚Р°. */
       try {
         const barrier = insetStart + paneStack + offX + mainShift - 12
         const byBarrier = Math.floor(barrier - insetStart - nudge - w)
@@ -7655,16 +7346,16 @@ function setupSidebarResize() {
     if (Math.abs(sh - shParsed) > 0.5) setShiftCss(sh)
   }
 
-  /** Якорь — левая координата сайдбара в момент захвата (правый грип). */
+  /** РЇРєРѕСЂСЊ вЂ” Р»РµРІР°СЏ РєРѕРѕСЂРґРёРЅР°С‚Р° СЃР°Р№РґР±Р°СЂР° РІ РјРѕРјРµРЅС‚ Р·Р°С…РІР°С‚Р° (РїСЂР°РІС‹Р№ РіСЂРёРї). */
   let anchorLeftPx = 0
-  /** Якорь — правая координата сайдбара в момент захвата (левый грип): стык с основной областью. */
+  /** РЇРєРѕСЂСЊ вЂ” РїСЂР°РІР°СЏ РєРѕРѕСЂРґРёРЅР°С‚Р° СЃР°Р№РґР±Р°СЂР° РІ РјРѕРјРµРЅС‚ Р·Р°С…РІР°С‚Р° (Р»РµРІС‹Р№ РіСЂРёРї): СЃС‚С‹Рє СЃ РѕСЃРЅРѕРІРЅРѕР№ РѕР±Р»Р°СЃС‚СЊСЋ. */
   let anchorRightPx = 0
 
   const applyRightDrag = (clientX) => {
     setWidthCss(clientX - anchorLeftPx)
     syncShiftToWidth()
   }
-  /** Левый грип: двигаем левую сторону, правая (у меню контента) остаётся на месте до отпускания. */
+  /** Р›РµРІС‹Р№ РіСЂРёРї: РґРІРёРіР°РµРј Р»РµРІСѓСЋ СЃС‚РѕСЂРѕРЅСѓ, РїСЂР°РІР°СЏ (Сѓ РјРµРЅСЋ РєРѕРЅС‚РµРЅС‚Р°) РѕСЃС‚Р°С‘С‚СЃСЏ РЅР° РјРµСЃС‚Рµ РґРѕ РѕС‚РїСѓСЃРєР°РЅРёСЏ. */
   const applyLeftDrag = (clientX) => {
     const wReq = anchorRightPx - clientX
     const clampedW = Math.max(MIN_W, Math.min(MAX_W, Math.round(wReq)))
@@ -7784,14 +7475,14 @@ function setupSidebarResize() {
     const cx = e.clientX
     const cy = e.clientY
     const hOpts = { fixedHMax }
-    /* Дельты от точки захвата для всех углов — freezeL/freezeR при драге «плывут» и правые углы дёргались. */
+    /* Р”РµР»СЊС‚С‹ РѕС‚ С‚РѕС‡РєРё Р·Р°С…РІР°С‚Р° РґР»СЏ РІСЃРµС… СѓРіР»РѕРІ вЂ” freezeL/freezeR РїСЂРё РґСЂР°РіРµ В«РїР»С‹РІСѓС‚В» Рё РїСЂР°РІС‹Рµ СѓРіР»С‹ РґС‘СЂРіР°Р»РёСЃСЊ. */
     if (corner === 'br') {
       const nw = Math.max(MIN_W, Math.min(MAX_W, Math.round(startW + (cx - startCx))))
       const nh = Math.max(SIDEBAR_H_MIN, Math.min(fixedHMax, Math.round(startPanelH + (cy - startCy))))
       setWidthCss(nw)
       setPanelHeightClamped(nh, hOpts)
     } else if (corner === 'tl') {
-      /* Левый верх: ширина/сдвиг от дельты — фиксируем правый край (innerL+shift+w), иначе cx-innerL даёт «схлопывание». */
+      /* Р›РµРІС‹Р№ РІРµСЂС…: С€РёСЂРёРЅР°/СЃРґРІРёРі РѕС‚ РґРµР»СЊС‚С‹ вЂ” С„РёРєСЃРёСЂСѓРµРј РїСЂР°РІС‹Р№ РєСЂР°Р№ (innerL+shift+w), РёРЅР°С‡Рµ cx-innerL РґР°С‘С‚ В«СЃС…Р»РѕРїС‹РІР°РЅРёРµВ». */
       const newW = Math.max(MIN_W, Math.min(MAX_W, Math.round(startW + (startCx - cx))))
       const newH = Math.max(SIDEBAR_H_MIN, Math.min(fixedHMax, Math.round(startPanelH + (startCy - cy))))
       const sh = clampShiftForWidth(newW, startShift + startW - newW)
@@ -7920,7 +7611,7 @@ function setupSidebarResize() {
         const n = parseFloat(raw)
         if (Number.isFinite(n)) setPanelHeightClamped(n)
       } catch (_) {}
-      /* Не вызываем syncShiftToWidth: он привязывает сдвиг к ширине #screen-main и даёт «резину» при ресайзе. */
+      /* РќРµ РІС‹Р·С‹РІР°РµРј syncShiftToWidth: РѕРЅ РїСЂРёРІСЏР·С‹РІР°РµС‚ СЃРґРІРёРі Рє С€РёСЂРёРЅРµ #screen-main Рё РґР°С‘С‚ В«СЂРµР·РёРЅСѓВ» РїСЂРё СЂРµСЃР°Р№Р·Рµ. */
       let wPx = NaN
       try {
         wPx = parseFloat(getComputedStyle(root).getPropertyValue('--sidebar-w')) || NaN
@@ -8087,7 +7778,7 @@ function debounceSidebarLayoutSync(fn, ms = 140) {
 const FLOW_MAIN_SHIFT_LS = 'flow_main_shift_px'
 const FLOW_SIDEBAR_PANEL_H_LS = 'flow_sidebar_panel_h'
 
-/** Сброс горизонтального сдвига (классический «Минимализм» без оффсета). */
+/** РЎР±СЂРѕСЃ РіРѕСЂРёР·РѕРЅС‚Р°Р»СЊРЅРѕРіРѕ СЃРґРІРёРіР° (РєР»Р°СЃСЃРёС‡РµСЃРєРёР№ В«РњРёРЅРёРјР°Р»РёР·РјВ» Р±РµР· РѕС„С„СЃРµС‚Р°). */
 function clearMainPaneShiftForClassicLayout() {
   try {
     document.documentElement.style.setProperty('--main-shift-x', '0px')
@@ -8097,7 +7788,7 @@ function clearMainPaneShiftForClassicLayout() {
   } catch (_) {}
 }
 
-/** Горизонтальный сдвиг основной области (.content + нижний плеер + текстовая панель) в границах окна. */
+/** Р“РѕСЂРёР·РѕРЅС‚Р°Р»СЊРЅС‹Р№ СЃРґРІРёРі РѕСЃРЅРѕРІРЅРѕР№ РѕР±Р»Р°СЃС‚Рё (.content + РЅРёР¶РЅРёР№ РїР»РµРµСЂ + С‚РµРєСЃС‚РѕРІР°СЏ РїР°РЅРµР»СЊ) РІ РіСЂР°РЅРёС†Р°С… РѕРєРЅР°. */
 function setupMainPaneShift() {
   const slider = document.getElementById('main-shift-slider')
   const btn = document.getElementById('main-shift-reset')
@@ -8141,7 +7832,7 @@ function setupMainPaneShift() {
       let rawMax = winMax
 
       const topNav = document.body.classList.contains('layout-top-nav')
-      /* «Минимал»: колонка контента не привязана к sb.right — лимиты сдвига только от окна. */
+      /* В«РњРёРЅРёРјР°Р»В»: РєРѕР»РѕРЅРєР° РєРѕРЅС‚РµРЅС‚Р° РЅРµ РїСЂРёРІСЏР·Р°РЅР° Рє sb.right вЂ” Р»РёРјРёС‚С‹ СЃРґРІРёРіР° С‚РѕР»СЊРєРѕ РѕС‚ РѕРєРЅР°. */
       if (!topNav && !document.body.classList.contains('visual-floated')) {
         const sidebar = document.getElementById('sidebar')
         let gapPx = 12
@@ -8268,7 +7959,7 @@ function setupCardTilt() {
   }, { passive: true })
 }
 
-/** Только время и прогресс на клоне главной — вызывать из timeupdate (без обложки и без карточки профиля). */
+/** РўРѕР»СЊРєРѕ РІСЂРµРјСЏ Рё РїСЂРѕРіСЂРµСЃСЃ РЅР° РєР»РѕРЅРµ РіР»Р°РІРЅРѕР№ вЂ” РІС‹Р·С‹РІР°С‚СЊ РёР· timeupdate (Р±РµР· РѕР±Р»РѕР¶РєРё Рё Р±РµР· РєР°СЂС‚РѕС‡РєРё РїСЂРѕС„РёР»СЏ). */
 function syncHomeClonePlaybackProgress() {
   const cur = document.getElementById('home-clone-time-cur')
   const tot = document.getElementById('home-clone-time-total')
@@ -8291,12 +7982,12 @@ function syncHomeCloneUI() {
   const prog = document.getElementById('home-clone-progress')
   if (!cover || !title || !artist || !cur || !tot || !prog) return
   if (currentTrack) {
-    title.textContent = currentTrack.title || 'Ничего не играет'
-    artist.textContent = currentTrack.artist || '—'
+    title.textContent = currentTrack.title || 'РќРёС‡РµРіРѕ РЅРµ РёРіСЂР°РµС‚'
+    artist.textContent = currentTrack.artist || 'вЂ”'
     applyCoverArt(cover, getEffectiveCoverUrl(currentTrack), currentTrack.bg || 'linear-gradient(135deg,#7c3aed,#a855f7)')
   } else {
-    title.textContent = 'Ничего не играет'
-    artist.textContent = '—'
+    title.textContent = 'РќРёС‡РµРіРѕ РЅРµ РёРіСЂР°РµС‚'
+    artist.textContent = 'вЂ”'
     cover.style.backgroundImage = ''
     cover.innerHTML = COVER_ICON
   }
@@ -8329,9 +8020,6 @@ function ensureAudioAnalyzer() {
   _audioCtx = state.audioCtx
   _analyser = state.analyser
   _freqData = state.freqData
-  try {
-    if (_audioCtx?.state === 'suspended') _audioCtx.resume().catch(() => {})
-  } catch (_) {}
   return true
 }
 
@@ -8362,9 +8050,9 @@ function resizeHomeVisualizerCanvas() {
 
 const FLOW_HOME_BLOCK_ORDER_LS = 'flow_home_block_order'
 const FLOW_HOME_BLOCK_GEOMETRY_LS = 'flow_home_block_geometry'
-/** Агрегат макета (блоки главной + снимок сайдбара) — дублирует геометрию блоков для обмена/бэкапа. */
+/** РђРіСЂРµРіР°С‚ РјР°РєРµС‚Р° (Р±Р»РѕРєРё РіР»Р°РІРЅРѕР№ + СЃРЅРёРјРѕРє СЃР°Р№РґР±Р°СЂР°) вЂ” РґСѓР±Р»РёСЂСѓРµС‚ РіРµРѕРјРµС‚СЂРёСЋ Р±Р»РѕРєРѕРІ РґР»СЏ РѕР±РјРµРЅР°/Р±СЌРєР°РїР°. */
 const FLOW_LAYOUT_COORDS_LS = 'flow_layout_coords'
-/** Масштаб блоков главной в «Минимал» (число 0.72–1.38, умножение zoom на стек). */
+/** РњР°СЃС€С‚Р°Р± Р±Р»РѕРєРѕРІ РіР»Р°РІРЅРѕР№ РІ В«РњРёРЅРёРјР°Р»В» (С‡РёСЃР»Рѕ 0.72вЂ“1.38, СѓРјРЅРѕР¶РµРЅРёРµ zoom РЅР° СЃС‚РµРє). */
 const FLOW_HOME_EDITOR_ZOOM_LS = 'flow_home_editor_zoom'
 
 function loadHomeEditorZoomValue() {
@@ -8416,7 +8104,7 @@ function snapshotSidebarLayoutForCoords() {
   }
 }
 
-/** Сохранить единый снимок `flow_layout_coords` из текущего LS геометрии блоков + CSS-сайдбара. */
+/** РЎРѕС…СЂР°РЅРёС‚СЊ РµРґРёРЅС‹Р№ СЃРЅРёРјРѕРє `flow_layout_coords` РёР· С‚РµРєСѓС‰РµРіРѕ LS РіРµРѕРјРµС‚СЂРёРё Р±Р»РѕРєРѕРІ + CSS-СЃР°Р№РґР±Р°СЂР°. */
 function syncFlowLayoutCoords() {
   try {
     let blocks = {}
@@ -8490,7 +8178,7 @@ function homeGeomRectValid(rect) {
   return !!(rect && rect.width >= 48 && rect.height >= 48)
 }
 
-/** Одна запись для отрисовки position:absolute блока. */
+/** РћРґРЅР° Р·Р°РїРёСЃСЊ РґР»СЏ РѕС‚СЂРёСЃРѕРІРєРё position:absolute Р±Р»РѕРєР°. */
 function homeGeomQuadValid(g) {
   return !!(
     g &&
@@ -8503,7 +8191,7 @@ function homeGeomQuadValid(g) {
   )
 }
 
-/** Главная не скрыта — иначе getBoundingClientRect даёт «нулевой» контур и затрёт сохранённые координаты. */
+/** Р“Р»Р°РІРЅР°СЏ РЅРµ СЃРєСЂС‹С‚Р° вЂ” РёРЅР°С‡Рµ getBoundingClientRect РґР°С‘С‚ В«РЅСѓР»РµРІРѕР№В» РєРѕРЅС‚СѓСЂ Рё Р·Р°С‚СЂС‘С‚ СЃРѕС…СЂР°РЅС‘РЅРЅС‹Рµ РєРѕРѕСЂРґРёРЅР°С‚С‹. */
 function isHomePageActiveForDashboardMeasure() {
   const pageHome = document.getElementById('page-home')
   return !!(pageHome && pageHome.classList.contains('active'))
@@ -8610,7 +8298,7 @@ function persistHomeDashboardLayoutFromDom() {
 }
 
 let _homeDashGeomReflowT = null
-/** После show главной один проход clamp+paint (двойная отрисовка — стабильные clientWidth/stack). */
+/** РџРѕСЃР»Рµ show РіР»Р°РІРЅРѕР№ РѕРґРёРЅ РїСЂРѕС…РѕРґ clamp+paint (РґРІРѕР№РЅР°СЏ РѕС‚СЂРёСЃРѕРІРєР° вЂ” СЃС‚Р°Р±РёР»СЊРЅС‹Рµ clientWidth/stack). */
 function scheduleHomeDashboardGeometryReflow() {
   if (!isVisualFloatedLayout()) return
   clearTimeout(_homeDashGeomReflowT)
@@ -8662,16 +8350,16 @@ function refreshHomeDashboardLayoutAfterContentChange() {
   syncHomeEditorZoomFromStorage()
 }
 
-/** Сайдбар: сброс раскладки — только в теме «Минимал» (floated). */
+/** РЎР°Р№РґР±Р°СЂ: СЃР±СЂРѕСЃ СЂР°СЃРєР»Р°РґРєРё вЂ” С‚РѕР»СЊРєРѕ РІ С‚РµРјРµ В«РњРёРЅРёРјР°Р»В» (floated). */
 function resetHomeDashboardLayoutPressed() {
   if (!isVisualFloatedLayout()) {
-    showToast('Сброс раскладки доступен только в интерфейсе «Минимал»')
+    showToast('РЎР±СЂРѕСЃ СЂР°СЃРєР»Р°РґРєРё РґРѕСЃС‚СѓРїРµРЅ С‚РѕР»СЊРєРѕ РІ РёРЅС‚РµСЂС„РµР№СЃРµ В«РњРёРЅРёРјР°Р»В»')
     return
   }
   resetHomeDashboardLayout()
 }
 
-/** Сброс сохранённого макета главной (конструктор + порядок). Без интерact.js — чистые LS + DOM. */
+/** РЎР±СЂРѕСЃ СЃРѕС…СЂР°РЅС‘РЅРЅРѕРіРѕ РјР°РєРµС‚Р° РіР»Р°РІРЅРѕР№ (РєРѕРЅСЃС‚СЂСѓРєС‚РѕСЂ + РїРѕСЂСЏРґРѕРє). Р‘РµР· РёРЅС‚РµСЂact.js вЂ” С‡РёСЃС‚С‹Рµ LS + DOM. */
 function resetHomeDashboardLayout() {
   try {
     localStorage.removeItem(FLOW_HOME_BLOCK_GEOMETRY_LS)
@@ -8707,11 +8395,11 @@ function resetHomeDashboardLayout() {
       scheduleMainShiftRemeasure()
     })
   }
-  showToast('Раскладка главной сброшена')
+  showToast('Р Р°СЃРєР»Р°РґРєР° РіР»Р°РІРЅРѕР№ СЃР±СЂРѕС€РµРЅР°')
   queueMicrotask(() => scheduleMainShiftRemeasure())
 }
 
-/** Прямые потомки `#home-dashboard-stack` — порядок узла = порядок в конструкторе. */
+/** РџСЂСЏРјС‹Рµ РїРѕС‚РѕРјРєРё `#home-dashboard-stack` вЂ” РїРѕСЂСЏРґРѕРє СѓР·Р»Р° = РїРѕСЂСЏРґРѕРє РІ РєРѕРЅСЃС‚СЂСѓРєС‚РѕСЂРµ. */
 function getHomeBlockIdsFromStack(stack) {
   if (!stack) return []
   return [...stack.children]
@@ -8719,7 +8407,7 @@ function getHomeBlockIdsFromStack(stack) {
     .map((c) => String(c.dataset.homeBlock))
 }
 
-/** Только id из DOM по сохранённому порядку; отсутствовавшие ранее блоки — в конец. */
+/** РўРѕР»СЊРєРѕ id РёР· DOM РїРѕ СЃРѕС…СЂР°РЅС‘РЅРЅРѕРјСѓ РїРѕСЂСЏРґРєСѓ; РѕС‚СЃСѓС‚СЃС‚РІРѕРІР°РІС€РёРµ СЂР°РЅРµРµ Р±Р»РѕРєРё вЂ” РІ РєРѕРЅРµС†. */
 function mergeSavedHomeOrderWithDom(saved, domOrderedIds) {
   const domSet = new Set(domOrderedIds)
   const seen = new Set()
@@ -8742,7 +8430,7 @@ function mergeSavedHomeOrderWithDom(saved, domOrderedIds) {
   return out
 }
 
-/** Статичный порядок блоков главной («Минимализм») — всегда как в разметке по умолчанию. */
+/** РЎС‚Р°С‚РёС‡РЅС‹Р№ РїРѕСЂСЏРґРѕРє Р±Р»РѕРєРѕРІ РіР»Р°РІРЅРѕР№ (В«РњРёРЅРёРјР°Р»РёР·РјВ») вЂ” РІСЃРµРіРґР° РєР°Рє РІ СЂР°Р·РјРµС‚РєРµ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ. */
 function applyStaticHomeDashboardOrder() {
   const stack = document.getElementById('home-dashboard-stack')
   if (!stack) return
@@ -8877,12 +8565,12 @@ function setupHomeDashboardDragAndDrop() {
   )
 }
 
-/** API из плана «свободных блоков»: элемент уже обслуживается делегированием со стека. */
+/** API РёР· РїР»Р°РЅР° В«СЃРІРѕР±РѕРґРЅС‹С… Р±Р»РѕРєРѕРІВ»: СЌР»РµРјРµРЅС‚ СѓР¶Рµ РѕР±СЃР»СѓР¶РёРІР°РµС‚СЃСЏ РґРµР»РµРіРёСЂРѕРІР°РЅРёРµРј СЃРѕ СЃС‚РµРєР°. */
 function makeBlockDynamic(sectionEl) {
   return !!(sectionEl && typeof sectionEl.matches === 'function' && sectionEl.matches('.home-dash-block[data-home-block]'))
 }
 
-/** Повторно применить порядок/геометрию из хранилища и обновить flow_layout_coords. */
+/** РџРѕРІС‚РѕСЂРЅРѕ РїСЂРёРјРµРЅРёС‚СЊ РїРѕСЂСЏРґРѕРє/РіРµРѕРјРµС‚СЂРёСЋ РёР· С…СЂР°РЅРёР»РёС‰Р° Рё РѕР±РЅРѕРІРёС‚СЊ flow_layout_coords. */
 function initFloatingHomeWorkspace() {
   refreshHomeDashboardLayoutAfterContentChange()
   syncFlowLayoutCoords()
@@ -8895,15 +8583,15 @@ function syncHomeLayoutEditButton() {
   const on = document.body.classList.contains('home-layout-edit')
   btn.classList.toggle('active', on)
   btn.setAttribute('aria-pressed', on ? 'true' : 'false')
-  if (label) label.textContent = on ? 'Сохранить' : 'Изменить'
-  btn.title = on ? 'Сохранить расположение блоков главной' : 'Изменить расположение блоков главной'
-  btn.setAttribute('aria-label', on ? 'Сохранить макет главной' : 'Редактировать макет главной')
+  if (label) label.textContent = on ? 'РЎРѕС…СЂР°РЅРёС‚СЊ' : 'РР·РјРµРЅРёС‚СЊ'
+  btn.title = on ? 'РЎРѕС…СЂР°РЅРёС‚СЊ СЂР°СЃРїРѕР»РѕР¶РµРЅРёРµ Р±Р»РѕРєРѕРІ РіР»Р°РІРЅРѕР№' : 'РР·РјРµРЅРёС‚СЊ СЂР°СЃРїРѕР»РѕР¶РµРЅРёРµ Р±Р»РѕРєРѕРІ РіР»Р°РІРЅРѕР№'
+  btn.setAttribute('aria-label', on ? 'РЎРѕС…СЂР°РЅРёС‚СЊ РјР°РєРµС‚ РіР»Р°РІРЅРѕР№' : 'Р РµРґР°РєС‚РёСЂРѕРІР°С‚СЊ РјР°РєРµС‚ РіР»Р°РІРЅРѕР№')
 }
 
-/** Конструктор главной: классы body + сохранённая геометрия в LS (flow_home_block_geometry). */
+/** РљРѕРЅСЃС‚СЂСѓРєС‚РѕСЂ РіР»Р°РІРЅРѕР№: РєР»Р°СЃСЃС‹ body + СЃРѕС…СЂР°РЅС‘РЅРЅР°СЏ РіРµРѕРјРµС‚СЂРёСЏ РІ LS (flow_home_block_geometry). */
 function toggleHomeLayoutEdit() {
   if (!isVisualFloatedLayout()) {
-    showToast('Конструктор главной доступен только в интерфейсе «Минимал»')
+    showToast('РљРѕРЅСЃС‚СЂСѓРєС‚РѕСЂ РіР»Р°РІРЅРѕР№ РґРѕСЃС‚СѓРїРµРЅ С‚РѕР»СЊРєРѕ РІ РёРЅС‚РµСЂС„РµР№СЃРµ В«РњРёРЅРёРјР°Р»В»')
     return
   }
   const on = !document.body.classList.contains('home-layout-edit')
@@ -8923,7 +8611,7 @@ function toggleHomeLayoutEdit() {
           applyHomeBlockGeometry(cloneHomeGeometry(geom))
         }
         scheduleHomeDashboardGeometryReflow()
-        showToast('Редактор: зона под контентом — перенос, уголок — размер')
+        showToast('Р РµРґР°РєС‚РѕСЂ: Р·РѕРЅР° РїРѕРґ РєРѕРЅС‚РµРЅС‚РѕРј вЂ” РїРµСЂРµРЅРѕСЃ, СѓРіРѕР»РѕРє вЂ” СЂР°Р·РјРµСЂ')
         pulseHomeVisualLayoutSync()
       })
     } else {
@@ -8934,7 +8622,7 @@ function toggleHomeLayoutEdit() {
       saveHomeBlockGeometry(geom)
       applyHomeBlockGeometry(cloneHomeGeometry(geom))
       scheduleHomeDashboardGeometryReflow()
-      showToast('Редактор: зона под контентом — перенос, уголок — размер')
+      showToast('Р РµРґР°РєС‚РѕСЂ: Р·РѕРЅР° РїРѕРґ РєРѕРЅС‚РµРЅС‚РѕРј вЂ” РїРµСЂРµРЅРѕСЃ, СѓРіРѕР»РѕРє вЂ” СЂР°Р·РјРµСЂ')
       pulseHomeVisualLayoutSync()
     }
   } else {
@@ -8943,18 +8631,13 @@ function toggleHomeLayoutEdit() {
     } catch (_) {}
     persistHomeDashboardLayoutFromDom()
     applyHomeBlockGeometry(cloneHomeGeometry(loadHomeBlockGeometryRaw()))
-    showToast('Макет главной сохранён')
+    showToast('РњР°РєРµС‚ РіР»Р°РІРЅРѕР№ СЃРѕС…СЂР°РЅС‘РЅ')
     pulseHomeVisualLayoutSync()
   }
   queueMicrotask(() => scheduleMainShiftRemeasure())
 }
 
-/** Троттлинг отрисовки виджета на главной: 60 FPS + Web Audio + canvas давали микрофризы при режиме «волна». */
-let _homeVizLastDrawAt = 0
-
 function drawHomeVisualizerFrame() {
-  const wrap = document.getElementById('home-visualizer-wrap')
-  if (!wrap || wrap.classList.contains('hidden')) return
   const canvas = document.getElementById('home-visualizer-canvas')
   if (!canvas) return
   try {
@@ -9038,26 +8721,13 @@ function startHomeVisualizerLoop() {
       try {
         playing = Boolean(audio && !audio.paused && !audio.ended)
       } catch (_) {}
-      // При открытом тексте и проигре визуализатор главной отключён — иначе два тяжёлых RAF подряд дают микрофризы.
+      // РџСЂРё РѕС‚РєСЂС‹С‚РѕРј С‚РµРєСЃС‚Рµ Рё РїСЂРѕРёРіСЂРµ РІРёР·СѓР°Р»РёР·Р°С‚РѕСЂ РіР»Р°РІРЅРѕР№ РѕС‚РєР»СЋС‡С‘РЅ вЂ” РёРЅР°С‡Рµ РґРІР° С‚СЏР¶С‘Р»С‹С… RAF РїРѕРґСЂСЏРґ РґР°СЋС‚ РјРёРєСЂРѕС„СЂРёР·С‹.
       let gameSleep = false
       try {
         gameSleep = document.body.classList.contains('flow-opt-game-sleep')
       } catch (_) {}
       const skipViz = Boolean(_lyricsOpen && playing) || gameSleep
-      let shouldDraw = !skipViz
-      if (shouldDraw) {
-        const v = getVisual()
-        const hw = Object.assign({ enabled: true, mode: 'bars' }, v.homeWidget || {})
-        if (!hw.enabled || hw.mode === 'image') shouldDraw = false
-        else {
-          const now = performance.now()
-          const heavy = hw.mode === 'wave' || hw.mode === 'dots'
-          const minMs = playing ? (heavy ? 50 : 40) : 220
-          if (now - _homeVizLastDrawAt < minMs) shouldDraw = false
-          else _homeVizLastDrawAt = now
-        }
-      }
-      if (shouldDraw) drawHomeVisualizerFrame()
+      if (!skipViz) drawHomeVisualizerFrame()
       requestAnimationFrame(tick)
     } else {
       setTimeout(() => requestAnimationFrame(tick), 250)
@@ -9074,17 +8744,11 @@ function syncPlayerUIFromTrack() {
   const coverUrl = getEffectiveCoverUrl(track)
   applyCoverArt(cover, coverUrl, fallbackBg)
   applyCoverArt(homeCover, coverUrl, fallbackBg)
-  try {
-    if (typeof shouldIsolateHostTrackVisualsFromRoomGuest === 'function' && shouldIsolateHostTrackVisualsFromRoomGuest()) {
-      if (_playerModeActive) syncPlayerModeUI()
-      return
-    }
-  } catch (_) {}
   updateYandexPlayerTheme(track)
   if (_playerModeActive) syncPlayerModeUI()
 }
 
-// в”Ђв”Ђв”Ђ NAVIGATION в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// РІвЂќР‚РІвЂќР‚РІвЂќР‚ NAVIGATION РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
 let _activePageId = 'home'
 let _deferredPageRenderRaf = 0
 
@@ -9155,8 +8819,8 @@ function openPage(id, opts = {}) {
   }
 }
 
-// в”Ђв”Ђв”Ђ PLAYER в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-/** Ключ для локального кэша потока (Spotify / SoundCloud / Audius). */
+// РІвЂќР‚РІвЂќР‚РІвЂќР‚ PLAYER РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
+/** РљР»СЋС‡ РґР»СЏ Р»РѕРєР°Р»СЊРЅРѕРіРѕ РєСЌС€Р° РїРѕС‚РѕРєР° (Spotify / SoundCloud / Audius). */
 function getStreamCacheKey(track) {
   if (!track || typeof track !== 'object') return ''
   const src = String(track.source || '').toLowerCase()
@@ -9174,9 +8838,6 @@ async function playTrackObj(track, opts = {}) {
   const reqId = ++_playRequestSeq
   const isStale = () => reqId !== _playRequestSeq
   track = sanitizeTrack(track)
-  if (opts?.remoteSync && _roomState?.roomId && !_roomState?.host) {
-    track = Object.assign({}, track, { _flowSkipGlobalThemeFromTrack: true })
-  }
   const forcedCover = getEffectiveCoverUrl(track)
   if (forcedCover) {
     track = Object.assign({}, track, {
@@ -9196,7 +8857,7 @@ async function playTrackObj(track, opts = {}) {
         ? (ytResults.find((t) => t?.ytId && t.ytId !== track?.ytId) || null)
         : null
       if (!candidate || !candidate.ytId) return false
-      showToast('YouTube: исходный ролик ограничен, пробую альтернативную версию')
+      showToast('YouTube: РёСЃС…РѕРґРЅС‹Р№ СЂРѕР»РёРє РѕРіСЂР°РЅРёС‡РµРЅ, РїСЂРѕР±СѓСЋ Р°Р»СЊС‚РµСЂРЅР°С‚РёРІРЅСѓСЋ РІРµСЂСЃРёСЋ')
       await playTrackObj(Object.assign({}, candidate, {
         title: originalRequestTrack?.title || candidate.title,
         artist: originalRequestTrack?.artist || candidate.artist,
@@ -9209,7 +8870,7 @@ async function playTrackObj(track, opts = {}) {
   }
   // Spotify playback fallback through SoundCloud/Audius first.
   if (track.source === 'spotify' && !track.url) {
-    showToast('\uD83C\uDFB5 Ищу в SoundCloud/Audius...')
+    showToast('\uD83C\uDFB5 РС‰Сѓ РІ SoundCloud/Audius...')
     try {
       const query = `${track.title} ${track.artist}`.trim()
       if (isStale()) return
@@ -9232,7 +8893,7 @@ async function playTrackObj(track, opts = {}) {
           cover: getEffectiveCoverUrl(track) || track.cover || audResults[0].cover
         }))
       }
-      showToast('Spotify: не найдено в SoundCloud/Audius', true)
+      showToast('Spotify: РЅРµ РЅР°Р№РґРµРЅРѕ РІ SoundCloud/Audius', true)
       return
     } catch (e) {
       showToast('Spotify: ' + e.message, true)
@@ -9251,59 +8912,29 @@ async function playTrackObj(track, opts = {}) {
   const nameEl = document.getElementById('player-name')
   const artistEl = document.getElementById('player-artist')
   const playBtn = document.getElementById('play-btn')
-  if (nameEl) nameEl.textContent = track.title || 'Без названия'
+  if (nameEl) nameEl.textContent = track.title || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ'
   const setStage = (text) => { if (artistEl) artistEl.textContent = text }
-  setStage('Загрузка…')
+  setStage('Р—Р°РіСЂСѓР·РєР°вЂ¦')
   if (playBtn) playBtn.innerHTML = '<svg class="ui-icon spin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9"/><path d="M12 7v5l3 2"/></svg>'
 
   if (String(track.source || '').toLowerCase() === 'yandex' && !/^https?:\/\//i.test(String(streamUrl || '')) && track.id && window.api?.yandexStream) {
     const ymTok = String(getSettings()?.yandexToken || '').trim()
     if (!ymTok) {
-      showToast('Яндекс: укажи токен в настройках', true)
+      showToast('РЇРЅРґРµРєСЃ: СѓРєР°Р¶Рё С‚РѕРєРµРЅ РІ РЅР°СЃС‚СЂРѕР№РєР°С…', true)
       if (playBtn) playBtn.innerHTML = ICONS.play
-      setStage('Яндекс: нужен токен')
+      setStage('РЇРЅРґРµРєСЃ: РЅСѓР¶РµРЅ С‚РѕРєРµРЅ')
       return
     }
-    setStage('Яндекс: получаю поток…')
+    setStage('РЇРЅРґРµРєСЃ: РїРѕР»СѓС‡Р°СЋ РїРѕС‚РѕРєвЂ¦')
     const ymRes = await window.api.yandexStream(String(track.id), ymTok).catch((e) => ({ ok: false, error: e?.message || String(e) }))
-    let resolvedYmUrl = ymRes?.ok && ymRes?.url ? String(ymRes.url) : ''
     if (isStale()) return
     if (!ymRes?.ok || !ymRes.url) {
-      const ymFallbackQuery = `${track.artist || ''} ${track.title || ''}`.trim()
-      const ymFallbackList = ymFallbackQuery && window.api?.yandexSearch
-        ? await window.api.yandexSearch(ymFallbackQuery, ymTok).catch(() => [])
-        : []
-      const ymFallback = Array.isArray(ymFallbackList)
-        ? ymFallbackList.find((item) => String(item?.id || '').trim())
-        : null
-      const fallbackId = String(ymFallback?.id || '').trim()
-      if (fallbackId && fallbackId !== String(track.id || '').trim()) {
-        setStage('Яндекс: пробую альтернативный трек…')
-        const ymRetry = await window.api.yandexStream(fallbackId, ymTok).catch((e) => ({ ok: false, error: e?.message || String(e) }))
-        if (isStale()) return
-        if (ymRetry?.ok && ymRetry?.url) {
-          resolvedYmUrl = String(ymRetry.url)
-          track = Object.assign({}, track, {
-            id: fallbackId,
-            url: resolvedYmUrl,
-            cover: track.cover || ymFallback?.cover || null,
-          })
-          streamUrl = track.url
-          currentTrack = track
-        } else {
-          showToast('Яндекс: ' + (ymRetry?.error || ymRes?.error || 'не удалось получить поток'), true)
-          if (playBtn) playBtn.innerHTML = ICONS.play
-          setStage('Яндекс: ошибка')
-          return
-        }
-      } else {
-        showToast('Яндекс: ' + (ymRes?.error || 'не удалось получить поток'), true)
-        if (playBtn) playBtn.innerHTML = ICONS.play
-        setStage('Яндекс: ошибка')
-        return
-      }
+      showToast('РЇРЅРґРµРєСЃ: ' + (ymRes?.error || 'РЅРµ СѓРґР°Р»РѕСЃСЊ РїРѕР»СѓС‡РёС‚СЊ РїРѕС‚РѕРє'), true)
+      if (playBtn) playBtn.innerHTML = ICONS.play
+      setStage('РЇРЅРґРµРєСЃ: РѕС€РёР±РєР°')
+      return
     }
-    track = Object.assign({}, track, { url: resolvedYmUrl })
+    track = Object.assign({}, track, { url: ymRes.url })
     streamUrl = track.url
     currentTrack = track
   }
@@ -9317,7 +8948,7 @@ async function playTrackObj(track, opts = {}) {
       track = Object.assign({}, track, { url: streamUrl })
       currentTrack = track
     } else {
-      showToast('SoundCloud: ' + (res.error || 'ошибка'), true)
+      showToast('SoundCloud: ' + (res.error || 'РѕС€РёР±РєР°'), true)
       if (playBtn) playBtn.innerHTML = ICONS.play
       return
     }
@@ -9327,9 +8958,9 @@ async function playTrackObj(track, opts = {}) {
   if (track.source === 'youtube' && track.ytId && window.api?.youtubeStream) {
     if (streamUrl && /^https?:\/\//i.test(streamUrl)) {
       streamEngine = track._streamInst || null
-      setStage('YouTube: поток готов')
+      setStage('YouTube: РїРѕС‚РѕРє РіРѕС‚РѕРІ')
     } else {
-      setStage('YouTube: получаю поток…')
+      setStage('YouTube: РїРѕР»СѓС‡Р°СЋ РїРѕС‚РѕРєвЂ¦')
       const res = await withTimeout(
         window.api.youtubeStream(track.ytId, _ytInstanceCache, { forceFresh: false }),
         35000,
@@ -9344,11 +8975,11 @@ async function playTrackObj(track, opts = {}) {
         if (res.inst) _ytInstanceCache = res.inst
         console.log('STREAM URL:', streamUrl, 'engine:', res.inst || 'unknown', 'cached:', Boolean(res.cached))
       } else {
-        if (res?.code === 'AGE_RESTRICTED' || res?.code === 'BOT_CHECK' || /возрастн|нужны cookies|confirm your age|not a bot/i.test(String(res?.error || ''))) {
+        if (res?.code === 'AGE_RESTRICTED' || res?.code === 'BOT_CHECK' || /РІРѕР·СЂР°СЃС‚РЅ|РЅСѓР¶РЅС‹ cookies|confirm your age|not a bot/i.test(String(res?.error || ''))) {
           const switched = await tryAlternateYoutubeVersion()
           if (switched || isStale()) return
         }
-        setStage('YouTube: ошибка, пробую ещё раз…')
+        setStage('YouTube: РѕС€РёР±РєР°, РїСЂРѕР±СѓСЋ РµС‰С‘ СЂР°Р·вЂ¦')
         // One quick retry with fresh URL before failing the track.
         const fresh = await withTimeout(
           window.api.youtubeStream(track.ytId, _ytInstanceCache, { forceFresh: true }),
@@ -9366,9 +8997,9 @@ async function playTrackObj(track, opts = {}) {
         } else {
           const switched = await tryAlternateYoutubeVersion()
           if (switched || isStale()) return
-          showToast('YouTube: ' + (fresh.error || res.error || 'ошибка'), true)
+          showToast('YouTube: ' + (fresh.error || res.error || 'РѕС€РёР±РєР°'), true)
           if (playBtn) playBtn.innerHTML = ICONS.play
-          setStage('YouTube: ошибка')
+          setStage('YouTube: РѕС€РёР±РєР°')
           return
         }
       }
@@ -9376,7 +9007,7 @@ async function playTrackObj(track, opts = {}) {
   }
 
   if (!streamUrl) {
-    showToast('Нет аудио потока', true)
+    showToast('РќРµС‚ Р°СѓРґРёРѕ РїРѕС‚РѕРєР°', true)
     if (playBtn) playBtn.innerHTML = ICONS.play
     return
   }
@@ -9393,21 +9024,21 @@ async function playTrackObj(track, opts = {}) {
     /^https?:\/\//i.test(streamUrl) &&
     !/127\.0\.0\.1|localhost/i.test(streamUrl)
   ) {
-    setStage('Кэш: проверка…')
+    setStage('РљСЌС€: РїСЂРѕРІРµСЂРєР°вЂ¦')
     const hit = await window.api.streamCacheLookup({ cacheKey: streamCacheKey }).catch(() => ({ hit: false }))
     if (isStale()) return
     if (hit?.hit && hit.url) {
       finalUrl = hit.url
       usedStreamCache = true
-      setStage('Кэш: воспроизведение')
+      setStage('РљСЌС€: РІРѕСЃРїСЂРѕРёР·РІРµРґРµРЅРёРµ')
     }
   }
 
   // External streams are played via local proxy for CORS/Range compatibility.
   if (!usedStreamCache) {
     // For yt-dlp direct googlevideo links, direct playback is often more stable than proxy.
-    if (window.api?.proxySetUrl && shouldUseProxyStream() && /^https?:\/\//i.test(streamUrl) && streamEngine !== 'yt-dlp') {
-      setStage('Прокси: подготовка…')
+    if (window.api?.proxySetUrl && shouldProxyThisStreamUrl(streamUrl, track.source) && streamEngine !== 'yt-dlp') {
+      setStage('РџСЂРѕРєСЃРё: РїРѕРґРіРѕС‚РѕРІРєР°вЂ¦')
       try {
         finalUrl = await window.api.proxySetUrl(streamUrl)
       } catch (e) {
@@ -9420,7 +9051,7 @@ async function playTrackObj(track, opts = {}) {
     // Quick probe: helps decide if URL is dead/403 before we even try audio.
     if (window.api?.probeStreamUrl && /^https?:\/\//i.test(streamUrl) && streamEngine !== 'yt-dlp') {
       try {
-        setStage('Проверка потока…')
+        setStage('РџСЂРѕРІРµСЂРєР° РїРѕС‚РѕРєР°вЂ¦')
         const p = await withTimeout(window.api.probeStreamUrl(streamUrl), 9000, 'probe timeout').catch(() => null)
         if (isStale()) return
         if (p && p.ok) {
@@ -9438,11 +9069,11 @@ async function playTrackObj(track, opts = {}) {
               streamUrl = fresh.url
               remoteUrlForCache = streamUrl
               if (fresh.inst) _ytInstanceCache = fresh.inst
-              finalUrl = (window.api?.proxySetUrl && shouldUseProxyStream() && /^https?:\/\//i.test(streamUrl)) ? await window.api.proxySetUrl(streamUrl) : streamUrl
+              finalUrl = (window.api?.proxySetUrl && shouldProxyThisStreamUrl(streamUrl, track.source)) ? await window.api.proxySetUrl(streamUrl) : streamUrl
               console.log('FRESH URL AFTER 403 PROBE:', streamUrl, 'engine:', fresh.inst || 'unknown')
-              setStage('YouTube: обновил поток, запускаю…')
+              setStage('YouTube: РѕР±РЅРѕРІРёР» РїРѕС‚РѕРє, Р·Р°РїСѓСЃРєР°СЋвЂ¦')
             } else {
-              showToast('YouTube 403: обнови yt-dlp (Настройки → Источники) или попробуй другой трек', true)
+              showToast('YouTube 403: РѕР±РЅРѕРІРё yt-dlp (РќР°СЃС‚СЂРѕР№РєРё в†’ РСЃС‚РѕС‡РЅРёРєРё) РёР»Рё РїРѕРїСЂРѕР±СѓР№ РґСЂСѓРіРѕР№ С‚СЂРµРє', true)
               setStage('YouTube: 403')
             }
           }
@@ -9485,16 +9116,9 @@ async function playTrackObj(track, opts = {}) {
 
   const tryStartPlayback = async (url) => {
     if (isStale()) throw new Error('stale playback request')
-    setStage('Старт воспроизведения…')
+    setStage('РЎС‚Р°СЂС‚ РІРѕСЃРїСЂРѕРёР·РІРµРґРµРЅРёСЏвЂ¦')
     audio.src = url
     await audio.play()
-    try {
-      if (_audioCtx?.state === 'suspended') await _audioCtx.resume().catch(() => {})
-    } catch (_) {}
-    try {
-      ensureAudioAnalyzer()
-      if (_audioCtx?.state === 'suspended') await _audioCtx.resume().catch(() => {})
-    } catch (_) {}
     // If nothing starts within ~5s, treat it as a dead stream and switch strategy.
     return waitForPlaybackProgress(5200)
   }
@@ -9509,7 +9133,7 @@ async function playTrackObj(track, opts = {}) {
     if (track.source === 'youtube') {
       try {
         const alternateUrl = finalUrl === streamUrl
-          ? ((window.api?.proxySetUrl && shouldUseProxyStream() && /^https?:\/\//i.test(streamUrl)) ? await window.api.proxySetUrl(streamUrl) : streamUrl)
+          ? ((window.api?.proxySetUrl && shouldProxyThisStreamUrl(streamUrl, track.source)) ? await window.api.proxySetUrl(streamUrl) : streamUrl)
           : streamUrl
         started = await tryStartPlayback(alternateUrl)
         if (!started) throw new Error('alternate playback timeout')
@@ -9528,7 +9152,7 @@ async function playTrackObj(track, opts = {}) {
             streamUrl = fresh.url
             if (fresh.inst) _ytInstanceCache = fresh.inst
             console.log('FRESH STREAM URL:', streamUrl, 'engine:', fresh.inst || 'unknown')
-            const freshProxy = window.api?.proxySetUrl && shouldUseProxyStream() && /^https?:\/\//i.test(streamUrl) ? await window.api.proxySetUrl(streamUrl) : streamUrl
+            const freshProxy = window.api?.proxySetUrl && shouldProxyThisStreamUrl(streamUrl, track.source) ? await window.api.proxySetUrl(streamUrl) : streamUrl
             started = await tryStartPlayback(freshProxy)
             if (!started) throw new Error('fresh stream timeout')
           } else {
@@ -9540,13 +9164,13 @@ async function playTrackObj(track, opts = {}) {
             const switched = await tryAlternateYoutubeVersion()
             if (switched || isStale()) return
           } catch {}
-          showToast('Ошибка воспроизведения: ' + (e3?.message || e2?.message || e?.message || 'unknown'), true)
+          showToast('РћС€РёР±РєР° РІРѕСЃРїСЂРѕРёР·РІРµРґРµРЅРёСЏ: ' + (e3?.message || e2?.message || e?.message || 'unknown'), true)
           if (playBtn) playBtn.innerHTML = ICONS.play
           return
         }
       }
     } else {
-      showToast('Ошибка воспроизведения: ' + (e?.message || 'unknown'), true)
+      showToast('РћС€РёР±РєР° РІРѕСЃРїСЂРѕРёР·РІРµРґРµРЅРёСЏ: ' + (e?.message || 'unknown'), true)
       if (playBtn) playBtn.innerHTML = ICONS.play
       return
     }
@@ -9564,17 +9188,17 @@ async function playTrackObj(track, opts = {}) {
     window.api.streamCacheStore({ cacheKey: streamCacheKey, url: remoteUrlForCache }).catch(() => {})
   }
 
-  if (nameEl) nameEl.textContent = track.title || 'Без названия'
-  if (artistEl) artistEl.textContent = track.artist || '—'
+  if (nameEl) nameEl.textContent = track.title || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ'
+  if (artistEl) artistEl.textContent = track.artist || 'вЂ”'
   const cover = document.getElementById('player-cover')
   const effectiveCover = getEffectiveCoverUrl(track)
   if (playBtn) playBtn.innerHTML = ICONS.pause
   const pmIcon = document.getElementById('pm-play-icon')
   if (pmIcon) pmIcon.innerHTML = PM_PAUSE_INNER
   updatePlayerLikeBtn()
-  // РћР±РЅРѕРІР»СЏРµРј titlebar
+  // Р С›Р В±Р Р…Р С•Р Р†Р В»РЎРЏР ВµР С titlebar
   const tinfo = document.getElementById('titlebar-track-info')
-  if (tinfo) tinfo.textContent = track.title + (track.artist ? ' вЂ” ' + track.artist : '')
+  if (tinfo) tinfo.textContent = track.title + (track.artist ? ' РІР‚вЂќ ' + track.artist : '')
   const deferHeavyPlaybackUi = () => {
     try {
       applyCoverArt(cover, effectiveCover, track.bg || 'linear-gradient(135deg,#7c3aed,#a855f7)')
@@ -9588,13 +9212,13 @@ async function playTrackObj(track, opts = {}) {
   } else {
     setTimeout(deferHeavyPlaybackUi, 16)
   }
-  // РЎРёРЅС…СЂРѕРЅРёР·РёСЂСѓРµРј fullscreen РїР»РµРµСЂ
+  // Р РЋР С‘Р Р…РЎвЂ¦РЎР‚Р С•Р Р…Р С‘Р В·Р С‘РЎР‚РЎС“Р ВµР С fullscreen Р С—Р В»Р ВµР ВµРЎР‚
   syncPlayerModeUI()
   syncTrackCoverStatus()
   alignHomeHeaderToPlay()
-  // Р—Р°РіСЂСѓР¶Р°РµРј lyrics РµСЃР»Рё РїР°РЅРµР»СЊ РѕС‚РєСЂС‹С‚Р°
+  // Р вЂ”Р В°Р С–РЎР‚РЎС“Р В¶Р В°Р ВµР С lyrics Р ВµРЎРѓР В»Р С‘ Р С—Р В°Р Р…Р ВµР В»РЎРЉ Р С•РЎвЂљР С”РЎР‚РЎвЂ№РЎвЂљР В°
   if (_lyricsOpen) loadLyrics(track)
-  scheduleNextTrackPrewarm(track)
+  prewarmNextQueueTrack()
   renderRoomNowPlaying()
   renderRoomQueue()
   _currentTrackStartedAt = Math.floor(Date.now() / 1000)
@@ -9602,132 +9226,45 @@ async function playTrackObj(track, opts = {}) {
   updateDiscordPresence(track, _roomState)
   broadcastPlaybackSync(true)
   syncHomeCloneUI()
-  try {
-    refreshNowPlayingTrackHighlight()
-  } catch (_) {}
-}
-
-function scheduleNextTrackPrewarm(referenceTrack = null) {
-  try {
-    if (_queuePrewarmTimer) {
-      clearTimeout(_queuePrewarmTimer)
-      _queuePrewarmTimer = null
-    }
-    const ref = referenceTrack || currentTrack
-    if (!ref) return
-    const refKey = `${String(ref.source || '').toLowerCase()}:${String(ref.id || ref.ytId || ref.url || '')}:${queueIndex}`
-    const src = String(ref.source || '').toLowerCase()
-    const delayMs = src === 'yandex' ? 12000 : 6500
-    _queuePrewarmTimer = setTimeout(() => {
-      _queuePrewarmTimer = null
-      if (!audio || audio.paused || audio.ended) return
-      if ((audio.readyState || 0) < 3) return
-      if (Number(audio.currentTime || 0) < 4) return
-      const remain = Number(audio.duration || 0) - Number(audio.currentTime || 0)
-      if (Number.isFinite(remain) && remain > 0 && remain < 10) return
-      const cur = currentTrack
-      const curKey = `${String(cur?.source || '').toLowerCase()}:${String(cur?.id || cur?.ytId || cur?.url || '')}:${queueIndex}`
-      if (curKey !== refKey) return
-      prewarmNextQueueTrack()
-    }, delayMs)
-  } catch {}
 }
 
 function prewarmNextQueueTrack() {
   try {
-    if (!audio || audio.paused || audio.ended) return
-    if ((audio.readyState || 0) < 3) return
-    const idx = queueIndex + 1
-    const next = queue[idx]
-    if (!next) return
-    const source = String(next.source || '').toLowerCase()
-    const markPrewarm = (key, ttlMs = 90000) => {
-      const now = Date.now()
-      const lastAt = Number(_queuePrewarmAt.get(key) || 0)
-      if (now - lastAt < ttlMs) return false
-      _queuePrewarmAt.set(key, now)
-      return true
-    }
-    if (source === 'youtube' && next.ytId && window.api?.youtubeStream) {
-      const key = `yt:${String(next.ytId)}`
-      if (!markPrewarm(key, 90000)) return
-      _ytPrewarmAt.set(String(next.ytId), Date.now())
-      window.api.youtubeStream(next.ytId, _ytInstanceCache, { forceFresh: false })
-        .then((res) => {
-          if (!res?.ok || !res?.url) return
-          const cur = queue[idx]
-          if (!cur || cur.ytId !== next.ytId) return
-          queue[idx] = Object.assign({}, cur, { url: res.url, _streamInst: res.inst || null })
-        })
-        .catch(() => {})
-      return
-    }
-    if (source === 'soundcloud' && next.scTranscoding && window.api?.scStream) {
-      const key = `sc:${String(next.id || next.scTranscoding)}`
-      if (!markPrewarm(key, 120000)) return
-      window.api.scStream(next.scTranscoding, next.scClientId)
-        .then((res) => {
-          if (!res?.ok || !res?.url) return
-          const cur = queue[idx]
-          if (!cur || String(cur.source || '').toLowerCase() !== 'soundcloud') return
-          queue[idx] = Object.assign({}, cur, { url: res.url })
-        })
-        .catch(() => {})
-      return
-    }
-    if (source === 'yandex' && next.id && !/^https?:\/\//i.test(String(next.url || '')) && window.api?.yandexStream) {
-      const ymTok = String(getSettings()?.yandexToken || '').trim()
-      if (!ymTok) return
-      const key = `ym:${String(next.id)}`
-      if (!markPrewarm(key, 120000)) return
-      window.api.yandexStream(String(next.id), ymTok)
-        .then((res) => {
-          if (!res?.ok || !res?.url) return
-          const cur = queue[idx]
-          if (!cur || String(cur.source || '').toLowerCase() !== 'yandex' || String(cur.id || '') !== String(next.id || '')) return
-          queue[idx] = Object.assign({}, cur, { url: res.url })
-        })
-        .catch(() => {})
-    }
+    if (!window.api?.youtubeStream) return
+    const next = queue[queueIndex + 1]
+    if (!next || next.source !== 'youtube' || !next.ytId) return
+    const key = String(next.ytId)
+    const lastAt = Number(_ytPrewarmAt.get(key) || 0)
+    if (Date.now() - lastAt < 90000) return
+    _ytPrewarmAt.set(key, Date.now())
+    window.api.youtubeStream(next.ytId, _ytInstanceCache, { forceFresh: false })
+      .then((res) => {
+        if (!res?.ok || !res?.url) return
+        const idx = queueIndex + 1
+        const cur = queue[idx]
+        if (!cur || cur.ytId !== next.ytId) return
+        queue[idx] = Object.assign({}, cur, { url: res.url, _streamInst: res.inst || null })
+      })
+      .catch(() => {})
   } catch {}
-}
-
-function syncTransportPlayPauseUi() {
-  const playing = Boolean(audio && !audio.paused && !audio.ended)
-  const playBtn = document.getElementById('play-btn')
-  const icon = document.getElementById('pm-play-icon')
-  if (playBtn) playBtn.innerHTML = playing ? ICONS.pause : ICONS.play
-  if (icon) icon.innerHTML = playing ? PM_PAUSE_INNER : PM_PLAY_INNER
 }
 
 function togglePlay() {
   if (!audio.src) return
+  const playBtn = document.getElementById('play-btn')
   const isRoomParticipant = Boolean(_roomState?.roomId)
-  const isRoomGuest = isRoomParticipant && !_roomState?.host
-  if (isRoomGuest) {
-    const wantPaused = !audio.paused
-    _socialPeer?.send?.({
-      type: 'room-control-toggle',
-      roomId: _roomState.roomId,
-      paused: wantPaused,
-      currentTime: Number(audio.currentTime || 0),
-    })
-    saveRoomStateToServer({
-      playback_state: { paused: wantPaused, currentTime: Number(audio.currentTime || 0) },
-      playback_ts: Date.now(),
-    }).catch(() => {})
-    return
-  }
   if (audio.paused) {
     audio.play()
     if (_audioCtx?.state === 'suspended') _audioCtx.resume().catch(() => {})
+    if (playBtn) playBtn.innerHTML = ICONS.pause
+    const icon = document.getElementById('pm-play-icon')
+    if (icon) icon.innerHTML = PM_PAUSE_INNER
   } else {
     audio.pause()
+    if (playBtn) playBtn.innerHTML = ICONS.play
+    const icon = document.getElementById('pm-play-icon')
+    if (icon) icon.innerHTML = PM_PLAY_INNER
   }
-  syncTransportPlayPauseUi()
-  try {
-    refreshNowPlayingTrackHighlight()
-  } catch (_) {}
   if (isRoomParticipant) {
     _socialPeer?.send?.({
       type: 'room-control-toggle',
@@ -9833,7 +9370,7 @@ function nextTrack(autoEnded = false) {
   }
   if (queueScope === 'myWave') {
     maybePreloadMyWave(true)
-    showToast('Волна ищет продолжение...')
+    showToast('Р’РѕР»РЅР° РёС‰РµС‚ РїСЂРѕРґРѕР»Р¶РµРЅРёРµ...')
     return
   }
   if (playbackMode.repeat === 'all') {
@@ -9848,7 +9385,7 @@ function nextTrack(autoEnded = false) {
 audio.ontimeupdate = () => {
   // Keep general UI updates lightweight, but make lyrics sync feel tighter.
   const shouldSyncUi = (performance.now() - _lastUiSyncAt) >= 90
-  // Во время play караоке крутится в RAF — второй вызов из timeupdate даёт лишний main-thread и рывки UI.
+  // Р’Рѕ РІСЂРµРјСЏ play РєР°СЂР°РѕРєРµ РєСЂСѓС‚РёС‚СЃСЏ РІ RAF вЂ” РІС‚РѕСЂРѕР№ РІС‹Р·РѕРІ РёР· timeupdate РґР°С‘С‚ Р»РёС€РЅРёР№ main-thread Рё СЂС‹РІРєРё UI.
   if (_lyricsOpen && _lyricsData.length && audio.paused) syncLyrics(getLyricsSmoothedTime())
   if (shouldSyncUi) {
     _lastUiSyncAt = performance.now()
@@ -9874,30 +9411,15 @@ audio.ontimeupdate = () => {
       const delta = Math.max(0, now - _listenTickAt) / 1000
       _listenTickAt = now
       if (delta > 0 && delta < 4) {
-        _listenStatsPendingSec = Number(_listenStatsPendingSec || 0) + delta
-        const flushDueMs = 2600
-        if (!_listenStatsLastFlushAt) _listenStatsLastFlushAt = now
-        if (_listenStatsPendingSec >= 2.2 || (now - _listenStatsLastFlushAt) >= flushDueMs) {
-          flushListenStatsPending(false)
-        }
+        const st = getListenStats()
+        saveListenStats({ totalSeconds: Number(st.totalSeconds || 0) + delta })
       }
     }
   }
-  if (queueScope === 'myWave' && !audio.paused && queue.length - queueIndex - 1 <= 3) {
-    const t = performance.now()
-    if (t - (_lastMyWavePreloadCheckAt || 0) > 3500) {
-      _lastMyWavePreloadCheckAt = t
-      maybePreloadMyWave(false)
-    }
-  }
+  if (queueScope === 'myWave' && !audio.paused && queue.length - queueIndex - 1 <= 3) maybePreloadMyWave(false)
   broadcastPlaybackSync(false)
 }
-audio.onpause = () => {
-  flushListenStatsPending(true)
-  _listenTickAt = 0
-}
 audio.onended = () => {
-  flushListenStatsPending(true)
   stopLyricsSyncLoop()
   _listenTickAt = 0
   const playBtn = document.getElementById('play-btn')
@@ -9918,7 +9440,7 @@ audio.onended = () => {
   nextTrack(true)
 }
 
-// в”Ђв”Ђв”Ђ SEARCH в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// РІвЂќР‚РІвЂќР‚РІвЂќР‚ SEARCH РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
 function normalizeInvokeError(err) {
   const raw = String(err?.message || err || '')
   return raw.replace(/^Error invoking remote method '[^']+': Error:\s*/i, '').trim()
@@ -9944,19 +9466,19 @@ async function searchHybridTracks(q, settings) {
       soundcloudClientId: settings?.soundcloudClientId || ''
     }), 10000, null)
     if (payload?.ok) return { mode: payload.mode || 'hybrid', tracks: sanitizeTrackList(payload.tracks || []) }
-    if (payload && !payload.ok) throw new Error(payload.error || 'Поиск на сервере не дал результатов')
-    throw new Error('Серверный поиск недоступен')
+    if (payload && !payload.ok) throw new Error(payload.error || 'РџРѕРёСЃРє РЅР° СЃРµСЂРІРµСЂРµ РЅРµ РґР°Р» СЂРµР·СѓР»СЊС‚Р°С‚РѕРІ')
+    throw new Error('РЎРµСЂРІРµСЂРЅС‹Р№ РїРѕРёСЃРє РЅРµРґРѕСЃС‚СѓРїРµРЅ')
   }
-  throw new Error('Серверный поиск недоступен в этой версии приложения')
+  throw new Error('РЎРµСЂРІРµСЂРЅС‹Р№ РїРѕРёСЃРє РЅРµРґРѕСЃС‚СѓРїРµРЅ РІ СЌС‚РѕР№ РІРµСЂСЃРёРё РїСЂРёР»РѕР¶РµРЅРёСЏ')
 }
 
 function searchLoadingPlaceholderLine(settings = getSettings()) {
   const src = String(settings?.activeSource || currentSource || 'hybrid').toLowerCase()
-  if (src === 'yandex' || src === 'ya' || src === 'ym') return 'Поиск: Яндекс Музыка...'
-  if (src === 'vk') return 'Поиск: ВКонтакте...'
-  if (src === 'hitmo' || src === 'hm') return 'Поиск: HitMo...'
-  if (src === 'youtube' || src === 'yt') return 'Поиск: YouTube...'
-  return 'Поиск: Spotify → SoundCloud → Audius...'
+  if (src === 'yandex' || src === 'ya' || src === 'ym') return 'РџРѕРёСЃРє: РЇРЅРґРµРєСЃ РњСѓР·С‹РєР°...'
+  if (src === 'vk') return 'РџРѕРёСЃРє: Р’РљРѕРЅС‚Р°РєС‚Рµ...'
+  if (src === 'hitmo' || src === 'hm') return 'РџРѕРёСЃРє: HitMo...'
+  if (src === 'youtube' || src === 'yt') return 'РџРѕРёСЃРє: YouTube...'
+  return 'РџРѕРёСЃРє: Spotify в†’ SoundCloud в†’ Audius...'
 }
 
 function searchTracks(queryOverride = '') {
@@ -9988,11 +9510,11 @@ function searchTracks(queryOverride = '') {
         results = sanitizeTrackList(await searchHitmo(q))
         mode = 'hitmo'
       } else if (src === 'youtube' || src === 'yt') {
-        if (!window.api?.youtubeSearch) throw new Error('YouTube поиск доступен только в Electron')
+        if (!window.api?.youtubeSearch) throw new Error('YouTube РїРѕРёСЃРє РґРѕСЃС‚СѓРїРµРЅ С‚РѕР»СЊРєРѕ РІ Electron')
         const ytList = await window.api.youtubeSearch(q)
-        if (!Array.isArray(ytList)) throw new Error('YouTube: некорректный ответ')
+        if (!Array.isArray(ytList)) throw new Error('YouTube: РЅРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РѕС‚РІРµС‚')
         results = sanitizeTrackList(ytList.map((t) => ({
-          title: t?.title || 'Без названия',
+          title: t?.title || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ',
           artist: t?.artist || 'YouTube',
           ytId: t?.ytId || t?.id || '',
           url: t?.url || null,
@@ -10004,23 +9526,22 @@ function searchTracks(queryOverride = '') {
         mode = 'youtube'
       } else if (src === 'yandex' || src === 'ya' || src === 'ym') {
         const token = String(s.yandexToken || '').trim()
-        if (!token) throw new Error('Яндекс: укажи токен Музыки в настройках')
-        if (!window.api?.yandexSearch) throw new Error('Яндекс поиск недоступен в этой сборке')
+        if (!token) throw new Error('РЇРЅРґРµРєСЃ: СѓРєР°Р¶Рё С‚РѕРєРµРЅ РњСѓР·С‹РєРё РІ РЅР°СЃС‚СЂРѕР№РєР°С…')
+        if (!window.api?.yandexSearch) throw new Error('РЇРЅРґРµРєСЃ РїРѕРёСЃРє РЅРµРґРѕСЃС‚СѓРїРµРЅ РІ СЌС‚РѕР№ СЃР±РѕСЂРєРµ')
         const ymList = await withTimeout(window.api.yandexSearch(q, token), 22000, 'yandex search timeout').catch((e) => {
-          throw new Error(normalizeInvokeError(e) || 'таймаут поиска')
+          throw new Error(normalizeInvokeError(e) || 'С‚Р°Р№РјР°СѓС‚ РїРѕРёСЃРєР°')
         })
-        if (!Array.isArray(ymList)) throw new Error('Яндекс: некорректный ответ')
+        if (!Array.isArray(ymList)) throw new Error('РЇРЅРґРµРєСЃ: РЅРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РѕС‚РІРµС‚')
         results = sanitizeTrackList(ymList)
         mode = 'yandex'
       } else if (src === 'vk') {
-        _lastSearchMode = 'vk'
         const token = String(s.vkToken || '').trim()
-        if (!token) throw new Error('VK: укажи токен в настройках → Источники → ВКонтакте')
-        if (!window.api?.vkSearch) throw new Error('VK поиск доступен только в приложении Electron')
+        if (!token) throw new Error('VK: СѓРєР°Р¶Рё С‚РѕРєРµРЅ РІ РЅР°СЃС‚СЂРѕР№РєР°С… в†’ РСЃС‚РѕС‡РЅРёРєРё в†’ Р’РљРѕРЅС‚Р°РєС‚Рµ')
+        if (!window.api?.vkSearch) throw new Error('VK РїРѕРёСЃРє РґРѕСЃС‚СѓРїРµРЅ С‚РѕР»СЊРєРѕ РІ РїСЂРёР»РѕР¶РµРЅРёРё Electron')
         const vkList = await withTimeout(searchVK(q, token), 60000, 'vk search timeout').catch((e) => {
-          throw new Error(normalizeInvokeError(e) || 'таймаут поиска')
+          throw new Error(normalizeInvokeError(e) || 'С‚Р°Р№РјР°СѓС‚ РїРѕРёСЃРєР°')
         })
-        if (!Array.isArray(vkList)) throw new Error('VK: некорректный ответ')
+        if (!Array.isArray(vkList)) throw new Error('VK: РЅРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РѕС‚РІРµС‚')
         results = sanitizeTrackList(vkList)
         mode = 'vk'
       } else {
@@ -10033,7 +9554,7 @@ function searchTracks(queryOverride = '') {
       renderResults(results)
     } catch (err) {
       const message = sanitizeDisplayText(normalizeInvokeError(err))
-      container.innerHTML = `<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.8 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0Z"/></svg></div><p>${message}</p><small>Источник: ${getSourceLabel()}</small><div style="display:flex;gap:8px;justify-content:center;margin-top:12px"><button class="btn-small" onclick="searchTracks()">Повторить</button><button class="btn-small" onclick="openPage('settings')">Настройки</button></div></div>`
+      container.innerHTML = `<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.8 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0Z"/></svg></div><p>${message}</p><small>РСЃС‚РѕС‡РЅРёРє: ${getSourceLabel()}</small><div style="display:flex;gap:8px;justify-content:center;margin-top:12px"><button class="btn-small" onclick="searchTracks()">РџРѕРІС‚РѕСЂРёС‚СЊ</button><button class="btn-small" onclick="openPage('settings')">РќР°СЃС‚СЂРѕР№РєРё</button></div></div>`
     }
   }, 350)
 }
@@ -10045,32 +9566,32 @@ async function searchTracksDirect(query, settings = getSettings()) {
   if (src === 'hitmo' || src === 'hm') return sanitizeTrackList(await searchHitmo(q))
   if (src === 'yandex' || src === 'ya' || src === 'ym') {
     const token = String(settings?.yandexToken || '').trim()
-    if (!token) throw new Error('Яндекс: укажи токен Музыки в настройках')
-    if (!window.api?.yandexSearch) throw new Error('Яндекс поиск недоступен в этой сборке')
+    if (!token) throw new Error('РЇРЅРґРµРєСЃ: СѓРєР°Р¶Рё С‚РѕРєРµРЅ РњСѓР·С‹РєРё РІ РЅР°СЃС‚СЂРѕР№РєР°С…')
+    if (!window.api?.yandexSearch) throw new Error('РЇРЅРґРµРєСЃ РїРѕРёСЃРє РЅРµРґРѕСЃС‚СѓРїРµРЅ РІ СЌС‚РѕР№ СЃР±РѕСЂРєРµ')
     const ymList = await withTimeout(window.api.yandexSearch(q, token), 22000, 'yandex search timeout').catch((e) => {
-      throw new Error(normalizeInvokeError(e) || 'таймаут поиска')
+      throw new Error(normalizeInvokeError(e) || 'С‚Р°Р№РјР°СѓС‚ РїРѕРёСЃРєР°')
     })
-    if (!Array.isArray(ymList)) throw new Error('Яндекс: некорректный ответ')
+    if (!Array.isArray(ymList)) throw new Error('РЇРЅРґРµРєСЃ: РЅРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РѕС‚РІРµС‚')
     _lastSearchMode = 'yandex'
     return sanitizeTrackList(ymList)
   }
   if (src === 'vk') {
-    _lastSearchMode = 'vk'
     const token = String(settings?.vkToken || '').trim()
-    if (!token) throw new Error('VK: укажи токен в настройках → Источники → ВКонтакте')
-    if (!window.api?.vkSearch) throw new Error('VK поиск доступен только в приложении Electron')
+    if (!token) throw new Error('VK: СѓРєР°Р¶Рё С‚РѕРєРµРЅ РІ РЅР°СЃС‚СЂРѕР№РєР°С… в†’ РСЃС‚РѕС‡РЅРёРєРё в†’ Р’РљРѕРЅС‚Р°РєС‚Рµ')
+    if (!window.api?.vkSearch) throw new Error('VK РїРѕРёСЃРє РґРѕСЃС‚СѓРїРµРЅ С‚РѕР»СЊРєРѕ РІ РїСЂРёР»РѕР¶РµРЅРёРё Electron')
     const vkList = await withTimeout(searchVK(q, token), 60000, 'vk search timeout').catch((e) => {
-      throw new Error(normalizeInvokeError(e) || 'таймаут поиска')
+      throw new Error(normalizeInvokeError(e) || 'С‚Р°Р№РјР°СѓС‚ РїРѕРёСЃРєР°')
     })
-    if (!Array.isArray(vkList)) throw new Error('VK: некорректный ответ')
+    if (!Array.isArray(vkList)) throw new Error('VK: РЅРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РѕС‚РІРµС‚')
+    _lastSearchMode = 'vk'
     return sanitizeTrackList(vkList)
   }
   if (src === 'youtube' || src === 'yt') {
-    if (!window.api?.youtubeSearch) throw new Error('YouTube поиск доступен только в Electron')
+    if (!window.api?.youtubeSearch) throw new Error('YouTube РїРѕРёСЃРє РґРѕСЃС‚СѓРїРµРЅ С‚РѕР»СЊРєРѕ РІ Electron')
     const result = await window.api.youtubeSearch(q)
     if (!Array.isArray(result)) throw new Error('YouTube: unexpected response')
     return sanitizeTrackList(result.map((t) => ({
-      title: t?.title || 'Без названия',
+      title: t?.title || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ',
       artist: t?.artist || 'YouTube',
       ytId: t?.ytId || t?.id || '',
       url: t?.url || null,
@@ -10090,13 +9611,13 @@ function renderResults(results) {
   const countEl = document.getElementById('results-count')
   const srcEl = document.getElementById('results-source-label')
   if (!results?.length) {
-    container.innerHTML = `<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg></div><p>Ничего не найдено</p><small>Попробуй другой запрос или источник</small></div>`
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg></div><p>РќРёС‡РµРіРѕ РЅРµ РЅР°Р№РґРµРЅРѕ</p><small>РџРѕРїСЂРѕР±СѓР№ РґСЂСѓРіРѕР№ Р·Р°РїСЂРѕСЃ РёР»Рё РёСЃС‚РѕС‡РЅРёРє</small></div>`
     if (meta) meta.style.display = 'none'
     return
   }
   queue = results; queueIndex = 0; queueScope = 'search'
   if (meta) { meta.style.display = 'flex'; }
-  if (countEl) countEl.textContent = `${results.length} треков`
+  if (countEl) countEl.textContent = `${results.length} С‚СЂРµРєРѕРІ`
   if (srcEl) srcEl.textContent = getSourceLabel()
   container.innerHTML = ''
   results.forEach((track, i) => {
@@ -10104,9 +9625,6 @@ function renderResults(results) {
     el.addEventListener('click', () => { queueIndex=i; playTrackObj(track) })
     container.appendChild(el)
   })
-  try {
-    refreshNowPlayingTrackHighlight()
-  } catch (_) {}
 }
 
 function getSourceLabel() {
@@ -10114,19 +9632,19 @@ function getSourceLabel() {
   if (_lastSearchMode === 'soundcloud') return 'SoundCloud'
   if (_lastSearchMode === 'audius') return 'Audius'
   if (_lastSearchMode === 'youtube') return 'YouTube'
-  if (_lastSearchMode === 'yandex') return 'Яндекс Музыка'
-  if (_lastSearchMode === 'vk') return 'ВКонтакте'
+  if (_lastSearchMode === 'yandex') return 'РЇРЅРґРµРєСЃ РњСѓР·С‹РєР°'
+  if (_lastSearchMode === 'vk') return 'Р’РљРѕРЅС‚Р°РєС‚Рµ'
   if (_lastSearchMode === 'hitmo') return 'HitMo'
-  return 'Spotify → SoundCloud → Audius'
+  return 'Spotify в†’ SoundCloud в†’ Audius'
 }
 
 async function searchAudius(q) {
-  if (!window.api?.audiusSearch) throw new Error('Audius доступен только в Electron приложении')
+  if (!window.api?.audiusSearch) throw new Error('Audius РґРѕСЃС‚СѓРїРµРЅ С‚РѕР»СЊРєРѕ РІ Electron РїСЂРёР»РѕР¶РµРЅРёРё')
   const result = await window.api.audiusSearch(q)
-  if (!Array.isArray(result)) throw new Error('Audius: некорректный ответ')
+  if (!Array.isArray(result)) throw new Error('Audius: РЅРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РѕС‚РІРµС‚')
   return result.map((t) => ({
-    title: t.title || 'Без названия',
-    artist: t.artist || '—',
+    title: t.title || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ',
+    artist: t.artist || 'вЂ”',
     url: t.url || null,
     cover: t.cover || null,
     bg: t.bg || 'linear-gradient(135deg,#2dd4bf,#0ea5e9)',
@@ -10135,24 +9653,24 @@ async function searchAudius(q) {
   })).filter((t) => t.url)
 }
 
-// в”Ђв”Ђв”Ђ SOUNDCLOUD в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// РІвЂќР‚РІвЂќР‚РІвЂќР‚ SOUNDCLOUD РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
 let _scAutoClientId = null
 
 async function getScClientId(manualId) {
   if (manualId) return manualId
   if (_scAutoClientId) return _scAutoClientId
   if (window.api?.scFetchClientId) {
-    showToast('РџРѕР»СѓС‡Р°СЋ SoundCloud Client ID...')
+    showToast('Р СџР С•Р В»РЎС“РЎвЂЎР В°РЎР‹ SoundCloud Client ID...')
     const r = await window.api.scFetchClientId()
     if (r.ok && r.clientId) { _scAutoClientId = r.clientId; return _scAutoClientId }
-    throw new Error('РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕР»СѓС‡РёС‚СЊ SC Client ID: ' + (r.error||''))
+    throw new Error('Р СњР Вµ РЎС“Р Т‘Р В°Р В»Р С•РЎРѓРЎРЉ Р С—Р С•Р В»РЎС“РЎвЂЎР С‘РЎвЂљРЎРЉ SC Client ID: ' + (r.error||''))
   }
-  throw new Error('SoundCloud: РЅРµС‚ Client ID вЂ” СѓРєР°Р¶Рё РІ РЅР°СЃС‚СЂРѕР№РєР°С… вљ™пёЏ')
+  throw new Error('SoundCloud: Р Р…Р ВµРЎвЂљ Client ID РІР‚вЂќ РЎС“Р С”Р В°Р В¶Р С‘ Р Р† Р Р…Р В°РЎРѓРЎвЂљРЎР‚Р С•Р в„–Р С”Р В°РЎвЂ¦ РІС™в„ўРїС‘РЏ')
 }
 
 async function searchSoundCloud(q, manualClientId) {
   const clientId = await getScClientId(manualClientId)
-  if (!window.api?.scSearch) throw new Error('SoundCloud серверный поиск недоступен')
+  if (!window.api?.scSearch) throw new Error('SoundCloud СЃРµСЂРІРµСЂРЅС‹Р№ РїРѕРёСЃРє РЅРµРґРѕСЃС‚СѓРїРµРЅ')
   const result = await window.api.scSearch(q, clientId)
   if (!result.ok) {
     if (result.expired && !manualClientId) {
@@ -10178,7 +9696,7 @@ async function mapScTracks(tracks, clientId) {
       if (tr) transcodingUrl = tr.url
     }
     results.push({
-      title: t.title, artist: t.user?.username || 'вЂ”',
+      title: t.title, artist: t.user?.username || 'РІР‚вЂќ',
       url: t.stream_url ? `${t.stream_url}?client_id=${clientId}` : null,
       scTranscoding: transcodingUrl, scClientId: clientId,
       cover: t.artwork_url ? t.artwork_url.replace('large','t300x300') : null,
@@ -10189,9 +9707,9 @@ async function mapScTracks(tracks, clientId) {
   return results
 }
 
-// в”Ђв”Ђв”Ђ VK в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// РІвЂќР‚РІвЂќР‚РІвЂќР‚ VK РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
 async function searchVK(q, token) {
-  if (!token) throw new Error('Укажи токен ВКонтакте в настройках')
+  if (!token) throw new Error('РЈРєР°Р¶Рё С‚РѕРєРµРЅ Р’РљРѕРЅС‚Р°РєС‚Рµ РІ РЅР°СЃС‚СЂРѕР№РєР°С…')
   if (window.api?.vkSearch) {
     let result
     try {
@@ -10207,21 +9725,21 @@ async function searchVK(q, token) {
   const data = await res.json()
   if (data.error) {
     const c = data.error.error_code
-    if (c===5) throw new Error('VK: токен недействителен — обнови в настройках')
-    if (c===15) throw new Error('VK: нужен токен Kate Mobile')
+    if (c===5) throw new Error('VK: С‚РѕРєРµРЅ РЅРµРґРµР№СЃС‚РІРёС‚РµР»РµРЅ вЂ” РѕР±РЅРѕРІРё РІ РЅР°СЃС‚СЂРѕР№РєР°С…')
+    if (c===15) throw new Error('VK: РЅСѓР¶РµРЅ С‚РѕРєРµРЅ Kate Mobile')
     throw new Error('VK: ' + data.error.error_msg)
   }
   return (data.response?.items||[]).filter(t=>t?.url).map(t => ({
-    title: t.title||'Без названия', artist: t.artist||'—', url: t.url,
+    title: t.title||'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ', artist: t.artist||'вЂ”', url: t.url,
     cover: t.album?.thumb?.photo_300||null, bg: 'linear-gradient(135deg,#4680c2,#5b9bd5)', source:'vk', id:String(t.id)
   }))
 }
 
-// в”Ђв”Ђв”Ђ HITMO в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// РІвЂќР‚РІвЂќР‚РІвЂќР‚ HITMO РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
 async function searchHitmo(q) {
-  if (!window.api?.hitmoSearch) throw new Error('Hitmo серверный поиск недоступен')
+  if (!window.api?.hitmoSearch) throw new Error('Hitmo СЃРµСЂРІРµСЂРЅС‹Р№ РїРѕРёСЃРє РЅРµРґРѕСЃС‚СѓРїРµРЅ')
   const result = await window.api.hitmoSearch(q)
-  if (!result.ok) throw new Error('Hitmo: ' + (result.error || 'ошибка поиска'))
+  if (!result.ok) throw new Error('Hitmo: ' + (result.error || 'РѕС€РёР±РєР° РїРѕРёСЃРєР°'))
   return result.tracks
 }
 
@@ -10249,8 +9767,8 @@ function parseHitmoResults(html) {
 
     if (!audioUrl && !titleEl) return
 
-    const rawTitle = titleEl?.textContent?.trim() || item.getAttribute('data-title') || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ'
-    const rawArtist = artistEl?.textContent?.trim() || item.getAttribute('data-artist') || 'вЂ”'
+    const rawTitle = titleEl?.textContent?.trim() || item.getAttribute('data-title') || 'Р вЂР ВµР В· Р Р…Р В°Р В·Р Р†Р В°Р Р…Р С‘РЎРЏ'
+    const rawArtist = artistEl?.textContent?.trim() || item.getAttribute('data-artist') || 'РІР‚вЂќ'
 
     tracks.push({
       title: rawTitle,
@@ -10278,8 +9796,8 @@ function parseHitmoResults(html) {
           const data = JSON.parse(jsonMatch[1])
           data.forEach(t => {
             tracks.push({
-              title: t.title || t.name || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ',
-              artist: t.artist || t.performer || 'вЂ”',
+              title: t.title || t.name || 'Р вЂР ВµР В· Р Р…Р В°Р В·Р Р†Р В°Р Р…Р С‘РЎРЏ',
+              artist: t.artist || t.performer || 'РІР‚вЂќ',
               url: t.url || t.mp3 || t.src || null,
               cover: t.cover || t.image || t.img || null,
               bg: 'linear-gradient(135deg,#ff2e88,#a020f0)',
@@ -10293,19 +9811,19 @@ function parseHitmoResults(html) {
   }
 
   if (tracks.length === 0) {
-    throw new Error('Hitmo: РЅРёС‡РµРіРѕ РЅРµ РЅР°Р№РґРµРЅРѕ РёР»Рё СЃС‚СЂСѓРєС‚СѓСЂР° СЃС‚СЂР°РЅРёС†С‹ РёР·РјРµРЅРёР»Р°СЃСЊ. РџРѕРїСЂРѕР±СѓР№ YouTube.')
+    throw new Error('Hitmo: Р Р…Р С‘РЎвЂЎР ВµР С–Р С• Р Р…Р Вµ Р Р…Р В°Р в„–Р Т‘Р ВµР Р…Р С• Р С‘Р В»Р С‘ РЎРѓРЎвЂљРЎР‚РЎС“Р С”РЎвЂљРЎС“РЎР‚Р В° РЎРѓРЎвЂљРЎР‚Р В°Р Р…Р С‘РЎвЂ РЎвЂ№ Р С‘Р В·Р СР ВµР Р…Р С‘Р В»Р В°РЎРѓРЎРЉ. Р СџР С•Р С—РЎР‚Р С•Р В±РЎС“Р в„– YouTube.')
   }
 
   return tracks
 }
 
-// в”Ђв”Ђв”Ђ YOUTUBE в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// РІвЂќР‚РІвЂќР‚РІвЂќР‚ YOUTUBE РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
 let _ytInstanceCache = null
 
 async function searchYouTube(q) {
-  if (!window.api?.youtubeSearch) throw new Error('YouTube РґРѕСЃС‚СѓРїРµРЅ С‚РѕР»СЊРєРѕ РІ Electron РїСЂРёР»РѕР¶РµРЅРёРё')
+  if (!window.api?.youtubeSearch) throw new Error('YouTube Р Т‘Р С•РЎРѓРЎвЂљРЎС“Р С—Р ВµР Р… РЎвЂљР С•Р В»РЎРЉР С”Р С• Р Р† Electron Р С—РЎР‚Р С‘Р В»Р С•Р В¶Р ВµР Р…Р С‘Р С‘')
   const result = await window.api.youtubeSearch(q)
-  if (!result.ok) throw new Error(result.error || 'YouTube: РѕС€РёР±РєР° РїРѕРёСЃРєР°')
+  if (!result.ok) throw new Error(result.error || 'YouTube: Р С•РЎв‚¬Р С‘Р В±Р С”Р В° Р С—Р С•Р С‘РЎРѓР С”Р В°')
   if (!Array.isArray(result.tracks) || result.tracks.length === 0) return []
   _ytInstanceCache = result.instance
   const tracks = result.tracks
@@ -10328,54 +9846,54 @@ async function refreshYtDlpStatus() {
   try {
     const info = await window.api.ytdlpInfo()
     if (!info?.ok) {
-      setYtDlpStatus('Ошибка проверки', sanitizeDisplayText(info?.error || 'unknown'))
+      setYtDlpStatus('РћС€РёР±РєР° РїСЂРѕРІРµСЂРєРё', sanitizeDisplayText(info?.error || 'unknown'))
       return
     }
     const p = info.resolved?.path
     const v = info.resolved?.version
-    if (p) setYtDlpStatus(`Готов: ${v || 'версия неизвестна'}`, p)
-    else setYtDlpStatus('Не найден', 'Нажми “Обновить yt-dlp” или установи: winget install yt-dlp.yt-dlp')
+    if (p) setYtDlpStatus(`Р“РѕС‚РѕРІ: ${v || 'РІРµСЂСЃРёСЏ РЅРµРёР·РІРµСЃС‚РЅР°'}`, p)
+    else setYtDlpStatus('РќРµ РЅР°Р№РґРµРЅ', 'РќР°Р¶РјРё вЂњРћР±РЅРѕРІРёС‚СЊ yt-dlpвЂќ РёР»Рё СѓСЃС‚Р°РЅРѕРІРё: winget install yt-dlp.yt-dlp')
   } catch (e) {
-    setYtDlpStatus('Ошибка проверки', sanitizeDisplayText(e?.message || String(e)))
+    setYtDlpStatus('РћС€РёР±РєР° РїСЂРѕРІРµСЂРєРё', sanitizeDisplayText(e?.message || String(e)))
   }
 }
 
 async function updateYtDlpNow() {
   const btn = document.getElementById('ytdlp-update-btn')
-  if (btn) { btn.disabled = true; btn.textContent = 'Обновляю...' }
+  if (btn) { btn.disabled = true; btn.textContent = 'РћР±РЅРѕРІР»СЏСЋ...' }
   try {
-    if (!window.api?.ytdlpUpdate) throw new Error('Недоступно (только в Electron)')
+    if (!window.api?.ytdlpUpdate) throw new Error('РќРµРґРѕСЃС‚СѓРїРЅРѕ (С‚РѕР»СЊРєРѕ РІ Electron)')
     const r = await window.api.ytdlpUpdate()
     if (!r?.ok) throw new Error(r?.error || 'update failed')
     const v = r?.info?.resolved?.version || r?.info?.managed?.version || r?.result?.version || null
-    showToast(v ? `yt-dlp обновлён: ${v}` : 'yt-dlp обновлён')
+    showToast(v ? `yt-dlp РѕР±РЅРѕРІР»С‘РЅ: ${v}` : 'yt-dlp РѕР±РЅРѕРІР»С‘РЅ')
   } catch (e) {
     showToast('yt-dlp: ' + sanitizeDisplayText(e?.message || String(e)), true)
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Обновить yt-dlp' }
+    if (btn) { btn.disabled = false; btn.textContent = 'РћР±РЅРѕРІРёС‚СЊ yt-dlp' }
     refreshYtDlpStatus().catch(() => {})
   }
 }
 
-// в”Ђв”Ђв”Ђ SPOTIFY в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// РІвЂќР‚РІвЂќР‚РІвЂќР‚ SPOTIFY РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
 async function searchSpotify(q, token) {
-  if (!token) throw new Error('РЈРєР°Р¶Рё Spotify Bearer С‚РѕРєРµРЅ РІ РЅР°СЃС‚СЂРѕР№РєР°С… вљ™пёЏ')
+  if (!token) throw new Error('Р Р€Р С”Р В°Р В¶Р С‘ Spotify Bearer РЎвЂљР С•Р С”Р ВµР Р… Р Р† Р Р…Р В°РЎРѓРЎвЂљРЎР‚Р С•Р в„–Р С”Р В°РЎвЂ¦ РІС™в„ўРїС‘РЏ')
   const res = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track&limit=20&market=RU`, {
     headers: { 'Authorization': `Bearer ${token}` }
   })
-  if (res.status===401) throw new Error('Spotify: С‚РѕРєРµРЅ РёСЃС‚С‘Рє вЂ” РѕР±РЅРѕРІРё РІ РЅР°СЃС‚СЂРѕР№РєР°С… вљ™пёЏ')
-  if (res.status===403) throw new Error('Spotify: РЅРµС‚ РґРѕСЃС‚СѓРїР° вљ™пёЏ')
-  if (!res.ok) throw new Error(`Spotify РѕС€РёР±РєР° ${res.status}`)
+  if (res.status===401) throw new Error('Spotify: РЎвЂљР С•Р С”Р ВµР Р… Р С‘РЎРѓРЎвЂљРЎвЂР С” РІР‚вЂќ Р С•Р В±Р Р…Р С•Р Р†Р С‘ Р Р† Р Р…Р В°РЎРѓРЎвЂљРЎР‚Р С•Р в„–Р С”Р В°РЎвЂ¦ РІС™в„ўРїС‘РЏ')
+  if (res.status===403) throw new Error('Spotify: Р Р…Р ВµРЎвЂљ Р Т‘Р С•РЎРѓРЎвЂљРЎС“Р С—Р В° РІС™в„ўРїС‘РЏ')
+  if (!res.ok) throw new Error(`Spotify Р С•РЎв‚¬Р С‘Р В±Р С”Р В° ${res.status}`)
   const data = await res.json()
   return (data.tracks?.items||[]).map(t => ({
-    title: t.name, artist: t.artists?.map(a=>a.name).join(', ')||'вЂ”',
+    title: t.name, artist: t.artists?.map(a=>a.name).join(', ')||'РІР‚вЂќ',
     cover: t.album?.images?.[0]?.url||null, url: null,
     bg: 'linear-gradient(135deg,#1db954,#1aa34a)',
     source: 'spotify', id: t.id, spotifyId: t.id
   }))
 }
 
-// в”Ђв”Ђв”Ђ LIKES в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// РІвЂќР‚РІвЂќР‚РІвЂќР‚ LIKES РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
 function getLiked() { return JSON.parse(localStorage.getItem('flow_liked')) || [] }
 function isLiked(track) { return getLiked().some(t => t.id===track.id && t.source===track.source) }
 
@@ -10383,10 +9901,10 @@ function likeTrack(track) {
   let liked = getLiked()
   if (isLiked(track)) {
     liked = liked.filter((t) => !(t.id === track.id && t.source === track.source))
-    showToast('РЈР±СЂР°РЅРѕ РёР· Р»СЋР±РёРјС‹С…')
+    showToast('Р Р€Р В±РЎР‚Р В°Р Р…Р С• Р С‘Р В· Р В»РЎР‹Р В±Р С‘Р СРЎвЂ№РЎвЂ¦')
   } else {
     liked.push(track)
-    showToast('Р”РѕР±Р°РІР»РµРЅРѕ РІ Р»СЋР±РёРјС‹Рµ в™Ґ')
+    showToast('Р вЂќР С•Р В±Р В°Р Р†Р В»Р ВµР Р…Р С• Р Р† Р В»РЎР‹Р В±Р С‘Р СРЎвЂ№Р Вµ РІв„ўТђ')
   }
   localStorage.setItem('flow_liked', JSON.stringify(liked))
   syncLikeButtonsInVisibleLists()
@@ -10426,7 +9944,7 @@ function renderLiked() {
   const liked = getLiked()
   document.body.classList.toggle('flow-heavy-liked', liked.length >= 220)
   const container = document.getElementById('liked-list'); if (!container) return
-  if (!liked.length) { container.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.35-9.5-8A5.5 5.5 0 0 1 12 5.1 5.5 5.5 0 0 1 21.5 13c-2.5 3.65-9.5 8-9.5 8Z"/></svg></div><p>Ты еще не лайкнул ни одного трека</p></div>`; return }
+  if (!liked.length) { container.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.35-9.5-8A5.5 5.5 0 0 1 12 5.1 5.5 5.5 0 0 1 21.5 13c-2.5 3.65-9.5 8-9.5 8Z"/></svg></div><p>РўС‹ РµС‰Рµ РЅРµ Р»Р°Р№РєРЅСѓР» РЅРё РѕРґРЅРѕРіРѕ С‚СЂРµРєР°</p></div>`; return }
   container.innerHTML = ''
   let i = 0
   const chunkSize = 18
@@ -10446,15 +9964,12 @@ function renderLiked() {
       fragment.appendChild(el)
     }
     container.appendChild(fragment)
-    try {
-      refreshNowPlayingTrackHighlight()
-    } catch (_) {}
     if (i < liked.length) setTimeout(renderChunk, 0)
   }
   renderChunk()
 }
 
-// в”Ђв”Ђв”Ђ PLAYLISTS в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// РІвЂќР‚РІвЂќР‚РІвЂќР‚ PLAYLISTS РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
 function getPlaylists() { return JSON.parse(localStorage.getItem('flow_playlists')) || [] }
 function savePlaylists(pls) { localStorage.setItem('flow_playlists', JSON.stringify(pls)) }
 function normalizePlaylist(pl) {
@@ -10478,7 +9993,7 @@ function createPlaylist(nameFromUi = '') {
 window.createPlaylist = createPlaylist
 
 function deletePlaylist(idx) {
-  if (!confirm('РЈРґР°Р»РёС‚СЊ РїР»РµР№Р»РёСЃС‚?')) return
+  if (!confirm('Р Р€Р Т‘Р В°Р В»Р С‘РЎвЂљРЎРЉ Р С—Р В»Р ВµР в„–Р В»Р С‘РЎРѓРЎвЂљ?')) return
   const pls = getPlaylists(); pls.splice(idx,1); savePlaylists(pls); renderPlaylists()
 }
 
@@ -10508,12 +10023,12 @@ function removeOpenPlaylistDuplicates() {
     if (key) seen.add(key)
     nextTracks.push(track)
   })
-  if (!removed) return showToast('Дублей в плейлисте нет')
+  if (!removed) return showToast('Р”СѓР±Р»РµР№ РІ РїР»РµР№Р»РёСЃС‚Рµ РЅРµС‚')
   pls[idx].tracks = nextTracks
   savePlaylists(pls)
   openPlaylist(idx)
   renderPlaylists()
-  showToast(`Удалено дублей: ${removed}`)
+  showToast(`РЈРґР°Р»РµРЅРѕ РґСѓР±Р»РµР№: ${removed}`)
 }
 
 function openPlaylist(idx) {
@@ -10524,7 +10039,7 @@ function openPlaylist(idx) {
   const playlistCover = sanitizeMediaByGifMode(pl.coverData || '', 'playlist')
   document.getElementById('playlist-view-name').textContent = pl.name
   const metaEl = document.getElementById('playlist-view-meta')
-  if (metaEl) metaEl.textContent = pl.description || `${pl.tracks.length} треков`
+  if (metaEl) metaEl.textContent = pl.description || `${pl.tracks.length} С‚СЂРµРєРѕРІ`
   const coverEl = document.getElementById('playlist-view-cover')
   if (coverEl) {
     coverEl.style.backgroundImage = playlistCover ? `url(${playlistCover})` : ''
@@ -10539,7 +10054,7 @@ function openPlaylist(idx) {
     requestAnimationFrame(() => viewEl.classList.add('is-opening'))
   }
   const container = document.getElementById('playlist-tracks')
-  if (!pl.tracks.length) { container.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div><p>Плейлист пуст</p></div>`; return }
+  if (!pl.tracks.length) { container.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div><p>РџР»РµР№Р»РёСЃС‚ РїСѓСЃС‚</p></div>`; return }
   container.innerHTML=''
   const token = ++_openPlaylistTrackRenderToken
   let cursor = 0
@@ -10569,8 +10084,8 @@ function openPlaylist(idx) {
       })
       const handle = document.createElement('button')
       handle.className = 'playlist-track-handle'
-      handle.title = 'Перетащить'
-      handle.innerHTML = '<span>⋮⋮</span>'
+      handle.title = 'РџРµСЂРµС‚Р°С‰РёС‚СЊ'
+      handle.innerHTML = '<span>в‹®в‹®</span>'
       handle.addEventListener('dragstart', (e) => {
         _playlistDragIndex = trackIndex
         row.classList.add('dragging')
@@ -10587,8 +10102,8 @@ function openPlaylist(idx) {
       const actions = document.createElement('div')
       actions.className = 'playlist-track-actions'
       actions.innerHTML = `
-        <button class="playlist-track-action" title="Редактировать трек">✎</button>
-        <button class="playlist-track-action danger" title="Удалить из плейлиста">✕</button>
+        <button class="playlist-track-action" title="Р РµРґР°РєС‚РёСЂРѕРІР°С‚СЊ С‚СЂРµРє">вњЋ</button>
+        <button class="playlist-track-action danger" title="РЈРґР°Р»РёС‚СЊ РёР· РїР»РµР№Р»РёСЃС‚Р°">вњ•</button>
       `
       actions.children[0].addEventListener('click', (event) => {
         event.preventDefault()
@@ -10606,9 +10121,6 @@ function openPlaylist(idx) {
       fragment.appendChild(row)
     }
     container.appendChild(fragment)
-    try {
-      refreshNowPlayingTrackHighlight()
-    } catch (_) {}
     if (cursor < pl.tracks.length) setTimeout(renderChunk, 0)
   }
   requestAnimationFrame(renderChunk)
@@ -10668,50 +10180,12 @@ async function closeImportProgressSafe(minVisibleMs = 900) {
   closeImportProgress()
 }
 
-function getImportPreferredSource(imported = {}) {
-  const service = String(imported?.service || '').trim().toLowerCase()
-  if (service === 'yandex') return 'yandex'
-  if (service === 'vk') return 'vk'
-  return ''
-}
-
-function isTrackPlayableCandidate(track = {}) {
-  const src = String(track?.source || '').trim().toLowerCase()
-  const url = String(track?.url || '').trim()
-  if (src === 'youtube') return Boolean(track?.ytId || /youtube\.com|youtu\.be/i.test(url))
-  if (src === 'yandex') return Boolean(track?.id || url)
-  if (src === 'soundcloud') return Boolean(url || track?.scTranscoding)
-  if (src === 'hitmo' || src === 'vk' || src === 'audius') return Boolean(url)
-  if (src === 'spotify') return Boolean(url)
-  if (src === 'local') return Boolean(track?.filePath || url)
-  return Boolean(url || track?.id || track?.ytId)
-}
-
-async function searchImportTrackWithSource(q, settings, preferredSource = '') {
-  const src = String(preferredSource || '').trim().toLowerCase()
-  if (src === 'yandex') {
-    const token = String(settings?.yandexToken || '').trim()
-    if (!token || !window.api?.yandexSearch) return []
-    const ymList = await withTimeout(window.api.yandexSearch(q, token), 22000, 'yandex search timeout').catch(() => [])
-    return sanitizeTrackList(Array.isArray(ymList) ? ymList : [])
-  }
-  if (src === 'vk') {
-    const token = String(settings?.vkToken || '').trim()
-    if (!token || !window.api?.vkSearch) return []
-    const vkList = await withTimeout(searchVK(q, token), 60000, 'vk search timeout').catch(() => [])
-    return sanitizeTrackList(Array.isArray(vkList) ? vkList : [])
-  }
-  const hybrid = await searchHybridTracks(q, settings).catch(() => ({ tracks: [] }))
-  return sanitizeTrackList(hybrid?.tracks || [])
-}
-
 async function processPlaylistImport(trackList, imported = {}) {
   const srcTracks = Array.isArray(trackList) ? trackList : []
   const maxTracks = Math.min(srcTracks.length, 120)
   const collected = []
   const notFound = []
-  const skippedUnplayable = []
-  const preferredSource = getImportPreferredSource(imported)
+  const preferYandex = String(imported?.service || '').trim().toLowerCase() === 'yandex'
   openImportProgress(maxTracks)
   try {
     for (let i = 0; i < maxTracks; i++) {
@@ -10719,22 +10193,19 @@ async function processPlaylistImport(trackList, imported = {}) {
       const directOriginalId = String(it?.original_id || it?.originalId || '').trim()
       const queries = buildImportQueries(it.title, it.artist)
       const query = queries[0] || ''
-      updateImportProgress(i, maxTracks, `Ищу: ${it.artist || '—'} - ${it.title || '—'}${notFound.length ? ` | не найдено: ${notFound.slice(-3).join('; ')}` : ''}`)
-      if (preferredSource === 'yandex' && directOriginalId) {
-        const directYandex = {
-          title: it.title || 'Без названия',
-          artist: it.artist || '—',
+      updateImportProgress(i, maxTracks, `РС‰Сѓ: ${it.artist || 'вЂ”'} - ${it.title || 'вЂ”'}${notFound.length ? ` | РЅРµ РЅР°Р№РґРµРЅРѕ: ${notFound.slice(-3).join('; ')}` : ''}`)
+      if (preferYandex && directOriginalId) {
+        collected.push({
+          title: it.title || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ',
+          artist: it.artist || 'вЂ”',
           duration: Number(it?.duration || 0) || null,
           cover: it?.cover || null,
           source: 'yandex',
           id: directOriginalId,
-        }
-        if (isTrackPlayableCandidate(directYandex)) {
-          collected.push(directYandex)
-          updateImportProgress(i + 1, maxTracks, `Импорт: ${i + 1} из ${maxTracks}${notFound.length ? ` | не найдено: ${notFound.slice(-3).join('; ')}` : ''}`)
-          await importDelay(180)
-          continue
-        }
+        })
+        updateImportProgress(i + 1, maxTracks, `РРјРїРѕСЂС‚: ${i + 1} РёР· ${maxTracks}${notFound.length ? ` | РЅРµ РЅР°Р№РґРµРЅРѕ: ${notFound.slice(-3).join('; ')}` : ''}`)
+        await importDelay(180)
+        continue
       }
       if (!query) {
         notFound.push(`Track ${i + 1}`)
@@ -10744,8 +10215,9 @@ async function processPlaylistImport(trackList, imported = {}) {
         let first = null
         const settings = getSettings()
         for (const q of queries) {
-          // 1) Prefer source-specific import search (e.g. Yandex -> Yandex).
-          const found = await searchImportTrackWithSource(q, settings, preferredSource)
+          // 1) Same chain as regular search bar.
+          const hybrid = await searchHybridTracks(q, settings).catch(() => ({ tracks: [] }))
+          const found = sanitizeTrackList(hybrid?.tracks || [])
           if (Array.isArray(found) && found.length) {
             first = found[0]
             break
@@ -10765,59 +10237,40 @@ async function processPlaylistImport(trackList, imported = {}) {
             title: it.title || first.title,
             artist: it.artist || first.artist
           })
-          if (preferredSource === 'yandex' && directOriginalId && String(picked.source || '').toLowerCase() === 'yandex') {
+          if (preferYandex && directOriginalId && String(picked.source || '').toLowerCase() === 'yandex') {
             picked.id = directOriginalId
-            if (!picked.duration && it?.duration) picked.duration = Number(it.duration) || null
-            if (!picked.cover && it?.cover) picked.cover = it.cover
-          }
-          if (!isTrackPlayableCandidate(picked)) {
-            skippedUnplayable.push(`${picked.artist || '—'} - ${picked.title || '—'}`)
-            continue
           }
           collected.push(picked)
         } else {
-          const row = `${it.artist || '—'} - ${it.title || '—'}`
+          const row = `${it.artist || 'вЂ”'} - ${it.title || 'вЂ”'}`
           notFound.push(row)
-          console.warn('Не удалось найти:', row)
+          console.warn('РќРµ СѓРґР°Р»РѕСЃСЊ РЅР°Р№С‚Рё:', row)
         }
       } catch (trackErr) {
-        const row = `${it.artist || '—'} - ${it.title || '—'}`
+        const row = `${it.artist || 'вЂ”'} - ${it.title || 'вЂ”'}`
         notFound.push(row)
-        console.warn('Ошибка поиска, пропуск:', row, trackErr?.message || trackErr)
+        console.warn('РћС€РёР±РєР° РїРѕРёСЃРєР°, РїСЂРѕРїСѓСЃРє:', row, trackErr?.message || trackErr)
       }
-      updateImportProgress(i + 1, maxTracks, `Импорт: ${i + 1} из ${maxTracks}${notFound.length ? ` | не найдено: ${notFound.slice(-3).join('; ')}` : ''}`)
+      updateImportProgress(i + 1, maxTracks, `РРјРїРѕСЂС‚: ${i + 1} РёР· ${maxTracks}${notFound.length ? ` | РЅРµ РЅР°Р№РґРµРЅРѕ: ${notFound.slice(-3).join('; ')}` : ''}`)
       await importDelay(300 + Math.floor(Math.random() * 201))
     }
     const pls = getPlaylists()
     const name = `${imported.name || 'Imported Playlist'} [${imported.service || 'import'}]`
-    const normalizedName = String(name).trim().toLowerCase()
-    const existingIdx = pls.findIndex((p) => String(p?.name || '').trim().toLowerCase() === normalizedName)
     const importedCover = String(imported?.cover || '').trim()
     const fallbackCover = String(collected.find((t) => t?.cover)?.cover || '').trim()
-    const nextPlaylist = normalizePlaylist({
-      name,
-      coverData: importedCover || fallbackCover || null,
-      tracks: collected,
-    })
-    if (existingIdx >= 0) pls[existingIdx] = nextPlaylist
-    else pls.push(nextPlaylist)
+    pls.push(normalizePlaylist({ name, coverData: importedCover || fallbackCover || null, tracks: collected }))
     savePlaylists(pls)
     renderPlaylists()
     openPage('library')
-    if (notFound.length || skippedUnplayable.length) {
-      const reportRows = [...notFound.slice(0, 8), ...skippedUnplayable.slice(0, 4)]
-      const report = reportRows.join('; ')
-      updateImportProgress(
-        maxTracks,
-        maxTracks,
-        `Готово. Не найдено ${notFound.length}, отброшено неиграбельных ${skippedUnplayable.length}: ${report}${(notFound.length + skippedUnplayable.length) > 12 ? '...' : ''}`
-      )
+    if (notFound.length) {
+      const report = notFound.slice(0, 12).join('; ')
+      updateImportProgress(maxTracks, maxTracks, `Р“РѕС‚РѕРІРѕ. РќРµ РЅР°Р№РґРµРЅРѕ ${notFound.length}: ${report}${notFound.length > 12 ? '...' : ''}`)
       await importDelay(1600)
     }
   } finally {
     closeImportProgress()
   }
-  return { added: collected.length, missed: notFound.length, skipped: skippedUnplayable.length, total: maxTracks }
+  return { added: collected.length, missed: notFound.length, total: maxTracks }
 }
 
 function collectImportTracksDeep(value, out = [], limit = 500) {
@@ -10880,7 +10333,7 @@ function parseTrackRowsFromText(text) {
       .trim()
     if (!value) continue
     value = value.replace(/^["'`]+|["'`]+$/g, '').trim()
-    const parts = value.split(/\s+(?:-|–|—|\||•)\s+/)
+    const parts = value.split(/\s+(?:-|вЂ“|вЂ”|\||вЂў)\s+/)
     let artist = ''
     let title = ''
     if (parts.length >= 2) {
@@ -10911,7 +10364,7 @@ function openTextPlaylistImportModal() {
   const modal = document.getElementById('text-import-modal')
   const input = document.getElementById('text-import-input')
   const name = document.getElementById('text-import-name')
-  if (!modal || !input) return showToast('Окно импорта текстом не найдено', true)
+  if (!modal || !input) return showToast('РћРєРЅРѕ РёРјРїРѕСЂС‚Р° С‚РµРєСЃС‚РѕРј РЅРµ РЅР°Р№РґРµРЅРѕ', true)
   input.value = ''
   if (name) name.value = ''
   modal.classList.remove('hidden')
@@ -10927,15 +10380,15 @@ window.closeTextPlaylistImportModal = closeTextPlaylistImportModal
 async function importPlaylistFromText(text, name = '') {
   const tracks = parseTrackRowsFromText(text)
   if (!tracks.length) {
-    showToast('Не нашёл строк с artist/title', true)
+    showToast('РќРµ РЅР°С€С‘Р» СЃС‚СЂРѕРє СЃ artist/title', true)
     return
   }
-  showToast(`Нашёл строк: ${tracks.length}. Запускаю поиск Flow...`)
+  showToast(`РќР°С€С‘Р» СЃС‚СЂРѕРє: ${tracks.length}. Р—Р°РїСѓСЃРєР°СЋ РїРѕРёСЃРє Flow...`)
   const stats = await processPlaylistImport(tracks, {
     name: name || 'VK Artist Title',
     service: 'text',
   })
-  showToast(`Импорт текстом завершен. Добавлено ${stats.added}, не найдено ${stats.missed}`)
+  showToast(`РРјРїРѕСЂС‚ С‚РµРєСЃС‚РѕРј Р·Р°РІРµСЂС€РµРЅ. Р”РѕР±Р°РІР»РµРЅРѕ ${stats.added}, РЅРµ РЅР°Р№РґРµРЅРѕ ${stats.missed}`)
 }
 window.importPlaylistFromText = importPlaylistFromText
 
@@ -10943,37 +10396,37 @@ async function submitTextPlaylistImportModal() {
   const input = document.getElementById('text-import-input')
   const name = document.getElementById('text-import-name')
   const text = String(input?.value || '').trim()
-  if (!text) return showToast('Вставь список треков', true)
+  if (!text) return showToast('Р’СЃС‚Р°РІСЊ СЃРїРёСЃРѕРє С‚СЂРµРєРѕРІ', true)
   closeTextPlaylistImportModal()
   await importPlaylistFromText(text, String(name?.value || '').trim()).catch((err) => {
-    showToast(`Импорт текстом: ${sanitizeDisplayText(err?.message || String(err))}`, true)
+    showToast(`РРјРїРѕСЂС‚ С‚РµРєСЃС‚РѕРј: ${sanitizeDisplayText(err?.message || String(err))}`, true)
   })
 }
 window.submitTextPlaylistImportModal = submitTextPlaylistImportModal
 
 async function importPlaylistFromLink(urlFromUi = '') {
-  showToast('Открываю импорт плейлиста...')
+  showToast('РћС‚РєСЂС‹РІР°СЋ РёРјРїРѕСЂС‚ РїР»РµР№Р»РёСЃС‚Р°...')
   const url = String(urlFromUi || '').trim()
   if (!url) return openLibraryActionModal('import')
   if (!window.api?.importPlaylistLink) {
-    showToast('Импорт доступен только в Electron', true)
+    showToast('РРјРїРѕСЂС‚ РґРѕСЃС‚СѓРїРµРЅ С‚РѕР»СЊРєРѕ РІ Electron', true)
     return
   }
   const settings = getSettings()
   const isYandexLink = /(^|\/\/)(music\.)?yandex\.[^/]+\/users\/[^/]+\/playlists\/[^/?#]+/i.test(url)
   if (isYandexLink && !settings.yandexToken) {
-    showToast('Для импорта Яндекс Музыки нужен активный OAuth token', true)
+    showToast('Р”Р»СЏ РёРјРїРѕСЂС‚Р° РЇРЅРґРµРєСЃ РњСѓР·С‹РєРё РЅСѓР¶РµРЅ Р°РєС‚РёРІРЅС‹Р№ OAuth token', true)
     openPage('settings')
     switchSettingsTab('sources')
     setTimeout(() => document.getElementById('ym-token-val')?.focus(), 120)
     return
   }
-  showToast('Импортирую плейлист...')
+  showToast('РРјРїРѕСЂС‚РёСЂСѓСЋ РїР»РµР№Р»РёСЃС‚...')
   openImportProgress(0)
   _importProgressOpenedAt = Date.now()
   setImportProgressIndeterminate(true)
   const isVkLink = /(^|\/\/)(m\.)?vk\.com\//i.test(url)
-  updateImportProgress(0, 0, isVkLink ? 'Отправляю VK плейлист на РФ сервер и получаю список треков...' : (isYandexLink ? 'Читаю плейлист Яндекс Музыки по OAuth token...' : 'Разбираю ссылку и получаю список треков...'))
+  updateImportProgress(0, 0, isVkLink ? 'РћС‚РїСЂР°РІР»СЏСЋ VK РїР»РµР№Р»РёСЃС‚ РЅР° Р Р¤ СЃРµСЂРІРµСЂ Рё РїРѕР»СѓС‡Р°СЋ СЃРїРёСЃРѕРє С‚СЂРµРєРѕРІ...' : (isYandexLink ? 'Р§РёС‚Р°СЋ РїР»РµР№Р»РёСЃС‚ РЇРЅРґРµРєСЃ РњСѓР·С‹РєРё РїРѕ OAuth token...' : 'Р Р°Р·Р±РёСЂР°СЋ СЃСЃС‹Р»РєСѓ Рё РїРѕР»СѓС‡Р°СЋ СЃРїРёСЃРѕРє С‚СЂРµРєРѕРІ...'))
   const imported = await window.api.importPlaylistLink(url.trim(), {
     spotify: settings.spotifyToken || '',
     yandex: settings.yandexToken || '',
@@ -10984,12 +10437,12 @@ async function importPlaylistFromLink(urlFromUi = '') {
   setImportProgressIndeterminate(false)
 
   if (!imported?.ok) {
-    const errorText = sanitizeDisplayText(imported?.error || 'ошибка')
+    const errorText = sanitizeDisplayText(imported?.error || 'РѕС€РёР±РєР°')
     const needsVkAuth = isVkLink && /auth_required|access_token|user authorization|authorization/i.test(errorText)
     if (needsVkAuth) {
-      updateImportProgress(0, 0, 'VK не отдал плейлист без авторизации. Открой Настройки -> Источники -> VK и войди в VK для импорта.')
+      updateImportProgress(0, 0, 'VK РЅРµ РѕС‚РґР°Р» РїР»РµР№Р»РёСЃС‚ Р±РµР· Р°РІС‚РѕСЂРёР·Р°С†РёРё. РћС‚РєСЂРѕР№ РќР°СЃС‚СЂРѕР№РєРё -> РСЃС‚РѕС‡РЅРёРєРё -> VK Рё РІРѕР№РґРё РІ VK РґР»СЏ РёРјРїРѕСЂС‚Р°.')
       await closeImportProgressSafe(1800)
-      showToast('Для этого VK плейлиста нужен вход в VK / токен', true)
+      showToast('Р”Р»СЏ СЌС‚РѕРіРѕ VK РїР»РµР№Р»РёСЃС‚Р° РЅСѓР¶РµРЅ РІС…РѕРґ РІ VK / С‚РѕРєРµРЅ', true)
       openPage('settings')
       switchSettingsTab('sources')
       setTimeout(() => {
@@ -10999,49 +10452,49 @@ async function importPlaylistFromLink(urlFromUi = '') {
       return
     }
     if (isYandexLink && /yandex token required|oauth|token/i.test(errorText)) {
-      updateImportProgress(0, 0, 'Яндекс Музыка требует активный OAuth token. Открой Источники и сохрани токен.')
+      updateImportProgress(0, 0, 'РЇРЅРґРµРєСЃ РњСѓР·С‹РєР° С‚СЂРµР±СѓРµС‚ Р°РєС‚РёРІРЅС‹Р№ OAuth token. РћС‚РєСЂРѕР№ РСЃС‚РѕС‡РЅРёРєРё Рё СЃРѕС…СЂР°РЅРё С‚РѕРєРµРЅ.')
       await closeImportProgressSafe(1800)
-      showToast('Для Яндекс Музыки нужен OAuth token', true)
+      showToast('Р”Р»СЏ РЇРЅРґРµРєСЃ РњСѓР·С‹РєРё РЅСѓР¶РµРЅ OAuth token', true)
       openPage('settings')
       switchSettingsTab('sources')
       setTimeout(() => document.getElementById('ym-token-val')?.focus(), 120)
       return
     }
-    updateImportProgress(0, 0, `Ошибка: ${errorText}`)
+    updateImportProgress(0, 0, `РћС€РёР±РєР°: ${errorText}`)
     await closeImportProgressSafe(1200)
-    showToast('Импорт: ' + errorText, true)
+    showToast('РРјРїРѕСЂС‚: ' + errorText, true)
     return
   }
 
   const srcTracks = Array.isArray(imported.tracks) ? imported.tracks : []
   if (!srcTracks.length) {
-    updateImportProgress(0, 0, 'В плейлисте не найдено треков')
+    updateImportProgress(0, 0, 'Р’ РїР»РµР№Р»РёСЃС‚Рµ РЅРµ РЅР°Р№РґРµРЅРѕ С‚СЂРµРєРѕРІ')
     await closeImportProgressSafe(1200)
-    showToast('В плейлисте не найдено треков', true)
+    showToast('Р’ РїР»РµР№Р»РёСЃС‚Рµ РЅРµ РЅР°Р№РґРµРЅРѕ С‚СЂРµРєРѕРІ', true)
     return
   }
 
   try {
-    if (imported?.via === 'flow-vk-server') showToast(`VK сервер вернул треков: ${srcTracks.length}`)
+    if (imported?.via === 'flow-vk-server') showToast(`VK СЃРµСЂРІРµСЂ РІРµСЂРЅСѓР» С‚СЂРµРєРѕРІ: ${srcTracks.length}`)
     const stats = await processPlaylistImport(srcTracks, imported)
-    showToast(`Импорт завершен. Добавлено ${stats.added} треков, ${stats.missed} не найдено, ${stats.skipped || 0} отброшено`)
+    showToast(`РРјРїРѕСЂС‚ Р·Р°РІРµСЂС€РµРЅ. Р”РѕР±Р°РІР»РµРЅРѕ ${stats.added} С‚СЂРµРєРѕРІ, ${stats.missed} РЅРµ РЅР°Р№РґРµРЅРѕ`)
   } catch (err) {
-    updateImportProgress(0, 0, `Ошибка: ${sanitizeDisplayText(err?.message || String(err))}`)
+    updateImportProgress(0, 0, `РћС€РёР±РєР°: ${sanitizeDisplayText(err?.message || String(err))}`)
     await closeImportProgressSafe(1200)
-    showToast(`Импорт сорвался: ${sanitizeDisplayText(err?.message || String(err))}`, true)
+    showToast(`РРјРїРѕСЂС‚ СЃРѕСЂРІР°Р»СЃСЏ: ${sanitizeDisplayText(err?.message || String(err))}`, true)
   }
 }
 window.importPlaylistFromLink = importPlaylistFromLink
 
 async function importPlaylistLinkFromBar() {
   const input = document.getElementById('playlist-link-import-input')
-  if (!input) return showToast('Поле ссылки не найдено', true)
+  if (!input) return showToast('РџРѕР»Рµ СЃСЃС‹Р»РєРё РЅРµ РЅР°Р№РґРµРЅРѕ', true)
   const url = String(input?.value || '').trim()
-  if (!url) return showToast('Вставь ссылку на плейлист VK или Яндекс Музыки', true)
+  if (!url) return showToast('Р’СЃС‚Р°РІСЊ СЃСЃС‹Р»РєСѓ РЅР° РїР»РµР№Р»РёСЃС‚ VK РёР»Рё РЇРЅРґРµРєСЃ РњСѓР·С‹РєРё', true)
   try {
     await importPlaylistFromLink(url)
   } catch (err) {
-    showToast(`Импорт: ${sanitizeDisplayText(err?.message || String(err))}`, true)
+    showToast(`РРјРїРѕСЂС‚: ${sanitizeDisplayText(err?.message || String(err))}`, true)
   }
 }
 window.importPlaylistLinkFromBar = importPlaylistLinkFromBar
@@ -11051,7 +10504,7 @@ function addToPlaylist(track) {
   const pls = getPlaylists().map(normalizePlaylist)
   openPlaylistPickerModal({
     mode: 'add-track-playlist',
-    title: 'Добавить трек в плейлист',
+    title: 'Р”РѕР±Р°РІРёС‚СЊ С‚СЂРµРє РІ РїР»РµР№Р»РёСЃС‚',
     items: pls.map((p, idx) => ({ id: String(idx), label: `${p.name} (${p.tracks.length})` })),
     payload: { track }
   })
@@ -11063,7 +10516,7 @@ function renderPlaylists() {
   const token = ++_playlistRenderToken
   const pls = getPlaylists().map(normalizePlaylist)
   const container = document.getElementById('playlists-list'); if (!container) return
-  if (!pls.length) { container.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg></div><p>Нет плейлистов — создай первый!</p></div>`; return }
+  if (!pls.length) { container.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg></div><p>РќРµС‚ РїР»РµР№Р»РёСЃС‚РѕРІ вЂ” СЃРѕР·РґР°Р№ РїРµСЂРІС‹Р№!</p></div>`; return }
   container.innerHTML=''
   let idx = 0
   const chunkSize = 12
@@ -11077,13 +10530,13 @@ function renderPlaylists() {
       const playlistCover = sanitizeMediaByGifMode(pl.coverData || '', 'playlist')
       const coverStyle = ''
       el.innerHTML=`
-        <div class="playlist-icon" style="${coverStyle}" title="Плейлист">${playlistCover ? '' : '<svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'}</div>
+        <div class="playlist-icon" style="${coverStyle}" title="РџР»РµР№Р»РёСЃС‚">${playlistCover ? '' : '<svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'}</div>
         <div class="playlist-info" onclick="openPlaylist(${currentIdx})" style="cursor:pointer">
           <span class="playlist-name">${pl.name}</span>
-          <span class="playlist-count">${pl.tracks.length} треков${pl.description ? ` • ${pl.description}` : ''}</span>
+          <span class="playlist-count">${pl.tracks.length} С‚СЂРµРєРѕРІ${pl.description ? ` вЂў ${pl.description}` : ''}</span>
         </div>
         <div class="playlist-card-actions">
-          <button class="playlist-del" onclick="event.stopPropagation();editPlaylistMeta(${currentIdx})" title="Редактировать">✎</button>
+          <button class="playlist-del" onclick="event.stopPropagation();editPlaylistMeta(${currentIdx})" title="Р РµРґР°РєС‚РёСЂРѕРІР°С‚СЊ">вњЋ</button>
           <button class="playlist-del" onclick="event.stopPropagation();deletePlaylist(${currentIdx})">${ICONS.close}</button>
         </div>`
       if (playlistCover) {
@@ -11102,7 +10555,7 @@ function renderPlaylists() {
 function playOpenPlaylist() {
   if (openPlaylistIndex == null) return
   const pl = normalizePlaylist(getPlaylists()[openPlaylistIndex])
-  if (!pl?.tracks?.length) return showToast('Плейлист пуст', true)
+  if (!pl?.tracks?.length) return showToast('РџР»РµР№Р»РёСЃС‚ РїСѓСЃС‚', true)
   queue = pl.tracks.slice()
   queueIndex = 0
   queueScope = 'playlist'
@@ -11112,7 +10565,7 @@ function playOpenPlaylist() {
 function shuffleOpenPlaylist() {
   if (openPlaylistIndex == null) return
   const pl = normalizePlaylist(getPlaylists()[openPlaylistIndex])
-  if (!pl?.tracks?.length) return showToast('Плейлист пуст', true)
+  if (!pl?.tracks?.length) return showToast('РџР»РµР№Р»РёСЃС‚ РїСѓСЃС‚', true)
   const shuffled = pl.tracks.slice().sort(() => Math.random() - 0.5)
   queue = shuffled
   queueIndex = 0
@@ -11125,7 +10578,7 @@ function editOpenPlaylist() {
   editPlaylistMeta(openPlaylistIndex)
   // Keep cover change inside the same edit flow.
   setTimeout(() => {
-    const shouldPickCover = confirm('Сменить обложку плейлиста сейчас?')
+    const shouldPickCover = confirm('РЎРјРµРЅРёС‚СЊ РѕР±Р»РѕР¶РєСѓ РїР»РµР№Р»РёСЃС‚Р° СЃРµР№С‡Р°СЃ?')
     if (shouldPickCover) pickPlaylistCover(openPlaylistIndex)
   }, 40)
 }
@@ -11146,9 +10599,9 @@ function exportPlaylistsFile() {
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(link.href)
-    showToast('Плейлисты экспортированы')
+    showToast('РџР»РµР№Р»РёСЃС‚С‹ СЌРєСЃРїРѕСЂС‚РёСЂРѕРІР°РЅС‹')
   } catch (err) {
-    showToast(`Ошибка экспорта: ${err?.message || err}`, true)
+    showToast(`РћС€РёР±РєР° СЌРєСЃРїРѕСЂС‚Р°: ${err?.message || err}`, true)
   }
 }
 
@@ -11166,15 +10619,15 @@ function importPlaylistsFile(input) {
     try {
       const payload = JSON.parse(String(reader.result || '{}'))
       const raw = Array.isArray(payload) ? payload : payload?.playlists
-      if (!Array.isArray(raw)) throw new Error('Неверный формат файла')
+      if (!Array.isArray(raw)) throw new Error('РќРµРІРµСЂРЅС‹Р№ С„РѕСЂРјР°С‚ С„Р°Р№Р»Р°')
       const imported = raw.map(normalizePlaylist).filter((pl) => pl?.name)
-      if (!imported.length) throw new Error('В файле нет плейлистов')
+      if (!imported.length) throw new Error('Р’ С„Р°Р№Р»Рµ РЅРµС‚ РїР»РµР№Р»РёСЃС‚РѕРІ')
       const current = getPlaylists().map(normalizePlaylist)
       savePlaylists([...current, ...imported])
       renderPlaylists()
-      showToast(`Импортировано плейлистов: ${imported.length}`)
+      showToast(`РРјРїРѕСЂС‚РёСЂРѕРІР°РЅРѕ РїР»РµР№Р»РёСЃС‚РѕРІ: ${imported.length}`)
     } catch (err) {
-      showToast(`Ошибка импорта: ${err?.message || err}`, true)
+      showToast(`РћС€РёР±РєР° РёРјРїРѕСЂС‚Р°: ${err?.message || err}`, true)
     } finally {
       input.value = ''
     }
@@ -11215,15 +10668,15 @@ function reorderPlaylistTrack(playlistIndex, fromIndex, toIndex) {
 }
 
 async function setPlaylistCoverFromFile(idx, file) {
-  if (!file || !file.type.startsWith('image/')) return showToast('Нужен файл изображения', true)
+  if (!file || !file.type.startsWith('image/')) return showToast('РќСѓР¶РµРЅ С„Р°Р№Р» РёР·РѕР±СЂР°Р¶РµРЅРёСЏ', true)
   const dataUrl = await readFileAsDataUrl(file).catch(() => '')
-  if (!dataUrl) return showToast('Не удалось прочитать изображение', true)
+  if (!dataUrl) return showToast('РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРѕС‡РёС‚Р°С‚СЊ РёР·РѕР±СЂР°Р¶РµРЅРёРµ', true)
   const pls = getPlaylists().map(normalizePlaylist)
   if (!pls[idx]) return
   pls[idx].coverData = dataUrl
   savePlaylists(pls)
   renderPlaylists()
-  showToast('Обложка плейлиста обновлена')
+  showToast('РћР±Р»РѕР¶РєР° РїР»РµР№Р»РёСЃС‚Р° РѕР±РЅРѕРІР»РµРЅР°')
 }
 
 function pickPlaylistCover(idx) {
@@ -11248,35 +10701,30 @@ function editPlaylistMeta(idx) {
   })
 }
 
-// в”Ђв”Ђв”Ђ TRACK CARD в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-const SRC_LABELS = { soundcloud: 'SC', vk: 'VK', hitmo: 'HM', youtube: 'YT', spotify: 'SP', yandex: 'Ya' }
+// РІвЂќР‚РІвЂќР‚РІвЂќР‚ TRACK CARD РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
+const SRC_LABELS = { soundcloud:'SC', vk:'VK', hitmo:'HM', youtube:'YT', spotify:'SP' }
 
 function makeTrackEl(track, showPlaylist=false, bindDefaultPlay=true) {
   track = sanitizeTrack(track)
   const el = document.createElement('div'); el.className='track-card'
-  try {
-    el.setAttribute('data-flow-track-key', getTrackKey(track))
-    el.setAttribute('data-flow-track-json', encodeURIComponent(JSON.stringify(track)))
-  } catch (_) {}
   const liked = isLiked(track)
   const trackJson = JSON.stringify(track).replace(/"/g,'&quot;')
   const trackCover = getListCoverUrl(track)
   const fallbackBg = track.bg||'linear-gradient(135deg,#7c3aed,#a855f7)'
   const coverStyle = `background:${fallbackBg};`
-  const badgeKey = trackSourceBadgeKey(track.source)
-  const srcLbl = SRC_LABELS[badgeKey] || ''
-  const badge = srcLbl ? `<span class="track-source track-source-${badgeKey}">${srcLbl}</span>` : ''
+  const srcLbl = SRC_LABELS[track.source]||''
+  const badge = srcLbl ? `<span class="track-source track-source-${track.source}">${srcLbl}</span>` : ''
   el.innerHTML=`
     <div class="track-cover" style="${coverStyle}">${trackCover?'':'<svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'}
       <div class="cover-overlay"><div class="cover-play-icon"><svg class="ctrl-play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M9 8 L17 12 L9 16 Z"/></svg></div></div>
     </div>
     <div class="track-info">
       <span class="track-name">${track.title}</span>
-      <span class="track-artist">${track.artist||'вЂ”'} ${badge}</span>
+      <span class="track-artist">${track.artist||'РІР‚вЂќ'} ${badge}</span>
     </div>
     <button class="track-like ${liked?'liked':''}" data-track-json="${trackJson}" onclick="event.stopPropagation();likeTrack(${trackJson})">${liked ? HEART_FILLED : HEART_OUTLINE}</button>
-    <button class="track-like" onclick="event.stopPropagation();findSimilarTracks(${trackJson})" title="Найти похожие">${ICON_SIMILAR}</button>
-    ${showPlaylist?`<button class="track-like" onclick="event.stopPropagation();addToPlaylist(${trackJson})" title="Р’ РїР»РµР№Р»РёСЃС‚">${ICONS.plus}</button>`:''}
+    <button class="track-like" onclick="event.stopPropagation();findSimilarTracks(${trackJson})" title="РќР°Р№С‚Рё РїРѕС…РѕР¶РёРµ">${ICON_SIMILAR}</button>
+    ${showPlaylist?`<button class="track-like" onclick="event.stopPropagation();addToPlaylist(${trackJson})" title="Р вЂ™ Р С—Р В»Р ВµР в„–Р В»Р С‘РЎРѓРЎвЂљ">${ICONS.plus}</button>`:''}
     <button class="track-play"><svg class="ctrl-play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M9 8 L17 12 L9 16 Z"/></svg></button>`
   if (trackCover) {
     const coverEl = el.querySelector('.track-cover')
@@ -11296,23 +10744,23 @@ function makeTrackEl(track, showPlaylist=false, bindDefaultPlay=true) {
 function findSimilarTracks(track = null) {
   const t = sanitizeTrack(track || currentTrack || {})
   const query = [t.artist, t.title].filter(Boolean).join(' ').trim()
-  if (!query) return showToast('Сначала выбери трек', true)
+  if (!query) return showToast('РЎРЅР°С‡Р°Р»Р° РІС‹Р±РµСЂРё С‚СЂРµРє', true)
   openPage('search')
   const input = document.getElementById('search-input')
   if (input) input.value = query
-  showToast('Ищу похожие треки')
+  showToast('РС‰Сѓ РїРѕС…РѕР¶РёРµ С‚СЂРµРєРё')
   searchTracks()
 }
 
-// в”Ђв”Ђв”Ђ LYRICS в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-let _lyricsData = []       // [{time, text}] РґР»СЏ synced
+// РІвЂќР‚РІвЂќР‚РІвЂќР‚ LYRICS РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
+let _lyricsData = []       // [{time, text}] Р Т‘Р В»РЎРЏ synced
 let _lyricsActiveIdx = -1
 let _lyricsOpen = false
 let _lyricsSettingsOpen = false
 let _lyricsObserver = null
 let _lyricsLastPaintAt = 0
 
-/** Интервал согласования с частотой кадров (~60–165 Гц); караоке идёт на каждый RAF. */
+/** РРЅС‚РµСЂРІР°Р» СЃРѕРіР»Р°СЃРѕРІР°РЅРёСЏ СЃ С‡Р°СЃС‚РѕС‚РѕР№ РєР°РґСЂРѕРІ (~60вЂ“165 Р“С†); РєР°СЂР°РѕРєРµ РёРґС‘С‚ РЅР° РєР°Р¶РґС‹Р№ RAF. */
 let _lyricsFrameBudgetCachedMs = null
 function refreshLyricsFrameBudgetCache() {
   _lyricsFrameBudgetCachedMs = null
@@ -11333,7 +10781,7 @@ if (typeof window !== 'undefined') {
   window.addEventListener('resize', refreshLyricsFrameBudgetCache, { passive: true })
 }
 let _lyricsRafId = 0
-/** Сглаживание времени между «ступеньками» currentTime для караоке (lerp по performance.now). */
+/** РЎРіР»Р°Р¶РёРІР°РЅРёРµ РІСЂРµРјРµРЅРё РјРµР¶РґСѓ В«СЃС‚СѓРїРµРЅСЊРєР°РјРёВ» currentTime РґР»СЏ РєР°СЂР°РѕРєРµ (lerp РїРѕ performance.now). */
 const LYRICS_TIME_DRIFT_RESYNC_SEC = 0.1
 let _lyricsSmoothedTimeAnchor = { audio: 0, perfMs: 0 }
 
@@ -11385,7 +10833,7 @@ function startLyricsSyncLoop() {
   _lyricsRafId = requestAnimationFrame(tick)
 }
 
-/** Контейнер со строками текста — только видимая панель (иначе караоке каждый кадр правит два дерева DOM). */
+/** РљРѕРЅС‚РµР№РЅРµСЂ СЃРѕ СЃС‚СЂРѕРєР°РјРё С‚РµРєСЃС‚Р° вЂ” С‚РѕР»СЊРєРѕ РІРёРґРёРјР°СЏ РїР°РЅРµР»СЊ (РёРЅР°С‡Рµ РєР°СЂР°РѕРєРµ РєР°Р¶РґС‹Р№ РєР°РґСЂ РїСЂР°РІРёС‚ РґРІР° РґРµСЂРµРІР° DOM). */
 function getLyricsSyncRoot() {
   try {
     const pmShell = document.getElementById('pm-lyrics-shell')
@@ -11433,7 +10881,7 @@ function normalizeLyricsPlaybackMode(raw) {
   return 'standard'
 }
 
-/** Пресеты кнопок «A» для подсветки выбора в попапе. */
+/** РџСЂРµСЃРµС‚С‹ РєРЅРѕРїРѕРє В«AВ» РґР»СЏ РїРѕРґСЃРІРµС‚РєРё РІС‹Р±РѕСЂР° РІ РїРѕРїР°РїРµ. */
 const _LYRICS_SIZE_PRESETS = [16, 22, 28, 38]
 
 function getLyricsVisualSettings() {
@@ -11611,19 +11059,19 @@ async function loadLyrics(track) {
   _lyricsData = []
   _lyricsActiveIdx = -1
   _lyricsSmoothedTimeAnchor = { audio: 0, perfMs: 0 }
-  if (titleEl) titleEl.textContent = track.title || '—'
-  if (pmTitleEl) pmTitleEl.textContent = track.title || '—'
-  if (container) container.innerHTML = '<div class="lyrics-loading"><div class="spinner"></div><span>Загрузка текста...</span></div>'
-  if (pmContainer) pmContainer.innerHTML = '<div class="lyrics-loading"><div class="spinner"></div><span>Загрузка текста...</span></div>'
+  if (titleEl) titleEl.textContent = track.title || 'вЂ”'
+  if (pmTitleEl) pmTitleEl.textContent = track.title || 'вЂ”'
+  if (container) container.innerHTML = '<div class="lyrics-loading"><div class="spinner"></div><span>Р—Р°РіСЂСѓР·РєР° С‚РµРєСЃС‚Р°...</span></div>'
+  if (pmContainer) pmContainer.innerHTML = '<div class="lyrics-loading"><div class="spinner"></div><span>Р—Р°РіСЂСѓР·РєР° С‚РµРєСЃС‚Р°...</span></div>'
   if (!window.api?.getLyrics) {
-    if (container) container.innerHTML = '<div class="lyrics-empty">Текст доступен только в Electron</div>'
-    if (pmContainer) pmContainer.innerHTML = '<div class="lyrics-empty">Текст доступен только в Electron</div>'
+    if (container) container.innerHTML = '<div class="lyrics-empty">РўРµРєСЃС‚ РґРѕСЃС‚СѓРїРµРЅ С‚РѕР»СЊРєРѕ РІ Electron</div>'
+    if (pmContainer) pmContainer.innerHTML = '<div class="lyrics-empty">РўРµРєСЃС‚ РґРѕСЃС‚СѓРїРµРЅ С‚РѕР»СЊРєРѕ РІ Electron</div>'
     return
   }
   const res = await window.api.getLyrics(track.title, track.artist || '', audio.duration || 0)
   if (!res.ok) {
-    if (container) container.innerHTML = '<div class="lyrics-empty">Текст не найден</div>'
-    if (pmContainer) pmContainer.innerHTML = '<div class="lyrics-empty">Текст не найден</div>'
+    if (container) container.innerHTML = '<div class="lyrics-empty">РўРµРєСЃС‚ РЅРµ РЅР°Р№РґРµРЅ</div>'
+    if (pmContainer) pmContainer.innerHTML = '<div class="lyrics-empty">РўРµРєСЃС‚ РЅРµ РЅР°Р№РґРµРЅ</div>'
     return
   }
   if (res.synced) {
@@ -11647,7 +11095,7 @@ async function loadLyrics(track) {
           div.appendChild(span)
         })
         div.onclick = () => {
-          if (isRoomClientRestricted()) return showToast('Только хост управляет плеером', true)
+          if (isRoomClientRestricted()) return showToast('РўРѕР»СЊРєРѕ С…РѕСЃС‚ СѓРїСЂР°РІР»СЏРµС‚ РїР»РµРµСЂРѕРј', true)
           audio.currentTime = line.time
         }
         target.appendChild(div)
@@ -11666,8 +11114,8 @@ async function loadLyrics(track) {
     if (container) container.innerHTML = plain
     if (pmContainer) pmContainer.innerHTML = plain
   } else {
-    if (container) container.innerHTML = '<div class="lyrics-empty">Текст не найден</div>'
-    if (pmContainer) pmContainer.innerHTML = '<div class="lyrics-empty">Текст не найден</div>'
+    if (container) container.innerHTML = '<div class="lyrics-empty">РўРµРєСЃС‚ РЅРµ РЅР°Р№РґРµРЅ</div>'
+    if (pmContainer) pmContainer.innerHTML = '<div class="lyrics-empty">РўРµРєСЃС‚ РЅРµ РЅР°Р№РґРµРЅ</div>'
   }
 }
 
@@ -11706,7 +11154,7 @@ function syncLyrics(currentTime) {
   const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()
   const karaokeHighRate = cfg.playbackMode === 'karaoke' && idx >= 0
   const frameBudget = getLyricsFrameBudgetMs()
-  // При не-караоке не чаще одного экранного кадра (60/90/120/144 Гц), караоке — каждый RAF.
+  // РџСЂРё РЅРµ-РєР°СЂР°РѕРєРµ РЅРµ С‡Р°С‰Рµ РѕРґРЅРѕРіРѕ СЌРєСЂР°РЅРЅРѕРіРѕ РєР°РґСЂР° (60/90/120/144 Р“С†), РєР°СЂР°РѕРєРµ вЂ” РєР°Р¶РґС‹Р№ RAF.
   if (!idxChanged && now - _lyricsLastPaintAt < frameBudget && !karaokeHighRate) return
   _lyricsLastPaintAt = now
   if (idxChanged) {
@@ -11771,23 +11219,23 @@ function syncLyrics(currentTime) {
   }
 }
 
-// в”Ђв”Ђв”Ђ SC TEST в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// РІвЂќР‚РІвЂќР‚РІвЂќР‚ SC TEST РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
 async function testScAutoId() {
   const btn = document.getElementById('sc-test-btn'); const msg = document.getElementById('sc-msg')
   if (!btn||!msg) return
-  btn.textContent='вЏі РџСЂРѕРІРµСЂСЏСЋ...'; btn.disabled=true; msg.textContent=''; msg.className='token-msg'
+  btn.textContent='РІРЏС– Р СџРЎР‚Р С•Р Р†Р ВµРЎР‚РЎРЏРЎР‹...'; btn.disabled=true; msg.textContent=''; msg.className='token-msg'
   try {
-    if (!window.api?.scFetchClientId) { msg.textContent='РўРѕР»СЊРєРѕ РІ Electron'; msg.className='token-msg token-msg-err'; return }
+    if (!window.api?.scFetchClientId) { msg.textContent='Р СћР С•Р В»РЎРЉР С”Р С• Р Р† Electron'; msg.className='token-msg token-msg-err'; return }
     _scAutoClientId = null
     const r = await window.api.scFetchClientId()
     if (r.ok && r.clientId) {
       _scAutoClientId = r.clientId
-      msg.textContent=`вњ“ РџРѕРґРєР»СЋС‡РµРЅРѕ! ID: ${r.clientId.slice(0,8)}вЂўвЂўвЂўвЂў`; msg.className='token-msg token-msg-ok'
+      msg.textContent=`РІСљвЂњ Р СџР С•Р Т‘Р С”Р В»РЎР‹РЎвЂЎР ВµР Р…Р С•! ID: ${r.clientId.slice(0,8)}РІР‚СћРІР‚СћРІР‚СћРІР‚Сћ`; msg.className='token-msg token-msg-ok'
       const el = document.getElementById('sc-status'); if (el) el.className='token-status token-ok'
-      const tx = document.getElementById('sc-status-text'); if (tx) tx.textContent='РџРѕРґРєР»СЋС‡РµРЅРѕ'
-    } else { msg.textContent='вњ— '+(r.error||'РЅРµРёР·РІРµСЃС‚РЅРѕ'); msg.className='token-msg token-msg-err' }
-  } catch(e) { msg.textContent='вњ— '+e.message; msg.className='token-msg token-msg-err' }
-  btn.textContent='рџ”„ РџСЂРѕРІРµСЂРёС‚СЊ РїРѕРґРєР»СЋС‡РµРЅРёРµ Рє SoundCloud'; btn.disabled=false
+      const tx = document.getElementById('sc-status-text'); if (tx) tx.textContent='Р СџР С•Р Т‘Р С”Р В»РЎР‹РЎвЂЎР ВµР Р…Р С•'
+    } else { msg.textContent='РІСљвЂ” '+(r.error||'Р Р…Р ВµР С‘Р В·Р Р†Р ВµРЎРѓРЎвЂљР Р…Р С•'); msg.className='token-msg token-msg-err' }
+  } catch(e) { msg.textContent='РІСљвЂ” '+e.message; msg.className='token-msg token-msg-err' }
+  btn.textContent='СЂСџвЂќвЂћ Р СџРЎР‚Р С•Р Р†Р ВµРЎР‚Р С‘РЎвЂљРЎРЉ Р С—Р С•Р Т‘Р С”Р В»РЎР‹РЎвЂЎР ВµР Р…Р С‘Р Вµ Р С” SoundCloud'; btn.disabled=false
 }
 
 function setupAppDragAndDrop() {
@@ -11797,7 +11245,7 @@ function setupAppDragAndDrop() {
       const objectUrl = URL.createObjectURL(file)
       const meta = smartCleaning.splitArtistAndTitle
         ? smartCleaning.splitArtistAndTitle(file.name)
-        : { artist: 'Локальный файл', title: String(file.name || '').replace(/\.[a-z0-9]+$/i, '') }
+        : { artist: 'Р›РѕРєР°Р»СЊРЅС‹Р№ С„Р°Р№Р»', title: String(file.name || '').replace(/\.[a-z0-9]+$/i, '') }
       const localTrack = sanitizeTrack({
         title: meta.title,
         artist: meta.artist,
@@ -11806,30 +11254,29 @@ function setupAppDragAndDrop() {
         id: `local:${file.name}:${file.size}:${file.lastModified}`,
         bg: 'linear-gradient(135deg,#7c3aed,#a855f7)',
       })
-      playTrackObj(localTrack).catch((err) => showToast(`Файл не проигран: ${err?.message || err}`, true))
-      showToast(`Локальный трек: ${meta.title}`)
+      playTrackObj(localTrack).catch((err) => showToast(`Р¤Р°Р№Р» РЅРµ РїСЂРѕРёРіСЂР°РЅ: ${err?.message || err}`, true))
+      showToast(`Р›РѕРєР°Р»СЊРЅС‹Р№ С‚СЂРµРє: ${meta.title}`)
     },
     onGif: async (file) => {
       try {
         const mediaUrl = await saveCustomMediaFile(file, 'background')
         saveVisual({ customBg: mediaUrl, bgType: 'custom' })
         setBgType('custom')
-        showToast('GIF установлен как фон')
+        showToast('GIF СѓСЃС‚Р°РЅРѕРІР»РµРЅ РєР°Рє С„РѕРЅ')
       } catch (err) {
-        showToast(`GIF не сохранён: ${sanitizeDisplayText(err?.message || err)}`, true)
+        showToast(`GIF РЅРµ СЃРѕС…СЂР°РЅС‘РЅ: ${sanitizeDisplayText(err?.message || err)}`, true)
       }
     },
-    onInvalid: () => showToast('Поддерживаются только .mp3 и .gif', true),
+    onInvalid: () => showToast('РџРѕРґРґРµСЂР¶РёРІР°СЋС‚СЃСЏ С‚РѕР»СЊРєРѕ .mp3 Рё .gif', true),
   })
 }
 
-// в”Ђв”Ђв”Ђ INIT + HOTKEYS в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// РІвЂќР‚РІвЂќР‚РІвЂќР‚ INIT + HOTKEYS РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
 window.addEventListener('DOMContentLoaded', () => {
   window.addEventListener(
     'beforeunload',
     () => {
       try {
-        flushListenStatsPending(true)
         teardownAudioAnalyzer()
       } catch (_) {}
     },
@@ -11945,8 +11392,8 @@ window.addEventListener('DOMContentLoaded', () => {
       const logo = document.getElementById('titlebar-logo')
       if (logo) logo.textContent = `Flow v${r.version}`
       const welcomeSub = document.querySelector('#page-home .content-sub')
-      if (welcomeSub) welcomeSub.textContent = `Выбери источник и начни слушать • билд ${r.version}`
-      showToast(`Запущен билд v${r.version}`)
+      if (welcomeSub) welcomeSub.textContent = `Р’С‹Р±РµСЂРё РёСЃС‚РѕС‡РЅРёРє Рё РЅР°С‡РЅРё СЃР»СѓС€Р°С‚СЊ вЂў Р±РёР»Рґ ${r.version}`
+      showToast(`Р—Р°РїСѓС‰РµРЅ Р±РёР»Рґ v${r.version}`)
     }).catch(() => {})
   }
   if (window.api?.isWindowMaximized) {
@@ -11960,7 +11407,7 @@ window.addEventListener('DOMContentLoaded', () => {
     window.api.youtubeEngineStatus()
       .then((s) => {
         if (!s?.ytdlp) {
-          showToast('YouTube engine: yt-dlp не найден. Поставь: winget install yt-dlp.yt-dlp', true)
+          showToast('YouTube engine: yt-dlp РЅРµ РЅР°Р№РґРµРЅ. РџРѕСЃС‚Р°РІСЊ: winget install yt-dlp.yt-dlp', true)
           console.warn('YouTube engine status:', s)
         } else {
           console.log('YouTube engine ready:', s.ytdlpPath)
@@ -11975,7 +11422,7 @@ window.addEventListener('DOMContentLoaded', () => {
       const roomId = resolveInviteToRoomId(secret)
       if (!roomId || !_socialPeer) return
       joinRoomById(roomId)
-      showToast(`Discord Join: подключение к ${roomId}`)
+      showToast(`Discord Join: РїРѕРґРєР»СЋС‡РµРЅРёРµ Рє ${roomId}`)
     })
   }
 
@@ -12037,7 +11484,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (canControlQueue() && e.key==='ArrowRight' && audio.duration) audio.currentTime = Math.min(audio.currentTime+10, audio.duration)
     if (canControlQueue() && e.key==='ArrowLeft'  && audio.duration) audio.currentTime = Math.max(audio.currentTime-10, 0)
 
-    // Источник фиксирован: Spotify -> YouTube
+    // РСЃС‚РѕС‡РЅРёРє С„РёРєСЃРёСЂРѕРІР°РЅ: Spotify -> YouTube
   })
 })
 
