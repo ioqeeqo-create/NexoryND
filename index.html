@@ -91,7 +91,7 @@
       </a>
       </div>
       <div class="nav-group">
-      <a class="nav-item" onclick="openPage('search')" href="#" title="Поиск" aria-label="Поиск">
+      <a class="nav-item search-liquid" onclick="openPage('search')" href="#" title="Поиск" aria-label="Поиск">
         <svg class="nav-icon flow-ref-nav" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.75"/><path d="M20 20l-4.55-4.55" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/><path d="M18.95 17.98L21 20.1" stroke="var(--accent2)" stroke-width="2" stroke-linecap="round"/></svg><span class="nav-label">Поиск</span>
       </a>
       <a class="nav-item" onclick="openPage('library')" href="#" title="Библиотека" aria-label="Библиотека">
@@ -166,48 +166,42 @@
     <button type="button" class="content-corner-resize content-corner-resize--br" data-main-pane-corner="br" tabindex="-1" aria-label="Размер окна контента, правый низ" title="Размер окна контента"><span class="flow-resize-glyph" aria-hidden="true"></span></button>
 
     <div id="page-home" class="page active">
-      <div class="yandex-home-shell" aria-label="Flow в стиле Яндекс Музыки">
-        <section class="yandex-wave-hero" onclick="startMyWave()" role="button" tabindex="0" aria-label="Запустить Мою волну">
-          <div class="yandex-wave-blob" aria-hidden="true"></div>
-          <div class="yandex-wave-copy">
-            <h2><span class="yandex-play-mark">▶</span>Моя волна</h2>
-            <button type="button" class="yandex-wave-settings" onclick="event.stopPropagation(); toggleYandexWaveModes()">☰ Настроить</button>
-            <div class="yandex-wave-mode-pop hidden" id="yandex-wave-mode-pop" onclick="event.stopPropagation()"></div>
+      <div class="liquid-home-shell" aria-label="Flow в стиле Liquid Glass">
+        <section class="liquid-hero glass" onclick="startMyWave()" role="button" tabindex="0" aria-label="Запустить Flow Mix">
+          <div class="liquid-hero-orb liquid-hero-orb--a" aria-hidden="true"></div>
+          <div class="liquid-hero-orb liquid-hero-orb--b" aria-hidden="true"></div>
+          <div class="liquid-hero-copy">
+            <h2>Flow Mix</h2>
+            <p>Жидкое стекло. Быстрый старт. Никакого Яндекс-шаблона.</p>
           </div>
+          <button type="button" class="liquid-hero-action" onclick="event.stopPropagation(); startMyWave()">▶</button>
         </section>
 
-        <div class="yandex-shortcuts">
-          <button type="button" class="yandex-pill-card yandex-pill-card--avatars" onclick="openPage('social')">
-            <span class="yandex-avatar-stack" aria-hidden="true"><i></i><i></i></span>
-            <span><strong>Для вас</strong><small>друзья и активность</small></span>
+        <div class="liquid-quick-row">
+          <button type="button" class="liquid-quick-btn glass" onclick="openPage('search')" title="Поиск">
+            <span aria-hidden="true">⌕</span>
           </button>
-          <button type="button" class="yandex-pill-card" onclick="openPage('search')">
-            <span class="yandex-pill-icon" aria-hidden="true">↗</span>
-            <span><strong>Тренды</strong><small>найти музыку</small></span>
+          <button type="button" class="liquid-quick-btn glass" onclick="openPage('liked')" title="Любимое">
+            <span aria-hidden="true">♥</span>
+          </button>
+          <button type="button" class="liquid-quick-btn glass" onclick="openPage('social')" title="Соц">
+            <span aria-hidden="true">◉</span>
+          </button>
+          <button type="button" class="liquid-quick-btn glass" onclick="enterPlayerMode()" title="Плеер">
+            <span aria-hidden="true">♪</span>
           </button>
         </div>
 
-        <div class="yandex-main-cards">
-          <button type="button" class="yandex-main-card yandex-liked-card" onclick="openPage('liked')">
-            <span class="yandex-main-cover" aria-hidden="true">♥</span>
-            <span class="yandex-main-card-text"><strong>Мне нравится</strong><small>любимые треки Flow</small></span>
-            <span class="yandex-main-arrow" aria-hidden="true">›</span>
+        <div class="liquid-main-grid">
+          <button type="button" class="liquid-main-card glass" onclick="openPage('liked')">
+            <span class="liquid-main-icon" aria-hidden="true">♥</span>
+            <span class="liquid-main-text"><strong>Мне нравится</strong><small>твоя коллекция</small></span>
           </button>
-          <button type="button" class="yandex-main-card" onclick="enterPlayerMode()">
-            <span class="yandex-main-cover yandex-history-cover" aria-hidden="true">↶</span>
-            <span class="yandex-main-card-text"><strong>История</strong><small>открыть плеер</small></span>
-            <span class="yandex-main-arrow" aria-hidden="true">›</span>
+          <button type="button" class="liquid-main-card glass" onclick="startMyWave()">
+            <span class="liquid-main-icon" aria-hidden="true">≈</span>
+            <span class="liquid-main-text"><strong>Flow Mix</strong><small>персональная волна</small></span>
           </button>
         </div>
-
-        <section class="yandex-ai-section">
-          <h3>Сведи в AI-сет</h3>
-          <button type="button" class="yandex-ai-card" onclick="startMyWave()">
-            <span class="yandex-ai-cover" aria-hidden="true">♪</span>
-            <span><strong>Flow Mix</strong><small>персональная волна по твоим прослушиваниям</small></span>
-            <span class="yandex-ai-more" aria-hidden="true">•••</span>
-          </button>
-        </section>
       </div>
       <div id="home-dashboard-stack" class="home-dashboard-stack">
       <section class="home-dash-block" data-home-block="welcome">
@@ -476,9 +470,8 @@
                   <span class="vsb-theme-icon">F⚙</span>
                   <span class="vsb-theme-label">flow custum</span>
                 </button>
-                <button class="vsb vsb-theme" id="vm-yandex" onclick="setVisualMode('yandex')" title="FY Яндекс">
-                  <span class="vsb-theme-icon">FY</span>
-                  <span class="vsb-theme-label">яндекс</span>
+                <button class="vsb vsb-theme" id="vm-liquid" onclick="setVisualMode('liquid')" title="Liquid Glass">
+                  <span class="vsb-theme-icon">◈</span>
                 </button>
               </div>
             </div>
@@ -776,6 +769,14 @@
                 <button class="vsb" id="hw-mode-image" onclick="setHomeWidgetMode('image')">Image</button>
               </div>
             </div>
+            <div class="vs-row">
+              <label class="vs-label">Интенсивность визуализации <span class="vs-val" id="home-widget-intensity-val">100%</span></label>
+              <input type="range" id="home-widget-intensity" min="60" max="180" step="1" value="100" onchange="setHomeWidgetIntensity(this.value)" oninput="setHomeWidgetIntensity(this.value)">
+            </div>
+            <div class="vs-row">
+              <label class="vs-label">Плавность визуализации <span class="vs-val" id="home-widget-smoothing-val">72%</span></label>
+              <input type="range" id="home-widget-smoothing" min="20" max="95" step="1" value="72" onchange="setHomeWidgetSmoothing(this.value)" oninput="setHomeWidgetSmoothing(this.value)">
+            </div>
             <div class="vs-row" id="home-widget-image-row" style="display:none;align-items:flex-start;flex-direction:column;gap:8px">
               <label class="vs-label">Фото для визуализации</label>
               <div class="vs-btn-group">
@@ -791,6 +792,14 @@
               <div class="vs-btn-group">
                 <button class="vsb" id="slider-style-line" onclick="setHomeSliderStyle('line')">Линия</button>
                 <button class="vsb" id="slider-style-wave" onclick="setHomeSliderStyle('wave')">Wave</button>
+              </div>
+            </div>
+            <div class="vs-row">
+              <label class="vs-label">Профиль чистоты звука</label>
+              <div class="vs-btn-group">
+                <button class="vsb" id="sound-profile-balanced" onclick="setSoundEnhancerProfile('balanced')">Сбаланс.</button>
+                <button class="vsb" id="sound-profile-clean" onclick="setSoundEnhancerProfile('clean')">Чистый</button>
+                <button class="vsb" id="sound-profile-bright" onclick="setSoundEnhancerProfile('bright')">Яркий</button>
               </div>
             </div>
           </div>

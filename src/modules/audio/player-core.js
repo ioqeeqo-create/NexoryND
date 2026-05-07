@@ -14,6 +14,37 @@
     } catch (_) {}
   }
 
+  function getSoundProfileConfig() {
+    let profile = 'clean'
+    try {
+      const raw = String(window?.localStorage?.getItem('flow_sound_profile') || 'clean').trim().toLowerCase()
+      if (raw === 'balanced' || raw === 'bright') profile = raw
+    } catch (_) {}
+    if (profile === 'balanced') {
+      return {
+        lowShelfGain: 1.2,
+        presenceGain: 1.1,
+        compressor: { threshold: -20, knee: 16, ratio: 2.9, attack: 0.006, release: 0.21 },
+        outputGain: 1.02,
+      }
+    }
+    if (profile === 'bright') {
+      return {
+        lowShelfGain: 0.6,
+        presenceGain: 2.8,
+        compressor: { threshold: -23, knee: 19, ratio: 3.4, attack: 0.004, release: 0.18 },
+        outputGain: 1.04,
+      }
+    }
+    return {
+      // "clean": мягкий low-end и подчистка середины/верха без сильной компрессии.
+      lowShelfGain: 0.9,
+      presenceGain: 2.1,
+      compressor: { threshold: -24, knee: 20, ratio: 3.1, attack: 0.004, release: 0.2 },
+      outputGain: 1.03,
+    }
+  }
+
   function ensureAudioAnalyser(audio, state) {
     if (
       state.analyser &&
@@ -41,23 +72,24 @@
       const lowShelf = state.audioCtx.createBiquadFilter()
       lowShelf.type = 'lowshelf'
       lowShelf.frequency.value = 170
-      lowShelf.gain.value = 2.2
+      const soundCfg = getSoundProfileConfig()
+      lowShelf.gain.value = soundCfg.lowShelfGain
 
       const presence = state.audioCtx.createBiquadFilter()
       presence.type = 'peaking'
       presence.frequency.value = 3100
       presence.Q.value = 0.9
-      presence.gain.value = 1.8
+      presence.gain.value = soundCfg.presenceGain
 
       const compressor = state.audioCtx.createDynamicsCompressor()
-      compressor.threshold.value = -22
-      compressor.knee.value = 18
-      compressor.ratio.value = 3.2
-      compressor.attack.value = 0.004
-      compressor.release.value = 0.19
+      compressor.threshold.value = soundCfg.compressor.threshold
+      compressor.knee.value = soundCfg.compressor.knee
+      compressor.ratio.value = soundCfg.compressor.ratio
+      compressor.attack.value = soundCfg.compressor.attack
+      compressor.release.value = soundCfg.compressor.release
 
       const outputGain = state.audioCtx.createGain()
-      outputGain.gain.value = 1.08
+      outputGain.gain.value = soundCfg.outputGain
 
       // Как в FlowPleerLoww: один линейный граф (два выхода с одного MediaElementSource дают лишнюю работу рендеру аудио)
       src.connect(state.analyser)

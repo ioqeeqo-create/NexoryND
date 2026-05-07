@@ -172,6 +172,24 @@ function getMyWaveMode() {
   return WE?.MY_WAVE_MODES?.[_myWaveMode] ? _myWaveMode : 'default'
 }
 
+function getMyWaveSource() {
+  try {
+    const raw = String(localStorage.getItem('flow_my_wave_source') || 'yandex').trim().toLowerCase()
+    return raw === 'vk' ? 'vk' : 'yandex'
+  } catch {
+    return 'yandex'
+  }
+}
+
+function setMyWaveSource(source) {
+  const next = String(source || '').trim().toLowerCase() === 'vk' ? 'vk' : 'yandex'
+  try { localStorage.setItem('flow_my_wave_source', next) } catch {}
+  if (next !== 'yandex') toggleYandexWaveModes(false)
+  renderMyWave()
+  renderRoomsMyWave()
+  syncYandexWaveSettingsLabel()
+}
+
 function setMyWaveMode(mode) {
   _myWaveMode = WE?.MY_WAVE_MODES?.[mode] ? mode : 'default'
   try { localStorage.setItem('flow_my_wave_mode', _myWaveMode) } catch {}
@@ -183,6 +201,12 @@ function setMyWaveMode(mode) {
 function syncYandexWaveSettingsLabel() {
   const btn = document.querySelector('.yandex-wave-settings')
   if (!btn) return
+  const source = getMyWaveSource()
+  if (source !== 'yandex') {
+    btn.style.display = 'none'
+    return
+  }
+  btn.style.display = 'inline-flex'
   const mode = getMyWaveMode()
   const cfg = WE?.MY_WAVE_MODES?.[mode]
   const label = sanitizeDisplayText(cfg?.label || 'Настроить')
@@ -193,6 +217,10 @@ function syncYandexWaveSettingsLabel() {
 function renderYandexWaveModes() {
   const pop = document.getElementById('yandex-wave-mode-pop')
   if (!pop) return
+  if (getMyWaveSource() !== 'yandex') {
+    pop.classList.add('hidden')
+    return
+  }
   const mode = getMyWaveMode()
   const modes = Object.entries(WE?.MY_WAVE_MODES || {})
   pop.innerHTML = `
@@ -207,6 +235,7 @@ function renderYandexWaveModes() {
 }
 
 function toggleYandexWaveModes(force) {
+  if (getMyWaveSource() !== 'yandex') return
   const pop = document.getElementById('yandex-wave-mode-pop')
   if (!pop) return
   renderYandexWaveModes()
@@ -281,12 +310,22 @@ function renderMyWave() {
   const modesEl = document.getElementById('my-wave-modes')
   if (!listEl || !hintEl) return
   const mode = getMyWaveMode()
+  const source = getMyWaveSource()
   const modeCfg = WE?.MY_WAVE_MODES?.[mode] || WE?.MY_WAVE_MODES?.default
   const seedCount = getMyWaveSeedTracks().length
   if (modesEl) {
-    modesEl.innerHTML = Object.entries(WE?.MY_WAVE_MODES || {}).map(([id, cfg]) => (
+    const sourcePicker = `
+      <div class="my-wave-source-switch">
+        <button class="my-wave-mode ${source === 'yandex' ? 'active' : ''}" onclick="setMyWaveSource('yandex')">Яндекс</button>
+        <button class="my-wave-mode ${source === 'vk' ? 'active' : ''}" onclick="setMyWaveSource('vk')">VK</button>
+      </div>
+    `
+    const modeButtons = source === 'yandex'
+      ? Object.entries(WE?.MY_WAVE_MODES || {}).map(([id, cfg]) => (
       `<button class="my-wave-mode ${id === mode ? 'active' : ''}" data-wave-mode="${id}" onclick="setMyWaveMode('${id}')">${cfg.label}</button>`
     )).join('')
+      : '<div class="token-msg" style="display:block">Для VK-волны используется авто-режим без ручных пресетов.</div>'
+    modesEl.innerHTML = sourcePicker + modeButtons
   }
   if (seedCount < 3) {
     hintEl.textContent = `Послушай или лайкни еще ${3 - seedCount} трек(ов), чтобы волна поняла твой вкус`
@@ -295,7 +334,8 @@ function renderMyWave() {
   } else if (_myWavePreloading) {
     hintEl.textContent = `${modeCfg.label}: дозагружаю новые треки, чтобы волна не кончалась...`
   } else {
-    hintEl.textContent = `${modeCfg.label}: ${modeCfg.hint}. Нажми запуск, и волна сама соберет новую очередь`
+    const sourceLabel = source === 'vk' ? 'VK' : 'Яндекс'
+    hintEl.textContent = `${sourceLabel} • ${modeCfg.label}: ${modeCfg.hint}. Нажми запуск, и волна сама соберет новую очередь`
   }
   listEl.innerHTML = `
     <div class="my-wave-orb mode-${mode} ${_myWaveBuilding || _myWavePreloading ? 'is-loading' : ''}" aria-label="${modeCfg.label}">
@@ -313,11 +353,21 @@ function renderRoomsMyWave() {
   const listEl = document.getElementById('rooms-wave-list')
   if (!hintEl || !modesEl || !listEl) return
   const mode = getMyWaveMode()
+  const source = getMyWaveSource()
   const modeCfg = WE?.MY_WAVE_MODES?.[mode] || WE?.MY_WAVE_MODES?.default
   const seedCount = getMyWaveSeedTracks().length
-  modesEl.innerHTML = Object.entries(WE?.MY_WAVE_MODES || {}).map(([id, cfg]) => (
+  const sourcePicker = `
+    <div class="my-wave-source-switch">
+      <button class="my-wave-mode ${source === 'yandex' ? 'active' : ''}" onclick="setMyWaveSource('yandex')">Яндекс</button>
+      <button class="my-wave-mode ${source === 'vk' ? 'active' : ''}" onclick="setMyWaveSource('vk')">VK</button>
+    </div>
+  `
+  const modeButtons = source === 'yandex'
+    ? Object.entries(WE?.MY_WAVE_MODES || {}).map(([id, cfg]) => (
     `<button class="my-wave-mode ${id === mode ? 'active' : ''}" data-wave-mode="${id}" onclick="setMyWaveMode('${id}')">${cfg.label}</button>`
   )).join('')
+    : '<div class="token-msg" style="display:block">Для VK-волны включен автоматический пресет.</div>'
+  modesEl.innerHTML = sourcePicker + modeButtons
   if (seedCount < 3) {
     hintEl.textContent = `Послушай или лайкни еще ${3 - seedCount} трек(ов), чтобы волна поняла твой вкус`
   } else if (_myWaveBuilding) {
@@ -325,7 +375,8 @@ function renderRoomsMyWave() {
   } else if (_myWavePreloading) {
     hintEl.textContent = `${modeCfg.label}: дозагружаю новые треки, чтобы волна не кончалась...`
   } else {
-    hintEl.textContent = `${modeCfg.label}: ${modeCfg.hint}. Нажми запуск, и волна сама соберет новую очередь`
+    const sourceLabel = source === 'vk' ? 'VK' : 'Яндекс'
+    hintEl.textContent = `${sourceLabel} • ${modeCfg.label}: ${modeCfg.hint}. Нажми запуск, и волна сама соберет новую очередь`
   }
   listEl.innerHTML = `
     <div class="my-wave-orb mode-${mode} ${_myWaveBuilding || _myWavePreloading ? 'is-loading' : ''}" aria-label="${modeCfg.label}">
@@ -1833,7 +1884,7 @@ function initPeerSocial() {
           syncTransportPlayPauseUi()
         } catch (_) {}
         if (Array.isArray(msg.sharedQueue)) {
-          sharedQueue = msg.sharedQueue
+          sharedQueue = msg.sharedQueue.map((t) => sanitizeTrack(t)).filter(Boolean)
           renderRoomQueue()
         }
       }
@@ -1904,7 +1955,11 @@ function initPeerSocial() {
         _peerProfiles.set(msg._peerId, profileWithPeer)
         cachePeerProfile(profileWithPeer, msg._peerId)
         _roomMembers.set(msg._peerId, profileWithPeer)
-        if (Array.isArray(msg.sharedQueue)) sharedQueue = msg.sharedQueue
+        const hostPeerId = String(_roomState.hostPeerId || '').trim()
+        if (Array.isArray(msg.sharedQueue) && msg._peerId && (!hostPeerId || String(msg._peerId) === hostPeerId)) {
+          sharedQueue = msg.sharedQueue.map((t) => sanitizeTrack(t)).filter(Boolean)
+          renderRoomQueue()
+        }
         if (_roomState.host) broadcastRoomMembersState()
         resetRoomHeartbeat()
         updateRoomUi()
@@ -1925,14 +1980,21 @@ function initPeerSocial() {
       }
       if (msg.type === 'room-queue-add' && msg.roomId === _roomState.roomId && _roomState.host && msg.track) {
         const t = sanitizeTrack(msg.track)
-        sharedQueue.push(t)
+        const sig = normalizeTrackSignature(t)
+        if (!sig || !sharedQueue.some((item) => normalizeTrackSignature(item) === sig)) {
+          sharedQueue.push(t)
+        }
         broadcastQueueUpdate()
         _socialPeer.send({ type: 'room-profile-state', roomId: _roomState.roomId, profile: getPublicProfilePayload(_profile?.username), sharedQueue })
         saveRoomStateToServer({ shared_queue: sharedQueue }).catch(() => {})
         renderRoomQueue()
       }
       if (msg.type === 'room-control-toggle' && msg.roomId === _roomState.roomId && msg._peerId && msg._peerId !== _socialPeer?.peer?.id) {
-        if (_roomState?.host && typeof msg.currentTime === 'number' && Number.isFinite(audio.duration) && audio.duration > 0) {
+        const expectedHostId = String(_roomState.hostPeerId || '').trim()
+        const senderId = String(msg._peerId || '').trim()
+        if (expectedHostId && senderId && senderId !== expectedHostId) return
+        if (_roomState?.host) return
+        if (typeof msg.currentTime === 'number' && Number.isFinite(audio.duration) && audio.duration > 0) {
           const ct = Math.max(0, Math.min(Number(msg.currentTime), audio.duration))
           if (Math.abs(audio.currentTime - ct) > 1.25) audio.currentTime = ct
         }
@@ -1942,13 +2004,6 @@ function initPeerSocial() {
         try {
           syncTransportPlayPauseUi()
         } catch (_) {}
-        if (_roomState?.host) {
-          broadcastPlaybackSync(true)
-          saveRoomStateToServer({
-            playback_state: { paused: Boolean(audio.paused), currentTime: Number(audio.currentTime || 0) },
-            playback_ts: Date.now(),
-          }).catch(() => {})
-        }
       }
       if (msg.type === 'room-queue-sync-request' && msg.roomId === _roomState.roomId && _roomState.host) {
         const payload = { type: 'room-queue-sync-state', roomId: _roomState.roomId, sharedQueue }
@@ -1956,13 +2011,11 @@ function initPeerSocial() {
         else _socialPeer.send(payload)
       }
       if (msg.type === 'room-queue-sync-state' && msg.roomId === _roomState.roomId && Array.isArray(msg.sharedQueue)) {
-        sharedQueue = msg.sharedQueue
-        saveRoomStateToServer({ shared_queue: sharedQueue }).catch(() => {})
+        sharedQueue = msg.sharedQueue.map((t) => sanitizeTrack(t)).filter(Boolean)
         renderRoomQueue()
       }
       if (msg.type === (peerSocial?.EVENTS?.QUEUE_UPDATE || 'queue-update') && msg.roomId === _roomState.roomId && Array.isArray(msg.sharedQueue)) {
-        sharedQueue = msg.sharedQueue
-        saveRoomStateToServer({ shared_queue: sharedQueue }).catch(() => {})
+        sharedQueue = msg.sharedQueue.map((t) => sanitizeTrack(t)).filter(Boolean)
         renderRoomQueue()
       }
     },
@@ -2098,6 +2151,11 @@ function joinRoomById(forceRoomId = '') {
   const r = _socialPeer.joinRoom(roomId)
   if (!r?.ok) return showToast(r?.error || 'Ошибка входа', true)
   _roomState = { roomId: r.roomId, host: false, hostPeerId: null }
+  // Вход в комнату переводит в отдельный комнатный режим — локальный трек останавливаем,
+  // дальше состояние задаёт только хост через playback-sync.
+  try { audio.pause() } catch (_) {}
+  try { audio.removeAttribute('src'); audio.load() } catch (_) {}
+  try { syncTransportPlayPauseUi() } catch (_) {}
   _roomMembers.clear()
   sharedQueue = []
   _lastPlaybackSyncSeq = 0
@@ -4592,14 +4650,18 @@ function drawHomeVisualizerFrame() {
   }
   if (!ctx) return
   const v = getVisual()
-  const hw = Object.assign({ enabled: true, mode: 'bars' }, v.homeWidget || {})
+  const hw = Object.assign({ enabled: true, mode: 'bars', intensity: 100, smoothing: 72 }, v.homeWidget || {})
   if (!hw.enabled || hw.mode === 'image') return
   const w = canvas.width
   const h = canvas.height
   ctx.clearRect(0, 0, w, h)
   const canAnalyze = ensureAudioAnalyzer() && !audio.paused && !audio.ended
-  if (canAnalyze) _analyser.getByteFrequencyData(_freqData)
+  if (canAnalyze) {
+    try { _analyser.smoothingTimeConstant = Math.max(0.2, Math.min(0.95, Number(hw.smoothing || 72) / 100)) } catch (_) {}
+    _analyser.getByteFrequencyData(_freqData)
+  }
   const data = _freqData || new Uint8Array(128)
+  const intensityScale = Math.max(0.6, Math.min(1.8, Number(hw.intensity || 100) / 100))
   const baseColor = v.accent2 || '#9ca3af'
   ctx.strokeStyle = baseColor
   ctx.fillStyle = baseColor
@@ -4609,7 +4671,7 @@ function drawHomeVisualizerFrame() {
     const step = Math.max(1, Math.floor(data.length / 52))
     for (let i = 0; i < 52; i++) {
       const val = data[i * step] || 0
-      const y = h - (val / 255) * (h - 18) - 9
+      const y = h - (Math.min(255, val * intensityScale) / 255) * (h - 18) - 9
       const x = (i / 51) * w
       if (i === 0) ctx.moveTo(x, y)
       else ctx.lineTo(x, y)
@@ -4623,7 +4685,7 @@ function drawHomeVisualizerFrame() {
     const step = Math.max(1, Math.floor(data.length / cols))
     for (let i = 0; i < cols; i++) {
       const val = data[i * step] || 0
-      const dots = Math.max(2, Math.round((val / 255) * 8))
+      const dots = Math.max(2, Math.round((Math.min(255, val * intensityScale) / 255) * 8))
       const x = 10 + (i / cols) * (w - 20)
       for (let d = 0; d < dots; d++) {
         const y = h - 10 - d * 12
@@ -4639,7 +4701,7 @@ function drawHomeVisualizerFrame() {
   const bw = (w - 20) / bars
   for (let i = 0; i < bars; i++) {
     const val = data[i * step] || 0
-    const bh = 8 + (val / 255) * (h - 24)
+    const bh = 8 + (Math.min(255, val * intensityScale) / 255) * (h - 24)
     const x = 10 + i * bw
     const y = h - bh - 6
     ctx.fillRect(x, y, Math.max(2, bw - 2), bh)
@@ -4666,7 +4728,7 @@ function startHomeVisualizerLoop() {
       let shouldDraw = !skipViz
       if (shouldDraw) {
         const v = getVisual()
-        const hw = Object.assign({ enabled: true, mode: 'bars' }, v.homeWidget || {})
+        const hw = Object.assign({ enabled: true, mode: 'bars', intensity: 100, smoothing: 72 }, v.homeWidget || {})
         if (!hw.enabled || hw.mode === 'image') shouldDraw = false
         else {
           const now = performance.now()
@@ -5324,17 +5386,7 @@ function togglePlay() {
   const isRoomParticipant = Boolean(_roomState?.roomId)
   const isRoomGuest = isRoomParticipant && !_roomState?.host
   if (isRoomGuest) {
-    const wantPaused = !audio.paused
-    _socialPeer?.send?.({
-      type: 'room-control-toggle',
-      roomId: _roomState.roomId,
-      paused: wantPaused,
-      currentTime: Number(audio.currentTime || 0),
-    })
-    saveRoomStateToServer({
-      playback_state: { paused: wantPaused, currentTime: Number(audio.currentTime || 0) },
-      playback_ts: Date.now(),
-    }).catch(() => {})
+    showHostOnlyToast()
     return
   }
   if (audio.paused) {

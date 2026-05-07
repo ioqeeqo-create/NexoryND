@@ -458,7 +458,7 @@ const defaultVisual = {
   accent: '#4b5563', accent2: '#9ca3af',
   orb1Color: '#4b5563',
   orb2Color: '#9ca3af',
-  visualMode: 'minimal',   // 'minimal' | 'floated' | 'yandex'
+  visualMode: 'minimal',   // 'minimal' | 'floated' | 'liquid'
   fontMode: 'default',
   customFontName: null,
   customFontData: null,
@@ -640,7 +640,7 @@ function toggleCustomFontTitle() {
 
 function normalizeVisualThemeMode(mode) {
   const m = String(mode || '')
-  if (m === 'yandex') return 'yandex'
+  if (m === 'liquid' || m === 'yandex') return 'liquid'
   if (m === 'premium' || m === 'floated') return 'floated'
   return 'minimal'
 }
@@ -652,14 +652,20 @@ function isVisualFloatedLayout() {
 
 function applyVisualMode(mode) {
   const safe = normalizeVisualThemeMode(mode)
-  document.body.classList.remove('visual-minimal', 'visual-premium', 'visual-floated', 'visual-yandex')
-  document.body.classList.add(safe === 'floated' ? 'visual-floated' : (safe === 'yandex' ? 'visual-yandex' : 'visual-minimal'))
+  document.body.classList.remove('visual-minimal', 'visual-premium', 'visual-floated', 'visual-liquid', 'visual-yandex')
+  if (safe === 'floated') {
+    document.body.classList.add('visual-floated')
+  } else if (safe === 'liquid') {
+    document.body.classList.add('visual-liquid')
+  } else {
+    document.body.classList.add('visual-minimal')
+  }
   const minimalBtn = document.getElementById('vm-minimal')
   const floatedBtn = document.getElementById('vm-floated')
-  const yandexBtn = document.getElementById('vm-yandex')
+  const liquidBtn = document.getElementById('vm-liquid')
   if (minimalBtn) minimalBtn.classList.toggle('active', safe === 'minimal')
   if (floatedBtn) floatedBtn.classList.toggle('active', safe === 'floated')
-  if (yandexBtn) yandexBtn.classList.toggle('active', safe === 'yandex')
+  if (liquidBtn) liquidBtn.classList.toggle('active', safe === 'liquid')
 }
 
 function syncHomeLayoutConstructorUi() {
@@ -766,7 +772,7 @@ function setVisualMode(mode) {
       window.flowFloatedMainPaneDrag?.refreshFromStorage?.()
     } catch (_) {}
   })
-  showToast(safe === 'yandex' ? 'Режим: Яндекс' : (safe === 'floated' ? 'Режим: минимал' : 'Режим: минимализм'))
+  showToast(safe === 'liquid' ? 'Режим: Liquid Glass' : (safe === 'floated' ? 'Режим: минимал' : 'Режим: минимализм'))
 }
 
 async function toggleWindowMaximize() {
@@ -1592,6 +1598,10 @@ function setYandexPlayerThemeFromRgb(r, g, b) {
   const root = document.documentElement
   const clamp = (n) => Math.max(0, Math.min(255, Math.round(n)))
   const base = `rgb(${clamp(r * 0.72)}, ${clamp(g * 0.66)}, ${clamp(b * 0.6)})`
+  root.style.setProperty('--liquid-player-bg', base)
+  root.style.setProperty('--liquid-player-card', `rgba(${clamp(r * 0.26)}, ${clamp(g * 0.24)}, ${clamp(b * 0.23)}, 0.58)`)
+  root.style.setProperty('--liquid-player-glow', `rgba(${clamp(r)}, ${clamp(g)}, ${clamp(b)}, 0.26)`)
+  // Legacy vars for backward compatibility with older style selectors.
   root.style.setProperty('--yandex-player-bg', base)
   root.style.setProperty('--yandex-player-card', `rgba(${clamp(r * 0.26)}, ${clamp(g * 0.24)}, ${clamp(b * 0.23)}, 0.58)`)
   root.style.setProperty('--yandex-player-glow', `rgba(${clamp(r)}, ${clamp(g)}, ${clamp(b)}, 0.26)`)
@@ -1606,6 +1616,9 @@ function updateYandexPlayerTheme(track = currentTrack) {
       fallback && !/^linear-gradient|^radial-gradient/i.test(String(fallback).trim())
         ? String(fallback).trim()
         : '#482618'
+    document.documentElement.style.setProperty('--liquid-player-bg', solidFallback)
+    document.documentElement.style.setProperty('--liquid-player-card', 'rgba(31, 18, 14, 0.5)')
+    document.documentElement.style.setProperty('--liquid-player-glow', 'rgba(251, 255, 40, 0.12)')
     document.documentElement.style.setProperty('--yandex-player-bg', solidFallback)
     document.documentElement.style.setProperty('--yandex-player-card', 'rgba(31, 18, 14, 0.5)')
     document.documentElement.style.setProperty('--yandex-player-glow', 'rgba(251, 255, 40, 0.12)')

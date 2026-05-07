@@ -153,6 +153,8 @@ function waveEngine() {
       sanitizeTrackList,
       getSettings,
       searchHybridTracks,
+      searchTracksDirect,
+      getMyWaveSource,
       normalizeTrackSignature,
       getQueue: () => queue,
       getCurrentTrack: () => currentTrack,
@@ -458,7 +460,7 @@ const defaultVisual = {
   accent: '#4b5563', accent2: '#9ca3af',
   orb1Color: '#4b5563',
   orb2Color: '#9ca3af',
-  visualMode: 'minimal',   // 'minimal' | 'floated' | 'yandex'
+  visualMode: 'minimal',   // 'minimal' | 'floated' | 'liquid'
   fontMode: 'default',
   customFontName: null,
   customFontData: null,
@@ -466,7 +468,7 @@ const defaultVisual = {
   uiScale: 100,
   customBg: null,
   homeSliderStyle: 'line',
-  homeWidget: { enabled: true, mode: 'bars', image: null },
+  homeWidget: { enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 },
   effects: { orbs: false, glow: true, dyncolor: false, accentFromCover: false },
   navActiveHighlight: false,
   sidebarPosition: 'left',
@@ -640,7 +642,7 @@ function toggleCustomFontTitle() {
 
 function normalizeVisualThemeMode(mode) {
   const m = String(mode || '')
-  if (m === 'yandex') return 'yandex'
+  if (m === 'liquid' || m === 'yandex') return 'liquid'
   if (m === 'premium' || m === 'floated') return 'floated'
   return 'minimal'
 }
@@ -652,14 +654,20 @@ function isVisualFloatedLayout() {
 
 function applyVisualMode(mode) {
   const safe = normalizeVisualThemeMode(mode)
-  document.body.classList.remove('visual-minimal', 'visual-premium', 'visual-floated', 'visual-yandex')
-  document.body.classList.add(safe === 'floated' ? 'visual-floated' : (safe === 'yandex' ? 'visual-yandex' : 'visual-minimal'))
+  document.body.classList.remove('visual-minimal', 'visual-premium', 'visual-floated', 'visual-liquid', 'visual-yandex')
+  if (safe === 'floated') {
+    document.body.classList.add('visual-floated')
+  } else if (safe === 'liquid') {
+    document.body.classList.add('visual-liquid')
+  } else {
+    document.body.classList.add('visual-minimal')
+  }
   const minimalBtn = document.getElementById('vm-minimal')
   const floatedBtn = document.getElementById('vm-floated')
-  const yandexBtn = document.getElementById('vm-yandex')
+  const liquidBtn = document.getElementById('vm-liquid')
   if (minimalBtn) minimalBtn.classList.toggle('active', safe === 'minimal')
   if (floatedBtn) floatedBtn.classList.toggle('active', safe === 'floated')
-  if (yandexBtn) yandexBtn.classList.toggle('active', safe === 'yandex')
+  if (liquidBtn) liquidBtn.classList.toggle('active', safe === 'liquid')
 }
 
 function syncHomeLayoutConstructorUi() {
@@ -766,7 +774,7 @@ function setVisualMode(mode) {
       window.flowFloatedMainPaneDrag?.refreshFromStorage?.()
     } catch (_) {}
   })
-  showToast(safe === 'yandex' ? 'Режим: Яндекс' : (safe === 'floated' ? 'Режим: минимал' : 'Режим: минимализм'))
+  showToast(safe === 'liquid' ? 'Режим: Liquid Glass' : (safe === 'floated' ? 'Режим: минимал' : 'Режим: минимализм'))
 }
 
 async function toggleWindowMaximize() {
@@ -1401,7 +1409,7 @@ function applyHomeSliderStyle() {
 
 function toggleHomeWidgetEnabled() {
   const v = getVisual()
-  const homeWidget = Object.assign({ enabled: true, mode: 'bars', image: null }, v.homeWidget || {})
+  const homeWidget = Object.assign({ enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }, v.homeWidget || {})
   homeWidget.enabled = !homeWidget.enabled
   saveVisual({ homeWidget })
   syncHomeWidgetUI()
@@ -1411,8 +1419,26 @@ function setHomeWidgetMode(mode) {
   const modes = ['bars', 'wave', 'dots', 'image']
   const safe = modes.includes(mode) ? mode : 'bars'
   const v = getVisual()
-  const homeWidget = Object.assign({ enabled: true, mode: 'bars', image: null }, v.homeWidget || {})
+  const homeWidget = Object.assign({ enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }, v.homeWidget || {})
   homeWidget.mode = safe
+  saveVisual({ homeWidget })
+  syncHomeWidgetUI()
+}
+
+function setHomeWidgetIntensity(value) {
+  const n = Math.max(60, Math.min(180, Number(value) || 100))
+  const v = getVisual()
+  const homeWidget = Object.assign({ enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }, v.homeWidget || {})
+  homeWidget.intensity = Math.round(n)
+  saveVisual({ homeWidget })
+  syncHomeWidgetUI()
+}
+
+function setHomeWidgetSmoothing(value) {
+  const n = Math.max(20, Math.min(95, Number(value) || 72))
+  const v = getVisual()
+  const homeWidget = Object.assign({ enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }, v.homeWidget || {})
+  homeWidget.smoothing = Math.round(n)
   saveVisual({ homeWidget })
   syncHomeWidgetUI()
 }
@@ -1423,7 +1449,7 @@ async function setHomeWidgetImage(input) {
   try {
     const mediaUrl = await saveCustomMediaFile(file, 'home-widget')
     const v = getVisual()
-    const homeWidget = Object.assign({ enabled: true, mode: 'image', image: null }, v.homeWidget || {})
+    const homeWidget = Object.assign({ enabled: true, mode: 'image', image: null, intensity: 100, smoothing: 72 }, v.homeWidget || {})
     homeWidget.image = mediaUrl
     homeWidget.mode = 'image'
     saveVisual({ homeWidget })
@@ -1438,7 +1464,7 @@ async function setHomeWidgetImage(input) {
 
 function clearHomeWidgetImage() {
   const v = getVisual()
-  const homeWidget = Object.assign({ enabled: true, mode: 'bars', image: null }, v.homeWidget || {})
+  const homeWidget = Object.assign({ enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }, v.homeWidget || {})
   homeWidget.image = null
   if (homeWidget.mode === 'image') homeWidget.mode = 'bars'
   saveVisual({ homeWidget })
@@ -1447,7 +1473,7 @@ function clearHomeWidgetImage() {
 
 function syncHomeWidgetUI() {
   const v = getVisual()
-  const hw = Object.assign({ enabled: true, mode: 'bars', image: null }, v.homeWidget || {})
+  const hw = Object.assign({ enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }, v.homeWidget || {})
   const wrap = document.getElementById('home-visualizer-wrap')
   const img = document.getElementById('home-visualizer-image')
   const canvas = document.getElementById('home-visualizer-canvas')
@@ -1465,6 +1491,46 @@ function syncHomeWidgetUI() {
   })
   const imageRow = document.getElementById('home-widget-image-row')
   if (imageRow) imageRow.style.display = hw.mode === 'image' ? 'flex' : 'none'
+  const intensityInput = document.getElementById('home-widget-intensity')
+  const intensityVal = document.getElementById('home-widget-intensity-val')
+  if (intensityInput) intensityInput.value = String(Math.max(60, Math.min(180, Number(hw.intensity) || 100)))
+  if (intensityVal) intensityVal.textContent = `${Math.round(Math.max(60, Math.min(180, Number(hw.intensity) || 100)))}%`
+  const smoothingInput = document.getElementById('home-widget-smoothing')
+  const smoothingVal = document.getElementById('home-widget-smoothing-val')
+  if (smoothingInput) smoothingInput.value = String(Math.max(20, Math.min(95, Number(hw.smoothing) || 72)))
+  if (smoothingVal) smoothingVal.textContent = `${Math.round(Math.max(20, Math.min(95, Number(hw.smoothing) || 72)))}%`
+}
+
+function getSoundEnhancerProfile() {
+  try {
+    const raw = String(localStorage.getItem('flow_sound_profile') || 'clean').trim().toLowerCase()
+    if (raw === 'balanced' || raw === 'bright') return raw
+    return 'clean'
+  } catch {
+    return 'clean'
+  }
+}
+
+function syncSoundEnhancerUI() {
+  const cur = getSoundEnhancerProfile()
+  ;['balanced', 'clean', 'bright'].forEach((id) => {
+    const el = document.getElementById(`sound-profile-${id}`)
+    if (el) el.classList.toggle('active', id === cur)
+  })
+}
+
+function setSoundEnhancerProfile(profile) {
+  const safe = profile === 'balanced' || profile === 'bright' ? profile : 'clean'
+  try { localStorage.setItem('flow_sound_profile', safe) } catch {}
+  syncSoundEnhancerUI()
+  showToast(`Профиль звука: ${safe === 'balanced' ? 'Сбалансированный' : safe === 'bright' ? 'Яркий' : 'Чистый'}`)
+  // Чтобы применить профиль сразу, переинициализируем граф WebAudio.
+  try {
+    if (audio && !audio.paused) {
+      teardownAudioAnalyzer()
+      ensureAudioAnalyzer()
+    }
+  } catch (_) {}
 }
 
 function normalizeAccentHex(c) {
@@ -1592,6 +1658,10 @@ function setYandexPlayerThemeFromRgb(r, g, b) {
   const root = document.documentElement
   const clamp = (n) => Math.max(0, Math.min(255, Math.round(n)))
   const base = `rgb(${clamp(r * 0.72)}, ${clamp(g * 0.66)}, ${clamp(b * 0.6)})`
+  root.style.setProperty('--liquid-player-bg', base)
+  root.style.setProperty('--liquid-player-card', `rgba(${clamp(r * 0.26)}, ${clamp(g * 0.24)}, ${clamp(b * 0.23)}, 0.58)`)
+  root.style.setProperty('--liquid-player-glow', `rgba(${clamp(r)}, ${clamp(g)}, ${clamp(b)}, 0.26)`)
+  // Legacy vars for backward compatibility with older style selectors.
   root.style.setProperty('--yandex-player-bg', base)
   root.style.setProperty('--yandex-player-card', `rgba(${clamp(r * 0.26)}, ${clamp(g * 0.24)}, ${clamp(b * 0.23)}, 0.58)`)
   root.style.setProperty('--yandex-player-glow', `rgba(${clamp(r)}, ${clamp(g)}, ${clamp(b)}, 0.26)`)
@@ -1606,6 +1676,9 @@ function updateYandexPlayerTheme(track = currentTrack) {
       fallback && !/^linear-gradient|^radial-gradient/i.test(String(fallback).trim())
         ? String(fallback).trim()
         : '#482618'
+    document.documentElement.style.setProperty('--liquid-player-bg', solidFallback)
+    document.documentElement.style.setProperty('--liquid-player-card', 'rgba(31, 18, 14, 0.5)')
+    document.documentElement.style.setProperty('--liquid-player-glow', 'rgba(251, 255, 40, 0.12)')
     document.documentElement.style.setProperty('--yandex-player-bg', solidFallback)
     document.documentElement.style.setProperty('--yandex-player-card', 'rgba(31, 18, 14, 0.5)')
     document.documentElement.style.setProperty('--yandex-player-glow', 'rgba(251, 255, 40, 0.12)')
@@ -1684,6 +1757,7 @@ function initVisualSettings() {
   applyFontSettings(true)
   applyHomeSliderStyle()
   syncHomeWidgetUI()
+  syncSoundEnhancerUI()
   document.body.classList.toggle('nav-active-highlight', Boolean(v.navActiveHighlight))
   applyCardDensity(v.cardDensity || 'comfort')
   const navToggle = document.getElementById('toggle-nav-active')
@@ -4190,7 +4264,7 @@ function syncRoomPresenceHeartbeat() {
     _socialPeer.send({ type: 'room-profile-state', roomId: _roomState.roomId, profile: me, sharedQueue })
     broadcastRoomMembersState()
   } else {
-    _socialPeer.send({ type: 'room-profile-state', roomId: _roomState.roomId, profile: me, sharedQueue })
+    _socialPeer.send({ type: 'room-profile-state', roomId: _roomState.roomId, profile: me })
     _socialPeer.send({ type: 'room-queue-sync-request', roomId: _roomState.roomId })
   }
   updateRoomUi()
@@ -4301,20 +4375,8 @@ function enqueueSharedTrack(track) {
     broadcastQueueUpdate()
     return showToast('Трек добавлен в очередь комнаты')
   }
-  sharedQueue.push(cleanTrack)
-  renderRoomQueue()
-  ;(async () => {
-    try {
-      if (!isFlowSocialReady()) return
-      const rid = encodeURIComponent(_roomState.roomId)
-      const data = await flowSocialGet(`/flow-api/v1/rooms/${rid}`)
-      const nextQueue = Array.isArray(data?.shared_queue)
-        ? data.shared_queue.map((t) => sanitizeTrack(t)).filter(Boolean)
-        : []
-      nextQueue.push(cleanTrack)
-      await saveRoomStateToServer({ shared_queue: nextQueue })
-    } catch {}
-  })()
+  // Гость только отправляет запрос хосту: локальная запись sharedQueue
+  // создаёт гонки и "пропадающие" треки при серверной синхронизации.
   const payload = { type: 'room-queue-add', roomId: _roomState.roomId, track: cleanTrack }
   _socialPeer?.send(payload)
   if (typeof _socialPeer?.sendToPeer === 'function' && _roomState?.hostPeerId) {

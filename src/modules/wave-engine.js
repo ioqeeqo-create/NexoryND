@@ -57,6 +57,8 @@
     const sanitizeTrackList = typeof ctx.sanitizeTrackList === 'function' ? ctx.sanitizeTrackList : (list) => list
     const getSettings = typeof ctx.getSettings === 'function' ? ctx.getSettings : () => ({})
     const searchHybridTracks = typeof ctx.searchHybridTracks === 'function' ? ctx.searchHybridTracks : async () => ({ tracks: [] })
+    const searchTracksDirect = typeof ctx.searchTracksDirect === 'function' ? ctx.searchTracksDirect : async () => []
+    const getMyWaveSource = typeof ctx.getMyWaveSource === 'function' ? ctx.getMyWaveSource : () => 'hybrid'
     const normalizeTrackSignature = typeof ctx.normalizeTrackSignature === 'function' ? ctx.normalizeTrackSignature : () => ''
     const getQueue = typeof ctx.getQueue === 'function' ? ctx.getQueue : () => []
     const getCurrentTrack = typeof ctx.getCurrentTrack === 'function' ? ctx.getCurrentTrack : () => null
@@ -421,12 +423,22 @@
       const selectedArtists = new Map()
       const found = []
       const settings = getSettings()
+      const sourceModeRaw = String(getMyWaveSource() || 'hybrid').toLowerCase()
+      const sourceMode = sourceModeRaw === 'vk' || sourceModeRaw === 'yandex' ? sourceModeRaw : 'hybrid'
+      const searchByWaveSource = async (query) => {
+        if (sourceMode === 'hybrid') {
+          const hybrid = await searchHybridTracks(query, settings)
+          return sanitizeTrackList(hybrid?.tracks || [])
+        }
+        const scopedSettings = Object.assign({}, settings, { activeSource: sourceMode })
+        const direct = await searchTracksDirect(query, scopedSettings)
+        return sanitizeTrackList(Array.isArray(direct) ? direct : [])
+      }
       for (const query of queries) {
         if (found.length >= target) break
         let results = []
         try {
-          const hybrid = await searchHybridTracks(query, settings)
-          results = sanitizeTrackList(hybrid?.tracks || [])
+          results = await searchByWaveSource(query)
         } catch { /* ignore */ }
         const ranked = results
           .map((track) => sanitizeTrack(track))
