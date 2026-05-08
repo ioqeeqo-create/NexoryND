@@ -1,35 +1,43 @@
-# FlowPleerLoww
+# Flow
 
-FlowPleerLoww is a desktop music player built with Electron, focused on style, social listening, and flexible customization.
+Flow is an Electron desktop music player with social rooms, shared playback, and customizable UI.
 
-## Highlights
+## Current release
 
-- Beautiful fullscreen player with synchronized lyrics and karaoke mode
-- Social rooms for listening with friends in real time
-- Shared room queue with host controls
-- Playlist management, editing, and drag-and-drop sorting
-- VK playlist import and multi-source search integrations
-- Profile customization: avatar, banner, pinned tracks/playlists
-- Extensive UI customization (accents, blur, glass, scale, covers, GIF support)
+- App version: `2.6.6`
+- Update channel: `stable` (`latest.yml` + installer artifacts)
+- Social mode: cloud-first (`/social/flow-api/v1`)
 
-## Tech Stack
+## Key features
 
-- Electron
-- Vanilla JavaScript
-- HTML/CSS
-- PeerJS
+- Full player with lyrics/karaoke, playlists, likes, and profile customization
+- Room listening with host controls and shared queue
+- Multi-source music search (Yandex, VK, SoundCloud, Spotify fallback flow, etc.)
+- Built-in app updater (check/download/install)
+- Animated Flow-style UI with glass effects and visual modes
 
-## Run Locally
+## Social/Room status (2.6.x line)
+
+- Server-side friend presence (online/offline) from social backend
+- Explicit host transfer + server election fallback
+- Authoritative room queue synchronization and host-only transport control
+- Invite flow and room member sync through cloud relay
+
+## Local development
 
 ```bash
 npm install
 npm start
 ```
 
-## Build
+## Build (Windows)
 
 ```bash
 npm run build:win
 ```
 
-Made with love for Flow users.
+## Publish stable update artifacts
+
+```bash
+npm run publish:update:stable -- --host <host> --user <user> --port <port> --dir /var/www/flow-updates/stable
+```
