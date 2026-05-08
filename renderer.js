@@ -153,6 +153,8 @@ function waveEngine() {
       sanitizeTrackList,
       getSettings,
       searchHybridTracks,
+      searchTracksDirect,
+      getMyWaveSource,
       normalizeTrackSignature,
       getQueue: () => queue,
       getCurrentTrack: () => currentTrack,
@@ -4598,6 +4600,25 @@ function getMyWaveMode() {
   return WE?.MY_WAVE_MODES?.[_myWaveMode] ? _myWaveMode : 'default'
 }
 
+function getMyWaveSource() {
+  try {
+    const raw = String(localStorage.getItem('flow_my_wave_source') || 'yandex').trim().toLowerCase()
+    return raw === 'vk' ? 'vk' : 'yandex'
+  } catch {
+    return 'yandex'
+  }
+}
+
+function setMyWaveSource(source) {
+  const next = String(source || '').trim().toLowerCase() === 'vk' ? 'vk' : 'yandex'
+  try { localStorage.setItem('flow_my_wave_source', next) } catch {}
+  if (next !== 'yandex') toggleYandexWaveModes(false)
+  renderYandexWaveModes()
+  renderMyWave()
+  renderRoomsMyWave()
+  syncYandexWaveSettingsLabel()
+}
+
 function setMyWaveMode(mode) {
   _myWaveMode = WE?.MY_WAVE_MODES?.[mode] ? mode : 'default'
   try { localStorage.setItem('flow_my_wave_mode', _myWaveMode) } catch {}
@@ -4609,6 +4630,12 @@ function setMyWaveMode(mode) {
 function syncYandexWaveSettingsLabel() {
   const btn = document.querySelector('.yandex-wave-settings')
   if (!btn) return
+  const source = getMyWaveSource()
+  if (source !== 'yandex') {
+    btn.style.display = 'none'
+    return
+  }
+  btn.style.display = 'inline-flex'
   const mode = getMyWaveMode()
   const cfg = WE?.MY_WAVE_MODES?.[mode]
   const label = sanitizeDisplayText(cfg?.label || 'Настроить')
@@ -4619,6 +4646,10 @@ function syncYandexWaveSettingsLabel() {
 function renderYandexWaveModes() {
   const pop = document.getElementById('yandex-wave-mode-pop')
   if (!pop) return
+  if (getMyWaveSource() !== 'yandex') {
+    pop.classList.add('hidden')
+    return
+  }
   const mode = getMyWaveMode()
   const modes = Object.entries(WE?.MY_WAVE_MODES || {})
   pop.innerHTML = `
@@ -4633,6 +4664,7 @@ function renderYandexWaveModes() {
 }
 
 function toggleYandexWaveModes(force) {
+  if (getMyWaveSource() !== 'yandex') return
   const pop = document.getElementById('yandex-wave-mode-pop')
   if (!pop) return
   renderYandexWaveModes()
@@ -4707,12 +4739,23 @@ function renderMyWave() {
   const modesEl = document.getElementById('my-wave-modes')
   if (!listEl || !hintEl) return
   const mode = getMyWaveMode()
+  const source = getMyWaveSource()
   const modeCfg = WE?.MY_WAVE_MODES?.[mode] || WE?.MY_WAVE_MODES?.default
   const seedCount = getMyWaveSeedTracks().length
   if (modesEl) {
-    modesEl.innerHTML = Object.entries(WE?.MY_WAVE_MODES || {}).map(([id, cfg]) => (
+    modesEl.style.display = 'flex'
+    const sourcePicker = `
+      <div class="my-wave-source-switch">
+        <button class="my-wave-mode ${source === 'yandex' ? 'active' : ''}" onclick="setMyWaveSource('yandex')">Яндекс</button>
+        <button class="my-wave-mode ${source === 'vk' ? 'active' : ''}" onclick="setMyWaveSource('vk')">VK</button>
+      </div>
+    `
+    const modeButtons = source === 'yandex'
+      ? Object.entries(WE?.MY_WAVE_MODES || {}).map(([id, cfg]) => (
       `<button class="my-wave-mode ${id === mode ? 'active' : ''}" data-wave-mode="${id}" onclick="setMyWaveMode('${id}')">${cfg.label}</button>`
     )).join('')
+      : '<div class="token-msg" style="display:block">Для VK-волны используется авто-режим без ручных пресетов.</div>'
+    modesEl.innerHTML = sourcePicker + modeButtons
   }
   if (seedCount < 3) {
     hintEl.textContent = `Послушай или лайкни еще ${3 - seedCount} трек(ов), чтобы волна поняла твой вкус`
@@ -4721,7 +4764,8 @@ function renderMyWave() {
   } else if (_myWavePreloading) {
     hintEl.textContent = `${modeCfg.label}: дозагружаю новые треки, чтобы волна не кончалась...`
   } else {
-    hintEl.textContent = `${modeCfg.label}: ${modeCfg.hint}. Нажми запуск, и волна сама соберет новую очередь`
+    const sourceLabel = source === 'vk' ? 'VK' : 'Яндекс'
+    hintEl.textContent = `${sourceLabel} • ${modeCfg.label}: ${modeCfg.hint}. Нажми запуск, и волна сама соберет новую очередь`
   }
   listEl.innerHTML = `
     <div class="my-wave-orb mode-${mode} ${_myWaveBuilding || _myWavePreloading ? 'is-loading' : ''}" aria-label="${modeCfg.label}">
@@ -4739,11 +4783,22 @@ function renderRoomsMyWave() {
   const listEl = document.getElementById('rooms-wave-list')
   if (!hintEl || !modesEl || !listEl) return
   const mode = getMyWaveMode()
+  const source = getMyWaveSource()
   const modeCfg = WE?.MY_WAVE_MODES?.[mode] || WE?.MY_WAVE_MODES?.default
   const seedCount = getMyWaveSeedTracks().length
-  modesEl.innerHTML = Object.entries(WE?.MY_WAVE_MODES || {}).map(([id, cfg]) => (
+  const sourcePicker = `
+    <div class="my-wave-source-switch">
+      <button class="my-wave-mode ${source === 'yandex' ? 'active' : ''}" onclick="setMyWaveSource('yandex')">Яндекс</button>
+      <button class="my-wave-mode ${source === 'vk' ? 'active' : ''}" onclick="setMyWaveSource('vk')">VK</button>
+    </div>
+  `
+  const modeButtons = source === 'yandex'
+    ? Object.entries(WE?.MY_WAVE_MODES || {}).map(([id, cfg]) => (
     `<button class="my-wave-mode ${id === mode ? 'active' : ''}" data-wave-mode="${id}" onclick="setMyWaveMode('${id}')">${cfg.label}</button>`
   )).join('')
+    : '<div class="token-msg" style="display:block">Для VK-волны включен автоматический пресет.</div>'
+  modesEl.innerHTML = sourcePicker + modeButtons
+  modesEl.style.display = 'flex'
   if (seedCount < 3) {
     hintEl.textContent = `Послушай или лайкни еще ${3 - seedCount} трек(ов), чтобы волна поняла твой вкус`
   } else if (_myWaveBuilding) {
@@ -4751,7 +4806,8 @@ function renderRoomsMyWave() {
   } else if (_myWavePreloading) {
     hintEl.textContent = `${modeCfg.label}: дозагружаю новые треки, чтобы волна не кончалась...`
   } else {
-    hintEl.textContent = `${modeCfg.label}: ${modeCfg.hint}. Нажми запуск, и волна сама соберет новую очередь`
+    const sourceLabel = source === 'vk' ? 'VK' : 'Яндекс'
+    hintEl.textContent = `${sourceLabel} • ${modeCfg.label}: ${modeCfg.hint}. Нажми запуск, и волна сама соберет новую очередь`
   }
   listEl.innerHTML = `
     <div class="my-wave-orb mode-${mode} ${_myWaveBuilding || _myWavePreloading ? 'is-loading' : ''}" aria-label="${modeCfg.label}">
