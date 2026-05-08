@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Как подключить ВКонтакте во Flow — токен</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0;
+      padding: 24px 16px 48px;
+      font: 18px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      background: #fafafa;
+      color: #222;
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background: #111; color: #e8e8e8; }
+      a { color: #8ab4ff; }
+      code { background: rgba(255,255,255,0.08); }
+    }
+    .wrap { max-width: 680px; margin: 0 auto; }
+    h1 { font-size: 1.75rem; line-height: 1.25; margin: 0 0 0.35em; font-weight: 700; }
+    .meta { font-size: 0.95rem; opacity: 0.72; margin-bottom: 1.75em; }
+    h2 { font-size: 1.2rem; margin: 1.6em 0 0.5em; font-weight: 700; }
+    p { margin: 0.65em 0; }
+    ul { margin: 0.5em 0 0.5em 1.1em; padding: 0; }
+    li { margin: 0.35em 0; }
+    code {
+      font: 0.92em/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      background: rgba(0,0,0,0.06);
+      padding: 0.12em 0.35em;
+      border-radius: 4px;
+    }
+    .note {
+      margin-top: 1.25em;
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1px solid rgba(0,0,0,0.12);
+      background: rgba(70,128,194,0.08);
+    }
+    a { color: #2481cc; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <article class="wrap">
+    <h1>Как подключить ВКонтакте во Flow — токен</h1>
+    <p class="meta">Гайд для десктопного Flow · поиск и импорт VK</p>
+
+    <p>Чтобы во <strong>Flow</strong> работали поиск по аудио ВКонтакте и импорт плейлистов, приложению нужен <strong>access token</strong> с доступом к аудио. Ниже — самый распространённый путь через сервис <strong>vkhost</strong> и приложение <strong>Kate Mobile</strong>.</p>
+
+    <h2>Шаг 1. Открой страницу получения токена</h2>
+    <p>Перейди на <a href="https://vkhost.github.io/" target="_blank" rel="noopener">https://vkhost.github.io/</a>.</p>
+
+    <h2>Шаг 2. Выбери приложение Kate Mobile</h2>
+    <p>В списке приложений выбери <strong>Kate Mobile</strong> (или эквивалент с полноценным доступом к аудио — как подсказывает vkhost).</p>
+
+    <h2>Шаг 3. Отметь права, особенно «Аудио»</h2>
+    <p>На vkhost отметь нужные права. Для музыки критично право <strong>«Аудио»</strong> (и связанные пункты, если они есть в интерфейсе).</p>
+
+    <h2>Шаг 4. Войди в VK и разреши доступ</h2>
+    <p>Нажми кнопку входа / получения токена. Может открыться <strong>VK ID</strong> («Продолжить как …») — подтверди.</p>
+    <p>На странице <code>id.vk.com</code> со списком прав <strong>нет отдельных галочек по каждой строке</strong>: это перечень того, что запрашивает приложение. Пролистай вниз и нажми <strong>«Разрешить»</strong>. Если кнопки не видно — разверни окно на весь экран или прокрути страницу вниз.</p>
+
+    <h2>Шаг 5. Скопируй токен из адреса</h2>
+    <p>После успешного входа браузер перейдёт на redirect-страницу, а в <strong>адресной строке</strong> будет фрагмент вида:</p>
+    <p><code>...#access_token=СЮДА_ДЛИННЫЙ_ТОКЕН&amp;expires_in=...</code></p>
+    <p>Скопируй значение от <code>access_token=</code> до следующего <code>&amp;</code> (до <code>expires_in</code> и т.п.). Это и есть токен.</p>
+
+    <h2>Шаг 6. Вставь токен во Flow</h2>
+    <p>Открой Flow → <strong>Настройки</strong> → раздел <strong>Аккаунты</strong> → блок <strong>Источники</strong> или секция <strong>«Авторизация VK»</strong>.</p>
+    <p>Вставь токен в поле, нажми <strong>сохранить</strong> (галочка), затем при необходимости — <strong>«Проверить токен»</strong>.</p>
+
+    <h2>Если проверка ругается на audio.* или коды VK</h2>
+    <ul>
+      <li><strong>Код 5</strong> — токен недействителен, получи новый.</li>
+      <li><strong>Код 6</strong> — слишком много запросов: подожди 30–60 секунд и проверь снова.</li>
+      <li><strong>Код 15</strong> — часто связано с типом токена: для аудио нужен подходящий токен (Kate и корректные права).</li>
+      <li>Если VK «режет» официальные методы <code>audio.*</code> для части аккаунтов, во Flow есть опция <strong>обхода через Chrome (Selenium)</strong> в настройках VK — только если реально нужно; по умолчанию браузер сам не открывается.</li>
+    </ul>
+
+    <div class="note">
+      <strong>Яндекс Музыка.</strong> Отдельный Telegraph-гайд по Яндексу: <a href="https://telegra.ph/Kak-podklyuchit-YAndeks-Muzyku-vo-Flow-05-03" target="_blank" rel="noopener">Как подключить Яндекс Музыку во Flow</a>.
+    </div>
+  </article>
+</body>
+</html>

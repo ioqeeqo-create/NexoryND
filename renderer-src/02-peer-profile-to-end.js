@@ -172,6 +172,25 @@ function getMyWaveMode() {
   return WE?.MY_WAVE_MODES?.[_myWaveMode] ? _myWaveMode : 'default'
 }
 
+function getMyWaveSource() {
+  try {
+    const raw = String(localStorage.getItem('flow_my_wave_source') || 'yandex').trim().toLowerCase()
+    return raw === 'vk' ? 'vk' : 'yandex'
+  } catch {
+    return 'yandex'
+  }
+}
+
+function setMyWaveSource(source) {
+  const next = String(source || '').trim().toLowerCase() === 'vk' ? 'vk' : 'yandex'
+  try { localStorage.setItem('flow_my_wave_source', next) } catch {}
+  if (next !== 'yandex') toggleYandexWaveModes(false)
+  renderYandexWaveModes()
+  renderMyWave()
+  renderRoomsMyWave()
+  syncYandexWaveSettingsLabel()
+}
+
 function setMyWaveMode(mode) {
   _myWaveMode = WE?.MY_WAVE_MODES?.[mode] ? mode : 'default'
   try { localStorage.setItem('flow_my_wave_mode', _myWaveMode) } catch {}
@@ -183,6 +202,12 @@ function setMyWaveMode(mode) {
 function syncYandexWaveSettingsLabel() {
   const btn = document.querySelector('.yandex-wave-settings')
   if (!btn) return
+  const source = getMyWaveSource()
+  if (source !== 'yandex') {
+    btn.style.display = 'none'
+    return
+  }
+  btn.style.display = 'inline-flex'
   const mode = getMyWaveMode()
   const cfg = WE?.MY_WAVE_MODES?.[mode]
   const label = sanitizeDisplayText(cfg?.label || 'Настроить')
@@ -193,6 +218,10 @@ function syncYandexWaveSettingsLabel() {
 function renderYandexWaveModes() {
   const pop = document.getElementById('yandex-wave-mode-pop')
   if (!pop) return
+  if (getMyWaveSource() !== 'yandex') {
+    pop.classList.add('hidden')
+    return
+  }
   const mode = getMyWaveMode()
   const modes = Object.entries(WE?.MY_WAVE_MODES || {})
   pop.innerHTML = `
@@ -207,6 +236,7 @@ function renderYandexWaveModes() {
 }
 
 function toggleYandexWaveModes(force) {
+  if (getMyWaveSource() !== 'yandex') return
   const pop = document.getElementById('yandex-wave-mode-pop')
   if (!pop) return
   renderYandexWaveModes()
@@ -214,6 +244,7 @@ function toggleYandexWaveModes(force) {
   pop.classList.toggle('hidden', !shouldOpen)
 }
 
+let _lastMyWavePreloadCheckAt = 0
 
 async function maybePreloadMyWave(force = false) {
   if (queueScope !== 'myWave' || _myWaveBuilding || _myWavePreloading) return
@@ -280,12 +311,23 @@ function renderMyWave() {
   const modesEl = document.getElementById('my-wave-modes')
   if (!listEl || !hintEl) return
   const mode = getMyWaveMode()
+  const source = getMyWaveSource()
   const modeCfg = WE?.MY_WAVE_MODES?.[mode] || WE?.MY_WAVE_MODES?.default
   const seedCount = getMyWaveSeedTracks().length
   if (modesEl) {
-    modesEl.innerHTML = Object.entries(WE?.MY_WAVE_MODES || {}).map(([id, cfg]) => (
+    modesEl.style.display = 'flex'
+    const sourcePicker = `
+      <div class="my-wave-source-switch">
+        <button class="my-wave-mode ${source === 'yandex' ? 'active' : ''}" onclick="setMyWaveSource('yandex')">Яндекс</button>
+        <button class="my-wave-mode ${source === 'vk' ? 'active' : ''}" onclick="setMyWaveSource('vk')">VK</button>
+      </div>
+    `
+    const modeButtons = source === 'yandex'
+      ? Object.entries(WE?.MY_WAVE_MODES || {}).map(([id, cfg]) => (
       `<button class="my-wave-mode ${id === mode ? 'active' : ''}" data-wave-mode="${id}" onclick="setMyWaveMode('${id}')">${cfg.label}</button>`
     )).join('')
+      : '<div class="token-msg" style="display:block">Для VK-волны используется авто-режим без ручных пресетов.</div>'
+    modesEl.innerHTML = sourcePicker + modeButtons
   }
   if (seedCount < 3) {
     hintEl.textContent = `Послушай или лайкни еще ${3 - seedCount} трек(ов), чтобы волна поняла твой вкус`
@@ -294,7 +336,8 @@ function renderMyWave() {
   } else if (_myWavePreloading) {
     hintEl.textContent = `${modeCfg.label}: дозагружаю новые треки, чтобы волна не кончалась...`
   } else {
-    hintEl.textContent = `${modeCfg.label}: ${modeCfg.hint}. Нажми запуск, и волна сама соберет новую очередь`
+    const sourceLabel = source === 'vk' ? 'VK' : 'Яндекс'
+    hintEl.textContent = `${sourceLabel} • ${modeCfg.label}: ${modeCfg.hint}. Нажми запуск, и волна сама соберет новую очередь`
   }
   listEl.innerHTML = `
     <div class="my-wave-orb mode-${mode} ${_myWaveBuilding || _myWavePreloading ? 'is-loading' : ''}" aria-label="${modeCfg.label}">
@@ -312,11 +355,22 @@ function renderRoomsMyWave() {
   const listEl = document.getElementById('rooms-wave-list')
   if (!hintEl || !modesEl || !listEl) return
   const mode = getMyWaveMode()
+  const source = getMyWaveSource()
   const modeCfg = WE?.MY_WAVE_MODES?.[mode] || WE?.MY_WAVE_MODES?.default
   const seedCount = getMyWaveSeedTracks().length
-  modesEl.innerHTML = Object.entries(WE?.MY_WAVE_MODES || {}).map(([id, cfg]) => (
+  const sourcePicker = `
+    <div class="my-wave-source-switch">
+      <button class="my-wave-mode ${source === 'yandex' ? 'active' : ''}" onclick="setMyWaveSource('yandex')">Яндекс</button>
+      <button class="my-wave-mode ${source === 'vk' ? 'active' : ''}" onclick="setMyWaveSource('vk')">VK</button>
+    </div>
+  `
+  const modeButtons = source === 'yandex'
+    ? Object.entries(WE?.MY_WAVE_MODES || {}).map(([id, cfg]) => (
     `<button class="my-wave-mode ${id === mode ? 'active' : ''}" data-wave-mode="${id}" onclick="setMyWaveMode('${id}')">${cfg.label}</button>`
   )).join('')
+    : '<div class="token-msg" style="display:block">Для VK-волны включен автоматический пресет.</div>'
+  modesEl.innerHTML = sourcePicker + modeButtons
+  modesEl.style.display = 'flex'
   if (seedCount < 3) {
     hintEl.textContent = `Послушай или лайкни еще ${3 - seedCount} трек(ов), чтобы волна поняла твой вкус`
   } else if (_myWaveBuilding) {
@@ -324,7 +378,8 @@ function renderRoomsMyWave() {
   } else if (_myWavePreloading) {
     hintEl.textContent = `${modeCfg.label}: дозагружаю новые треки, чтобы волна не кончалась...`
   } else {
-    hintEl.textContent = `${modeCfg.label}: ${modeCfg.hint}. Нажми запуск, и волна сама соберет новую очередь`
+    const sourceLabel = source === 'vk' ? 'VK' : 'Яндекс'
+    hintEl.textContent = `${sourceLabel} • ${modeCfg.label}: ${modeCfg.hint}. Нажми запуск, и волна сама соберет новую очередь`
   }
   listEl.innerHTML = `
     <div class="my-wave-orb mode-${mode} ${_myWaveBuilding || _myWavePreloading ? 'is-loading' : ''}" aria-label="${modeCfg.label}">
@@ -350,6 +405,16 @@ function saveListenStats(patch = {}) {
   const next = Object.assign(getListenStats(), patch || {})
   localStorage.setItem(key, JSON.stringify(next))
   scheduleProfileCloudSync()
+}
+
+function flushListenStatsPending(force = false) {
+  const pending = Number(_listenStatsPendingSec || 0)
+  if (!force && pending < 0.9) return
+  if (pending <= 0) return
+  const st = getListenStats()
+  saveListenStats({ totalSeconds: Number(st.totalSeconds || 0) + pending })
+  _listenStatsPendingSec = 0
+  _listenStatsLastFlushAt = Date.now()
 }
 
 function saveProfileCustom(patch = {}) {
@@ -456,12 +521,19 @@ function resolvePeerAvatarByUsername(username = '') {
   }
 }
 
-/** Бейдж как на карточках треков: SoundCloud — оранжевый «SC» (совпадает с .track-source-soundcloud). */
+/** Ключ источника для класса `.track-source-*` и таблицы подписей (ya/ym → yandex). */
+function trackSourceBadgeKey(source) {
+  const s = String(source || '').toLowerCase()
+  if (s === 'ya' || s === 'ym') return 'yandex'
+  return s
+}
+
+/** Бейдж как на карточках треков: SC / Ya и т.д. (цвета в styles.css). */
 function profileListeningSourcePillHtml(trackHint) {
-  const LABELS = { soundcloud: 'SC', vk: 'VK', hitmo: 'HM', youtube: 'YT', spotify: 'SP' }
-  const src =
-    trackHint && typeof trackHint.source === 'string' && LABELS[trackHint.source] ? trackHint.source : ''
-  if (!src) {
+  const LABELS = { soundcloud: 'SC', vk: 'VK', youtube: 'YT', spotify: 'SP', yandex: 'Ya' }
+  const raw = trackHint && typeof trackHint.source === 'string' ? trackHint.source : ''
+  const src = raw ? trackSourceBadgeKey(raw) : ''
+  if (!src || !LABELS[src]) {
     return '<span class="flow-profile-src-badge flow-profile-src-badge--muted">SC</span>'
   }
   return `<span class="track-source track-source-${src} flow-profile-src-badge">${LABELS[src]}</span>`
@@ -1132,11 +1204,23 @@ async function transferRoomHost(peerId = '', username = '') {
   const targetPeerId = String(peerId || '').trim()
   if (!_roomState?.roomId || !_roomState.host) return showToast('Передавать хоста может только текущий хост', true)
   if (!targetPeerId || targetPeerId === _socialPeer?.peer?.id) return showToast('Выбери другого участника', true)
+  const prevHost = String(_socialPeer?.peer?.id || _roomState.hostPeerId || '')
+  let transferredOnServer = false
+  if (isFlowSocialReady()) {
+    try {
+      const rid = encodeURIComponent(String(_roomState.roomId || '').trim())
+      const resp = await window.FlowSocialBackend.request('POST', `/flow-api/v1/rooms/${rid}/transfer-host`, {
+        to_peer_id: targetPeerId,
+        requested_by_peer_id: prevHost,
+      })
+      transferredOnServer = Boolean(resp?.ok)
+    } catch (_) {}
+  }
   _roomState.host = false
   _roomState.hostPeerId = targetPeerId
   _socialPeer?.sendToPeer?.(targetPeerId, { type: 'room-host-transfer', roomId: _roomState.roomId, hostPeerId: targetPeerId, sharedQueue })
   _socialPeer?.send?.({ type: 'room-host-changed', roomId: _roomState.roomId, hostPeerId: targetPeerId, username })
-  await saveRoomStateToServer({ host_peer_id: targetPeerId, shared_queue: sharedQueue }).catch(() => {})
+  if (!transferredOnServer) await saveRoomStateToServer({ host_peer_id: targetPeerId, shared_queue: sharedQueue }).catch(() => {})
   updateRoomUi()
   showToast(`Хост передан: ${username || targetPeerId.replace(/^flow-/, '')}`)
 }
@@ -1350,7 +1434,7 @@ function ensureSocialUI() {
   box.style.padding = '14px'
   box.innerHTML = `
     <div class="social-head">
-      <strong>Flow Social (P2P)</strong>
+      <strong>Flow Social (Cloud)</strong>
       <span id="social-status" class="social-status">offline</span>
     </div>
     <div class="social-add-box">
@@ -1476,12 +1560,116 @@ async function renderFriends() {
 
 function setSocialStatus(text) {
   const el = document.getElementById('social-status')
-  if (el) el.textContent = text
+  if (!el) return
+  const raw = String(text || '').trim().toLowerCase()
+  let state = 'degraded'
+  let label = String(text || 'degraded')
+  if (raw.startsWith('online')) {
+    state = 'online'
+    label = 'online'
+  } else if (raw.startsWith('connecting')) {
+    state = 'connecting'
+    label = 'connecting'
+  } else if (raw.startsWith('degraded')) {
+    state = 'degraded'
+    label = 'degraded'
+  } else if (raw.startsWith('error')) {
+    state = 'degraded'
+    label = `degraded (${String(text || '').replace(/^error:\s*/i, '')})`
+  }
+  el.textContent = label
+  el.classList.remove('social-status--online', 'social-status--connecting', 'social-status--degraded')
+  el.classList.add(`social-status--${state}`)
 }
 
 function setRoomStatus(text) {
   const el = document.getElementById('room-status')
   if (el) el.textContent = text
+}
+
+let _appUpdateState = {
+  available: false,
+  latestVersion: '',
+  downloadedPath: '',
+  checking: false,
+  downloading: false,
+}
+
+function setAppUpdateStatus(text, mode = 'neutral') {
+  const el = document.getElementById('app-update-status')
+  if (!el) return
+  el.textContent = String(text || '')
+  el.classList.remove('app-update-status--checking', 'app-update-status--ready', 'app-update-status--error')
+  if (mode === 'checking') el.classList.add('app-update-status--checking')
+  if (mode === 'ready') el.classList.add('app-update-status--ready')
+  if (mode === 'error') el.classList.add('app-update-status--error')
+}
+
+function updateAppUpdaterUiState() {
+  const downloadBtn = document.getElementById('app-update-download-btn')
+  const installBtn = document.getElementById('app-update-install-btn')
+  if (downloadBtn) {
+    downloadBtn.disabled = !_appUpdateState.available || _appUpdateState.downloading
+    downloadBtn.textContent = _appUpdateState.downloading ? 'Скачиваю...' : 'Скачать'
+  }
+  if (installBtn) {
+    installBtn.disabled = !_appUpdateState.downloadedPath
+  }
+}
+
+async function checkAppUpdatesNow() {
+  if (!window.api?.appUpdateCheck || _appUpdateState.checking) return
+  _appUpdateState.checking = true
+  setAppUpdateStatus('Проверяю stable-канал...', 'checking')
+  updateAppUpdaterUiState()
+  try {
+    const result = await window.api.appUpdateCheck()
+    if (!result?.ok) throw new Error(result?.error || 'update check failed')
+    _appUpdateState.available = Boolean(result.available)
+    _appUpdateState.latestVersion = String(result.latestVersion || '')
+    _appUpdateState.downloadedPath = ''
+    if (_appUpdateState.available) {
+      setAppUpdateStatus(`Доступна версия ${_appUpdateState.latestVersion}`, 'ready')
+      showToast(`Доступно обновление ${_appUpdateState.latestVersion}`)
+    } else {
+      setAppUpdateStatus(`У вас актуальная версия (${result.currentVersion || 'unknown'})`)
+    }
+  } catch (e) {
+    setAppUpdateStatus(`Ошибка проверки: ${sanitizeDisplayText(e?.message || String(e))}`, 'error')
+  } finally {
+    _appUpdateState.checking = false
+    updateAppUpdaterUiState()
+  }
+}
+
+async function downloadAppUpdateNow() {
+  if (!window.api?.appUpdateDownload || !_appUpdateState.available || _appUpdateState.downloading) return
+  _appUpdateState.downloading = true
+  setAppUpdateStatus(`Скачиваю ${_appUpdateState.latestVersion || 'обновление'}...`, 'checking')
+  updateAppUpdaterUiState()
+  try {
+    const result = await window.api.appUpdateDownload()
+    if (!result?.ok || !result?.downloadedPath) throw new Error(result?.error || 'download failed')
+    _appUpdateState.downloadedPath = String(result.downloadedPath || '')
+    setAppUpdateStatus(`Готово: ${result.latestVersion || _appUpdateState.latestVersion}`, 'ready')
+    showToast('Обновление скачано. Нажми "Установить и перезапустить"')
+  } catch (e) {
+    setAppUpdateStatus(`Ошибка скачивания: ${sanitizeDisplayText(e?.message || String(e))}`, 'error')
+  } finally {
+    _appUpdateState.downloading = false
+    updateAppUpdaterUiState()
+  }
+}
+
+async function installAppUpdateNow() {
+  if (!window.api?.appUpdateInstall || !_appUpdateState.downloadedPath) return
+  setAppUpdateStatus('Запускаю установщик и перезапуск...', 'checking')
+  try {
+    const result = await window.api.appUpdateInstall(_appUpdateState.downloadedPath)
+    if (!result?.ok) throw new Error(result?.error || 'install failed')
+  } catch (e) {
+    setAppUpdateStatus(`Ошибка установки: ${sanitizeDisplayText(e?.message || String(e))}`, 'error')
+  }
 }
 
 function getLastFmPayload() {
@@ -1507,28 +1695,21 @@ function syncIntegrationsUI() {
   if (k) k.value = s.lastfmApiKey || ''
   if (ss) ss.value = s.lastfmSharedSecret || ''
   if (sk) sk.value = s.lastfmSessionKey || ''
-  if (fsb) fsb.value = String(s.flowSocialApiBase || '').trim().replace(/\/$/, '')
-  if (fss) fss.value = String(s.flowSocialApiSecret || '').trim()
+  if (fsb) {
+    fsb.value = String(window.FlowSocialBackend?.getConfig?.().base || FLOW_SOCIAL_DEFAULT_API_BASE).trim().replace(/\/$/, '')
+    fsb.disabled = true
+    fsb.title = 'В этой сборке значение фиксированное'
+  }
+  if (fss) {
+    fss.value = '********'
+    fss.disabled = true
+    fss.title = 'В этой сборке значение фиксированное'
+  }
+  updateAppUpdaterUiState()
 }
 
 function saveFlowSocialBackendSettings() {
-  const elB = document.getElementById('flow-social-api-base')
-  const elS = document.getElementById('flow-social-api-secret')
-  const base = String(elB?.value || '').trim().replace(/\/$/, '')
-  const secret = String(elS?.value || '').trim()
-  saveSettingsRaw({ flowSocialApiBase: base, flowSocialApiSecret: secret })
-  try {
-    localStorage.setItem('flow_social_api_base', base)
-    localStorage.setItem('flow_social_api_secret', secret)
-  } catch (_) {}
-  try {
-    stopProfilesRealtimeSync()
-    stopRoomServerSync()
-    window.FlowSocialBackend?.invalidate?.()
-    if (_profile?.username) initPeerSocial()
-    if (_roomState?.roomId) startRoomServerSync()
-  } catch (_) {}
-  showToast('Социальный сервер сохранён')
+  showToast('В этой версии социальный backend зафиксирован и не требует ручного ввода')
 }
 
 async function checkFlowSocialBackendStatus() {
@@ -1540,15 +1721,11 @@ async function checkFlowSocialBackendStatus() {
     else if (ok === false) statusEl.style.color = '#ff9b9b'
     else statusEl.style.color = ''
   }
-  const base = String(document.getElementById('flow-social-api-base')?.value || '').trim().replace(/\/$/, '')
-  const secret = String(document.getElementById('flow-social-api-secret')?.value || '').trim()
-  saveSettingsRaw({ flowSocialApiBase: base, flowSocialApiSecret: secret })
-  try {
-    localStorage.setItem('flow_social_api_base', base)
-    localStorage.setItem('flow_social_api_secret', secret)
-  } catch (_) {}
+  const cfg = window.FlowSocialBackend?.getConfig?.() || {}
+  const base = String(cfg.base || FLOW_SOCIAL_DEFAULT_API_BASE || '').trim().replace(/\/$/, '')
+  const secret = String(cfg.secret || FLOW_SOCIAL_DEFAULT_API_SECRET || '').trim()
   if (!base || !secret) {
-    setStatus('Соц-API: укажи URL и секрет', false)
+    setStatus('Соц-API: конфиг отсутствует', false)
     return
   }
   setStatus('Соц-API: проверяю…')
@@ -1739,6 +1916,11 @@ function initPeerSocial() {
     maxPeers: 3,
     onStatus: (evt) => {
       if (evt.type === 'ready') setSocialStatus(`online: ${evt.id}`)
+      if (evt.type === 'ws-state') {
+        if (evt.state === 'online') setSocialStatus('online')
+        else if (evt.state === 'connecting') setSocialStatus(`connecting${evt.attempt ? ` (#${evt.attempt})` : ''}`)
+        else setSocialStatus(`degraded${evt.reason ? ` (${evt.reason})` : ''}`)
+      }
       if (evt.type === 'peer-joined') {
         setRoomStatus(`Рума ${_roomState.roomId || '—'}: участников ${_socialPeer.peersCount()}/3`)
         const me = getPublicProfilePayload(_profile?.username)
@@ -1772,10 +1954,10 @@ function initPeerSocial() {
           _peerProfiles.delete(evt.peerId)
         }
         if (!_roomState.host && evt.peerId && evt.peerId === _roomState.hostPeerId) {
-          _roomState = { roomId: null, host: true, hostPeerId: null }
-          _roomMembers.clear()
-          showToast('Хост покинул комнату. Теперь вы управляете плеером сами')
-          setRoomStatus('Хост отключился, автономный режим активирован')
+          _roomState.hostPeerId = null
+          showToast('Хост вышел. Выбираем нового хоста...')
+          setRoomStatus('Хост вышел, server election...')
+          loadRoomStateFromServer(true).catch(() => {})
         }
         broadcastRoomMembersState()
         resetRoomHeartbeat()
@@ -1794,23 +1976,40 @@ function initPeerSocial() {
         const senderId = String(msg._peerId || fromPeerId || '').trim()
         if (!_roomState.hostPeerId && senderId) _roomState.hostPeerId = senderId
         if (expectedHostId && senderId && senderId !== expectedHostId) return
+        const seq = Number(msg.syncSeq || 0)
+        if (seq && _lastPlaybackSyncSeq && seq < _lastPlaybackSyncSeq) return
+        if (seq) _lastPlaybackSyncSeq = Math.max(_lastPlaybackSyncSeq || 0, seq)
         const ts = Number(msg.playbackTs || msg._ts || 0)
-        if (ts && ts <= _lastAppliedServerPlaybackTs) return
-        if (ts) _lastAppliedServerPlaybackTs = ts
-        if (msg.track && msg.track.id !== currentTrack?.id) {
-          playTrackObj(msg.track, { remoteSync: true }).catch(() => {})
+        if (ts) _lastAppliedServerPlaybackTs = Math.max(_lastAppliedServerPlaybackTs || 0, ts)
+        if (msg.track) {
+          const incomingTrack = sanitizeTrack(msg.track)
+          const incomingSig = normalizeTrackSignature(incomingTrack)
+          const currentSig = normalizeTrackSignature(currentTrack || {})
+          const noActiveAudio = !audio?.src || audio?.ended || audio?.error
+          const shouldReloadTrack =
+            noActiveAudio ||
+            !currentTrack ||
+            !incomingSig ||
+            !currentSig ||
+            incomingSig !== currentSig
+          if (shouldReloadTrack) {
+            playTrackObj(incomingTrack, { remoteSync: true }).catch(() => {})
+          }
         }
-        if (typeof msg.currentTime === 'number') {
+        if (typeof msg.currentTime === 'number' && Number.isFinite(audio.duration) && audio.duration > 0) {
           const latencySec = Math.max(0, (Date.now() - Number(msg._ts || Date.now())) / 1000)
-          const targetTime = Math.max(0, msg.currentTime + latencySec)
-          if (Math.abs(audio.currentTime - targetTime) > 0.10) audio.currentTime = targetTime
+          const targetTime = Math.max(0, Math.min(msg.currentTime + latencySec, audio.duration))
+          if (Math.abs(audio.currentTime - targetTime) > 0.12) audio.currentTime = targetTime
         }
         if (typeof msg.paused === 'boolean') {
           if (msg.paused && !audio.paused) audio.pause()
           if (!msg.paused && audio.paused) audio.play().catch(() => {})
         }
+        try {
+          syncTransportPlayPauseUi()
+        } catch (_) {}
         if (Array.isArray(msg.sharedQueue)) {
-          sharedQueue = msg.sharedQueue
+          sharedQueue = msg.sharedQueue.map((t) => sanitizeTrack(t)).filter(Boolean)
           renderRoomQueue()
         }
       }
@@ -1881,7 +2080,9 @@ function initPeerSocial() {
         _peerProfiles.set(msg._peerId, profileWithPeer)
         cachePeerProfile(profileWithPeer, msg._peerId)
         _roomMembers.set(msg._peerId, profileWithPeer)
-        if (Array.isArray(msg.sharedQueue)) sharedQueue = msg.sharedQueue
+        // Queue should be synchronized only via authoritative events:
+        // playback-sync / queue-update / room-queue-sync-state / server flow_rooms.
+        // Applying queue from profile packets causes occasional stale "flicker".
         if (_roomState.host) broadcastRoomMembersState()
         resetRoomHeartbeat()
         updateRoomUi()
@@ -1902,23 +2103,30 @@ function initPeerSocial() {
       }
       if (msg.type === 'room-queue-add' && msg.roomId === _roomState.roomId && _roomState.host && msg.track) {
         const t = sanitizeTrack(msg.track)
-        sharedQueue.push(t)
+        const sig = normalizeTrackSignature(t)
+        if (!sig || !sharedQueue.some((item) => normalizeTrackSignature(item) === sig)) {
+          sharedQueue.push(t)
+        }
         broadcastQueueUpdate()
         _socialPeer.send({ type: 'room-profile-state', roomId: _roomState.roomId, profile: getPublicProfilePayload(_profile?.username), sharedQueue })
         saveRoomStateToServer({ shared_queue: sharedQueue }).catch(() => {})
         renderRoomQueue()
       }
       if (msg.type === 'room-control-toggle' && msg.roomId === _roomState.roomId && msg._peerId && msg._peerId !== _socialPeer?.peer?.id) {
+        const expectedHostId = String(_roomState.hostPeerId || '').trim()
+        const senderId = String(msg._peerId || '').trim()
+        if (expectedHostId && senderId && senderId !== expectedHostId) return
+        if (_roomState?.host) return
+        if (typeof msg.currentTime === 'number' && Number.isFinite(audio.duration) && audio.duration > 0) {
+          const ct = Math.max(0, Math.min(Number(msg.currentTime), audio.duration))
+          if (Math.abs(audio.currentTime - ct) > 1.25) audio.currentTime = ct
+        }
         const shouldPause = Boolean(msg.paused)
         if (shouldPause && !audio.paused) audio.pause()
         if (!shouldPause && audio.paused) audio.play().catch(() => {})
-        if (_roomState?.host) {
-          broadcastPlaybackSync(true)
-          saveRoomStateToServer({
-            playback_state: { paused: Boolean(audio.paused), currentTime: Number(audio.currentTime || 0) },
-            playback_ts: Date.now(),
-          }).catch(() => {})
-        }
+        try {
+          syncTransportPlayPauseUi()
+        } catch (_) {}
       }
       if (msg.type === 'room-queue-sync-request' && msg.roomId === _roomState.roomId && _roomState.host) {
         const payload = { type: 'room-queue-sync-state', roomId: _roomState.roomId, sharedQueue }
@@ -1926,13 +2134,11 @@ function initPeerSocial() {
         else _socialPeer.send(payload)
       }
       if (msg.type === 'room-queue-sync-state' && msg.roomId === _roomState.roomId && Array.isArray(msg.sharedQueue)) {
-        sharedQueue = msg.sharedQueue
-        saveRoomStateToServer({ shared_queue: sharedQueue }).catch(() => {})
+        sharedQueue = msg.sharedQueue.map((t) => sanitizeTrack(t)).filter(Boolean)
         renderRoomQueue()
       }
       if (msg.type === (peerSocial?.EVENTS?.QUEUE_UPDATE || 'queue-update') && msg.roomId === _roomState.roomId && Array.isArray(msg.sharedQueue)) {
-        sharedQueue = msg.sharedQueue
-        saveRoomStateToServer({ shared_queue: sharedQueue }).catch(() => {})
+        sharedQueue = msg.sharedQueue.map((t) => sanitizeTrack(t)).filter(Boolean)
         renderRoomQueue()
       }
     },
@@ -2047,9 +2253,12 @@ function createRoom() {
   if (!_socialPeer) return
   const r = _socialPeer.createRoom()
   if (!r?.ok) return showToast(r?.error || 'Ошибка создания', true)
+  stopCurrentPlaybackForRoomMode()
   _roomState = { roomId: r.roomId, host: true, hostPeerId: _socialPeer?.peer?.id || r.roomId }
   _roomMembers.clear()
   sharedQueue = []
+  _lastPlaybackSyncSeq = 0
+  _hostPlaybackSyncSeq = 0
   if (_socialPeer?.peer?.id) _roomMembers.set(_socialPeer.peer.id, getPublicProfilePayload(_profile?.username))
   setRoomStatus(`Рума ${r.roomId}: участников 1/3`)
   resetRoomHeartbeat()
@@ -2066,8 +2275,12 @@ function joinRoomById(forceRoomId = '') {
   const r = _socialPeer.joinRoom(roomId)
   if (!r?.ok) return showToast(r?.error || 'Ошибка входа', true)
   _roomState = { roomId: r.roomId, host: false, hostPeerId: null }
+  // Вход в комнату переводит в отдельный комнатный режим, персональный плеер мгновенно останавливаем.
+  stopCurrentPlaybackForRoomMode()
   _roomMembers.clear()
   sharedQueue = []
+  _lastPlaybackSyncSeq = 0
+  _hostPlaybackSyncSeq = 0
   if (_socialPeer?.peer?.id) _roomMembers.set(_socialPeer.peer.id, getPublicProfilePayload(_profile?.username))
   setRoomStatus(`Подключение к руме ${r.roomId}...`)
   resetRoomHeartbeat()
@@ -2085,16 +2298,31 @@ function leaveRoom() {
   const prevRoomId = _roomState?.roomId
   removeRoomMemberPresence(prevRoomId).catch(() => {})
   stopRoomServerSync()
+  stopCurrentPlaybackForRoomMode()
   if (!_socialPeer) return
   if (typeof _socialPeer.leaveRoom === 'function') _socialPeer.leaveRoom()
   _roomState = { roomId: null, host: false, hostPeerId: null }
   _roomMembers.clear()
   sharedQueue = []
+  _lastPlaybackSyncSeq = 0
+  _hostPlaybackSyncSeq = 0
+  _lastAppliedServerPlaybackTs = 0
   if (_roomHeartbeatTimer) clearInterval(_roomHeartbeatTimer)
   _roomHeartbeatTimer = null
   setRoomStatus('Рума: не активна')
   updateRoomUi()
   showToast('Вы покинули руму')
+}
+
+function stopCurrentPlaybackForRoomMode() {
+  // Invalidate pending async play resolutions from previous (personal) context.
+  _playRequestSeq = Number(_playRequestSeq || 0) + 1
+  try { audio.pause() } catch (_) {}
+  try { audio.removeAttribute('src'); audio.load() } catch (_) {}
+  currentTrack = null
+  try { syncTransportPlayPauseUi() } catch (_) {}
+  try { renderRoomNowPlaying() } catch (_) {}
+  try { refreshNowPlayingTrackHighlight() } catch (_) {}
 }
 
 function copyInviteLink() {
@@ -2266,19 +2494,52 @@ function promptInviteJoin() {
   openInviteModal()
 }
 
+async function fetchServerFriendsPresence(username) {
+  if (!isFlowSocialReady() || !username) return null
+  try {
+    const rid = encodeURIComponent(String(username || '').trim().toLowerCase())
+    const rows = await window.FlowSocialBackend.request('GET', `/flow-api/v1/presence/friends/${rid}`)
+    if (!Array.isArray(rows)) return null
+    const map = new Map()
+    rows.forEach((row) => {
+      const uname = String(row?.username || '').trim().toLowerCase()
+      if (!uname) return
+      map.set(uname, {
+        online: Boolean(row?.online),
+        roomId: row?.room_id ? String(row.room_id) : null,
+        peerId: row?.peer_id ? String(row.peer_id) : `flow-${uname}`,
+        updatedAt: Date.now(),
+      })
+    })
+    return map
+  } catch {
+    return null
+  }
+}
+
 async function pollFriendsPresence(force = false) {
   if (!_socialPeer || !_profile?.username || !peerSocial.getFriends) return
+  const serverPresence = await fetchServerFriendsPresence(_profile.username).catch(() => null)
   const friends = peerSocial.getFriends(_profile.username) || []
   const entries = await Promise.all(friends.map(async (friend) => {
     const uname = String(friend || '').trim().toLowerCase()
     const prev = _friendPresence.get(uname) || {}
+    const cloud = serverPresence?.get(uname) || null
     const freshOnline = !force && prev.online && (Date.now() - Number(prev.updatedAt || 0) < FRIEND_FRESH_ONLINE_MS)
-    const isOnline = freshOnline ? true : await _socialPeer.probeUser(uname, 900).catch(() => false)
+    const isOnline = cloud
+      ? Boolean(cloud.online)
+      : (freshOnline ? true : await _socialPeer.probeUser(uname, 900).catch(() => false))
     if (!isOnline) {
-      return [uname, { online: false, track: null, roomId: null, peerId: prev.peerId || null, updatedAt: Date.now() }]
+      return [uname, { online: false, track: null, roomId: cloud?.roomId || null, peerId: cloud?.peerId || prev.peerId || null, updatedAt: Date.now() }]
     }
-    let state = { online: true, track: prev.track || null, roomId: prev.roomId || `flow-${uname}`, peerId: prev.peerId || `flow-${uname}`, updatedAt: Date.now() }
-    const peerId = `flow-${uname}`
+    let state = {
+      online: true,
+      track: prev.track || null,
+      roomId: cloud?.roomId || prev.roomId || `flow-${uname}`,
+      peerId: cloud?.peerId || prev.peerId || `flow-${uname}`,
+      updatedAt: Date.now(),
+    }
+    const peerId = String(state.peerId || `flow-${uname}`)
     if (typeof _socialPeer.requestPeerData === 'function') {
       const response = await _socialPeer.requestPeerData(peerId, { type: 'presence-request' }, 1100).catch(() => null)
       if (response?.ok && response?.data?.type === 'presence-state') {
@@ -2335,11 +2596,13 @@ function broadcastPlaybackSync(force = false) {
   const now = Date.now()
   if (!force && now - _lastRoomSyncAt < 700) return
   _lastRoomSyncAt = now
+  _hostPlaybackSyncSeq = Number(_hostPlaybackSyncSeq || 0) + 1
   _socialPeer.send({
     type: 'playback-sync',
     roomId: _roomState.roomId,
     track: currentTrack,
     playbackTs: Date.now(),
+    syncSeq: _hostPlaybackSyncSeq,
     currentTime: Number(audio.currentTime || 0),
     paused: Boolean(audio.paused),
     source: currentTrack?.source || null,
@@ -2385,6 +2648,7 @@ function startApp() {
     switchTab('login')
     syncIntegrationsUI()
   }
+  checkAppUpdatesNow().catch(() => {})
   updateRoomUi()
   if (!localStorage.getItem('flow_first_launch_done')) {
     saveVisual({
@@ -3909,6 +4173,9 @@ function ensureAudioAnalyzer() {
   _audioCtx = state.audioCtx
   _analyser = state.analyser
   _freqData = state.freqData
+  try {
+    if (_audioCtx?.state === 'suspended') _audioCtx.resume().catch(() => {})
+  } catch (_) {}
   return true
 }
 
@@ -4526,7 +4793,12 @@ function toggleHomeLayoutEdit() {
   queueMicrotask(() => scheduleMainShiftRemeasure())
 }
 
+/** Троттлинг отрисовки виджета на главной: 60 FPS + Web Audio + canvas давали микрофризы при режиме «волна». */
+let _homeVizLastDrawAt = 0
+
 function drawHomeVisualizerFrame() {
+  const wrap = document.getElementById('home-visualizer-wrap')
+  if (!wrap || wrap.classList.contains('hidden')) return
   const canvas = document.getElementById('home-visualizer-canvas')
   if (!canvas) return
   try {
@@ -4545,14 +4817,18 @@ function drawHomeVisualizerFrame() {
   }
   if (!ctx) return
   const v = getVisual()
-  const hw = Object.assign({ enabled: true, mode: 'bars' }, v.homeWidget || {})
+  const hw = Object.assign({ enabled: true, mode: 'bars', intensity: 100, smoothing: 72 }, v.homeWidget || {})
   if (!hw.enabled || hw.mode === 'image') return
   const w = canvas.width
   const h = canvas.height
   ctx.clearRect(0, 0, w, h)
   const canAnalyze = ensureAudioAnalyzer() && !audio.paused && !audio.ended
-  if (canAnalyze) _analyser.getByteFrequencyData(_freqData)
+  if (canAnalyze) {
+    try { _analyser.smoothingTimeConstant = Math.max(0.2, Math.min(0.95, Number(hw.smoothing || 72) / 100)) } catch (_) {}
+    _analyser.getByteFrequencyData(_freqData)
+  }
   const data = _freqData || new Uint8Array(128)
+  const intensityScale = Math.max(0.6, Math.min(1.8, Number(hw.intensity || 100) / 100))
   const baseColor = v.accent2 || '#9ca3af'
   ctx.strokeStyle = baseColor
   ctx.fillStyle = baseColor
@@ -4562,7 +4838,7 @@ function drawHomeVisualizerFrame() {
     const step = Math.max(1, Math.floor(data.length / 52))
     for (let i = 0; i < 52; i++) {
       const val = data[i * step] || 0
-      const y = h - (val / 255) * (h - 18) - 9
+      const y = h - (Math.min(255, val * intensityScale) / 255) * (h - 18) - 9
       const x = (i / 51) * w
       if (i === 0) ctx.moveTo(x, y)
       else ctx.lineTo(x, y)
@@ -4576,7 +4852,7 @@ function drawHomeVisualizerFrame() {
     const step = Math.max(1, Math.floor(data.length / cols))
     for (let i = 0; i < cols; i++) {
       const val = data[i * step] || 0
-      const dots = Math.max(2, Math.round((val / 255) * 8))
+      const dots = Math.max(2, Math.round((Math.min(255, val * intensityScale) / 255) * 8))
       const x = 10 + (i / cols) * (w - 20)
       for (let d = 0; d < dots; d++) {
         const y = h - 10 - d * 12
@@ -4592,7 +4868,7 @@ function drawHomeVisualizerFrame() {
   const bw = (w - 20) / bars
   for (let i = 0; i < bars; i++) {
     const val = data[i * step] || 0
-    const bh = 8 + (val / 255) * (h - 24)
+    const bh = 8 + (Math.min(255, val * intensityScale) / 255) * (h - 24)
     const x = 10 + i * bw
     const y = h - bh - 6
     ctx.fillRect(x, y, Math.max(2, bw - 2), bh)
@@ -4616,7 +4892,20 @@ function startHomeVisualizerLoop() {
         gameSleep = document.body.classList.contains('flow-opt-game-sleep')
       } catch (_) {}
       const skipViz = Boolean(_lyricsOpen && playing) || gameSleep
-      if (!skipViz) drawHomeVisualizerFrame()
+      let shouldDraw = !skipViz
+      if (shouldDraw) {
+        const v = getVisual()
+        const hw = Object.assign({ enabled: true, mode: 'bars', intensity: 100, smoothing: 72 }, v.homeWidget || {})
+        if (!hw.enabled || hw.mode === 'image') shouldDraw = false
+        else {
+          const now = performance.now()
+          const heavy = hw.mode === 'wave' || hw.mode === 'dots'
+          const minMs = playing ? (heavy ? 50 : 40) : 220
+          if (now - _homeVizLastDrawAt < minMs) shouldDraw = false
+          else _homeVizLastDrawAt = now
+        }
+      }
+      if (shouldDraw) drawHomeVisualizerFrame()
       requestAnimationFrame(tick)
     } else {
       setTimeout(() => requestAnimationFrame(tick), 250)
@@ -4633,6 +4922,12 @@ function syncPlayerUIFromTrack() {
   const coverUrl = getEffectiveCoverUrl(track)
   applyCoverArt(cover, coverUrl, fallbackBg)
   applyCoverArt(homeCover, coverUrl, fallbackBg)
+  try {
+    if (typeof shouldIsolateHostTrackVisualsFromRoomGuest === 'function' && shouldIsolateHostTrackVisualsFromRoomGuest()) {
+      if (_playerModeActive) syncPlayerModeUI()
+      return
+    }
+  } catch (_) {}
   updateYandexPlayerTheme(track)
   if (_playerModeActive) syncPlayerModeUI()
 }
@@ -4724,9 +5019,17 @@ async function playTrackObj(track, opts = {}) {
     enqueueSharedTrack(track)
     return
   }
+  if (_roomState?.roomId && _roomState?.host && !opts?.remoteSync && !opts?.fromSharedQueue && !opts?.allowRoomDirectPlay) {
+    enqueueSharedTrack(track)
+    showToast('Трек добавлен в очередь комнаты. Для запуска выбери трек в очереди.')
+    return
+  }
   const reqId = ++_playRequestSeq
   const isStale = () => reqId !== _playRequestSeq
   track = sanitizeTrack(track)
+  if (opts?.remoteSync && _roomState?.roomId && !_roomState?.host) {
+    track = Object.assign({}, track, { _flowSkipGlobalThemeFromTrack: true })
+  }
   const forcedCover = getEffectiveCoverUrl(track)
   if (forcedCover) {
     track = Object.assign({}, track, {
@@ -4816,14 +5119,44 @@ async function playTrackObj(track, opts = {}) {
     }
     setStage('Яндекс: получаю поток…')
     const ymRes = await window.api.yandexStream(String(track.id), ymTok).catch((e) => ({ ok: false, error: e?.message || String(e) }))
+    let resolvedYmUrl = ymRes?.ok && ymRes?.url ? String(ymRes.url) : ''
     if (isStale()) return
     if (!ymRes?.ok || !ymRes.url) {
-      showToast('Яндекс: ' + (ymRes?.error || 'не удалось получить поток'), true)
-      if (playBtn) playBtn.innerHTML = ICONS.play
-      setStage('Яндекс: ошибка')
-      return
+      const ymFallbackQuery = `${track.artist || ''} ${track.title || ''}`.trim()
+      const ymFallbackList = ymFallbackQuery && window.api?.yandexSearch
+        ? await window.api.yandexSearch(ymFallbackQuery, ymTok).catch(() => [])
+        : []
+      const ymFallback = Array.isArray(ymFallbackList)
+        ? ymFallbackList.find((item) => String(item?.id || '').trim())
+        : null
+      const fallbackId = String(ymFallback?.id || '').trim()
+      if (fallbackId && fallbackId !== String(track.id || '').trim()) {
+        setStage('Яндекс: пробую альтернативный трек…')
+        const ymRetry = await window.api.yandexStream(fallbackId, ymTok).catch((e) => ({ ok: false, error: e?.message || String(e) }))
+        if (isStale()) return
+        if (ymRetry?.ok && ymRetry?.url) {
+          resolvedYmUrl = String(ymRetry.url)
+          track = Object.assign({}, track, {
+            id: fallbackId,
+            url: resolvedYmUrl,
+            cover: track.cover || ymFallback?.cover || null,
+          })
+          streamUrl = track.url
+          currentTrack = track
+        } else {
+          showToast('Яндекс: ' + (ymRetry?.error || ymRes?.error || 'не удалось получить поток'), true)
+          if (playBtn) playBtn.innerHTML = ICONS.play
+          setStage('Яндекс: ошибка')
+          return
+        }
+      } else {
+        showToast('Яндекс: ' + (ymRes?.error || 'не удалось получить поток'), true)
+        if (playBtn) playBtn.innerHTML = ICONS.play
+        setStage('Яндекс: ошибка')
+        return
+      }
     }
-    track = Object.assign({}, track, { url: ymRes.url })
+    track = Object.assign({}, track, { url: resolvedYmUrl })
     streamUrl = track.url
     currentTrack = track
   }
@@ -5008,6 +5341,13 @@ async function playTrackObj(track, opts = {}) {
     setStage('Старт воспроизведения…')
     audio.src = url
     await audio.play()
+    try {
+      if (_audioCtx?.state === 'suspended') await _audioCtx.resume().catch(() => {})
+    } catch (_) {}
+    try {
+      ensureAudioAnalyzer()
+      if (_audioCtx?.state === 'suspended') await _audioCtx.resume().catch(() => {})
+    } catch (_) {}
     // If nothing starts within ~5s, treat it as a dead stream and switch strategy.
     return waitForPlaybackProgress(5200)
   }
@@ -5107,7 +5447,7 @@ async function playTrackObj(track, opts = {}) {
   alignHomeHeaderToPlay()
   // Р—Р°РіСЂСѓР¶Р°РµРј lyrics РµСЃР»Рё РїР°РЅРµР»СЊ РѕС‚РєСЂС‹С‚Р°
   if (_lyricsOpen) loadLyrics(track)
-  prewarmNextQueueTrack()
+  scheduleNextTrackPrewarm(track)
   renderRoomNowPlaying()
   renderRoomQueue()
   _currentTrackStartedAt = Math.floor(Date.now() / 1000)
@@ -5115,45 +5455,122 @@ async function playTrackObj(track, opts = {}) {
   updateDiscordPresence(track, _roomState)
   broadcastPlaybackSync(true)
   syncHomeCloneUI()
+  try {
+    refreshNowPlayingTrackHighlight()
+  } catch (_) {}
+}
+
+function scheduleNextTrackPrewarm(referenceTrack = null) {
+  try {
+    if (_queuePrewarmTimer) {
+      clearTimeout(_queuePrewarmTimer)
+      _queuePrewarmTimer = null
+    }
+    const ref = referenceTrack || currentTrack
+    if (!ref) return
+    const refKey = `${String(ref.source || '').toLowerCase()}:${String(ref.id || ref.ytId || ref.url || '')}:${queueIndex}`
+    const src = String(ref.source || '').toLowerCase()
+    const delayMs = src === 'yandex' ? 12000 : 6500
+    _queuePrewarmTimer = setTimeout(() => {
+      _queuePrewarmTimer = null
+      if (!audio || audio.paused || audio.ended) return
+      if ((audio.readyState || 0) < 3) return
+      if (Number(audio.currentTime || 0) < 4) return
+      const remain = Number(audio.duration || 0) - Number(audio.currentTime || 0)
+      if (Number.isFinite(remain) && remain > 0 && remain < 10) return
+      const cur = currentTrack
+      const curKey = `${String(cur?.source || '').toLowerCase()}:${String(cur?.id || cur?.ytId || cur?.url || '')}:${queueIndex}`
+      if (curKey !== refKey) return
+      prewarmNextQueueTrack()
+    }, delayMs)
+  } catch {}
 }
 
 function prewarmNextQueueTrack() {
   try {
-    if (!window.api?.youtubeStream) return
-    const next = queue[queueIndex + 1]
-    if (!next || next.source !== 'youtube' || !next.ytId) return
-    const key = String(next.ytId)
-    const lastAt = Number(_ytPrewarmAt.get(key) || 0)
-    if (Date.now() - lastAt < 90000) return
-    _ytPrewarmAt.set(key, Date.now())
-    window.api.youtubeStream(next.ytId, _ytInstanceCache, { forceFresh: false })
-      .then((res) => {
-        if (!res?.ok || !res?.url) return
-        const idx = queueIndex + 1
-        const cur = queue[idx]
-        if (!cur || cur.ytId !== next.ytId) return
-        queue[idx] = Object.assign({}, cur, { url: res.url, _streamInst: res.inst || null })
-      })
-      .catch(() => {})
+    if (!audio || audio.paused || audio.ended) return
+    if ((audio.readyState || 0) < 3) return
+    const idx = queueIndex + 1
+    const next = queue[idx]
+    if (!next) return
+    const source = String(next.source || '').toLowerCase()
+    const markPrewarm = (key, ttlMs = 90000) => {
+      const now = Date.now()
+      const lastAt = Number(_queuePrewarmAt.get(key) || 0)
+      if (now - lastAt < ttlMs) return false
+      _queuePrewarmAt.set(key, now)
+      return true
+    }
+    if (source === 'youtube' && next.ytId && window.api?.youtubeStream) {
+      const key = `yt:${String(next.ytId)}`
+      if (!markPrewarm(key, 90000)) return
+      _ytPrewarmAt.set(String(next.ytId), Date.now())
+      window.api.youtubeStream(next.ytId, _ytInstanceCache, { forceFresh: false })
+        .then((res) => {
+          if (!res?.ok || !res?.url) return
+          const cur = queue[idx]
+          if (!cur || cur.ytId !== next.ytId) return
+          queue[idx] = Object.assign({}, cur, { url: res.url, _streamInst: res.inst || null })
+        })
+        .catch(() => {})
+      return
+    }
+    if (source === 'soundcloud' && next.scTranscoding && window.api?.scStream) {
+      const key = `sc:${String(next.id || next.scTranscoding)}`
+      if (!markPrewarm(key, 120000)) return
+      window.api.scStream(next.scTranscoding, next.scClientId)
+        .then((res) => {
+          if (!res?.ok || !res?.url) return
+          const cur = queue[idx]
+          if (!cur || String(cur.source || '').toLowerCase() !== 'soundcloud') return
+          queue[idx] = Object.assign({}, cur, { url: res.url })
+        })
+        .catch(() => {})
+      return
+    }
+    if (source === 'yandex' && next.id && !/^https?:\/\//i.test(String(next.url || '')) && window.api?.yandexStream) {
+      const ymTok = String(getSettings()?.yandexToken || '').trim()
+      if (!ymTok) return
+      const key = `ym:${String(next.id)}`
+      if (!markPrewarm(key, 120000)) return
+      window.api.yandexStream(String(next.id), ymTok)
+        .then((res) => {
+          if (!res?.ok || !res?.url) return
+          const cur = queue[idx]
+          if (!cur || String(cur.source || '').toLowerCase() !== 'yandex' || String(cur.id || '') !== String(next.id || '')) return
+          queue[idx] = Object.assign({}, cur, { url: res.url })
+        })
+        .catch(() => {})
+    }
   } catch {}
+}
+
+function syncTransportPlayPauseUi() {
+  const playing = Boolean(audio && !audio.paused && !audio.ended)
+  const playBtn = document.getElementById('play-btn')
+  const icon = document.getElementById('pm-play-icon')
+  if (playBtn) playBtn.innerHTML = playing ? ICONS.pause : ICONS.play
+  if (icon) icon.innerHTML = playing ? PM_PAUSE_INNER : PM_PLAY_INNER
 }
 
 function togglePlay() {
   if (!audio.src) return
-  const playBtn = document.getElementById('play-btn')
   const isRoomParticipant = Boolean(_roomState?.roomId)
+  const isRoomGuest = isRoomParticipant && !_roomState?.host
+  if (isRoomGuest) {
+    showHostOnlyToast()
+    return
+  }
   if (audio.paused) {
     audio.play()
     if (_audioCtx?.state === 'suspended') _audioCtx.resume().catch(() => {})
-    if (playBtn) playBtn.innerHTML = ICONS.pause
-    const icon = document.getElementById('pm-play-icon')
-    if (icon) icon.innerHTML = PM_PAUSE_INNER
   } else {
     audio.pause()
-    if (playBtn) playBtn.innerHTML = ICONS.play
-    const icon = document.getElementById('pm-play-icon')
-    if (icon) icon.innerHTML = PM_PLAY_INNER
   }
+  syncTransportPlayPauseUi()
+  try {
+    refreshNowPlayingTrackHighlight()
+  } catch (_) {}
   if (isRoomParticipant) {
     _socialPeer?.send?.({
       type: 'room-control-toggle',
@@ -5206,6 +5623,11 @@ function prevTrack() {
     return
   }
   if (!queue.length) return
+  if (_roomState?.roomId && _roomState?.host) {
+    audio.currentTime = 0
+    broadcastPlaybackSync(true)
+    return
+  }
   const resetThreshold = Math.max(1, Math.min(10, (Number(audio.duration) || 0) / 3 || 10))
   if (audio.currentTime > resetThreshold) { audio.currentTime = 0; return }
   const allowShuffle = playbackMode.shuffle && queueScope === 'liked'
@@ -5228,6 +5650,20 @@ function prevTrack() {
 function nextTrack(autoEnded = false) {
   if (!canControlQueue() && !autoEnded) {
     showHostOnlyToast()
+    return
+  }
+  if (_roomState?.roomId && _roomState?.host) {
+    if (sharedQueue.length) {
+      const nextRoomTrack = sharedQueue.shift()
+      renderRoomQueue()
+      broadcastQueueUpdate()
+      saveRoomStateToServer({ shared_queue: sharedQueue, playback_ts: Date.now() }).catch(() => {})
+      if (nextRoomTrack) {
+        playTrackObj(nextRoomTrack, { fromSharedQueue: true }).catch(() => {})
+      }
+    } else if (!autoEnded) {
+      showToast('Очередь комнаты пуста')
+    }
     return
   }
   if (!queue.length) return
@@ -5300,15 +5736,50 @@ audio.ontimeupdate = () => {
       const delta = Math.max(0, now - _listenTickAt) / 1000
       _listenTickAt = now
       if (delta > 0 && delta < 4) {
-        const st = getListenStats()
-        saveListenStats({ totalSeconds: Number(st.totalSeconds || 0) + delta })
+        _listenStatsPendingSec = Number(_listenStatsPendingSec || 0) + delta
+        const flushDueMs = 2600
+        if (!_listenStatsLastFlushAt) _listenStatsLastFlushAt = now
+        if (_listenStatsPendingSec >= 2.2 || (now - _listenStatsLastFlushAt) >= flushDueMs) {
+          flushListenStatsPending(false)
+        }
       }
     }
   }
-  if (queueScope === 'myWave' && !audio.paused && queue.length - queueIndex - 1 <= 3) maybePreloadMyWave(false)
+  if (queueScope === 'myWave' && !audio.paused && queue.length - queueIndex - 1 <= 3) {
+    const t = performance.now()
+    if (t - (_lastMyWavePreloadCheckAt || 0) > 3500) {
+      _lastMyWavePreloadCheckAt = t
+      maybePreloadMyWave(false)
+    }
+  }
   broadcastPlaybackSync(false)
 }
+audio.onpause = () => {
+  flushListenStatsPending(true)
+  _listenTickAt = 0
+  if (_roomState?.roomId && _roomState?.host) {
+    _socialPeer?.send?.({
+      type: 'room-control-toggle',
+      roomId: _roomState.roomId,
+      paused: true,
+      currentTime: Number(audio.currentTime || 0),
+    })
+    broadcastPlaybackSync(true)
+  }
+}
+audio.onplay = () => {
+  if (_roomState?.roomId && _roomState?.host) {
+    _socialPeer?.send?.({
+      type: 'room-control-toggle',
+      roomId: _roomState.roomId,
+      paused: false,
+      currentTime: Number(audio.currentTime || 0),
+    })
+    broadcastPlaybackSync(true)
+  }
+}
 audio.onended = () => {
+  flushListenStatsPending(true)
   stopLyricsSyncLoop()
   _listenTickAt = 0
   const playBtn = document.getElementById('play-btn')
@@ -5365,7 +5836,6 @@ function searchLoadingPlaceholderLine(settings = getSettings()) {
   const src = String(settings?.activeSource || currentSource || 'hybrid').toLowerCase()
   if (src === 'yandex' || src === 'ya' || src === 'ym') return 'Поиск: Яндекс Музыка...'
   if (src === 'vk') return 'Поиск: ВКонтакте...'
-  if (src === 'hitmo' || src === 'hm') return 'Поиск: HitMo...'
   if (src === 'youtube' || src === 'yt') return 'Поиск: YouTube...'
   return 'Поиск: Spotify → SoundCloud → Audius...'
 }
@@ -5395,10 +5865,7 @@ function searchTracks(queryOverride = '') {
       const src = String(s.activeSource || currentSource || 'hybrid').toLowerCase()
       let results = []
       let mode = 'hybrid'
-      if (src === 'hitmo' || src === 'hm') {
-        results = sanitizeTrackList(await searchHitmo(q))
-        mode = 'hitmo'
-      } else if (src === 'youtube' || src === 'yt') {
+      if (src === 'youtube' || src === 'yt') {
         if (!window.api?.youtubeSearch) throw new Error('YouTube поиск доступен только в Electron')
         const ytList = await window.api.youtubeSearch(q)
         if (!Array.isArray(ytList)) throw new Error('YouTube: некорректный ответ')
@@ -5424,6 +5891,7 @@ function searchTracks(queryOverride = '') {
         results = sanitizeTrackList(ymList)
         mode = 'yandex'
       } else if (src === 'vk') {
+        _lastSearchMode = 'vk'
         const token = String(s.vkToken || '').trim()
         if (!token) throw new Error('VK: укажи токен в настройках → Источники → ВКонтакте')
         if (!window.api?.vkSearch) throw new Error('VK поиск доступен только в приложении Electron')
@@ -5452,7 +5920,6 @@ async function searchTracksDirect(query, settings = getSettings()) {
   const q = String(query || '').trim()
   if (!q) return []
   const src = String(settings?.activeSource || currentSource || 'hybrid').toLowerCase()
-  if (src === 'hitmo' || src === 'hm') return sanitizeTrackList(await searchHitmo(q))
   if (src === 'yandex' || src === 'ya' || src === 'ym') {
     const token = String(settings?.yandexToken || '').trim()
     if (!token) throw new Error('Яндекс: укажи токен Музыки в настройках')
@@ -5465,6 +5932,7 @@ async function searchTracksDirect(query, settings = getSettings()) {
     return sanitizeTrackList(ymList)
   }
   if (src === 'vk') {
+    _lastSearchMode = 'vk'
     const token = String(settings?.vkToken || '').trim()
     if (!token) throw new Error('VK: укажи токен в настройках → Источники → ВКонтакте')
     if (!window.api?.vkSearch) throw new Error('VK поиск доступен только в приложении Electron')
@@ -5472,7 +5940,6 @@ async function searchTracksDirect(query, settings = getSettings()) {
       throw new Error(normalizeInvokeError(e) || 'таймаут поиска')
     })
     if (!Array.isArray(vkList)) throw new Error('VK: некорректный ответ')
-    _lastSearchMode = 'vk'
     return sanitizeTrackList(vkList)
   }
   if (src === 'youtube' || src === 'yt') {
@@ -5514,6 +5981,9 @@ function renderResults(results) {
     el.addEventListener('click', () => { queueIndex=i; playTrackObj(track) })
     container.appendChild(el)
   })
+  try {
+    refreshNowPlayingTrackHighlight()
+  } catch (_) {}
 }
 
 function getSourceLabel() {
@@ -5523,7 +5993,6 @@ function getSourceLabel() {
   if (_lastSearchMode === 'youtube') return 'YouTube'
   if (_lastSearchMode === 'yandex') return 'Яндекс Музыка'
   if (_lastSearchMode === 'vk') return 'ВКонтакте'
-  if (_lastSearchMode === 'hitmo') return 'HitMo'
   return 'Spotify → SoundCloud → Audius'
 }
 
@@ -5602,7 +6071,7 @@ async function searchVK(q, token) {
   if (window.api?.vkSearch) {
     let result
     try {
-      result = await window.api.vkSearch(q, token)
+      result = await window.api.vkSearch(q, token, Boolean(getSettings().vkSeleniumBridge))
     } catch (err) {
       throw new Error(normalizeInvokeError(err))
     }
@@ -5622,88 +6091,6 @@ async function searchVK(q, token) {
     title: t.title||'Без названия', artist: t.artist||'—', url: t.url,
     cover: t.album?.thumb?.photo_300||null, bg: 'linear-gradient(135deg,#4680c2,#5b9bd5)', source:'vk', id:String(t.id)
   }))
-}
-
-// в”Ђв”Ђв”Ђ HITMO в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-async function searchHitmo(q) {
-  if (!window.api?.hitmoSearch) throw new Error('Hitmo серверный поиск недоступен')
-  const result = await window.api.hitmoSearch(q)
-  if (!result.ok) throw new Error('Hitmo: ' + (result.error || 'ошибка поиска'))
-  return result.tracks
-}
-
-function parseHitmoResults(html) {
-  const parser = new DOMParser()
-  const doc = parser.parseFromString(html, 'text/html')
-  const tracks = []
-
-  // Hitmo uses .play-track or similar list items
-  const items = doc.querySelectorAll('.song-item, .track-item, .music-item, [data-url], [data-mp3]')
-
-  items.forEach(item => {
-    // Try to get mp3 url
-    const audioUrl = item.getAttribute('data-mp3') || item.getAttribute('data-url') ||
-      item.querySelector('[data-mp3]')?.getAttribute('data-mp3') ||
-      item.querySelector('a[href$=".mp3"]')?.href
-
-    // Title and artist
-    const titleEl = item.querySelector('.song-title, .track-name, .title, h3, h4, .name')
-    const artistEl = item.querySelector('.song-artist, .artist, .performer, .author')
-
-    // Cover image
-    const imgEl = item.querySelector('img[src], [data-src]')
-    const coverUrl = imgEl?.src || imgEl?.getAttribute('data-src') || null
-
-    if (!audioUrl && !titleEl) return
-
-    const rawTitle = titleEl?.textContent?.trim() || item.getAttribute('data-title') || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ'
-    const rawArtist = artistEl?.textContent?.trim() || item.getAttribute('data-artist') || 'вЂ”'
-
-    tracks.push({
-      title: rawTitle,
-      artist: rawArtist,
-      url: audioUrl || null,
-      cover: coverUrl,
-      bg: 'linear-gradient(135deg,#ff2e88,#a020f0)',
-      source: 'hitmo',
-      id: audioUrl || (rawTitle + rawArtist)
-    })
-
-    if (tracks.length >= 25) return
-  })
-
-  // If selector didn't find items, try a more generic approach
-  if (tracks.length === 0) {
-    // Try JSON data embedded in page
-    const scripts = doc.querySelectorAll('script')
-    scripts.forEach(s => {
-      const text = s.textContent
-      // look for track list JSON
-      const jsonMatch = text.match(/tracks\s*[:=]\s*(\[.*?\])/s) || text.match(/trackList\s*[:=]\s*(\[.*?\])/s)
-      if (jsonMatch) {
-        try {
-          const data = JSON.parse(jsonMatch[1])
-          data.forEach(t => {
-            tracks.push({
-              title: t.title || t.name || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ',
-              artist: t.artist || t.performer || 'вЂ”',
-              url: t.url || t.mp3 || t.src || null,
-              cover: t.cover || t.image || t.img || null,
-              bg: 'linear-gradient(135deg,#ff2e88,#a020f0)',
-              source: 'hitmo',
-              id: t.id || (t.title + t.artist)
-            })
-          })
-        } catch(e) {}
-      }
-    })
-  }
-
-  if (tracks.length === 0) {
-    throw new Error('Hitmo: РЅРёС‡РµРіРѕ РЅРµ РЅР°Р№РґРµРЅРѕ РёР»Рё СЃС‚СЂСѓРєС‚СѓСЂР° СЃС‚СЂР°РЅРёС†С‹ РёР·РјРµРЅРёР»Р°СЃСЊ. РџРѕРїСЂРѕР±СѓР№ YouTube.')
-  }
-
-  return tracks
 }
 
 // в”Ђв”Ђв”Ђ YOUTUBE в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
@@ -5831,6 +6218,7 @@ let _likedRenderToken = 0
 function renderLiked() {
   const token = ++_likedRenderToken
   const liked = getLiked()
+  document.body.classList.toggle('flow-heavy-liked', liked.length >= 220)
   const container = document.getElementById('liked-list'); if (!container) return
   if (!liked.length) { container.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.35-9.5-8A5.5 5.5 0 0 1 12 5.1 5.5 5.5 0 0 1 21.5 13c-2.5 3.65-9.5 8-9.5 8Z"/></svg></div><p>Ты еще не лайкнул ни одного трека</p></div>`; return }
   container.innerHTML = ''
@@ -5852,6 +6240,9 @@ function renderLiked() {
       fragment.appendChild(el)
     }
     container.appendChild(fragment)
+    try {
+      refreshNowPlayingTrackHighlight()
+    } catch (_) {}
     if (i < liked.length) setTimeout(renderChunk, 0)
   }
   renderChunk()
@@ -5923,6 +6314,7 @@ function openPlaylist(idx) {
   openPlaylistIndex = idx
   const pl = normalizePlaylist(getPlaylists()[idx])
   if (!pl) return
+  document.body.classList.toggle('flow-heavy-playlist', (pl.tracks || []).length >= 180)
   const playlistCover = sanitizeMediaByGifMode(pl.coverData || '', 'playlist')
   document.getElementById('playlist-view-name').textContent = pl.name
   const metaEl = document.getElementById('playlist-view-meta')
@@ -6008,6 +6400,9 @@ function openPlaylist(idx) {
       fragment.appendChild(row)
     }
     container.appendChild(fragment)
+    try {
+      refreshNowPlayingTrackHighlight()
+    } catch (_) {}
     if (cursor < pl.tracks.length) setTimeout(renderChunk, 0)
   }
   requestAnimationFrame(renderChunk)
@@ -6015,6 +6410,7 @@ function openPlaylist(idx) {
 
 function closePlaylist() {
   openPlaylistIndex=null
+  document.body.classList.remove('flow-heavy-playlist')
   _openPlaylistTrackRenderToken++
   const viewEl = document.getElementById('playlist-view')
   if (viewEl) {
@@ -6066,18 +6462,74 @@ async function closeImportProgressSafe(minVisibleMs = 900) {
   closeImportProgress()
 }
 
+function getImportPreferredSource(imported = {}) {
+  const service = String(imported?.service || '').trim().toLowerCase()
+  if (service === 'yandex') return 'yandex'
+  if (service === 'vk') return 'vk'
+  return ''
+}
+
+function isTrackPlayableCandidate(track = {}) {
+  const src = String(track?.source || '').trim().toLowerCase()
+  const url = String(track?.url || '').trim()
+  if (src === 'youtube') return Boolean(track?.ytId || /youtube\.com|youtu\.be/i.test(url))
+  if (src === 'yandex') return Boolean(track?.id || url)
+  if (src === 'soundcloud') return Boolean(url || track?.scTranscoding)
+  if (src === 'vk' || src === 'audius') return Boolean(url)
+  if (src === 'spotify') return Boolean(url)
+  if (src === 'local') return Boolean(track?.filePath || url)
+  return Boolean(url || track?.id || track?.ytId)
+}
+
+async function searchImportTrackWithSource(q, settings, preferredSource = '') {
+  const src = String(preferredSource || '').trim().toLowerCase()
+  if (src === 'yandex') {
+    const token = String(settings?.yandexToken || '').trim()
+    if (!token || !window.api?.yandexSearch) return []
+    const ymList = await withTimeout(window.api.yandexSearch(q, token), 22000, 'yandex search timeout').catch(() => [])
+    return sanitizeTrackList(Array.isArray(ymList) ? ymList : [])
+  }
+  if (src === 'vk') {
+    const token = String(settings?.vkToken || '').trim()
+    if (!token || !window.api?.vkSearch) return []
+    const vkList = await withTimeout(searchVK(q, token), 60000, 'vk search timeout').catch(() => [])
+    return sanitizeTrackList(Array.isArray(vkList) ? vkList : [])
+  }
+  const hybrid = await searchHybridTracks(q, settings).catch(() => ({ tracks: [] }))
+  return sanitizeTrackList(hybrid?.tracks || [])
+}
+
 async function processPlaylistImport(trackList, imported = {}) {
   const srcTracks = Array.isArray(trackList) ? trackList : []
   const maxTracks = Math.min(srcTracks.length, 120)
   const collected = []
   const notFound = []
+  const skippedUnplayable = []
+  const preferredSource = getImportPreferredSource(imported)
   openImportProgress(maxTracks)
   try {
     for (let i = 0; i < maxTracks; i++) {
       const it = srcTracks[i] || {}
+      const directOriginalId = String(it?.original_id || it?.originalId || '').trim()
       const queries = buildImportQueries(it.title, it.artist)
       const query = queries[0] || ''
       updateImportProgress(i, maxTracks, `Ищу: ${it.artist || '—'} - ${it.title || '—'}${notFound.length ? ` | не найдено: ${notFound.slice(-3).join('; ')}` : ''}`)
+      if (preferredSource === 'yandex' && directOriginalId) {
+        const directYandex = {
+          title: it.title || 'Без названия',
+          artist: it.artist || '—',
+          duration: Number(it?.duration || 0) || null,
+          cover: it?.cover || null,
+          source: 'yandex',
+          id: directOriginalId,
+        }
+        if (isTrackPlayableCandidate(directYandex)) {
+          collected.push(directYandex)
+          updateImportProgress(i + 1, maxTracks, `Импорт: ${i + 1} из ${maxTracks}${notFound.length ? ` | не найдено: ${notFound.slice(-3).join('; ')}` : ''}`)
+          await importDelay(180)
+          continue
+        }
+      }
       if (!query) {
         notFound.push(`Track ${i + 1}`)
         continue
@@ -6086,9 +6538,8 @@ async function processPlaylistImport(trackList, imported = {}) {
         let first = null
         const settings = getSettings()
         for (const q of queries) {
-          // 1) Same chain as regular search bar.
-          const hybrid = await searchHybridTracks(q, settings).catch(() => ({ tracks: [] }))
-          const found = sanitizeTrackList(hybrid?.tracks || [])
+          // 1) Prefer source-specific import search (e.g. Yandex -> Yandex).
+          const found = await searchImportTrackWithSource(q, settings, preferredSource)
           if (Array.isArray(found) && found.length) {
             first = found[0]
             break
@@ -6104,10 +6555,20 @@ async function processPlaylistImport(trackList, imported = {}) {
           }
         }
         if (first) {
-          collected.push(Object.assign({}, first, {
+          const picked = Object.assign({}, first, {
             title: it.title || first.title,
             artist: it.artist || first.artist
-          }))
+          })
+          if (preferredSource === 'yandex' && directOriginalId && String(picked.source || '').toLowerCase() === 'yandex') {
+            picked.id = directOriginalId
+            if (!picked.duration && it?.duration) picked.duration = Number(it.duration) || null
+            if (!picked.cover && it?.cover) picked.cover = it.cover
+          }
+          if (!isTrackPlayableCandidate(picked)) {
+            skippedUnplayable.push(`${picked.artist || '—'} - ${picked.title || '—'}`)
+            continue
+          }
+          collected.push(picked)
         } else {
           const row = `${it.artist || '—'} - ${it.title || '—'}`
           notFound.push(row)
@@ -6123,19 +6584,34 @@ async function processPlaylistImport(trackList, imported = {}) {
     }
     const pls = getPlaylists()
     const name = `${imported.name || 'Imported Playlist'} [${imported.service || 'import'}]`
-    pls.push(normalizePlaylist({ name, tracks: collected }))
+    const normalizedName = String(name).trim().toLowerCase()
+    const existingIdx = pls.findIndex((p) => String(p?.name || '').trim().toLowerCase() === normalizedName)
+    const importedCover = String(imported?.cover || '').trim()
+    const fallbackCover = String(collected.find((t) => t?.cover)?.cover || '').trim()
+    const nextPlaylist = normalizePlaylist({
+      name,
+      coverData: importedCover || fallbackCover || null,
+      tracks: collected,
+    })
+    if (existingIdx >= 0) pls[existingIdx] = nextPlaylist
+    else pls.push(nextPlaylist)
     savePlaylists(pls)
     renderPlaylists()
     openPage('library')
-    if (notFound.length) {
-      const report = notFound.slice(0, 12).join('; ')
-      updateImportProgress(maxTracks, maxTracks, `Готово. Не найдено ${notFound.length}: ${report}${notFound.length > 12 ? '...' : ''}`)
+    if (notFound.length || skippedUnplayable.length) {
+      const reportRows = [...notFound.slice(0, 8), ...skippedUnplayable.slice(0, 4)]
+      const report = reportRows.join('; ')
+      updateImportProgress(
+        maxTracks,
+        maxTracks,
+        `Готово. Не найдено ${notFound.length}, отброшено неиграбельных ${skippedUnplayable.length}: ${report}${(notFound.length + skippedUnplayable.length) > 12 ? '...' : ''}`
+      )
       await importDelay(1600)
     }
   } finally {
     closeImportProgress()
   }
-  return { added: collected.length, missed: notFound.length, total: maxTracks }
+  return { added: collected.length, missed: notFound.length, skipped: skippedUnplayable.length, total: maxTracks }
 }
 
 function collectImportTracksDeep(value, out = [], limit = 500) {
@@ -6297,6 +6773,7 @@ async function importPlaylistFromLink(urlFromUi = '') {
     yandex: settings.yandexToken || '',
     vk: isVkLink ? getCurrentVkTokenForImport() : (settings.vkToken || ''),
     serverBaseUrl: settings.proxyBaseUrl || '',
+    allowVkSeleniumBridge: Boolean(settings.vkSeleniumBridge),
   }).catch((e) => ({ ok: false, error: e?.message || String(e) }))
   setImportProgressIndeterminate(false)
 
@@ -6341,7 +6818,7 @@ async function importPlaylistFromLink(urlFromUi = '') {
   try {
     if (imported?.via === 'flow-vk-server') showToast(`VK сервер вернул треков: ${srcTracks.length}`)
     const stats = await processPlaylistImport(srcTracks, imported)
-    showToast(`Импорт завершен. Добавлено ${stats.added} треков, ${stats.missed} не найдено`)
+    showToast(`Импорт завершен. Добавлено ${stats.added} треков, ${stats.missed} не найдено, ${stats.skipped || 0} отброшено`)
   } catch (err) {
     updateImportProgress(0, 0, `Ошибка: ${sanitizeDisplayText(err?.message || String(err))}`)
     await closeImportProgressSafe(1200)
@@ -6566,18 +7043,23 @@ function editPlaylistMeta(idx) {
 }
 
 // в”Ђв”Ђв”Ђ TRACK CARD в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-const SRC_LABELS = { soundcloud:'SC', vk:'VK', hitmo:'HM', youtube:'YT', spotify:'SP' }
+const SRC_LABELS = { soundcloud: 'SC', vk: 'VK', youtube: 'YT', spotify: 'SP', yandex: 'Ya' }
 
 function makeTrackEl(track, showPlaylist=false, bindDefaultPlay=true) {
   track = sanitizeTrack(track)
   const el = document.createElement('div'); el.className='track-card'
+  try {
+    el.setAttribute('data-flow-track-key', getTrackKey(track))
+    el.setAttribute('data-flow-track-json', encodeURIComponent(JSON.stringify(track)))
+  } catch (_) {}
   const liked = isLiked(track)
   const trackJson = JSON.stringify(track).replace(/"/g,'&quot;')
   const trackCover = getListCoverUrl(track)
   const fallbackBg = track.bg||'linear-gradient(135deg,#7c3aed,#a855f7)'
   const coverStyle = `background:${fallbackBg};`
-  const srcLbl = SRC_LABELS[track.source]||''
-  const badge = srcLbl ? `<span class="track-source track-source-${track.source}">${srcLbl}</span>` : ''
+  const badgeKey = trackSourceBadgeKey(track.source)
+  const srcLbl = SRC_LABELS[badgeKey] || ''
+  const badge = srcLbl ? `<span class="track-source track-source-${badgeKey}">${srcLbl}</span>` : ''
   el.innerHTML=`
     <div class="track-cover" style="${coverStyle}">${trackCover?'':'<svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'}
       <div class="cover-overlay"><div class="cover-play-icon"><svg class="ctrl-play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M9 8 L17 12 L9 16 Z"/></svg></div></div>
@@ -7141,6 +7623,7 @@ window.addEventListener('DOMContentLoaded', () => {
     'beforeunload',
     () => {
       try {
+        flushListenStatsPending(true)
         teardownAudioAnalyzer()
       } catch (_) {}
     },

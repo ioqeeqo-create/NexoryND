@@ -6,7 +6,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
   <!-- bump ?v= when profile/CSS/JS layout changes so Electron reloads assets -->
-  <link rel="stylesheet" href="styles.css?v=20260503-vk-source">
+  <link rel="stylesheet" href="styles.css?v=20260504-flat-bg-transitions">
 </head>
 <body>
 
@@ -91,7 +91,7 @@
       </a>
       </div>
       <div class="nav-group">
-      <a class="nav-item" onclick="openPage('search')" href="#" title="Поиск" aria-label="Поиск">
+      <a class="nav-item search-liquid" onclick="openPage('search')" href="#" title="Поиск" aria-label="Поиск">
         <svg class="nav-icon flow-ref-nav" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.75"/><path d="M20 20l-4.55-4.55" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/><path d="M18.95 17.98L21 20.1" stroke="var(--accent2)" stroke-width="2" stroke-linecap="round"/></svg><span class="nav-label">Поиск</span>
       </a>
       <a class="nav-item" onclick="openPage('library')" href="#" title="Библиотека" aria-label="Библиотека">
@@ -166,48 +166,42 @@
     <button type="button" class="content-corner-resize content-corner-resize--br" data-main-pane-corner="br" tabindex="-1" aria-label="Размер окна контента, правый низ" title="Размер окна контента"><span class="flow-resize-glyph" aria-hidden="true"></span></button>
 
     <div id="page-home" class="page active">
-      <div class="yandex-home-shell" aria-label="Flow в стиле Яндекс Музыки">
-        <section class="yandex-wave-hero" onclick="startMyWave()" role="button" tabindex="0" aria-label="Запустить Мою волну">
-          <div class="yandex-wave-blob" aria-hidden="true"></div>
-          <div class="yandex-wave-copy">
-            <h2><span class="yandex-play-mark">▶</span>Моя волна</h2>
-            <button type="button" class="yandex-wave-settings" onclick="event.stopPropagation(); toggleYandexWaveModes()">☰ Настроить</button>
-            <div class="yandex-wave-mode-pop hidden" id="yandex-wave-mode-pop" onclick="event.stopPropagation()"></div>
+      <div class="liquid-home-shell" aria-label="Flow в стиле Liquid Glass">
+        <section class="liquid-hero glass" onclick="startMyWave()" role="button" tabindex="0" aria-label="Запустить Flow Mix">
+          <div class="liquid-hero-orb liquid-hero-orb--a" aria-hidden="true"></div>
+          <div class="liquid-hero-orb liquid-hero-orb--b" aria-hidden="true"></div>
+          <div class="liquid-hero-copy">
+            <h2>Flow Mix</h2>
+            <p>Жидкое стекло. Быстрый старт. Никакого Яндекс-шаблона.</p>
           </div>
+          <button type="button" class="liquid-hero-action" onclick="event.stopPropagation(); startMyWave()">▶</button>
         </section>
 
-        <div class="yandex-shortcuts">
-          <button type="button" class="yandex-pill-card yandex-pill-card--avatars" onclick="openPage('social')">
-            <span class="yandex-avatar-stack" aria-hidden="true"><i></i><i></i></span>
-            <span><strong>Для вас</strong><small>друзья и активность</small></span>
+        <div class="liquid-quick-row">
+          <button type="button" class="liquid-quick-btn glass" onclick="openPage('search')" title="Поиск">
+            <span aria-hidden="true">⌕</span>
           </button>
-          <button type="button" class="yandex-pill-card" onclick="openPage('search')">
-            <span class="yandex-pill-icon" aria-hidden="true">↗</span>
-            <span><strong>Тренды</strong><small>найти музыку</small></span>
+          <button type="button" class="liquid-quick-btn glass" onclick="openPage('liked')" title="Любимое">
+            <span aria-hidden="true">♥</span>
+          </button>
+          <button type="button" class="liquid-quick-btn glass" onclick="openPage('social')" title="Соц">
+            <span aria-hidden="true">◉</span>
+          </button>
+          <button type="button" class="liquid-quick-btn glass" onclick="enterPlayerMode()" title="Плеер">
+            <span aria-hidden="true">♪</span>
           </button>
         </div>
 
-        <div class="yandex-main-cards">
-          <button type="button" class="yandex-main-card yandex-liked-card" onclick="openPage('liked')">
-            <span class="yandex-main-cover" aria-hidden="true">♥</span>
-            <span class="yandex-main-card-text"><strong>Мне нравится</strong><small>любимые треки Flow</small></span>
-            <span class="yandex-main-arrow" aria-hidden="true">›</span>
+        <div class="liquid-main-grid">
+          <button type="button" class="liquid-main-card glass" onclick="openPage('liked')">
+            <span class="liquid-main-icon" aria-hidden="true">♥</span>
+            <span class="liquid-main-text"><strong>Мне нравится</strong><small>твоя коллекция</small></span>
           </button>
-          <button type="button" class="yandex-main-card" onclick="enterPlayerMode()">
-            <span class="yandex-main-cover yandex-history-cover" aria-hidden="true">↶</span>
-            <span class="yandex-main-card-text"><strong>История</strong><small>открыть плеер</small></span>
-            <span class="yandex-main-arrow" aria-hidden="true">›</span>
+          <button type="button" class="liquid-main-card glass" onclick="startMyWave()">
+            <span class="liquid-main-icon" aria-hidden="true">≈</span>
+            <span class="liquid-main-text"><strong>Flow Mix</strong><small>персональная волна</small></span>
           </button>
         </div>
-
-        <section class="yandex-ai-section">
-          <h3>Сведи в AI-сет</h3>
-          <button type="button" class="yandex-ai-card" onclick="startMyWave()">
-            <span class="yandex-ai-cover" aria-hidden="true">♪</span>
-            <span><strong>Flow Mix</strong><small>персональная волна по твоим прослушиваниям</small></span>
-            <span class="yandex-ai-more" aria-hidden="true">•••</span>
-          </button>
-        </section>
       </div>
       <div id="home-dashboard-stack" class="home-dashboard-stack">
       <section class="home-dash-block" data-home-block="welcome">
@@ -476,9 +470,8 @@
                   <span class="vsb-theme-icon">F⚙</span>
                   <span class="vsb-theme-label">flow custum</span>
                 </button>
-                <button class="vsb vsb-theme" id="vm-yandex" onclick="setVisualMode('yandex')" title="FY Яндекс">
-                  <span class="vsb-theme-icon">FY</span>
-                  <span class="vsb-theme-label">яндекс</span>
+                <button class="vsb vsb-theme" id="vm-liquid" onclick="setVisualMode('liquid')" title="Liquid Glass">
+                  <span class="vsb-theme-icon">◈</span>
                 </button>
               </div>
             </div>
@@ -776,6 +769,14 @@
                 <button class="vsb" id="hw-mode-image" onclick="setHomeWidgetMode('image')">Image</button>
               </div>
             </div>
+            <div class="vs-row">
+              <label class="vs-label">Интенсивность визуализации <span class="vs-val" id="home-widget-intensity-val">100%</span></label>
+              <input type="range" id="home-widget-intensity" min="60" max="180" step="1" value="100" onchange="setHomeWidgetIntensity(this.value)" oninput="setHomeWidgetIntensity(this.value)">
+            </div>
+            <div class="vs-row">
+              <label class="vs-label">Плавность визуализации <span class="vs-val" id="home-widget-smoothing-val">72%</span></label>
+              <input type="range" id="home-widget-smoothing" min="20" max="95" step="1" value="72" onchange="setHomeWidgetSmoothing(this.value)" oninput="setHomeWidgetSmoothing(this.value)">
+            </div>
             <div class="vs-row" id="home-widget-image-row" style="display:none;align-items:flex-start;flex-direction:column;gap:8px">
               <label class="vs-label">Фото для визуализации</label>
               <div class="vs-btn-group">
@@ -791,6 +792,14 @@
               <div class="vs-btn-group">
                 <button class="vsb" id="slider-style-line" onclick="setHomeSliderStyle('line')">Линия</button>
                 <button class="vsb" id="slider-style-wave" onclick="setHomeSliderStyle('wave')">Wave</button>
+              </div>
+            </div>
+            <div class="vs-row">
+              <label class="vs-label">Профиль чистоты звука</label>
+              <div class="vs-btn-group">
+                <button class="vsb" id="sound-profile-balanced" onclick="setSoundEnhancerProfile('balanced')">Сбаланс.</button>
+                <button class="vsb" id="sound-profile-clean" onclick="setSoundEnhancerProfile('clean')">Чистый</button>
+                <button class="vsb" id="sound-profile-bright" onclick="setSoundEnhancerProfile('bright')">Яркий</button>
               </div>
             </div>
           </div>
@@ -863,20 +872,89 @@
         <div class="glass-card" style="padding:18px;border-radius:18px;margin-top:8px;max-width:760px;">
           <div class="vs-section-title" style="margin-bottom:8px;">Источники</div>
           <div style="color:var(--muted);font-size:14px;line-height:1.55;margin-bottom:14px;">Откуда брать результаты поиска: классический Flow (сервер), Яндекс Музыка или ВКонтакте (нужен токен с аудио).</div>
-          <div class="source-mode-grid" style="margin:0 0 14px;">
-            <button class="source-mode-card" data-src="hybrid" onclick="setActiveSource('hybrid')" title="Flow classic">
-              <span class="source-mode-icon">F</span>
-              <span class="source-mode-label">classic</span>
-            </button>
-            <button class="source-mode-card" data-src="yandex" onclick="setActiveSource('yandex')" title="Яндекс">
-              <span class="source-mode-icon source-mode-icon-ya">✶</span>
-              <span class="source-mode-label">Ya</span>
-            </button>
-            <button class="source-mode-card" data-src="vk" onclick="setActiveSource('vk')" title="ВКонтакте">
-              <span class="source-mode-icon" style="font-size:13px;font-weight:800;background:linear-gradient(135deg,#4680c2,#5b9bd5);color:#fff">VK</span>
-              <span class="source-mode-label">VK</span>
-            </button>
+          <div class="auth-token-guide-row">
+            <button type="button" class="btn-small auth-token-guide-btn auth-token-guide-btn--half" onclick="openFlowYandexTelegraphGuide()" title="Открыть в браузере">Яндекс · Telegraph</button>
+            <button type="button" class="btn-small auth-token-guide-btn auth-token-guide-btn--half" onclick="openFlowVkTelegraphGuide()" title="Telegraph: как подключить ВКонтакте во Flow">VK · Telegraph</button>
           </div>
+
+          <div class="auth-source-stack" id="auth-source-stack">
+            <div class="auth-source-row" data-auth-row="hybrid">
+              <button type="button" class="auth-source-tile auth-source-tile--flow source-mode-card" data-src="hybrid" onclick="onAuthSourceTileClick(event, 'hybrid')" title="Классический Flow">
+                <span class="auth-source-tile-img-wrap"><img class="auth-source-tile-img" src="assets/auth/flow.png" alt="Flow" /></span>
+                <span class="source-mode-label">Flow</span>
+              </button>
+              <div class="auth-source-drawer" data-auth-drawer="hybrid" aria-hidden="true">
+                <div class="auth-source-drawer-inner">
+                  <input class="token-field flow-input auth-readonly-line" readonly value="Работает" />
+                  <div class="auth-source-hint">Серверный гибридный поиск и потоки без отдельного токена.</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="auth-source-row" data-auth-row="yandex">
+              <button type="button" class="auth-source-tile auth-source-tile--yandex source-mode-card" data-src="yandex" onclick="onAuthSourceTileClick(event, 'yandex')" title="Яндекс Музыка">
+                <span class="auth-source-tile-img-wrap"><img class="auth-source-tile-img" src="assets/auth/yandex.png" alt="Яндекс Музыка" /></span>
+                <span class="source-mode-label">Яндекс</span>
+              </button>
+              <div class="auth-source-drawer" data-auth-drawer="yandex" aria-hidden="true">
+                <div class="auth-source-drawer-inner">
+                  <div class="token-field-wrap">
+                    <input id="ym-token-val-compact" type="password" class="token-field" placeholder="Вставь access_token или полный redirect URL..." oninput="syncYmTokenFieldsFromCompact()">
+                    <button class="token-field-eye" type="button" onclick="toggleToken('ym-token-val-compact')" title="Показать/скрыть">
+                      <svg class="ui-icon sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </button>
+                    <button class="token-field-apply" type="button" onclick="applyYandexTokenFromCompact()" title="Сохранить">
+                      <svg class="ui-icon sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><polyline points="20 6 9 17 4 12"/></svg>
+                    </button>
+                  </div>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 0;">
+                    <button class="btn-small" type="button" onclick="checkYandexTokenFromCompact()">Проверить токен</button>
+                  </div>
+                  <div id="ym-msg-compact" class="token-msg" style="display:block;margin-top:8px;" role="status" aria-live="polite"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="auth-source-row" data-auth-row="vk">
+              <button type="button" class="auth-source-tile auth-source-tile--vk source-mode-card" data-src="vk" onclick="onAuthSourceTileClick(event, 'vk')" title="ВКонтакте">
+                <span class="auth-source-tile-img-wrap"><img class="auth-source-tile-img" src="assets/auth/vk.png" alt="VK" /></span>
+                <span class="source-mode-label">VK</span>
+              </button>
+              <div class="auth-source-drawer" data-auth-drawer="vk" aria-hidden="true">
+                <div class="auth-source-drawer-inner">
+                  <div class="token-field-wrap">
+                    <input id="vk-token-val-compact" type="password" class="token-field" placeholder="Вставь VK токен..." oninput="syncVkTokenFieldsFromCompact()">
+                    <button class="token-field-eye" type="button" onclick="toggleToken('vk-token-val-compact')" title="Показать/скрыть">
+                      <svg class="ui-icon sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </button>
+                    <button class="token-field-apply" type="button" onclick="applyVkTokenFromCompact()" title="Сохранить">
+                      <svg class="ui-icon sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><polyline points="20 6 9 17 4 12"/></svg>
+                    </button>
+                  </div>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 0;">
+                    <button class="btn-small" type="button" onclick="checkVkTokenFromCompact()">Проверить токен</button>
+                    <button class="btn-small" type="button" onclick="openFlowVkTelegraphGuide()" title="Telegraph: как подключить ВКонтакте во Flow">VK · Telegraph</button>
+                  </div>
+                  <div id="vk-msg-compact" class="token-msg" style="display:block;margin-top:8px;" role="status" aria-live="polite"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="auth-source-row" data-auth-row="spotify">
+              <button type="button" class="auth-source-tile auth-source-tile--spotify source-mode-card" data-src="spotify-dev" onclick="onAuthSourceTileClick(event, 'spotify')" title="Spotify">
+                <span class="auth-source-tile-img-wrap"><img class="auth-source-tile-img" src="assets/auth/spotify.png" alt="Spotify" /></span>
+                <span class="source-mode-label">Spotify</span>
+              </button>
+              <div class="auth-source-drawer" data-auth-drawer="spotify" aria-hidden="true">
+                <div class="auth-source-drawer-inner">
+                  <input class="token-field flow-input auth-readonly-line" readonly value="В разработке" />
+                  <div class="auth-source-hint">Интеграция Spotify для этого блока пока не готова.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button type="button" class="btn-small auth-advanced-sources-btn" onclick="openAdvancedSourceSections()" style="margin:12px 0 14px;">Расширенные настройки (YouTube, Spotify Bearer, VK-логин…)</button>
 
           <div class="vs-section glass-card vs-collapsible collapsed" data-settings-section="accountYoutube" style="margin:10px 0 16px;">
             <button type="button" class="vs-section-head" onclick="toggleSettingsSection('accountYoutube')" aria-expanded="false">
@@ -952,6 +1030,7 @@
               <button class="btn-small" id="vk-get-btn" onclick="getVkToken()">Войти в VK и получить токен</button>
               <button class="btn-small" id="vk-browser-auth-btn" onclick="startVkBrowserAuth()">Открыть вход VK в браузере</button>
               <button class="btn-small" onclick="openVkHostTokenPage()">Открыть vkhost.github.io</button>
+              <button class="btn-small" type="button" onclick="openFlowVkTelegraphGuide()" title="Telegraph: как подключить ВКонтакте во Flow">VK · Telegraph</button>
             </div>
 
             <div style="font-size:12px;color:var(--muted);margin:12px 0 6px;">Токен VK (можно вставить вручную)</div>
@@ -969,6 +1048,13 @@
             </div>
             <div class="integration-hint" style="margin-top:12px">Ручной токен через <strong>vkhost.github.io</strong>: выбери <strong>Kate Mobile</strong>. В <strong>«Настройки»</strong> на vkhost отмечай нужные права (аудио, офлайн) — там как раз галочки. Затем войди: сначала может открыться VK ID («Продолжить как …») — нажми продолжить; на странице <strong>id.vk.com</strong> со списком прав <strong>нет отдельных галочек по строкам</strong>, это просто перечень доступа приложения; внизу страницы найди кнопку <strong>«Разрешить»</strong> (при узком окне — <strong>прокрути вниз</strong> или разверни браузер на весь экран). После перехода скопируй из адреса фрагмент от <code>access_token=</code> до <code>&amp;expires_in</code>.</div>
             <div id="vk-msg" class="token-msg" style="display:block;margin-top:10px;" role="status" aria-live="polite"></div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);">
+              <div style="font-size:12px;line-height:1.4;color:rgba(255,255,255,0.88);">
+                <div style="font-weight:600;margin-bottom:2px;">Обход через Chrome (Selenium)</div>
+                <div style="color:var(--muted);">Только если VK режет audio.*: отдельное окно Chrome, вход в VK, профиль в %LOCALAPPDATA%\Flow\vk_chrome_profile. По умолчанию выключено — поиск и импорт не запускают браузер сами.</div>
+              </div>
+              <div class="vs-toggle" id="toggle-vk-selenium-bridge" onclick="toggleVkSeleniumBridgeSetting()" title="Разрешить обход через Chrome"><div class="vs-toggle-thumb"></div></div>
+            </div>
             </div>
           </div>
 
@@ -1402,7 +1488,7 @@
     <div class="flow-game-sleep-title">Sleep mode</div>
     <div class="flow-game-sleep-sub">Только воспроизведение · верни Flow на экран</div>
   </div>
-  <script src="renderer.js?v=20260503-vk-source"></script>
+  <script src="renderer.js?v=20260503-room-guest-visual"></script>
 </body>
 </html>
 
