@@ -315,6 +315,7 @@ function renderMyWave() {
   const modeCfg = WE?.MY_WAVE_MODES?.[mode] || WE?.MY_WAVE_MODES?.default
   const seedCount = getMyWaveSeedTracks().length
   if (modesEl) {
+    modesEl.style.display = 'flex'
     const sourcePicker = `
       <div class="my-wave-source-switch">
         <button class="my-wave-mode ${source === 'yandex' ? 'active' : ''}" onclick="setMyWaveSource('yandex')">Яндекс</button>
@@ -369,6 +370,7 @@ function renderRoomsMyWave() {
   )).join('')
     : '<div class="token-msg" style="display:block">Для VK-волны включен автоматический пресет.</div>'
   modesEl.innerHTML = sourcePicker + modeButtons
+  modesEl.style.display = 'flex'
   if (seedCount < 3) {
     hintEl.textContent = `Послушай или лайкни еще ${3 - seedCount} трек(ов), чтобы волна поняла твой вкус`
   } else if (_myWaveBuilding) {
@@ -2286,6 +2288,7 @@ function leaveRoom() {
   const prevRoomId = _roomState?.roomId
   removeRoomMemberPresence(prevRoomId).catch(() => {})
   stopRoomServerSync()
+  stopCurrentPlaybackForRoomMode()
   if (!_socialPeer) return
   if (typeof _socialPeer.leaveRoom === 'function') _socialPeer.leaveRoom()
   _roomState = { roomId: null, host: false, hostPeerId: null }
