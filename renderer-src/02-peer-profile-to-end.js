@@ -185,6 +185,7 @@ function setMyWaveSource(source) {
   const next = String(source || '').trim().toLowerCase() === 'vk' ? 'vk' : 'yandex'
   try { localStorage.setItem('flow_my_wave_source', next) } catch {}
   if (next !== 'yandex') toggleYandexWaveModes(false)
+  renderYandexWaveModes()
   renderMyWave()
   renderRoomsMyWave()
   syncYandexWaveSettingsLabel()
@@ -1201,11 +1202,23 @@ async function transferRoomHost(peerId = '', username = '') {
   const targetPeerId = String(peerId || '').trim()
   if (!_roomState?.roomId || !_roomState.host) return showToast('Передавать хоста может только текущий хост', true)
   if (!targetPeerId || targetPeerId === _socialPeer?.peer?.id) return showToast('Выбери другого участника', true)
+  const prevHost = String(_socialPeer?.peer?.id || _roomState.hostPeerId || '')
+  let transferredOnServer = false
+  if (isFlowSocialReady()) {
+    try {
+      const rid = encodeURIComponent(String(_roomState.roomId || '').trim())
+      const resp = await window.FlowSocialBackend.request('POST', `/flow-api/v1/rooms/${rid}/transfer-host`, {
+        to_peer_id: targetPeerId,
+        requested_by_peer_id: prevHost,
+      })
+      transferredOnServer = Boolean(resp?.ok)
+    } catch (_) {}
+  }
   _roomState.host = false
   _roomState.hostPeerId = targetPeerId
   _socialPeer?.sendToPeer?.(targetPeerId, { type: 'room-host-transfer', roomId: _roomState.roomId, hostPeerId: targetPeerId, sharedQueue })
   _socialPeer?.send?.({ type: 'room-host-changed', roomId: _roomState.roomId, hostPeerId: targetPeerId, username })
-  await saveRoomStateToServer({ host_peer_id: targetPeerId, shared_queue: sharedQueue }).catch(() => {})
+  if (!transferredOnServer) await saveRoomStateToServer({ host_peer_id: targetPeerId, shared_queue: sharedQueue }).catch(() => {})
   updateRoomUi()
   showToast(`Хост передан: ${username || targetPeerId.replace(/^flow-/, '')}`)
 }
@@ -1419,7 +1432,7 @@ function ensureSocialUI() {
   box.style.padding = '14px'
   box.innerHTML = `
     <div class="social-head">
-      <strong>Flow Social (P2P)</strong>
+      <strong>Flow Social (Cloud)</strong>
       <span id="social-status" class="social-status">offline</span>
     </div>
     <div class="social-add-box">
@@ -1545,12 +1558,116 @@ async function renderFriends() {
 
 function setSocialStatus(text) {
   const el = document.getElementById('social-status')
-  if (el) el.textContent = text
+  if (!el) return
+  const raw = String(text || '').trim().toLowerCase()
+  let state = 'degraded'
+  let label = String(text || 'degraded')
+  if (raw.startsWith('online')) {
+    state = 'online'
+    label = 'online'
+  } else if (raw.startsWith('connecting')) {
+    state = 'connecting'
+    label = 'connecting'
+  } else if (raw.startsWith('degraded')) {
+    state = 'degraded'
+    label = 'degraded'
+  } else if (raw.startsWith('error')) {
+    state = 'degraded'
+    label = `degraded (${String(text || '').replace(/^error:\s*/i, '')})`
+  }
+  el.textContent = label
+  el.classList.remove('social-status--online', 'social-status--connecting', 'social-status--degraded')
+  el.classList.add(`social-status--${state}`)
 }
 
 function setRoomStatus(text) {
   const el = document.getElementById('room-status')
   if (el) el.textContent = text
+}
+
+let _appUpdateState = {
+  available: false,
+  latestVersion: '',
+  downloadedPath: '',
+  checking: false,
+  downloading: false,
+}
+
+function setAppUpdateStatus(text, mode = 'neutral') {
+  const el = document.getElementById('app-update-status')
+  if (!el) return
+  el.textContent = String(text || '')
+  el.classList.remove('app-update-status--checking', 'app-update-status--ready', 'app-update-status--error')
+  if (mode === 'checking') el.classList.add('app-update-status--checking')
+  if (mode === 'ready') el.classList.add('app-update-status--ready')
+  if (mode === 'error') el.classList.add('app-update-status--error')
+}
+
+function updateAppUpdaterUiState() {
+  const downloadBtn = document.getElementById('app-update-download-btn')
+  const installBtn = document.getElementById('app-update-install-btn')
+  if (downloadBtn) {
+    downloadBtn.disabled = !_appUpdateState.available || _appUpdateState.downloading
+    downloadBtn.textContent = _appUpdateState.downloading ? 'Скачиваю...' : 'Скачать'
+  }
+  if (installBtn) {
+    installBtn.disabled = !_appUpdateState.downloadedPath
+  }
+}
+
+async function checkAppUpdatesNow() {
+  if (!window.api?.appUpdateCheck || _appUpdateState.checking) return
+  _appUpdateState.checking = true
+  setAppUpdateStatus('Проверяю stable-канал...', 'checking')
+  updateAppUpdaterUiState()
+  try {
+    const result = await window.api.appUpdateCheck()
+    if (!result?.ok) throw new Error(result?.error || 'update check failed')
+    _appUpdateState.available = Boolean(result.available)
+    _appUpdateState.latestVersion = String(result.latestVersion || '')
+    _appUpdateState.downloadedPath = ''
+    if (_appUpdateState.available) {
+      setAppUpdateStatus(`Доступна версия ${_appUpdateState.latestVersion}`, 'ready')
+      showToast(`Доступно обновление ${_appUpdateState.latestVersion}`)
+    } else {
+      setAppUpdateStatus(`У вас актуальная версия (${result.currentVersion || 'unknown'})`)
+    }
+  } catch (e) {
+    setAppUpdateStatus(`Ошибка проверки: ${sanitizeDisplayText(e?.message || String(e))}`, 'error')
+  } finally {
+    _appUpdateState.checking = false
+    updateAppUpdaterUiState()
+  }
+}
+
+async function downloadAppUpdateNow() {
+  if (!window.api?.appUpdateDownload || !_appUpdateState.available || _appUpdateState.downloading) return
+  _appUpdateState.downloading = true
+  setAppUpdateStatus(`Скачиваю ${_appUpdateState.latestVersion || 'обновление'}...`, 'checking')
+  updateAppUpdaterUiState()
+  try {
+    const result = await window.api.appUpdateDownload()
+    if (!result?.ok || !result?.downloadedPath) throw new Error(result?.error || 'download failed')
+    _appUpdateState.downloadedPath = String(result.downloadedPath || '')
+    setAppUpdateStatus(`Готово: ${result.latestVersion || _appUpdateState.latestVersion}`, 'ready')
+    showToast('Обновление скачано. Нажми "Установить и перезапустить"')
+  } catch (e) {
+    setAppUpdateStatus(`Ошибка скачивания: ${sanitizeDisplayText(e?.message || String(e))}`, 'error')
+  } finally {
+    _appUpdateState.downloading = false
+    updateAppUpdaterUiState()
+  }
+}
+
+async function installAppUpdateNow() {
+  if (!window.api?.appUpdateInstall || !_appUpdateState.downloadedPath) return
+  setAppUpdateStatus('Запускаю установщик и перезапуск...', 'checking')
+  try {
+    const result = await window.api.appUpdateInstall(_appUpdateState.downloadedPath)
+    if (!result?.ok) throw new Error(result?.error || 'install failed')
+  } catch (e) {
+    setAppUpdateStatus(`Ошибка установки: ${sanitizeDisplayText(e?.message || String(e))}`, 'error')
+  }
 }
 
 function getLastFmPayload() {
@@ -1576,28 +1693,21 @@ function syncIntegrationsUI() {
   if (k) k.value = s.lastfmApiKey || ''
   if (ss) ss.value = s.lastfmSharedSecret || ''
   if (sk) sk.value = s.lastfmSessionKey || ''
-  if (fsb) fsb.value = String(s.flowSocialApiBase || '').trim().replace(/\/$/, '')
-  if (fss) fss.value = String(s.flowSocialApiSecret || '').trim()
+  if (fsb) {
+    fsb.value = String(window.FlowSocialBackend?.getConfig?.().base || FLOW_SOCIAL_DEFAULT_API_BASE).trim().replace(/\/$/, '')
+    fsb.disabled = true
+    fsb.title = 'В этой сборке значение фиксированное'
+  }
+  if (fss) {
+    fss.value = '********'
+    fss.disabled = true
+    fss.title = 'В этой сборке значение фиксированное'
+  }
+  updateAppUpdaterUiState()
 }
 
 function saveFlowSocialBackendSettings() {
-  const elB = document.getElementById('flow-social-api-base')
-  const elS = document.getElementById('flow-social-api-secret')
-  const base = String(elB?.value || '').trim().replace(/\/$/, '')
-  const secret = String(elS?.value || '').trim()
-  saveSettingsRaw({ flowSocialApiBase: base, flowSocialApiSecret: secret })
-  try {
-    localStorage.setItem('flow_social_api_base', base)
-    localStorage.setItem('flow_social_api_secret', secret)
-  } catch (_) {}
-  try {
-    stopProfilesRealtimeSync()
-    stopRoomServerSync()
-    window.FlowSocialBackend?.invalidate?.()
-    if (_profile?.username) initPeerSocial()
-    if (_roomState?.roomId) startRoomServerSync()
-  } catch (_) {}
-  showToast('Социальный сервер сохранён')
+  showToast('В этой версии социальный backend зафиксирован и не требует ручного ввода')
 }
 
 async function checkFlowSocialBackendStatus() {
@@ -1609,15 +1719,11 @@ async function checkFlowSocialBackendStatus() {
     else if (ok === false) statusEl.style.color = '#ff9b9b'
     else statusEl.style.color = ''
   }
-  const base = String(document.getElementById('flow-social-api-base')?.value || '').trim().replace(/\/$/, '')
-  const secret = String(document.getElementById('flow-social-api-secret')?.value || '').trim()
-  saveSettingsRaw({ flowSocialApiBase: base, flowSocialApiSecret: secret })
-  try {
-    localStorage.setItem('flow_social_api_base', base)
-    localStorage.setItem('flow_social_api_secret', secret)
-  } catch (_) {}
+  const cfg = window.FlowSocialBackend?.getConfig?.() || {}
+  const base = String(cfg.base || FLOW_SOCIAL_DEFAULT_API_BASE || '').trim().replace(/\/$/, '')
+  const secret = String(cfg.secret || FLOW_SOCIAL_DEFAULT_API_SECRET || '').trim()
   if (!base || !secret) {
-    setStatus('Соц-API: укажи URL и секрет', false)
+    setStatus('Соц-API: конфиг отсутствует', false)
     return
   }
   setStatus('Соц-API: проверяю…')
@@ -1808,6 +1914,11 @@ function initPeerSocial() {
     maxPeers: 3,
     onStatus: (evt) => {
       if (evt.type === 'ready') setSocialStatus(`online: ${evt.id}`)
+      if (evt.type === 'ws-state') {
+        if (evt.state === 'online') setSocialStatus('online')
+        else if (evt.state === 'connecting') setSocialStatus(`connecting${evt.attempt ? ` (#${evt.attempt})` : ''}`)
+        else setSocialStatus(`degraded${evt.reason ? ` (${evt.reason})` : ''}`)
+      }
       if (evt.type === 'peer-joined') {
         setRoomStatus(`Рума ${_roomState.roomId || '—'}: участников ${_socialPeer.peersCount()}/3`)
         const me = getPublicProfilePayload(_profile?.username)
@@ -1841,10 +1952,10 @@ function initPeerSocial() {
           _peerProfiles.delete(evt.peerId)
         }
         if (!_roomState.host && evt.peerId && evt.peerId === _roomState.hostPeerId) {
-          _roomState = { roomId: null, host: true, hostPeerId: null }
-          _roomMembers.clear()
-          showToast('Хост покинул комнату. Теперь вы управляете плеером сами')
-          setRoomStatus('Хост отключился, автономный режим активирован')
+          _roomState.hostPeerId = null
+          showToast('Хост вышел. Выбираем нового хоста...')
+          setRoomStatus('Хост вышел, server election...')
+          loadRoomStateFromServer(true).catch(() => {})
         }
         broadcastRoomMembersState()
         resetRoomHeartbeat()
@@ -2130,6 +2241,7 @@ function createRoom() {
   if (!_socialPeer) return
   const r = _socialPeer.createRoom()
   if (!r?.ok) return showToast(r?.error || 'Ошибка создания', true)
+  stopCurrentPlaybackForRoomMode()
   _roomState = { roomId: r.roomId, host: true, hostPeerId: _socialPeer?.peer?.id || r.roomId }
   _roomMembers.clear()
   sharedQueue = []
@@ -2151,11 +2263,8 @@ function joinRoomById(forceRoomId = '') {
   const r = _socialPeer.joinRoom(roomId)
   if (!r?.ok) return showToast(r?.error || 'Ошибка входа', true)
   _roomState = { roomId: r.roomId, host: false, hostPeerId: null }
-  // Вход в комнату переводит в отдельный комнатный режим — локальный трек останавливаем,
-  // дальше состояние задаёт только хост через playback-sync.
-  try { audio.pause() } catch (_) {}
-  try { audio.removeAttribute('src'); audio.load() } catch (_) {}
-  try { syncTransportPlayPauseUi() } catch (_) {}
+  // Вход в комнату переводит в отдельный комнатный режим, персональный плеер мгновенно останавливаем.
+  stopCurrentPlaybackForRoomMode()
   _roomMembers.clear()
   sharedQueue = []
   _lastPlaybackSyncSeq = 0
@@ -2190,6 +2299,17 @@ function leaveRoom() {
   setRoomStatus('Рума: не активна')
   updateRoomUi()
   showToast('Вы покинули руму')
+}
+
+function stopCurrentPlaybackForRoomMode() {
+  // Invalidate pending async play resolutions from previous (personal) context.
+  _playRequestSeq = Number(_playRequestSeq || 0) + 1
+  try { audio.pause() } catch (_) {}
+  try { audio.removeAttribute('src'); audio.load() } catch (_) {}
+  currentTrack = null
+  try { syncTransportPlayPauseUi() } catch (_) {}
+  try { renderRoomNowPlaying() } catch (_) {}
+  try { refreshNowPlayingTrackHighlight() } catch (_) {}
 }
 
 function copyInviteLink() {
@@ -2361,19 +2481,52 @@ function promptInviteJoin() {
   openInviteModal()
 }
 
+async function fetchServerFriendsPresence(username) {
+  if (!isFlowSocialReady() || !username) return null
+  try {
+    const rid = encodeURIComponent(String(username || '').trim().toLowerCase())
+    const rows = await window.FlowSocialBackend.request('GET', `/flow-api/v1/presence/friends/${rid}`)
+    if (!Array.isArray(rows)) return null
+    const map = new Map()
+    rows.forEach((row) => {
+      const uname = String(row?.username || '').trim().toLowerCase()
+      if (!uname) return
+      map.set(uname, {
+        online: Boolean(row?.online),
+        roomId: row?.room_id ? String(row.room_id) : null,
+        peerId: row?.peer_id ? String(row.peer_id) : `flow-${uname}`,
+        updatedAt: Date.now(),
+      })
+    })
+    return map
+  } catch {
+    return null
+  }
+}
+
 async function pollFriendsPresence(force = false) {
   if (!_socialPeer || !_profile?.username || !peerSocial.getFriends) return
+  const serverPresence = await fetchServerFriendsPresence(_profile.username).catch(() => null)
   const friends = peerSocial.getFriends(_profile.username) || []
   const entries = await Promise.all(friends.map(async (friend) => {
     const uname = String(friend || '').trim().toLowerCase()
     const prev = _friendPresence.get(uname) || {}
+    const cloud = serverPresence?.get(uname) || null
     const freshOnline = !force && prev.online && (Date.now() - Number(prev.updatedAt || 0) < FRIEND_FRESH_ONLINE_MS)
-    const isOnline = freshOnline ? true : await _socialPeer.probeUser(uname, 900).catch(() => false)
+    const isOnline = cloud
+      ? Boolean(cloud.online)
+      : (freshOnline ? true : await _socialPeer.probeUser(uname, 900).catch(() => false))
     if (!isOnline) {
-      return [uname, { online: false, track: null, roomId: null, peerId: prev.peerId || null, updatedAt: Date.now() }]
+      return [uname, { online: false, track: null, roomId: cloud?.roomId || null, peerId: cloud?.peerId || prev.peerId || null, updatedAt: Date.now() }]
     }
-    let state = { online: true, track: prev.track || null, roomId: prev.roomId || `flow-${uname}`, peerId: prev.peerId || `flow-${uname}`, updatedAt: Date.now() }
-    const peerId = `flow-${uname}`
+    let state = {
+      online: true,
+      track: prev.track || null,
+      roomId: cloud?.roomId || prev.roomId || `flow-${uname}`,
+      peerId: cloud?.peerId || prev.peerId || `flow-${uname}`,
+      updatedAt: Date.now(),
+    }
+    const peerId = String(state.peerId || `flow-${uname}`)
     if (typeof _socialPeer.requestPeerData === 'function') {
       const response = await _socialPeer.requestPeerData(peerId, { type: 'presence-request' }, 1100).catch(() => null)
       if (response?.ok && response?.data?.type === 'presence-state') {
@@ -2482,6 +2635,7 @@ function startApp() {
     switchTab('login')
     syncIntegrationsUI()
   }
+  checkAppUpdatesNow().catch(() => {})
   updateRoomUi()
   if (!localStorage.getItem('flow_first_launch_done')) {
     saveVisual({
@@ -4852,6 +5006,11 @@ async function playTrackObj(track, opts = {}) {
     enqueueSharedTrack(track)
     return
   }
+  if (_roomState?.roomId && _roomState?.host && !opts?.remoteSync && !opts?.fromSharedQueue && !opts?.allowRoomDirectPlay) {
+    enqueueSharedTrack(track)
+    showToast('Трек добавлен в очередь комнаты. Для запуска выбери трек в очереди.')
+    return
+  }
   const reqId = ++_playRequestSeq
   const isStale = () => reqId !== _playRequestSeq
   track = sanitizeTrack(track)
@@ -5451,6 +5610,11 @@ function prevTrack() {
     return
   }
   if (!queue.length) return
+  if (_roomState?.roomId && _roomState?.host) {
+    audio.currentTime = 0
+    broadcastPlaybackSync(true)
+    return
+  }
   const resetThreshold = Math.max(1, Math.min(10, (Number(audio.duration) || 0) / 3 || 10))
   if (audio.currentTime > resetThreshold) { audio.currentTime = 0; return }
   const allowShuffle = playbackMode.shuffle && queueScope === 'liked'
@@ -5473,6 +5637,20 @@ function prevTrack() {
 function nextTrack(autoEnded = false) {
   if (!canControlQueue() && !autoEnded) {
     showHostOnlyToast()
+    return
+  }
+  if (_roomState?.roomId && _roomState?.host) {
+    if (sharedQueue.length) {
+      const nextRoomTrack = sharedQueue.shift()
+      renderRoomQueue()
+      broadcastQueueUpdate()
+      saveRoomStateToServer({ shared_queue: sharedQueue, playback_ts: Date.now() }).catch(() => {})
+      if (nextRoomTrack) {
+        playTrackObj(nextRoomTrack, { fromSharedQueue: true }).catch(() => {})
+      }
+    } else if (!autoEnded) {
+      showToast('Очередь комнаты пуста')
+    }
     return
   }
   if (!queue.length) return
@@ -5566,6 +5744,26 @@ audio.ontimeupdate = () => {
 audio.onpause = () => {
   flushListenStatsPending(true)
   _listenTickAt = 0
+  if (_roomState?.roomId && _roomState?.host) {
+    _socialPeer?.send?.({
+      type: 'room-control-toggle',
+      roomId: _roomState.roomId,
+      paused: true,
+      currentTime: Number(audio.currentTime || 0),
+    })
+    broadcastPlaybackSync(true)
+  }
+}
+audio.onplay = () => {
+  if (_roomState?.roomId && _roomState?.host) {
+    _socialPeer?.send?.({
+      type: 'room-control-toggle',
+      roomId: _roomState.roomId,
+      paused: false,
+      currentTime: Number(audio.currentTime || 0),
+    })
+    broadcastPlaybackSync(true)
+  }
 }
 audio.onended = () => {
   flushListenStatsPending(true)
