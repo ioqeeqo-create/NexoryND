@@ -1981,8 +1981,20 @@ function initPeerSocial() {
         if (seq) _lastPlaybackSyncSeq = Math.max(_lastPlaybackSyncSeq || 0, seq)
         const ts = Number(msg.playbackTs || msg._ts || 0)
         if (ts) _lastAppliedServerPlaybackTs = Math.max(_lastAppliedServerPlaybackTs || 0, ts)
-        if (msg.track && msg.track.id !== currentTrack?.id) {
-          playTrackObj(msg.track, { remoteSync: true }).catch(() => {})
+        if (msg.track) {
+          const incomingTrack = sanitizeTrack(msg.track)
+          const incomingSig = normalizeTrackSignature(incomingTrack)
+          const currentSig = normalizeTrackSignature(currentTrack || {})
+          const noActiveAudio = !audio?.src || audio?.ended || audio?.error
+          const shouldReloadTrack =
+            noActiveAudio ||
+            !currentTrack ||
+            !incomingSig ||
+            !currentSig ||
+            incomingSig !== currentSig
+          if (shouldReloadTrack) {
+            playTrackObj(incomingTrack, { remoteSync: true }).catch(() => {})
+          }
         }
         if (typeof msg.currentTime === 'number' && Number.isFinite(audio.duration) && audio.duration > 0) {
           const latencySec = Math.max(0, (Date.now() - Number(msg._ts || Date.now())) / 1000)
@@ -2068,11 +2080,9 @@ function initPeerSocial() {
         _peerProfiles.set(msg._peerId, profileWithPeer)
         cachePeerProfile(profileWithPeer, msg._peerId)
         _roomMembers.set(msg._peerId, profileWithPeer)
-        const hostPeerId = String(_roomState.hostPeerId || '').trim()
-        if (Array.isArray(msg.sharedQueue) && msg._peerId && (!hostPeerId || String(msg._peerId) === hostPeerId)) {
-          sharedQueue = msg.sharedQueue.map((t) => sanitizeTrack(t)).filter(Boolean)
-          renderRoomQueue()
-        }
+        // Queue should be synchronized only via authoritative events:
+        // playback-sync / queue-update / room-queue-sync-state / server flow_rooms.
+        // Applying queue from profile packets causes occasional stale "flicker".
         if (_roomState.host) broadcastRoomMembersState()
         resetRoomHeartbeat()
         updateRoomUi()
