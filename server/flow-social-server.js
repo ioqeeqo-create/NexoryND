@@ -139,6 +139,57 @@ function rowRoom(r) {
   }
 }
 
+function parseAnyDateMs(value) {
+  const ms = Date.parse(String(value || ''))
+  return Number.isFinite(ms) ? ms : null
+}
+
+function isFreshIso(value, freshMs = 180000) {
+  const ms = parseAnyDateMs(value)
+  if (!Number.isFinite(ms)) return false
+  return (Date.now() - ms) <= Math.max(15000, Number(freshMs || 0))
+}
+
+function roomHasMember(roomId, peerId) {
+  if (!roomId || !peerId) return false
+  const r = db.prepare(
+    'SELECT 1 AS ok FROM flow_room_members WHERE room_id=? AND peer_id=? LIMIT 1'
+  ).get(String(roomId), String(peerId))
+  return !!r?.ok
+}
+
+function electRoomHost(roomId, opts = {}) {
+  const rid = String(roomId || '').trim()
+  if (!rid) return null
+  const room = db.prepare('SELECT * FROM flow_rooms WHERE room_id=?').get(rid)
+  if (!room) return null
+  const members = db.prepare(
+    'SELECT peer_id,last_seen FROM flow_room_members WHERE room_id=? ORDER BY last_seen DESC'
+  ).all(rid)
+  if (!members.length) return null
+  const currentHost = String(room.host_peer_id || '').trim()
+  if (currentHost && members.some((m) => String(m.peer_id || '') === currentHost)) {
+    return currentHost
+  }
+  const elected = String(members[0]?.peer_id || '').trim()
+  if (!elected) return null
+  db.prepare(
+    `UPDATE flow_rooms
+      SET host_peer_id=?,
+          updated_by_peer_id=?,
+          updated_at=?,
+          playback_ts=?
+      WHERE room_id=?`
+  ).run(
+    elected,
+    String(opts.updatedBy || 'server-election'),
+    new Date().toISOString(),
+    Date.now(),
+    rid
+  )
+  return elected
+}
+
 /** --- WebSocket hubs --- */
 const app = express()
 app.use(cors({ origin: true }))
@@ -252,8 +303,17 @@ app.patch('/flow-api/v1/profile-password', bearerAuth, (req, res) => {
 app.get('/flow-api/v1/friends/:owner', bearerAuth, (req, res) => {
   const owner = String(req.params.owner || '').trim().toLowerCase()
   const rows = db.prepare(
-    'SELECT friend_username FROM flow_friends WHERE owner_username = ? ORDER BY created_at DESC'
-  ).all(owner)
+    `WITH friend_set AS (
+      SELECT friend_username AS username, created_at FROM flow_friends WHERE owner_username = ?
+      UNION ALL
+      SELECT owner_username AS username, created_at FROM flow_friends WHERE friend_username = ?
+    )
+    SELECT username AS friend_username, MAX(created_at) AS created_at
+    FROM friend_set
+    WHERE username IS NOT NULL AND username <> ''
+    GROUP BY username
+    ORDER BY created_at DESC`
+  ).all(owner, owner)
   res.json(rows)
 })
 
@@ -316,6 +376,16 @@ app.patch('/flow-api/v1/friend-requests', bearerAuth, (req, res) => {
   }
   db.prepare(`UPDATE flow_friend_requests SET status=?, updated_at=datetime('now')
     WHERE from_username=? AND to_username=? AND status='pending'`).run(status, from, to)
+  if (status === 'accepted') {
+    db.prepare(
+      `INSERT OR REPLACE INTO flow_friends (owner_username,friend_username,created_at)
+       VALUES (?,?,datetime('now'))`
+    ).run(from, to)
+    db.prepare(
+      `INSERT OR REPLACE INTO flow_friends (owner_username,friend_username,created_at)
+       VALUES (?,?,datetime('now'))`
+    ).run(to, from)
+  }
   res.json({ ok: true })
 })
 
@@ -331,6 +401,7 @@ app.put('/flow-api/v1/rooms', bearerAuth, (req, res) => {
   const b = req.body || {}
   const room_id = String(b.room_id || '').trim()
   if (!room_id) return res.status(400).json({ error: 'room_id required' })
+  const existing = db.prepare('SELECT * FROM flow_rooms WHERE room_id=?').get(room_id)
   const host_peer_id = String(b.host_peer_id || '').trim()
   const shared_queue = JSON.stringify(Array.isArray(b.shared_queue) ? b.shared_queue : [])
   const now_playing = b.now_playing != null ? JSON.stringify(b.now_playing) : null
@@ -340,6 +411,24 @@ app.put('/flow-api/v1/rooms', bearerAuth, (req, res) => {
   const playback_ts = Number.isFinite(Number(b.playback_ts)) ? Number(b.playback_ts) : 0
   const updated_by_peer_id = b.updated_by_peer_id ? String(b.updated_by_peer_id) : null
   const updated_at = b.updated_at || new Date().toISOString()
+  const hasQueuePatch =
+    Object.prototype.hasOwnProperty.call(b, 'shared_queue') ||
+    Object.prototype.hasOwnProperty.call(b, 'now_playing') ||
+    Object.prototype.hasOwnProperty.call(b, 'playback_state') ||
+    Object.prototype.hasOwnProperty.call(b, 'playback_ts')
+
+  if (existing && existing.host_peer_id && updated_by_peer_id && updated_by_peer_id !== existing.host_peer_id) {
+    if (host_peer_id && host_peer_id !== existing.host_peer_id) {
+      return res.status(409).json({ error: 'host_transfer_required', host_peer_id: existing.host_peer_id })
+    }
+    if (hasQueuePatch) {
+      return res.status(409).json({ error: 'not_host', host_peer_id: existing.host_peer_id })
+    }
+  }
+
+  if (existing && playback_ts > 0 && Number(existing.playback_ts || 0) > playback_ts) {
+    return res.status(409).json({ error: 'stale_state', server_playback_ts: Number(existing.playback_ts || 0) })
+  }
 
   db.prepare(`INSERT INTO flow_rooms (
     room_id,host_peer_id,shared_queue,now_playing,playback_state,playback_ts,updated_by_peer_id,updated_at
@@ -367,6 +456,33 @@ app.put('/flow-api/v1/rooms', bearerAuth, (req, res) => {
   res.json({ ok: true })
 })
 
+app.post('/flow-api/v1/rooms/:roomId/transfer-host', bearerAuth, (req, res) => {
+  const roomId = String(req.params.roomId || '').trim()
+  const to_peer_id = String(req.body?.to_peer_id || '').trim()
+  const requested_by_peer_id = String(req.body?.requested_by_peer_id || '').trim()
+  if (!roomId || !to_peer_id || !requested_by_peer_id) {
+    return res.status(400).json({ error: 'bad body' })
+  }
+  const room = db.prepare('SELECT * FROM flow_rooms WHERE room_id=?').get(roomId)
+  if (!room) return res.status(404).json({ error: 'not_found' })
+  if (String(room.host_peer_id || '').trim() !== requested_by_peer_id) {
+    return res.status(403).json({ error: 'only_host_can_transfer', host_peer_id: room.host_peer_id || null })
+  }
+  if (!roomHasMember(roomId, to_peer_id)) {
+    return res.status(404).json({ error: 'target_not_in_room' })
+  }
+  db.prepare(
+    `UPDATE flow_rooms
+      SET host_peer_id=?,
+          updated_by_peer_id=?,
+          updated_at=?,
+          playback_ts=?
+      WHERE room_id=?`
+  ).run(to_peer_id, requested_by_peer_id, new Date().toISOString(), Date.now(), roomId)
+  wsBroadcastRoomTick(roomId)
+  res.json({ ok: true, host_peer_id: to_peer_id })
+})
+
 app.put('/flow-api/v1/room-members', bearerAuth, (req, res) => {
   const b = req.body || {}
   const room_id = String(b.room_id || '').trim()
@@ -379,8 +495,9 @@ app.put('/flow-api/v1/room-members', bearerAuth, (req, res) => {
     VALUES (?,?,?,?,?)
     ON CONFLICT(room_id,peer_id) DO UPDATE SET username=excluded.username, profile=excluded.profile, last_seen=excluded.last_seen
   `).run(room_id, peer_id, username, profileJson, last_seen)
+  const elected = electRoomHost(room_id, { updatedBy: 'server-join' })
   wsBroadcastRoomTick(room_id)
-  res.json({ ok: true })
+  res.json({ ok: true, host_peer_id: elected || null })
 })
 
 app.delete('/flow-api/v1/room-members', bearerAuth, (req, res) => {
@@ -388,8 +505,9 @@ app.delete('/flow-api/v1/room-members', bearerAuth, (req, res) => {
   const peer_id = String(req.query.peer_id || '').trim()
   if (!room_id || !peer_id) return res.status(400).json({ error: 'bad query' })
   db.prepare('DELETE FROM flow_room_members WHERE room_id=? AND peer_id=?').run(room_id, peer_id)
+  const elected = electRoomHost(room_id, { updatedBy: 'server-leave' })
   wsBroadcastRoomTick(room_id)
-  res.json({ ok: true })
+  res.json({ ok: true, host_peer_id: elected || null })
 })
 
 app.get('/flow-api/v1/room-members/:roomId', bearerAuth, (req, res) => {
@@ -411,6 +529,57 @@ app.get('/flow-api/v1/room-members/:roomId', bearerAuth, (req, res) => {
     }
   })
   res.json(rows)
+})
+
+app.get('/flow-api/v1/presence/friends/:owner', bearerAuth, (req, res) => {
+  const owner = String(req.params.owner || '').trim().toLowerCase()
+  if (!owner) return res.status(400).json({ error: 'bad owner' })
+  const rows = db.prepare(
+    `WITH friend_set AS (
+      SELECT friend_username AS username FROM flow_friends WHERE owner_username = ?
+      UNION
+      SELECT owner_username AS username FROM flow_friends WHERE friend_username = ?
+    )
+    SELECT
+      fs.username AS username,
+      p.online AS online,
+      p.last_seen AS last_seen,
+      (
+        SELECT rm.room_id
+        FROM flow_room_members rm
+        WHERE rm.username = fs.username
+          AND rm.last_seen >= datetime('now', '-180 seconds')
+        ORDER BY rm.last_seen DESC
+        LIMIT 1
+      ) AS room_id,
+      (
+        SELECT rm.peer_id
+        FROM flow_room_members rm
+        WHERE rm.username = fs.username
+          AND rm.last_seen >= datetime('now', '-180 seconds')
+        ORDER BY rm.last_seen DESC
+        LIMIT 1
+      ) AS peer_id
+    FROM friend_set fs
+    LEFT JOIN flow_profiles p ON p.username = fs.username
+    WHERE fs.username IS NOT NULL AND fs.username <> ''
+    ORDER BY fs.username ASC`
+  ).all(owner, owner)
+
+  const out = rows.map((r) => {
+    const onlineFlag = Number(r?.online || 0) === 1
+    const seen = String(r?.last_seen || '')
+    const online = onlineFlag || isFreshIso(seen, 180000)
+    return {
+      username: String(r?.username || '').trim().toLowerCase(),
+      online,
+      online_raw: onlineFlag,
+      last_seen: seen || null,
+      room_id: r?.room_id ? String(r.room_id) : null,
+      peer_id: r?.peer_id ? String(r.peer_id) : null,
+    }
+  }).filter((r) => !!r.username)
+  res.json(out)
 })
 
 /** --- WS --- */
