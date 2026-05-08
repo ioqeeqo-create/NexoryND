@@ -6272,10 +6272,10 @@ function initPeerSocial() {
           _peerProfiles.delete(evt.peerId)
         }
         if (!_roomState.host && evt.peerId && evt.peerId === _roomState.hostPeerId) {
-          _roomState = { roomId: null, host: true, hostPeerId: null }
-          _roomMembers.clear()
-          showToast('Хост покинул комнату. Теперь вы управляете плеером сами')
-          setRoomStatus('Хост отключился, автономный режим активирован')
+          _roomState.hostPeerId = null
+          showToast('Хост вышел. Выбираем нового хоста...')
+          setRoomStatus('Хост вышел, server election...')
+          loadRoomStateFromServer(true).catch(() => {})
         }
         broadcastRoomMembersState()
         resetRoomHeartbeat()
@@ -6299,8 +6299,20 @@ function initPeerSocial() {
         if (seq) _lastPlaybackSyncSeq = Math.max(_lastPlaybackSyncSeq || 0, seq)
         const ts = Number(msg.playbackTs || msg._ts || 0)
         if (ts) _lastAppliedServerPlaybackTs = Math.max(_lastAppliedServerPlaybackTs || 0, ts)
-        if (msg.track && msg.track.id !== currentTrack?.id) {
-          playTrackObj(msg.track, { remoteSync: true }).catch(() => {})
+        if (msg.track) {
+          const incomingTrack = sanitizeTrack(msg.track)
+          const incomingSig = normalizeTrackSignature(incomingTrack)
+          const currentSig = normalizeTrackSignature(currentTrack || {})
+          const noActiveAudio = !audio?.src || audio?.ended || audio?.error
+          const shouldReloadTrack =
+            noActiveAudio ||
+            !currentTrack ||
+            !incomingSig ||
+            !currentSig ||
+            incomingSig !== currentSig
+          if (shouldReloadTrack) {
+            playTrackObj(incomingTrack, { remoteSync: true }).catch(() => {})
+          }
         }
         if (typeof msg.currentTime === 'number' && Number.isFinite(audio.duration) && audio.duration > 0) {
           const latencySec = Math.max(0, (Date.now() - Number(msg._ts || Date.now())) / 1000)
@@ -6315,7 +6327,7 @@ function initPeerSocial() {
           syncTransportPlayPauseUi()
         } catch (_) {}
         if (Array.isArray(msg.sharedQueue)) {
-          sharedQueue = msg.sharedQueue
+          sharedQueue = msg.sharedQueue.map((t) => sanitizeTrack(t)).filter(Boolean)
           renderRoomQueue()
         }
       }
@@ -6386,7 +6398,7 @@ function initPeerSocial() {
         _peerProfiles.set(msg._peerId, profileWithPeer)
         cachePeerProfile(profileWithPeer, msg._peerId)
         _roomMembers.set(msg._peerId, profileWithPeer)
-        if (Array.isArray(msg.sharedQueue)) sharedQueue = msg.sharedQueue
+        // Queue must be applied only from authoritative sync channels.
         if (_roomState.host) broadcastRoomMembersState()
         resetRoomHeartbeat()
         updateRoomUi()
@@ -6407,14 +6419,21 @@ function initPeerSocial() {
       }
       if (msg.type === 'room-queue-add' && msg.roomId === _roomState.roomId && _roomState.host && msg.track) {
         const t = sanitizeTrack(msg.track)
-        sharedQueue.push(t)
+        const sig = normalizeTrackSignature(t)
+        if (!sig || !sharedQueue.some((item) => normalizeTrackSignature(item) === sig)) {
+          sharedQueue.push(t)
+        }
         broadcastQueueUpdate()
         _socialPeer.send({ type: 'room-profile-state', roomId: _roomState.roomId, profile: getPublicProfilePayload(_profile?.username), sharedQueue })
         saveRoomStateToServer({ shared_queue: sharedQueue }).catch(() => {})
         renderRoomQueue()
       }
       if (msg.type === 'room-control-toggle' && msg.roomId === _roomState.roomId && msg._peerId && msg._peerId !== _socialPeer?.peer?.id) {
-        if (_roomState?.host && typeof msg.currentTime === 'number' && Number.isFinite(audio.duration) && audio.duration > 0) {
+        const expectedHostId = String(_roomState.hostPeerId || '').trim()
+        const senderId = String(msg._peerId || '').trim()
+        if (expectedHostId && senderId && senderId !== expectedHostId) return
+        if (_roomState?.host) return
+        if (typeof msg.currentTime === 'number' && Number.isFinite(audio.duration) && audio.duration > 0) {
           const ct = Math.max(0, Math.min(Number(msg.currentTime), audio.duration))
           if (Math.abs(audio.currentTime - ct) > 1.25) audio.currentTime = ct
         }
@@ -6424,13 +6443,6 @@ function initPeerSocial() {
         try {
           syncTransportPlayPauseUi()
         } catch (_) {}
-        if (_roomState?.host) {
-          broadcastPlaybackSync(true)
-          saveRoomStateToServer({
-            playback_state: { paused: Boolean(audio.paused), currentTime: Number(audio.currentTime || 0) },
-            playback_ts: Date.now(),
-          }).catch(() => {})
-        }
       }
       if (msg.type === 'room-queue-sync-request' && msg.roomId === _roomState.roomId && _roomState.host) {
         const payload = { type: 'room-queue-sync-state', roomId: _roomState.roomId, sharedQueue }
@@ -6438,13 +6450,11 @@ function initPeerSocial() {
         else _socialPeer.send(payload)
       }
       if (msg.type === 'room-queue-sync-state' && msg.roomId === _roomState.roomId && Array.isArray(msg.sharedQueue)) {
-        sharedQueue = msg.sharedQueue
-        saveRoomStateToServer({ shared_queue: sharedQueue }).catch(() => {})
+        sharedQueue = msg.sharedQueue.map((t) => sanitizeTrack(t)).filter(Boolean)
         renderRoomQueue()
       }
       if (msg.type === (peerSocial?.EVENTS?.QUEUE_UPDATE || 'queue-update') && msg.roomId === _roomState.roomId && Array.isArray(msg.sharedQueue)) {
-        sharedQueue = msg.sharedQueue
-        saveRoomStateToServer({ shared_queue: sharedQueue }).catch(() => {})
+        sharedQueue = msg.sharedQueue.map((t) => sanitizeTrack(t)).filter(Boolean)
         renderRoomQueue()
       }
     },
@@ -9806,17 +9816,7 @@ function togglePlay() {
   const isRoomParticipant = Boolean(_roomState?.roomId)
   const isRoomGuest = isRoomParticipant && !_roomState?.host
   if (isRoomGuest) {
-    const wantPaused = !audio.paused
-    _socialPeer?.send?.({
-      type: 'room-control-toggle',
-      roomId: _roomState.roomId,
-      paused: wantPaused,
-      currentTime: Number(audio.currentTime || 0),
-    })
-    saveRoomStateToServer({
-      playback_state: { paused: wantPaused, currentTime: Number(audio.currentTime || 0) },
-      playback_ts: Date.now(),
-    }).catch(() => {})
+    showHostOnlyToast()
     return
   }
   if (audio.paused) {
