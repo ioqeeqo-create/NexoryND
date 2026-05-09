@@ -181,13 +181,205 @@ function getMyWaveSource() {
   }
 }
 
+let _yandexRotorTrackStartedForId = null
+let _yandexWaveMoodDockOpen = false
+
+function flowWaveSourceBadgeLine(track) {
+  const t = track && typeof track === 'object' ? track : null
+  if (!t?.source) return ''
+  const raw = String(t.source).toLowerCase()
+  const base = raw === 'ya' || raw === 'ym' ? 'yandex' : raw
+  if (base === 'yandex') {
+    const ymWave = getMyWaveSource() === 'yandex' && queueScope === 'myWave'
+    const m = getMyWaveMode()
+    const lab = WE?.MY_WAVE_MODES?.[m]?.label || ''
+    if (ymWave && lab) return `Яндекс · Волна · ${lab}`
+    return 'Яндекс'
+  }
+  const short = { soundcloud: 'SoundCloud', vk: 'VK', youtube: 'YouTube', spotify: 'Spotify' }[base]
+  return short || String(base).toUpperCase()
+}
+
+/** Цветной бейдж источника (SC / VK / Ян …) как в списках треков. */
+function flowTrackSourceBadgeHtml(track) {
+  const t = track && typeof track === 'object' ? track : null
+  if (!t?.source) return ''
+  const badgeKey = trackSourceBadgeKey(t.source)
+  const SHORT = { soundcloud: 'SC', vk: 'VK', youtube: 'YT', spotify: 'SP', yandex: 'Ян' }
+  const lbl = SHORT[badgeKey]
+  if (!lbl) return ''
+  return `<span class="track-source track-source-${badgeKey}">${lbl}</span>`
+}
+
+function syncInlineTrackSourcePill(track) {
+  const el = document.getElementById('player-track-source-inline')
+  if (!el) return
+  const html = flowTrackSourceBadgeHtml(track || currentTrack)
+  if (!html) {
+    el.classList.add('hidden')
+    el.innerHTML = ''
+    return
+  }
+  el.innerHTML = html
+  el.classList.remove('hidden')
+}
+
+function updateYandexWaveDislikeButtonsVisible() {
+  const show = Boolean(
+    queueScope === 'myWave' &&
+    getMyWaveSource() === 'yandex' &&
+    currentTrack &&
+    String(currentTrack.source || '').toLowerCase() === 'yandex' &&
+    Boolean(currentTrack?.yandexRotor?.batchId)
+  )
+  ;['player-wave-dislike-btn', 'pm-wave-dislike-btn'].forEach((id) => {
+    const b = document.getElementById(id)
+    if (b) b.classList.toggle('hidden', !show)
+  })
+}
+
+function renderYandexWaveMoodDock() {
+  const docks = document.querySelectorAll('.yandex-wave-mood-dock')
+  if (!docks.length) return
+  if (getMyWaveSource() !== 'yandex') {
+    docks.forEach((dock) => {
+      dock.classList.add('hidden')
+      dock.classList.remove('is-open')
+    })
+    return
+  }
+  const mode = getMyWaveMode()
+  const modes = Object.entries(WE?.MY_WAVE_MODES || {})
+  const activeCfg = WE?.MY_WAVE_MODES?.[mode] || WE?.MY_WAVE_MODES?.default
+  const icon = activeCfg?.moodIconSvg || (WE?.MY_WAVE_MODES?.default?.moodIconSvg || '')
+  const html = `
+    <div class="yandex-wave-mood-panel" role="menu">
+      ${modes.map(([id, cfg]) => {
+        const ic = cfg?.moodIconSvg || ''
+        return `<button type="button" class="yandex-wave-mood-chip ${id === mode ? 'active' : ''}" data-wave-mood="${escapeHtml(id)}" title="${escapeHtml(sanitizeDisplayText(cfg.label || id))}" aria-pressed="${id === mode ? 'true' : 'false'}" onclick="setMyWaveMode('${escapeHtml(id)}'); toggleYandexWaveMoodDockPanel(false)">${ic}</button>`
+      }).join('')}
+    </div>
+    <button type="button" class="yandex-wave-mood-toggle" onclick="toggleYandexWaveMoodDockPanel()" title="Настроение волны (${escapeHtml(sanitizeDisplayText(activeCfg?.label || ''))})" aria-expanded="${_yandexWaveMoodDockOpen ? 'true' : 'false'}">
+      <span class="yandex-wave-mood-toggle-icon">${icon}</span>
+    </button>
+  `
+  docks.forEach((dock) => {
+    dock.classList.remove('hidden')
+    dock.innerHTML = html
+    dock.classList.toggle('is-open', Boolean(_yandexWaveMoodDockOpen))
+  })
+}
+
+function toggleYandexWaveMoodDockPanel(force) {
+  const docks = document.querySelectorAll('.yandex-wave-mood-dock')
+  const first = docks[0]
+  if (!first || first.classList.contains('hidden')) return
+  if (typeof force === 'boolean') _yandexWaveMoodDockOpen = force
+  else _yandexWaveMoodDockOpen = !_yandexWaveMoodDockOpen
+  docks.forEach((dock) => {
+    dock.classList.toggle('is-open', _yandexWaveMoodDockOpen)
+    const btn = dock.querySelector('.yandex-wave-mood-toggle')
+    if (btn) btn.setAttribute('aria-expanded', _yandexWaveMoodDockOpen ? 'true' : 'false')
+  })
+}
+
+async function dislikeCurrentYandexWaveTrack() {
+  const t = sanitizeTrack(currentTrack || {})
+  if (!t?.id || String(t.source || '').toLowerCase() !== 'yandex') return
+  if (!t?.yandexRotor?.batchId) return
+  if (queueScope !== 'myWave' || getMyWaveSource() !== 'yandex') return
+  const tok = String(getSettings()?.yandexToken || '').trim()
+  if (!tok || !window.api?.yandexTrackDislike) return showToast('Нужен токен Яндекса', true)
+  const r = await window.api.yandexTrackDislike({ token: tok, trackId: t.id }).catch(() => ({ ok: false }))
+  if (r?.ok) showToast('Не рекомендовать: синхрон с Яндексом')
+  else showToast('Яндекс: не удалось отметить трек', true)
+  recordWaveEarlySkip(t)
+  nextTrack()
+}
+window.toggleYandexWaveMoodDockPanel = toggleYandexWaveMoodDockPanel
+window.dislikeCurrentYandexWaveTrack = dislikeCurrentYandexWaveTrack
+window.flowWaveSourceBadgeLine = flowWaveSourceBadgeLine
+window.flowTrackSourceBadgeHtml = flowTrackSourceBadgeHtml
+
+function closeMyWaveSourceMenus() {
+  try {
+    document.querySelectorAll('.my-wave-source-anchor.is-open').forEach((a) => {
+      a.classList.remove('is-open')
+      a.querySelector('.my-wave-source-fab')?.setAttribute('aria-expanded', 'false')
+    })
+  } catch (_) {}
+}
+
+function toggleMyWaveSourceMenu(ev) {
+  try {
+    ev?.preventDefault?.()
+    ev?.stopPropagation?.()
+  } catch (_) {}
+  const btn = ev?.currentTarget
+  const anchor = btn?.closest?.('.my-wave-source-anchor')
+  if (!anchor) return
+  const willOpen = !anchor.classList.contains('is-open')
+  document.querySelectorAll('.my-wave-source-anchor.is-open').forEach((a) => {
+    if (a !== anchor) {
+      a.classList.remove('is-open')
+      a.querySelector('.my-wave-source-fab')?.setAttribute('aria-expanded', 'false')
+    }
+  })
+  anchor.classList.toggle('is-open', willOpen)
+  btn?.setAttribute('aria-expanded', willOpen ? 'true' : 'false')
+}
+
+function myWaveSourceFabMarkHtml(source) {
+  const s = source === 'vk' ? 'vk' : 'yandex'
+  const vkSvg =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="30" height="30" aria-hidden="true">' +
+    '<rect width="48" height="48" rx="11" fill="#0077FF"/>' +
+    '<text x="24" y="31" text-anchor="middle" font-family="system-ui,-apple-system,Segoe UI,sans-serif" font-size="17" font-weight="700" fill="#ffffff">vk</text>' +
+    '</svg>'
+  const yaSvg =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="30" height="30" aria-hidden="true" fill="none">' +
+    '<circle cx="24" cy="24" r="23" fill="#050508"/>' +
+    '<path fill="#FFCC00" d="M24 2l1.4 9.2 8.3-5.6-4 9.7 10-.9-7.8 6.5 9 4.4-10 2.4 6.8 7.6-9.6-3.4 1.2 10.4L24 34.6l-6.3 8.5 1.2-10.4-9.6 3.4 6.8-7.6-10-2.4 9-4.4-7.8-6.5 10 .9-4-9.7 8.3 5.6L24 2z"/>' +
+    '</svg>'
+  if (s === 'vk') {
+    return `<span class="my-wave-source-fab-mark my-wave-source-fab-mark--vk" aria-hidden="true">${vkSvg}</span>`
+  }
+  return `<span class="my-wave-source-fab-mark my-wave-source-fab-mark--yandex" aria-hidden="true">${yaSvg}</span>`
+}
+
+function renderMyWaveSourceSlotInto(slotEl) {
+  if (!slotEl) return
+  const source = getMyWaveSource()
+  slotEl.innerHTML = `
+    <div class="my-wave-source-anchor">
+      <button type="button" class="my-wave-source-fab" onclick="toggleMyWaveSourceMenu(event)" title="Источник волны" aria-haspopup="true" aria-expanded="false">
+        ${myWaveSourceFabMarkHtml(source)}
+      </button>
+      <div class="my-wave-source-dropdown" role="menu">
+        <button type="button" role="menuitem" class="my-wave-source-dropdown-item ${source === 'yandex' ? 'is-active' : ''}" onclick="setMyWaveSource('yandex')">
+          ${myWaveSourceFabMarkHtml('yandex')} Яндекс
+        </button>
+        <button type="button" role="menuitem" class="my-wave-source-dropdown-item ${source === 'vk' ? 'is-active' : ''}" onclick="setMyWaveSource('vk')">
+          ${myWaveSourceFabMarkHtml('vk')} VK
+        </button>
+      </div>
+    </div>
+  `
+}
+
+window.toggleMyWaveSourceMenu = toggleMyWaveSourceMenu
+window.closeMyWaveSourceMenus = closeMyWaveSourceMenus
+
 function setMyWaveSource(source) {
+  closeMyWaveSourceMenus()
   const next = String(source || '').trim().toLowerCase() === 'vk' ? 'vk' : 'yandex'
   try { localStorage.setItem('flow_my_wave_source', next) } catch {}
+  if (next === 'vk') {
+    try { _yandexWaveRotorQueueHint = '' } catch (_) {}
+  }
   if (next !== 'yandex') toggleYandexWaveModes(false)
   renderYandexWaveModes()
   renderMyWave()
-  renderRoomsMyWave()
   syncYandexWaveSettingsLabel()
 }
 
@@ -197,6 +389,8 @@ function setMyWaveMode(mode) {
   renderMyWave()
   renderYandexWaveModes()
   syncYandexWaveSettingsLabel()
+  renderYandexWaveMoodDock()
+  syncInlineTrackSourcePill(currentTrack)
 }
 
 function syncYandexWaveSettingsLabel() {
@@ -285,6 +479,9 @@ async function startMyWave() {
   if (_myWaveBuilding) return
   const seedTracks = getMyWaveSeedTracks()
   if (seedTracks.length < 3) return showToast('Послушай или лайкни еще несколько треков, чтобы волна поняла вкус', true)
+  try { _yandexWaveRotorQueueHint = '' } catch (_) {}
+  _yandexRotorTrackStartedForId = null
+  _waveEngineApi = null
   _myWaveBuilding = true
   renderMyWave()
   showToast('Моя волна подбирает новые треки...')
@@ -314,20 +511,11 @@ function renderMyWave() {
   const source = getMyWaveSource()
   const modeCfg = WE?.MY_WAVE_MODES?.[mode] || WE?.MY_WAVE_MODES?.default
   const seedCount = getMyWaveSeedTracks().length
+  const sourceSlot = document.getElementById('my-wave-source-slot')
+  if (sourceSlot) renderMyWaveSourceSlotInto(sourceSlot)
   if (modesEl) {
-    modesEl.style.display = 'flex'
-    const sourcePicker = `
-      <div class="my-wave-source-switch">
-        <button class="my-wave-mode ${source === 'yandex' ? 'active' : ''}" onclick="setMyWaveSource('yandex')">Яндекс</button>
-        <button class="my-wave-mode ${source === 'vk' ? 'active' : ''}" onclick="setMyWaveSource('vk')">VK</button>
-      </div>
-    `
-    const modeButtons = source === 'yandex'
-      ? Object.entries(WE?.MY_WAVE_MODES || {}).map(([id, cfg]) => (
-      `<button class="my-wave-mode ${id === mode ? 'active' : ''}" data-wave-mode="${id}" onclick="setMyWaveMode('${id}')">${cfg.label}</button>`
-    )).join('')
-      : '<div class="token-msg" style="display:block">Для VK-волны используется авто-режим без ручных пресетов.</div>'
-    modesEl.innerHTML = sourcePicker + modeButtons
+    modesEl.innerHTML = ''
+    modesEl.style.display = 'none'
   }
   if (seedCount < 3) {
     hintEl.textContent = `Послушай или лайкни еще ${3 - seedCount} трек(ов), чтобы волна поняла твой вкус`
@@ -339,13 +527,31 @@ function renderMyWave() {
     const sourceLabel = source === 'vk' ? 'VK' : 'Яндекс'
     hintEl.textContent = `${sourceLabel} • ${modeCfg.label}: ${modeCfg.hint}. Нажми запуск, и волна сама соберет новую очередь`
   }
+  const orbPlayInner = (() => {
+    try {
+      const playing = Boolean(audio && !audio.paused && !audio.ended && queueScope === 'myWave')
+      return playing
+        ? `<svg class="my-wave-orb-play-svg" viewBox="0 0 24 24" aria-hidden="true">${PM_PAUSE_INNER}</svg>`
+        : `<svg class="my-wave-orb-play-svg" viewBox="0 0 24 24" aria-hidden="true">${PM_PLAY_INNER}</svg>`
+    } catch (_) {
+      return `<svg class="my-wave-orb-play-svg" viewBox="0 0 24 24" aria-hidden="true">${PM_PLAY_INNER}</svg>`
+    }
+  })()
   listEl.innerHTML = `
     <div class="my-wave-orb mode-${mode} ${_myWaveBuilding || _myWavePreloading ? 'is-loading' : ''}" aria-label="${modeCfg.label}">
       <div class="my-wave-orb-ring"></div>
       <div class="my-wave-orb-core"></div>
+      <button type="button" class="my-wave-orb-play-btn" onclick="toggleMyWaveOrbPlayback()" aria-label="Волна: плей / пауза">${orbPlayInner}</button>
     </div>
   `
   renderRoomsMyWave()
+  renderYandexWaveMoodDock()
+  try {
+    if (typeof hydrateFlowLucideIcons === 'function') {
+      const w = document.getElementById('my-wave')
+      if (w) hydrateFlowLucideIcons(w)
+    }
+  } catch (_) {}
   refreshHomeDashboardLayoutAfterContentChange()
 }
 
@@ -358,19 +564,10 @@ function renderRoomsMyWave() {
   const source = getMyWaveSource()
   const modeCfg = WE?.MY_WAVE_MODES?.[mode] || WE?.MY_WAVE_MODES?.default
   const seedCount = getMyWaveSeedTracks().length
-  const sourcePicker = `
-    <div class="my-wave-source-switch">
-      <button class="my-wave-mode ${source === 'yandex' ? 'active' : ''}" onclick="setMyWaveSource('yandex')">Яндекс</button>
-      <button class="my-wave-mode ${source === 'vk' ? 'active' : ''}" onclick="setMyWaveSource('vk')">VK</button>
-    </div>
-  `
-  const modeButtons = source === 'yandex'
-    ? Object.entries(WE?.MY_WAVE_MODES || {}).map(([id, cfg]) => (
-    `<button class="my-wave-mode ${id === mode ? 'active' : ''}" data-wave-mode="${id}" onclick="setMyWaveMode('${id}')">${cfg.label}</button>`
-  )).join('')
-    : '<div class="token-msg" style="display:block">Для VK-волны включен автоматический пресет.</div>'
-  modesEl.innerHTML = sourcePicker + modeButtons
-  modesEl.style.display = 'flex'
+  const roomsSourceSlot = document.getElementById('rooms-wave-source-slot')
+  if (roomsSourceSlot) renderMyWaveSourceSlotInto(roomsSourceSlot)
+  modesEl.innerHTML = ''
+  modesEl.style.display = 'none'
   if (seedCount < 3) {
     hintEl.textContent = `Послушай или лайкни еще ${3 - seedCount} трек(ов), чтобы волна поняла твой вкус`
   } else if (_myWaveBuilding) {
@@ -381,12 +578,30 @@ function renderRoomsMyWave() {
     const sourceLabel = source === 'vk' ? 'VK' : 'Яндекс'
     hintEl.textContent = `${sourceLabel} • ${modeCfg.label}: ${modeCfg.hint}. Нажми запуск, и волна сама соберет новую очередь`
   }
+  const roomsOrbPlayInner = (() => {
+    try {
+      const playing = Boolean(audio && !audio.paused && !audio.ended && queueScope === 'myWave')
+      return playing
+        ? `<svg class="my-wave-orb-play-svg" viewBox="0 0 24 24" aria-hidden="true">${PM_PAUSE_INNER}</svg>`
+        : `<svg class="my-wave-orb-play-svg" viewBox="0 0 24 24" aria-hidden="true">${PM_PLAY_INNER}</svg>`
+    } catch (_) {
+      return `<svg class="my-wave-orb-play-svg" viewBox="0 0 24 24" aria-hidden="true">${PM_PLAY_INNER}</svg>`
+    }
+  })()
   listEl.innerHTML = `
     <div class="my-wave-orb mode-${mode} ${_myWaveBuilding || _myWavePreloading ? 'is-loading' : ''}" aria-label="${modeCfg.label}">
       <div class="my-wave-orb-ring"></div>
       <div class="my-wave-orb-core"></div>
+      <button type="button" class="my-wave-orb-play-btn" onclick="toggleMyWaveOrbPlayback()" aria-label="Волна: плей / пауза">${roomsOrbPlayInner}</button>
     </div>
   `
+  renderYandexWaveMoodDock()
+  try {
+    if (typeof hydrateFlowLucideIcons === 'function') {
+      const box = document.querySelector('.rooms-wave-my-wave')
+      if (box) hydrateFlowLucideIcons(box)
+    }
+  } catch (_) {}
 }
 
 function playTrackFromMyWave(index) {
@@ -530,7 +745,7 @@ function trackSourceBadgeKey(source) {
 
 /** Бейдж как на карточках треков: SC / Ya и т.д. (цвета в styles.css). */
 function profileListeningSourcePillHtml(trackHint) {
-  const LABELS = { soundcloud: 'SC', vk: 'VK', youtube: 'YT', spotify: 'SP', yandex: 'Ya' }
+  const LABELS = { soundcloud: 'SC', vk: 'VK', youtube: 'YT', spotify: 'SP', yandex: 'Ян' }
   const raw = trackHint && typeof trackHint.source === 'string' ? trackHint.source : ''
   const src = raw ? trackSourceBadgeKey(raw) : ''
   if (!src || !LABELS[src]) {
@@ -1490,13 +1705,18 @@ function ensureRoomsUI() {
       <div class="rooms-wave-embedded">
         <div class="my-wave rooms-wave-my-wave">
           <div class="my-wave-hero">
-            <div class="my-wave-badge">Моя волна</div>
-            <h3>Волна для комнаты</h3>
-            <p id="rooms-wave-hint">Выбери режим и запусти волну для общей очереди</p>
-            <div class="my-wave-actions">
-              <button class="my-wave-start" onclick="startMyWave()">Запустить волну</button>
-              <div class="my-wave-modes" id="rooms-wave-modes"></div>
+            <div class="my-wave-hero-top">
+              <div class="my-wave-hero-copy">
+                <div class="my-wave-badge">Моя волна</div>
+                <h3>Волна для комнаты</h3>
+                <p id="rooms-wave-hint">Выбери режим и запусти волну для общей очереди</p>
+              </div>
+              <div class="my-wave-hero-trailing">
+                <div id="rooms-wave-source-slot" class="my-wave-source-slot"></div>
+                <div id="rooms-yandex-wave-mood-dock" class="yandex-wave-mood-dock hidden" aria-label="Настроение волны Яндекса"></div>
+              </div>
             </div>
+            <div id="rooms-wave-modes" class="my-wave-modes hidden" aria-hidden="true" style="display:none"></div>
           </div>
           <div class="my-wave-list" id="rooms-wave-list"></div>
         </div>
@@ -1981,6 +2201,7 @@ function initPeerSocial() {
         if (seq) _lastPlaybackSyncSeq = Math.max(_lastPlaybackSyncSeq || 0, seq)
         const ts = Number(msg.playbackTs || msg._ts || 0)
         if (ts) _lastAppliedServerPlaybackTs = Math.max(_lastAppliedServerPlaybackTs || 0, ts)
+        _lastGuestP2pPlaybackAt = Date.now()
         if (msg.track) {
           const incomingTrack = sanitizeTrack(msg.track)
           const incomingSig = normalizeTrackSignature(incomingTrack)
@@ -1997,7 +2218,8 @@ function initPeerSocial() {
           }
         }
         if (typeof msg.currentTime === 'number' && Number.isFinite(audio.duration) && audio.duration > 0) {
-          const latencySec = Math.max(0, (Date.now() - Number(msg._ts || Date.now())) / 1000)
+          const sentAt = Number(msg._ts || msg.playbackTs || Date.now())
+          const latencySec = Math.max(0, (Date.now() - sentAt) / 1000)
           const targetTime = Math.max(0, Math.min(msg.currentTime + latencySec, audio.duration))
           if (Math.abs(audio.currentTime - targetTime) > 0.12) audio.currentTime = targetTime
         }
@@ -2088,16 +2310,20 @@ function initPeerSocial() {
         updateRoomUi()
       }
       if (msg.type === 'room-members-state' && msg.roomId === _roomState.roomId && Array.isArray(msg.members)) {
-        const map = new Map()
         msg.members.forEach((item) => {
           if (!item?.peerId || !item?.profile) return
-          map.set(item.peerId, item.profile)
-          cachePeerProfile(item.profile, item.peerId)
+          const merged = mergeProfileData(
+            _roomMembers.get(item.peerId) || _peerProfiles.get(item.peerId) || getCachedPeerProfile(item.profile.username) || {},
+            Object.assign({}, item.profile, { peerId: item.peerId }),
+            item.peerId
+          )
+          _roomMembers.set(item.peerId, merged)
+          cachePeerProfile(merged, item.peerId)
         })
-        if (_socialPeer?.peer?.id && !map.has(_socialPeer.peer.id) && _profile?.username) {
-          map.set(_socialPeer.peer.id, getPublicProfilePayload(_profile.username))
+        if (_socialPeer?.peer?.id && _profile?.username && !_roomMembers.has(_socialPeer.peer.id)) {
+          _roomMembers.set(_socialPeer.peer.id, getPublicProfilePayload(_profile.username))
         }
-        _roomMembers = map
+        renderRoomMembers()
         resetRoomHeartbeat()
         updateRoomUi()
       }
@@ -2259,6 +2485,7 @@ function createRoom() {
   sharedQueue = []
   _lastPlaybackSyncSeq = 0
   _hostPlaybackSyncSeq = 0
+  _lastGuestP2pPlaybackAt = 0
   if (_socialPeer?.peer?.id) _roomMembers.set(_socialPeer.peer.id, getPublicProfilePayload(_profile?.username))
   setRoomStatus(`Рума ${r.roomId}: участников 1/3`)
   resetRoomHeartbeat()
@@ -2281,6 +2508,7 @@ function joinRoomById(forceRoomId = '') {
   sharedQueue = []
   _lastPlaybackSyncSeq = 0
   _hostPlaybackSyncSeq = 0
+  _lastGuestP2pPlaybackAt = 0
   if (_socialPeer?.peer?.id) _roomMembers.set(_socialPeer.peer.id, getPublicProfilePayload(_profile?.username))
   setRoomStatus(`Подключение к руме ${r.roomId}...`)
   resetRoomHeartbeat()
@@ -2307,6 +2535,7 @@ function leaveRoom() {
   _lastPlaybackSyncSeq = 0
   _hostPlaybackSyncSeq = 0
   _lastAppliedServerPlaybackTs = 0
+  _lastGuestP2pPlaybackAt = 0
   if (_roomHeartbeatTimer) clearInterval(_roomHeartbeatTimer)
   _roomHeartbeatTimer = null
   setRoomStatus('Рума: не активна')
@@ -2597,11 +2826,12 @@ function broadcastPlaybackSync(force = false) {
   if (!force && now - _lastRoomSyncAt < 700) return
   _lastRoomSyncAt = now
   _hostPlaybackSyncSeq = Number(_hostPlaybackSyncSeq || 0) + 1
+  const syncTs = Date.now()
   _socialPeer.send({
     type: 'playback-sync',
     roomId: _roomState.roomId,
     track: currentTrack,
-    playbackTs: Date.now(),
+    playbackTs: syncTs,
     syncSeq: _hostPlaybackSyncSeq,
     currentTime: Number(audio.currentTime || 0),
     paused: Boolean(audio.paused),
@@ -2612,7 +2842,7 @@ function broadcastPlaybackSync(force = false) {
     now_playing: currentTrack,
     shared_queue: sharedQueue,
     playback_state: { paused: Boolean(audio.paused), currentTime: Number(audio.currentTime || 0) },
-    playback_ts: Date.now(),
+    playback_ts: syncTs,
   }).catch(() => {})
 }
 
@@ -2649,6 +2879,7 @@ function startApp() {
     syncIntegrationsUI()
   }
   checkAppUpdatesNow().catch(() => {})
+  try { renderYandexWaveMoodDock() } catch (_) {}
   updateRoomUi()
   if (!localStorage.getItem('flow_first_launch_done')) {
     saveVisual({
@@ -2671,6 +2902,8 @@ function startApp() {
   // Repair previously injected custom covers in collections on each launch.
   restoreSourceCoversInCollections()
   renderLiked(); renderPlaylists(); updateSourceBadge(); syncSearchSourcePills()
+  renderQueue()
+  renderMainHub()
   renderMyWave()
   initVisualSettings()
   syncPlaybackModeUI()
@@ -2686,14 +2919,18 @@ function applyUiTextOverrides() {
     const el = document.querySelector(selector)
     if (el) el.setAttribute(attr, value)
   }
-  const nav = document.querySelectorAll('.nav-item')
-  if (nav[0]?.querySelector('.nav-label')) nav[0].querySelector('.nav-label').textContent = 'Главная'
-  if (nav[1]?.querySelector('.nav-label')) nav[1].querySelector('.nav-label').textContent = 'Поиск'
-  if (nav[2]?.querySelector('.nav-label')) nav[2].querySelector('.nav-label').textContent = 'Библиотека'
-  if (nav[3]?.querySelector('.nav-label')) nav[3].querySelector('.nav-label').textContent = 'Любимые'
-  if (nav[4]?.querySelector('.nav-label')) nav[4].querySelector('.nav-label').textContent = 'Друзья'
-  if (nav[5]?.querySelector('.nav-label')) nav[5].querySelector('.nav-label').textContent = 'Комнаты'
-  if (nav[6]?.querySelector('.nav-label')) nav[6].querySelector('.nav-label').textContent = 'Настройки'
+  const setNavLabel = (pageId, value) => {
+    const el = document.querySelector(`.nav-item[data-nav-page="${pageId}"] .nav-label`)
+    if (el) el.textContent = value
+  }
+  setNavLabel('main', 'Главная')
+  setNavLabel('home', 'Воспроизведение')
+  setNavLabel('search', 'Поиск')
+  setNavLabel('library', 'Библиотека')
+  setNavLabel('liked', 'Любимые')
+  setNavLabel('social', 'Друзья')
+  setNavLabel('rooms', 'Комнаты')
+  setNavLabel('settings', 'Настройки')
   const currentName = _profile?.username || 'слушатель'
   set('#welcome-text', `Привет, ${currentName}`)
   set('#user-name', currentName)
@@ -2716,6 +2953,8 @@ function applyUiTextOverrides() {
   setText('#page-search .content-sub', 'Найди трек')
   setText('#page-library .content-sub', 'Твои плейлисты')
   setText('#page-liked .content-sub', 'Треки, которые ты лайкнул')
+  setText('#page-home .content-header h2', 'Воспроизведение')
+  setText('#page-home .content-header .content-sub', 'Управляй текущим треком и очередью')
 
   const labels = Array.from(document.querySelectorAll('#settings-panel-appearance .vs-label, #settings-panel-playback .vs-label'))
   labels.forEach((el) => {
@@ -4933,11 +5172,12 @@ function syncPlayerUIFromTrack() {
 }
 
 // в”Ђв”Ђв”Ђ NAVIGATION в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-let _activePageId = 'home'
+let _activePageId = 'main'
 let _deferredPageRenderRaf = 0
 
 function runDeferredPageRender(id) {
-  if (id === 'home') return renderMyWave()
+  if (id === 'main') return renderMainHub()
+  if (id === 'home') return renderQueue()
   if (id === 'liked') return renderLiked()
   if (id === 'library') return renderPlaylists()
   if (id === 'social') return renderFriends()
@@ -4970,9 +5210,12 @@ function openPage(id, opts = {}) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'))
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'))
   document.getElementById('page-'+id)?.classList.add('active')
-  const pages = ['home','search','library','liked','social','rooms','settings']
-  const idx = pages.indexOf(id)
-  if (idx >= 0) document.querySelectorAll('.nav-item')[idx]?.classList.add('active')
+  const navItem = document.querySelector(`.sidebar-nav .nav-item[data-nav-page="${id}"]`)
+  if (navItem) {
+    navItem.classList.add('active')
+    navItem.classList.add('flow-nav-item--pulse')
+    window.setTimeout(() => navItem.classList.remove('flow-nav-item--pulse'), 460)
+  }
   _activePageId = id
   try { document.body.setAttribute('data-active-page', id) } catch {}
   syncSearchBarCollapsedState()
@@ -5098,7 +5341,7 @@ async function playTrackObj(track, opts = {}) {
   const st = getListenStats()
   if (st.lastTrackKey !== newTrackKey) saveListenStats({ totalTracks: Number(st.totalTracks || 0) + 1, lastTrackKey: newTrackKey })
   pushListenHistory(track)
-  if (_activePageId === 'home') renderMyWave()
+  if (_activePageId === 'main') renderMyWave()
   let streamUrl = track.url
   let streamEngine = null
   const nameEl = document.getElementById('player-name')
@@ -5419,6 +5662,28 @@ async function playTrackObj(track, opts = {}) {
 
   if (nameEl) nameEl.textContent = track.title || 'Без названия'
   if (artistEl) artistEl.textContent = track.artist || '—'
+  syncInlineTrackSourcePill(track)
+  updateYandexWaveDislikeButtonsVisible()
+  renderYandexWaveMoodDock()
+  const yr = track?.yandexRotor
+  if (yr?.batchId && queueScope === 'myWave' && getMyWaveSource() === 'yandex' && track?.id) {
+    const tid = String(track.id)
+    if (_yandexRotorTrackStartedForId !== tid) {
+      _yandexRotorTrackStartedForId = tid
+      const tok = String(getSettings()?.yandexToken || '').trim()
+      if (tok && window.api?.yandexRotorFeedback) {
+        void window.api.yandexRotorFeedback({
+          token: tok,
+          station: yr.station || 'user:onyourwave',
+          type: 'trackStarted',
+          trackId: tid,
+          batchId: yr.batchId,
+        })
+      }
+    }
+  } else {
+    _yandexRotorTrackStartedForId = null
+  }
   const cover = document.getElementById('player-cover')
   const effectiveCover = getEffectiveCoverUrl(track)
   if (playBtn) playBtn.innerHTML = ICONS.pause
@@ -5455,6 +5720,7 @@ async function playTrackObj(track, opts = {}) {
   updateDiscordPresence(track, _roomState)
   broadcastPlaybackSync(true)
   syncHomeCloneUI()
+  renderQueue()
   try {
     refreshNowPlayingTrackHighlight()
   } catch (_) {}
@@ -5545,12 +5811,59 @@ function prewarmNextQueueTrack() {
   } catch {}
 }
 
+async function toggleMyWaveOrbPlayback() {
+  const isRoomParticipant = Boolean(_roomState?.roomId)
+  const isRoomGuest = isRoomParticipant && !_roomState?.host
+  if (isRoomGuest) {
+    showHostOnlyToast()
+    return
+  }
+  if (queueScope === 'myWave' && currentTrack) {
+    if (!audio.paused) {
+      audio.pause()
+    } else if (audio.src) {
+      audio.play().catch(() => {})
+      if (_audioCtx?.state === 'suspended') _audioCtx.resume().catch(() => {})
+    } else {
+      await startMyWave()
+    }
+    syncTransportPlayPauseUi()
+    return
+  }
+  await startMyWave()
+}
+window.toggleMyWaveOrbPlayback = toggleMyWaveOrbPlayback
+
+function syncMyWaveOrbPlayUi() {
+  const playing = Boolean(audio && !audio.paused && !audio.ended && queueScope === 'myWave')
+  const inner = playing
+    ? `<svg class="my-wave-orb-play-svg" viewBox="0 0 24 24" aria-hidden="true">${PM_PAUSE_INNER}</svg>`
+    : `<svg class="my-wave-orb-play-svg" viewBox="0 0 24 24" aria-hidden="true">${PM_PLAY_INNER}</svg>`
+  document.querySelectorAll('.my-wave-orb-play-btn').forEach((btn) => {
+    btn.innerHTML = inner
+    btn.setAttribute('aria-label', playing ? 'Пауза' : 'Запустить волну')
+  })
+}
+
 function syncTransportPlayPauseUi() {
   const playing = Boolean(audio && !audio.paused && !audio.ended)
+  const iconInner = playing ? ICONS.pause : ICONS.play
   const playBtn = document.getElementById('play-btn')
   const icon = document.getElementById('pm-play-icon')
-  if (playBtn) playBtn.innerHTML = playing ? ICONS.pause : ICONS.play
+  const homePlay = document.getElementById('home-play-btn')
+  if (playBtn) playBtn.innerHTML = iconInner
   if (icon) icon.innerHTML = playing ? PM_PAUSE_INNER : PM_PLAY_INNER
+  if (homePlay) {
+    homePlay.innerHTML = iconInner
+    homePlay.setAttribute('aria-label', playing ? 'Пауза' : 'Воспроизвести')
+  }
+  document.querySelectorAll('.home-clone-controls .play-btn').forEach((btn) => {
+    btn.innerHTML = iconInner
+    btn.setAttribute('aria-label', playing ? 'Пауза' : 'Воспроизвести')
+  })
+  try {
+    syncMyWaveOrbPlayUi()
+  } catch (_) {}
 }
 
 function togglePlay() {
@@ -5667,6 +5980,29 @@ function nextTrack(autoEnded = false) {
     return
   }
   if (!queue.length) return
+  const ymRotorLeaving =
+    queueScope === 'myWave' &&
+    getMyWaveSource() === 'yandex' &&
+    currentTrack &&
+    String(currentTrack.source || '').toLowerCase() === 'yandex' &&
+    currentTrack.yandexRotor?.batchId
+  if (ymRotorLeaving) {
+    const tok = String(getSettings()?.yandexToken || '').trim()
+    if (tok && window.api?.yandexRotorFeedback) {
+      const typ = autoEnded ? 'trackFinished' : 'skip'
+      const dur = Number(audio?.duration || 0) || 0
+      const ct = Number(audio?.currentTime || 0) || 0
+      const totalPlayedSeconds = typ === 'trackFinished' ? (dur > 1 ? dur : ct) : ct
+      void window.api.yandexRotorFeedback({
+        token: tok,
+        station: currentTrack.yandexRotor.station || 'user:onyourwave',
+        type: typ,
+        trackId: currentTrack.id,
+        batchId: currentTrack.yandexRotor.batchId,
+        totalPlayedSeconds,
+      })
+    }
+  }
   if (
     queueScope === 'myWave' &&
     !autoEnded &&
@@ -5782,8 +6118,9 @@ audio.onended = () => {
   flushListenStatsPending(true)
   stopLyricsSyncLoop()
   _listenTickAt = 0
-  const playBtn = document.getElementById('play-btn')
-  if (playBtn) playBtn.innerHTML = ICONS.play
+  try {
+    syncTransportPlayPauseUi()
+  } catch (_) {}
   if (currentTrack) scrobbleLastFm(currentTrack)
   if (isRoomClientRestricted()) return
   if (_roomState?.roomId && _roomState?.host && sharedQueue.length) {
@@ -6214,10 +6551,116 @@ function updatePlayerLikeBtn() {
   if (pmCoverBtn) { pmCoverBtn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; pmCoverBtn.classList.toggle('liked', liked) }
 }
 
+function renderQueue() {
+  const listEl = document.getElementById('home-up-next-list')
+  const metaEl = document.getElementById('home-up-next-meta')
+  if (!listEl) return
+  const nextTracks = Array.isArray(queue) ? queue.slice(queueIndex + 1, queueIndex + 11) : []
+  if (!nextTracks.length) {
+    if (metaEl) metaEl.textContent = 'Очередь пока пуста'
+    listEl.innerHTML = '<div class="empty-state compact"><p>Запусти трек, и тут появятся следующие позиции очереди</p></div>'
+    return
+  }
+  if (metaEl) {
+    const left = Math.max(0, Number(queue.length || 0) - (Number(queueIndex || 0) + 1))
+    metaEl.textContent = `Следующих треков: ${left}`
+  }
+  listEl.innerHTML = ''
+  const frag = document.createDocumentFragment()
+  nextTracks.forEach((track, pos) => {
+    const t = sanitizeTrack(track)
+    const row = document.createElement('button')
+    row.type = 'button'
+    row.className = 'home-up-next-item'
+    const cover = getListCoverUrl(t)
+    const fallbackBg = t.bg || 'linear-gradient(135deg,#7c3aed,#a855f7)'
+    row.innerHTML = `
+      <span class="home-up-next-order">${queueIndex + pos + 2}</span>
+      <span class="home-up-next-cover" style="background:${fallbackBg};${cover ? `background-image:url('${escapeHtml(cover)}');` : ''}"></span>
+      <span class="home-up-next-meta-wrap">
+        <strong>${escapeHtml(sanitizeDisplayText(t.title || 'Без названия'))}</strong>
+        <span>${escapeHtml(sanitizeDisplayText(t.artist || '—'))}</span>
+      </span>
+      <span class="home-up-next-src">›</span>
+    `
+    row.addEventListener('click', () => {
+      const idx = queueIndex + pos + 1
+      const nextTrack = queue[idx]
+      if (!nextTrack) return
+      queueIndex = idx
+      playTrackObj(nextTrack).catch(() => {})
+    })
+    frag.appendChild(row)
+  })
+  listEl.appendChild(frag)
+}
+
+function renderMainHub() {
+  renderMyWave()
+  renderMainQuickPlaylists()
+  renderMainQuickLiked()
+}
+
+function renderMainQuickPlaylists() {
+  const root = document.getElementById('main-quick-playlists')
+  if (!root) return
+  const playlists = getPlaylists().map(normalizePlaylist).slice(0, 4)
+  if (!playlists.length) {
+    root.innerHTML = '<div class="empty-state compact"><p>Добавь несколько плейлистов для быстрого доступа</p></div>'
+    return
+  }
+  root.innerHTML = ''
+  const frag = document.createDocumentFragment()
+  playlists.forEach((pl, idx) => {
+    const card = document.createElement('button')
+    card.type = 'button'
+    card.className = 'main-quick-playlist'
+    const cover = sanitizeMediaByGifMode(pl.coverData || '', 'playlist')
+    card.innerHTML = `
+      <span class="main-quick-playlist-cover"${cover ? ` style="background-image:url('${escapeHtml(cover)}')"` : ''}>
+        ${cover ? '' : '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'}
+      </span>
+      <span class="main-quick-playlist-meta">
+        <strong>${escapeHtml(sanitizeDisplayText(pl.name || 'Плейлист'))}</strong>
+        <span>${pl.tracks.length} треков</span>
+      </span>
+    `
+    card.addEventListener('click', () => {
+      openPage('library')
+      openPlaylist(idx)
+    })
+    frag.appendChild(card)
+  })
+  root.appendChild(frag)
+}
+
+function renderMainQuickLiked() {
+  const root = document.getElementById('main-quick-liked')
+  if (!root) return
+  const liked = getLiked().slice(0, 4)
+  if (!liked.length) {
+    root.innerHTML = '<div class="empty-state compact"><p>Лайкни треки, чтобы они появились здесь</p></div>'
+    return
+  }
+  root.innerHTML = ''
+  liked.forEach((track, idx) => {
+    const row = makeTrackEl(track, false, false)
+    row.classList.add('main-quick-liked-item')
+    row.addEventListener('click', () => {
+      queue = getLiked().slice()
+      queueIndex = idx
+      queueScope = 'liked'
+      playTrackObj(track).catch(() => {})
+    })
+    root.appendChild(row)
+  })
+}
+
 let _likedRenderToken = 0
 function renderLiked() {
   const token = ++_likedRenderToken
   const liked = getLiked()
+  renderMainQuickLiked()
   document.body.classList.toggle('flow-heavy-liked', liked.length >= 220)
   const container = document.getElementById('liked-list'); if (!container) return
   if (!liked.length) { container.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.35-9.5-8A5.5 5.5 0 0 1 12 5.1 5.5 5.5 0 0 1 21.5 13c-2.5 3.65-9.5 8-9.5 8Z"/></svg></div><p>Ты еще не лайкнул ни одного трека</p></div>`; return }
@@ -6856,6 +7299,7 @@ let _openPlaylistTrackRenderToken = 0
 function renderPlaylists() {
   const token = ++_playlistRenderToken
   const pls = getPlaylists().map(normalizePlaylist)
+  renderMainQuickPlaylists()
   const container = document.getElementById('playlists-list'); if (!container) return
   if (!pls.length) { container.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg></div><p>Нет плейлистов — создай первый!</p></div>`; return }
   container.innerHTML=''
@@ -7043,7 +7487,7 @@ function editPlaylistMeta(idx) {
 }
 
 // в”Ђв”Ђв”Ђ TRACK CARD в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-const SRC_LABELS = { soundcloud: 'SC', vk: 'VK', youtube: 'YT', spotify: 'SP', yandex: 'Ya' }
+const SRC_LABELS = { soundcloud: 'SC', vk: 'VK', youtube: 'YT', spotify: 'SP', yandex: 'Ян' }
 
 function makeTrackEl(track, showPlaylist=false, bindDefaultPlay=true) {
   track = sanitizeTrack(track)
@@ -7443,6 +7887,11 @@ async function loadLyrics(track) {
         div.onclick = () => {
           if (isRoomClientRestricted()) return showToast('Только хост управляет плеером', true)
           audio.currentTime = line.time
+          requestAnimationFrame(() => {
+            try {
+              div.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+            } catch (_) {}
+          })
         }
         target.appendChild(div)
       })
@@ -7560,7 +8009,13 @@ function syncLyrics(currentTime) {
     if (el && idxChanged) {
       const scrollBeh =
         cfg.playbackMode === 'karaoke' ? 'auto' : cfg.scrollMode === 'smooth' ? 'smooth' : 'auto'
-      el.scrollIntoView({ behavior: scrollBeh, block: 'center', inline: 'nearest' })
+      try {
+        el.scrollIntoView({ behavior: scrollBeh, block: 'center', inline: 'nearest' })
+      } catch (_) {
+        try {
+          el.scrollIntoView(true)
+        } catch (_) {}
+      }
     }
   }
 }
@@ -7631,7 +8086,7 @@ window.addEventListener('DOMContentLoaded', () => {
   )
   enableMojibakeAutoFix()
   startApp()
-  try { document.body.setAttribute('data-active-page', _activePageId || 'home') } catch {}
+  try { document.body.setAttribute('data-active-page', _activePageId || 'main') } catch {}
   applyUiTextOverrides()
   refreshHomeDashboardLayoutAfterContentChange()
   setupHomeDashboardDragAndDrop()
@@ -7764,6 +8219,30 @@ window.addEventListener('DOMContentLoaded', () => {
   }
   syncIntegrationsUI()
   setupAppDragAndDrop()
+  ;(function setupFlowChromeMicroPulse() {
+    const pulse = (ev) => {
+      const el = ev.target?.closest?.(
+        'button, .player-like-btn, .ctrl-btn, .pm-btn, .pm-btn-side, .pm-cover-action-btn',
+      )
+      if (!el || el.disabled || el.getAttribute('aria-disabled') === 'true') return
+      el.classList.remove('flow-ui-pulse')
+      void el.offsetWidth
+      el.classList.add('flow-ui-pulse')
+      window.setTimeout(() => el.classList.remove('flow-ui-pulse'), 480)
+    }
+    document.getElementById('player-bar')?.addEventListener('click', pulse, true)
+    document.getElementById('player-mode')?.addEventListener('click', pulse, true)
+  })()
+  document.addEventListener(
+    'pointerdown',
+    (ev) => {
+      try {
+        if (ev?.target?.closest?.('.my-wave-source-anchor')) return
+        closeMyWaveSourceMenus()
+      } catch (_) {}
+    },
+    true,
+  )
   if (window.api?.onDiscordJoinSecret) {
     window.api.onDiscordJoinSecret((secret) => {
       const roomId = resolveInviteToRoomId(secret)
@@ -7775,13 +8254,22 @@ window.addEventListener('DOMContentLoaded', () => {
 
   audio.addEventListener('play', () => {
     if (_lyricsOpen) startLyricsSyncLoop()
+    try {
+      syncTransportPlayPauseUi()
+    } catch (_) {}
   })
   audio.addEventListener('pause', () => {
     stopLyricsSyncLoop()
+    try {
+      syncTransportPlayPauseUi()
+    } catch (_) {}
   })
 
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
+      try {
+        closeMyWaveSourceMenus()
+      } catch (_) {}
       const modal = document.getElementById('invite-modal')
       if (modal && !modal.classList.contains('hidden')) {
         e.preventDefault()
@@ -7834,5 +8322,59 @@ window.addEventListener('DOMContentLoaded', () => {
     // Источник фиксирован: Spotify -> YouTube
   })
 })
+
+;(function setupFlowBootSplash() {
+  let done = false
+  let loadTs = 0
+  let pendingTimer = null
+  const MIN_VISIBLE_MS = 3600
+  const doDismiss = () => {
+    if (done) return
+    if (pendingTimer != null) {
+      clearTimeout(pendingTimer)
+      pendingTimer = null
+    }
+    done = true
+    document.body.classList.add('flow-boot-ready')
+    const el = document.getElementById('flow-boot-splash')
+    if (!el) return
+    el.classList.add('flow-boot-splash--out')
+    const removeEl = () => {
+      try {
+        el.remove()
+      } catch (_) {}
+    }
+    window.setTimeout(removeEl, 720)
+    el.addEventListener(
+      'transitionend',
+      (e) => {
+        if (e.propertyName === 'opacity') removeEl()
+      },
+      { once: true },
+    )
+  }
+  const queueDismissAfterMinHold = () => {
+    if (done) return
+    if (pendingTimer != null) clearTimeout(pendingTimer)
+    const elapsed = loadTs ? Date.now() - loadTs : 0
+    const wait = Math.max(0, MIN_VISIBLE_MS - elapsed)
+    pendingTimer = window.setTimeout(() => {
+      pendingTimer = null
+      doDismiss()
+    }, wait)
+  }
+  const onLoaded = () => {
+    loadTs = Date.now()
+    window.setTimeout(queueDismissAfterMinHold, 80)
+  }
+  if (document.readyState === 'complete') onLoaded()
+  else window.addEventListener('load', onLoaded, { once: true })
+  window.setTimeout(() => {
+    if (!done) {
+      if (!loadTs) loadTs = Date.now()
+      queueDismissAfterMinHold()
+    }
+  }, 15000)
+})()
 
 

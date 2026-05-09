@@ -387,6 +387,16 @@
     _onBackendMessage(raw) {
       if (!this.peer || !window.FlowSocialBackend) return
 
+      if (raw?.t === 'ws_state') {
+        this.onStatus({
+          type: 'ws-state',
+          state: String(raw.state || 'degraded'),
+          attempt: Number(raw.attempt || 0),
+          reason: raw.reason ? String(raw.reason) : '',
+        })
+        return
+      }
+
       if (raw?.t === 'relay_direct') {
         if (String(raw.to_peer_id || '') !== this.peer?.id) return
         const from = String(raw.from_peer_id || '').trim()
@@ -507,15 +517,19 @@
         const be = getBackend()
         const safe = normalizeUsername(username)
         if (!be || !safe) return resolve(false)
+        const probeTimeoutMs = Math.max(2500, Number(timeoutMs || 0))
+        const freshWindowMs = 3 * 60 * 1000
         Promise.race([
           be.request('GET', `/flow-api/v1/profile-public/${encodeURIComponent(safe)}`),
-          new Promise((r) => setTimeout(() => r(null), Math.max(1000, Number(timeoutMs || 0)))),
+          new Promise((r) => setTimeout(() => r(null), probeTimeoutMs)),
         ])
           .then((row) => {
             if (!row) return resolve(false)
-            const seen = Date.parse(String(row.last_seen || ''))
-            const seenFresh = !Number.isNaN(seen) && Date.now() - seen < 75000
-            if (row.online === true && seenFresh) return resolve(true)
+            const onlineFlag = row.online === true || row.online === 1 || String(row.online || '') === '1'
+            const seen = Date.parse(String(row.last_seen || row.lastSeen || ''))
+            const seenFresh = !Number.isNaN(seen) && Date.now() - seen < freshWindowMs
+            if (onlineFlag && !Number.isNaN(seen)) return resolve(seenFresh)
+            if (onlineFlag) return resolve(true)
             if (seenFresh) return resolve(true)
             resolve(false)
           })

@@ -1,13 +1,13 @@
 ;(function initWaveEngine(global) {
   const MY_WAVE_MIN_TRACKS = 10
   const MY_WAVE_MAX_TRACKS = 30
-  // Иконки настроения: контуры из Tabler Icons v3 (MIT) https://github.com/tabler/tabler-icons — mood-neutral, mood-sad, mood-happy, bolt, moon, heart
+  // Иконки настроения: Lucide (ISC) https://lucide.dev — sparkles, frown, laugh, zap, moon, heart
   const MY_WAVE_MODES = {
     default: {
       label: 'Обычная',
       ymMoodEnergy: 'all',
       moodIconSvg:
-        '<svg class="tabler-wave-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/><path d="M9 10l.01 0"/><path d="M15 10l.01 0"/></svg>',
+        '<svg class="lucide-wave-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg>',
       hint: 'глубокая очередь по общему вкусу, жанрам и похожим артистам',
       keywords: ['official', 'audio', 'music', 'mix', 'single', 'album', 'remix', 'feat', 'prod', 'viral', 'trend', 'trending', 'hit', 'popular', 'vibe', 'tiktok', 'hyperpop', 'phonk', 'dreamcore'],
       queryTerms: ['viral hits', 'tiktok vibe', 'trending music', 'popular mix', 'hyperpop viral', 'phonk viral', 'slowed reverb popular'],
@@ -16,7 +16,7 @@
       label: 'Грустная',
       ymMoodEnergy: 'sad',
       moodIconSvg:
-        '<svg class="tabler-wave-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/><path d="M9 10l.01 0"/><path d="M15 10l.01 0"/><path d="M9.5 15.25a3.5 3.5 0 0 1 5 0"/></svg>',
+        '<svg class="lucide-wave-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M16 16s-1.5-2-4-2-4 2-4 2"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="9" y2="9"/></svg>',
       hint: 'мягкая и меланхоличная очередь из твоих предпочтений',
       keywords: ['sad', 'slow', 'slowed', 'reverb', 'dreamcore', 'doll', 'mirrors', 'lofi', 'lo-fi', 'melancholy', 'melancholic', 'alone', 'lonely', 'cry', 'tears', 'rain', 'night', 'dark', 'blue', 'broken', 'heartbreak', 'empty', 'pain', 'груст', 'печаль', 'слез', 'один', 'одна', 'одиноч', 'дожд', 'ноч', 'боль', 'разбит', 'тоска', 'пуст', 'плак', 'забыть'],
       queryTerms: ['sad viral', 'sad tiktok', 'slowed reverb popular', 'dreamcore music', 'sad aesthetic tiktok', 'depression cherry vibe', 'melancholic pop'],
@@ -25,7 +25,7 @@
       label: 'Веселая',
       ymMoodEnergy: 'fun',
       moodIconSvg:
-        '<svg class="tabler-wave-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/><path d="M9 9l.01 0"/><path d="M15 9l.01 0"/><path d="M8 13a4 4 0 1 0 8 0h-8"/></svg>',
+        '<svg class="lucide-wave-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M18 13a6 6 0 0 1-6 5 6 6 0 0 1-6-5h12Z"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="9" y2="9"/></svg>',
       hint: 'более светлая и позитивная очередь по твоему вкусу',
       keywords: ['happy', 'smile', 'summer', 'sun', 'sunny', 'party', 'dance', 'fun', 'joy', 'love', 'good', 'vibe', 'vibes', 'club', 'bright', 'feel good', 'hyperpop', 'glitchcore', 'весел', 'улыб', 'лето', 'солн', 'танц', 'кайф', 'радост', 'любов', 'позитив', 'движ', 'туса', 'вечерин'],
       queryTerms: ['happy viral', 'tiktok happy', 'feel good', 'hyperpop happy', 'glitchcore pop', 'summer vibe', 'party mix'],
@@ -34,7 +34,7 @@
       label: 'Энергичная',
       ymMoodEnergy: 'active',
       moodIconSvg:
-        '<svg class="tabler-wave-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 3l0 7l6 0l-8 11l0 -7l-6 0l8 -11"/></svg>',
+        '<svg class="lucide-wave-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg>',
       hint: 'треклист поживее, чтобы разогнаться',
       keywords: ['energy', 'energetic', 'speed', 'fast', 'power', 'rock', 'metal', 'drum', 'bass', 'dnb', 'phonk', 'rave', 'club', 'hard', 'workout', 'rage', 'trap', 'banger', 'aggressive', 'brazilian', 'drift', 'gym', 'фонк', 'энерг', 'быстр', 'мощ', 'рок', 'метал', 'рейв', 'клуб', 'фонк', 'драм', 'бас', 'разнос', 'жестк'],
       queryTerms: ['phonk viral', 'aggressive phonk', 'brazilian funk popular', 'gym phonk', 'tiktok hype', 'energetic viral', 'club banger'],
@@ -43,7 +43,7 @@
       label: 'Спокойная',
       ymMoodEnergy: 'calm',
       moodIconSvg:
-        '<svg class="tabler-wave-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z"/></svg>',
+        '<svg class="lucide-wave-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>',
       hint: 'ровная очередь без резких прыжков',
       keywords: ['calm', 'chill', 'relax', 'ambient', 'acoustic', 'piano', 'sleep', 'dream', 'soft', 'quiet', 'slow', 'lofi', 'lo-fi', 'dreamcore', 'softcore', 'спокой', 'чил', 'расслаб', 'акуст', 'пианино', 'сон', 'мечт', 'тих', 'медлен', 'мягк'],
       queryTerms: ['chill viral', 'calm tiktok', 'soft night', 'lofi vibe', 'dreamcore chill', 'ambient playlist', 'relax mix'],
@@ -52,7 +52,7 @@
       label: 'Романтика',
       ymMoodEnergy: 'calm',
       moodIconSvg:
-        '<svg class="tabler-wave-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.5 12.572l-7.5 7.428l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.5 6.572"/></svg>',
+        '<svg class="lucide-wave-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>',
       hint: 'больше треков про любовь и мягкий вайб',
       keywords: ['love', 'heart', 'kiss', 'romance', 'romantic', 'baby', 'darling', 'sweet', 'relationship', 'miss you', 'slowed', 'soft', 'любов', 'сердц', 'роман', 'поцел', 'мила', 'милый', 'нежн', 'скуч', 'твоя', 'твой', 'влюб'],
       queryTerms: ['romantic viral', 'love tiktok', 'soft love', 'heartbreak love', 'slowed love songs', 'night romance', 'relationship songs'],

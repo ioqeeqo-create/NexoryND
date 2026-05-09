@@ -484,15 +484,19 @@
         const sb = this._sb || getSupabase()
         const safe = normalizeUsername(username)
         if (!sb || !safe) return resolve(false)
+        const probeTimeoutMs = Math.max(2500, Number(timeoutMs || 0))
+        const freshWindowMs = 3 * 60 * 1000
         Promise.race([
           sb.from(DB_PROFILES).select('online,last_seen').eq('username', safe).maybeSingle(),
-          new Promise((r) => setTimeout(() => r({ data: null }), Math.max(1000, Number(timeoutMs || 0))))
+          new Promise((r) => setTimeout(() => r({ data: null }), probeTimeoutMs))
         ]).then((r) => {
           const row = r?.data
           if (!row) return resolve(false)
           const seen = Date.parse(String(row.last_seen || ''))
-          const seenFresh = !Number.isNaN(seen) && (Date.now() - seen) < 75000
-          if (row.online === true && seenFresh) return resolve(true)
+          const seenFresh = !Number.isNaN(seen) && (Date.now() - seen) < freshWindowMs
+          const onlineFlag = row.online === true || row.online === 1 || String(row.online || '') === '1'
+          if (onlineFlag && !Number.isNaN(seen)) return resolve(seenFresh)
+          if (onlineFlag) return resolve(true)
           if (seenFresh) return resolve(true)
           resolve(false)
         }).catch(() => resolve(false))

@@ -80,7 +80,16 @@ let playbackMode = (() => {
   catch { return { ...defaultPlayback } }
 })()
 
-const COVER_ICON = '<svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'
+function flowLucideSvg(name, extraClass = '') {
+  const L = typeof FLOW_LUCIDE_INNER !== 'undefined' ? FLOW_LUCIDE_INNER : {}
+  const paths = L[name] || ''
+  const cls = ('ui-icon ' + String(extraClass || '').trim()).trim()
+  if (!paths) return `<svg class="${cls}" viewBox="0 0 24 24"></svg>`
+  if (name === 'play') return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" aria-hidden="true">${paths}</svg>`
+  if (name === 'pause') return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" aria-hidden="true">${paths}</svg>`
+  return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`
+}
+const COVER_ICON = flowLucideSvg('music-2', 'lg')
 let _audioCtx = null
 let _analyser = null
 let _freqData = null
@@ -99,6 +108,7 @@ let _lastAppliedServerPlaybackTs = 0
 /** Монотонный номер sync от хоста — гость отбрасывает только устаревшие пакеты, не «равные по ts» с pause. */
 let _lastPlaybackSyncSeq = 0
 let _hostPlaybackSyncSeq = 0
+let _lastGuestP2pPlaybackAt = 0
 let _lastRoomServerLoadAt = 0
 let _friendPresence = new Map()
 let _friendsPollTimer = null
@@ -142,6 +152,8 @@ const FRIEND_NOTIFY_COOLDOWN_MS = 90 * 1000
 const PROFILE_CACHE_TTL_MS = 60 * 1000
 /** Ленивый API «Моя волна» (реализация в src/modules/wave-engine.js). */
 let _waveEngineApi = null
+/** Яндекс «Моя волна» (rotor): queue в GET /tracks — id первого трека предыдущей выдачи. */
+let _yandexWaveRotorQueueHint = ''
 function waveEngine() {
   if (!_waveEngineApi && WE?.createWaveEngine) {
     _waveEngineApi = WE.createWaveEngine({
@@ -158,6 +170,19 @@ function waveEngine() {
       normalizeTrackSignature,
       getQueue: () => queue,
       getCurrentTrack: () => currentTrack,
+      getYandexWaveQueueHint: () => _yandexWaveRotorQueueHint,
+      setYandexWaveQueueHint: (id) => {
+        _yandexWaveRotorQueueHint = String(id || '').trim()
+      },
+      fetchYandexRotorMyWave: async ({ mode, queueTrackId }) => {
+        const tok = String(getSettings()?.yandexToken || '').trim()
+        if (!tok || !window.api?.yandexMyWaveFetch) return null
+        return window.api.yandexMyWaveFetch({
+          token: tok,
+          mode: String(mode || 'default'),
+          queueTrackId: String(queueTrackId || '').trim(),
+        })
+      },
     })
   }
   return _waveEngineApi
@@ -442,16 +467,27 @@ function prepareProfileImageData(file, dataUrl, kind = 'avatar') {
 }
 
 const ICONS = {
-  play: '<svg class="ui-icon ctrl-play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M9 8 L17 12 L9 16 Z"/></svg>',
-  pause: '<svg class="ui-icon ctrl-play-icon" viewBox="0 0 24 24" fill="currentColor"><rect x="7.25" y="5.75" width="4" height="12.5" rx="1.15"/><rect x="12.75" y="5.75" width="4" height="12.5" rx="1.15"/></svg>',
-  plus: '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>',
-  close: '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>'
+  play: flowLucideSvg('play', 'ctrl-play-icon'),
+  pause: (() => {
+    const L = typeof FLOW_LUCIDE_INNER !== 'undefined' ? FLOW_LUCIDE_INNER : {}
+    const p = L.pause || ''
+    return `<svg class="ui-icon ctrl-play-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`
+  })(),
+  plus: flowLucideSvg('plus'),
+  close: flowLucideSvg('x'),
 }
-const HEART_OUTLINE = '<svg class="ui-icon flow-ref-heart" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M12 20.4s6.5-4.35 8.82-7.74A5.05 5.05 0 0012 6.42a5.05 5.05 0 00-8.82 6.24C5.47 15.93 12 20.35 12 20.42z"/></svg>'
-const HEART_FILLED = '<svg class="ui-icon flow-ref-heart" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M12 20.4s6.5-4.35 8.82-7.74A5.05 5.05 0 0012 6.42a5.05 5.05 0 00-8.82 6.24C5.47 15.93 12 20.35 12 20.42z"/><path fill="#e11d48" d="M12 16c-.72-.62-2.65-2.35-2.65-4a1.75 1.75 0 013.38-.72A1.75 1.75 0 0114.65 12c0 1.65-1.93 3.38-2.65 4z"/></svg>'
-const PM_PLAY_INNER = '<path fill="currentColor" d="M9 8 L17 12 L9 16 Z"/>'
-const PM_PAUSE_INNER = '<rect fill="currentColor" x="7.25" y="5.75" width="4" height="12.5" rx="1.15"/><rect fill="currentColor" x="12.75" y="5.75" width="4" height="12.5" rx="1.15"/>'
-const ICON_SIMILAR = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M14.83 14.83a4 4 0 0 1-6.63 1.1 4 4 0 0 1 1.53-6.73 4 4 0 0 1 5 .37l5.74 5.32"/><path d="M9.17 9.17a4 4 0 0 0 6.63-1.1 4 4 0 0 0-1.53 6.73 4 4 0 0 0-5-.37l-5.74-5.32"/></svg>'
+const HEART_OUTLINE = flowLucideSvg('heart', 'flow-ref-heart')
+/** Полная заливка цветом «любимых», без обводки-«точки». */
+const HEART_FILLED =
+  '<svg class="ui-icon flow-ref-heart flow-ref-heart--filled" viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+  '<path fill="#f472b6" stroke="none" d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>' +
+  '</svg>'
+const PM_PLAY_INNER = (typeof FLOW_LUCIDE_INNER !== 'undefined' && FLOW_LUCIDE_INNER.play) ? FLOW_LUCIDE_INNER.play : '<path fill="currentColor" d="M9 8 L17 12 L9 16 Z"/>'
+const PM_PAUSE_INNER =
+  (typeof FLOW_LUCIDE_INNER !== 'undefined' && FLOW_LUCIDE_INNER.pause)
+    ? FLOW_LUCIDE_INNER.pause
+    : '<rect fill="currentColor" x="14" y="4" width="4" height="16" rx="1" stroke="none"/><rect fill="currentColor" x="6" y="4" width="4" height="16" rx="1" stroke="none"/>'
+const ICON_SIMILAR = flowLucideSvg('audio-lines')
 
 // в”Ђв”Ђв”Ђ VISUAL SETTINGS в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 const defaultVisual = {
@@ -1269,13 +1305,38 @@ function applyVisualSettings() {
   const bright = document.getElementById('vs-bright')?.value ?? 50
   const glass  = document.getElementById('vs-glass')?.value ?? 8
   const pb     = document.getElementById('vs-panel-blur')?.value ?? 30
-  const scale  = document.getElementById('vs-scale')?.value ?? 100
+  const scaleLegacyEl = document.getElementById('vs-scale')
+  const scaleWindowEl = document.getElementById('vs-scale-window')
+  const scaleFullscreenEl = document.getElementById('vs-scale-fullscreen')
+  const clampScale = (n, lo = 75, hi = 140) => {
+    const x = Number(n)
+    return Number.isFinite(x) ? Math.max(lo, Math.min(hi, x)) : 100
+  }
+  const v0 = getVisual()
+  const activeScaleId = document.activeElement?.id || ''
+  const legacyScale = clampScale(scaleLegacyEl?.value ?? v0.uiScale ?? 100, 75, 140)
+  const windowScale = clampScale(scaleWindowEl?.value ?? legacyScale, 75, 130)
+  const fullscreenScale = clampScale(scaleFullscreenEl?.value ?? legacyScale, 75, 140)
+  let scale = windowScale
+  if (activeScaleId === 'vs-scale-fullscreen') scale = fullscreenScale
+  else if (activeScaleId === 'vs-scale-window') scale = windowScale
+  else if (activeScaleId === 'vs-scale') scale = legacyScale
+  else if (scaleWindowEl) scale = windowScale
+  else if (scaleFullscreenEl) scale = fullscreenScale
+  else scale = legacyScale
+
+  // Keep all scale sliders in sync so blur/brightness changes never reset UI scale.
+  if (scaleLegacyEl && Number(scaleLegacyEl.value) !== scale) scaleLegacyEl.value = String(scale)
+  if (scaleWindowEl && Number(scaleWindowEl.value) !== scale) scaleWindowEl.value = String(Math.max(75, Math.min(130, scale)))
+  if (scaleFullscreenEl && Number(scaleFullscreenEl.value) !== scale) scaleFullscreenEl.value = String(scale)
 
   document.getElementById('vs-blur-val').textContent   = blur + 'px'
   document.getElementById('vs-bright-val').textContent = bright + '%'
   document.getElementById('vs-glass-val').textContent  = glass + '%'
   document.getElementById('vs-panel-blur-val').textContent = pb + 'px'
   if (document.getElementById('vs-scale-val')) document.getElementById('vs-scale-val').textContent = scale + '%'
+  if (document.getElementById('vs-scale-window-val')) document.getElementById('vs-scale-window-val').textContent = scale + '%'
+  if (document.getElementById('vs-scale-fullscreen-val')) document.getElementById('vs-scale-fullscreen-val').textContent = scale + '%'
 
   const v = getVisual()
   saveVisual({ blur:+blur, bright:+bright, glass:+glass, panelBlur:+pb, uiScale:+scale })
@@ -1642,8 +1703,22 @@ function updateOrbsFromCover(coverUrl) {
         document.getElementById('gorb2').style.background = `color-mix(in srgb, ${c2} 24%, transparent)`
       }
       if (effects.accentFromCover) {
-        document.documentElement.style.setProperty('--accent', c1)
-        document.documentElement.style.setProperty('--accent2', c2)
+        const relLum = (rr, gg, bb) => {
+          const srgb = (x) => {
+            const v = x / 255
+            return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
+          }
+          const R = srgb(rr)
+          const G = srgb(gg)
+          const B = srgb(bb)
+          return 0.2126 * R + 0.7152 * G + 0.0722 * B
+        }
+        const L = relLum(r, g, b)
+        const nearWhite = L > 0.9 || (r > 236 && g > 236 && b > 236)
+        const a1 = nearWhite ? (v.accent || defaultVisual.accent) : c1
+        const a2 = nearWhite ? (v.accent2 || defaultVisual.accent2) : c2
+        document.documentElement.style.setProperty('--accent', a1)
+        document.documentElement.style.setProperty('--accent2', a2)
       }
       if (document.getElementById('pm-cover-glow')) {
         document.getElementById('pm-cover-glow').style.background = `color-mix(in srgb, ${c1} 28%, transparent)`
@@ -1717,12 +1792,16 @@ function initVisualSettings() {
   setSlider('vs-glass', v.glass)
   setSlider('vs-panel-blur', v.panelBlur)
   setSlider('vs-scale', v.uiScale || 100)
+  setSlider('vs-scale-window', v.uiScale || 100)
+  setSlider('vs-scale-fullscreen', v.uiScale || 100)
   // Labels
   if (document.getElementById('vs-blur-val')) document.getElementById('vs-blur-val').textContent = v.blur + 'px'
   if (document.getElementById('vs-bright-val')) document.getElementById('vs-bright-val').textContent = v.bright + '%'
   if (document.getElementById('vs-glass-val')) document.getElementById('vs-glass-val').textContent = v.glass + '%'
   if (document.getElementById('vs-panel-blur-val')) document.getElementById('vs-panel-blur-val').textContent = v.panelBlur + 'px'
   if (document.getElementById('vs-scale-val')) document.getElementById('vs-scale-val').textContent = (v.uiScale || 100) + '%'
+  if (document.getElementById('vs-scale-window-val')) document.getElementById('vs-scale-window-val').textContent = (v.uiScale || 100) + '%'
+  if (document.getElementById('vs-scale-fullscreen-val')) document.getElementById('vs-scale-fullscreen-val').textContent = (v.uiScale || 100) + '%'
   // CSS vars
   document.documentElement.style.setProperty('--accent', v.accent)
   document.documentElement.style.setProperty('--accent2', v.accent2)
@@ -1983,6 +2062,14 @@ function refreshLyricsPanelsVisibility() {
     if (sidePanel) sidePanel.classList.add('hidden')
     if (pmPanel) pmPanel.classList.toggle('hidden', !_lyricsOpen)
     pmRoot?.classList.toggle('lyrics-mode', _lyricsOpen)
+    try {
+      if (pmRoot && _lyricsOpen) {
+        pmRoot.classList.remove('pm-lyrics-opening')
+        void pmRoot.offsetWidth
+        pmRoot.classList.add('pm-lyrics-opening')
+        window.setTimeout(() => pmRoot.classList.remove('pm-lyrics-opening'), 520)
+      }
+    } catch (_) {}
   } else {
     if (pmPanel) pmPanel.classList.add('hidden')
     if (sidePanel) sidePanel.classList.toggle('hidden', !_lyricsOpen)
@@ -2014,6 +2101,17 @@ function syncPlayerModeUI() {
   if (t) {
     pmTitle.textContent  = t.title || 'РќРµРёР·РІРµСЃС‚РЅРѕ'
     pmArtist.textContent = t.artist || 'вЂ”'
+    const pmSrc = document.getElementById('pm-source-badge')
+    if (pmSrc && typeof window.flowTrackSourceBadgeHtml === 'function') {
+      const html = window.flowTrackSourceBadgeHtml(t)
+      if (html) {
+        pmSrc.innerHTML = html
+        pmSrc.classList.remove('hidden')
+      } else {
+        pmSrc.innerHTML = ''
+        pmSrc.classList.add('hidden')
+      }
+    }
     const effectiveCover = getEffectiveCoverUrl(t)
     if (effectiveCover) {
       applyCoverArt(pmCover, effectiveCover, t.bg || 'linear-gradient(135deg,#7c3aed,#a855f7)')
@@ -3274,6 +3372,15 @@ function syncPlaybackModeUI() {
     rpSettings.textContent = repeatLabel
     rpSettings.classList.toggle('active', playbackMode.repeat !== 'off')
   }
+  const repeatLucide = playbackMode.repeat === 'one' ? 'repeat-1' : 'repeat'
+  ;['repeat-btn', 'home-repeat-btn'].forEach((id) => {
+    const btn = document.getElementById(id)
+    const svg = btn?.querySelector?.('svg[data-lucide]')
+    if (svg) {
+      svg.setAttribute('data-lucide', repeatLucide)
+      if (typeof hydrateFlowLucideIcons === 'function') hydrateFlowLucideIcons(btn)
+    }
+  })
 }
 
 function toggleShuffleMode() {
@@ -4104,15 +4211,26 @@ async function removeRoomMemberPresence(roomId = _roomState?.roomId) {
 async function saveRoomStateToServer(patch = {}) {
   try {
     if (!_roomState?.roomId || !_profile?.username || !isFlowSocialReady()) return
+    const isHost = Boolean(_roomState.host)
+    const payloadPatch = Object.assign({}, patch || {})
+    if (!isHost) {
+      delete payloadPatch.shared_queue
+      delete payloadPatch.now_playing
+      delete payloadPatch.playback_state
+      delete payloadPatch.playback_ts
+    }
     const hostPeerId = _roomState.host
       ? String(_socialPeer?.peer?.id || _roomState.roomId)
       : ((_roomState.hostPeerId && _roomState.hostPeerId !== _roomState.roomId) ? String(_roomState.hostPeerId) : null)
-    const payload = Object.assign({
-      room_id: _roomState.roomId,
-      shared_queue: sharedQueue,
-      updated_by_peer_id: String(_socialPeer?.peer?.id || hostPeerId || _roomState.roomId),
-      updated_at: new Date().toISOString(),
-    }, patch || {})
+    const payload = Object.assign(
+      {
+        room_id: _roomState.roomId,
+        updated_by_peer_id: String(_socialPeer?.peer?.id || hostPeerId || _roomState.roomId),
+        updated_at: new Date().toISOString(),
+      },
+      isHost ? { shared_queue: sharedQueue } : {},
+      payloadPatch
+    )
     if (hostPeerId) payload.host_peer_id = hostPeerId
     await flowSocialPut('/flow-api/v1/rooms', payload)
   } catch {}
@@ -4127,6 +4245,31 @@ function scheduleRoomStateSave(patch = {}, delay = 450) {
   }, Math.max(120, Number(delay || 450)))
 }
 
+function applyRoomMembersRowsFromServer(rows) {
+  if (!Array.isArray(rows)) return
+  const merged = new Map(_roomMembers)
+  rows.forEach((m) => {
+    const pid = String(m?.peer_id || '').trim()
+    if (!pid) return
+    const base =
+      merged.get(pid) ||
+      _peerProfiles.get(pid) ||
+      getCachedPeerProfile(m?.username || pid.replace(/^flow-/, '')) || { username: m?.username || pid.replace(/^flow-/, '') }
+    const profile = mergeProfileData(
+      base,
+      Object.assign({ username: m?.username || pid.replace(/^flow-/, '') }, m?.profile || {}, { peerId: pid }),
+      pid
+    )
+    merged.set(pid, profile)
+    cachePeerProfile(profile, pid)
+  })
+  if (_socialPeer?.peer?.id && _profile?.username) {
+    merged.set(_socialPeer.peer.id, getPublicProfilePayload(_profile.username))
+  }
+  _roomMembers = merged
+  renderRoomMembers()
+}
+
 async function loadRoomStateFromServer(force = false) {
   try {
     if (!_roomState?.roomId) return
@@ -4135,49 +4278,45 @@ async function loadRoomStateFromServer(force = false) {
     _lastRoomServerLoadAt = now
     if (!isFlowSocialReady()) return
     const rid = encodeURIComponent(_roomState.roomId)
-    const nowIso = new Date(Date.now() - 20000).toISOString()
-    const membersPath = force
-      ? `/flow-api/v1/room-members/${rid}`
-      : `/flow-api/v1/room-members/${rid}?since=${encodeURIComponent(nowIso)}`
     const [room, members] = await Promise.all([
       flowSocialGet(`/flow-api/v1/rooms/${rid}`),
-      flowSocialGet(membersPath),
+      flowSocialGet(`/flow-api/v1/room-members/${rid}`),
     ])
-    if (room?.host_peer_id) _roomState.hostPeerId = String(room.host_peer_id)
+    if (room?.host_peer_id) {
+      _roomState.hostPeerId = String(room.host_peer_id)
+      const myPeerId = String(_socialPeer?.peer?.id || '')
+      if (myPeerId) _roomState.host = _roomState.hostPeerId === myPeerId
+    }
     if (Array.isArray(room?.shared_queue)) {
       sharedQueue = room.shared_queue.map((t) => sanitizeTrack(t)).filter(Boolean)
       renderRoomQueue()
     }
-    if (Array.isArray(members)) {
-      const next = new Map()
-      members.forEach((m) => {
-        const pid = String(m?.peer_id || '').trim()
-        if (!pid) return
-    const profile = mergeProfileData(
-      getCachedPeerProfile(m?.username || pid.replace(/^flow-/, '')) || _peerProfiles.get(pid) || { username: m?.username || pid.replace(/^flow-/, '') },
-      Object.assign({ username: m?.username || pid.replace(/^flow-/, '') }, m?.profile || {}, { peerId: pid }),
-      pid
-    )
-        next.set(pid, profile)
-        cachePeerProfile(profile, pid)
-      })
-      if (_socialPeer?.peer?.id && _profile?.username) next.set(_socialPeer.peer.id, getPublicProfilePayload(_profile.username))
-      _roomMembers = next
-      renderRoomMembers()
-    }
+    applyRoomMembersRowsFromServer(members)
     if (!_roomState.host && room?.now_playing && Number(room?.playback_ts || 0) > _lastAppliedServerPlaybackTs) {
       _lastAppliedServerPlaybackTs = Number(room.playback_ts || 0)
       const serverTrack = sanitizeTrack(room.now_playing)
       const state = room?.playback_state || {}
-      if (serverTrack && serverTrack.id !== currentTrack?.id) {
-        playTrackObj(serverTrack, { remoteSync: true }).catch(() => {})
-      }
+      const serverSig = normalizeTrackSignature(serverTrack || {})
+      const currentSig = normalizeTrackSignature(currentTrack || {})
+      const noActiveAudio = !audio?.src || audio?.ended || audio?.error
+      const shouldReloadFromServer =
+        Boolean(serverTrack) &&
+        (noActiveAudio || !currentTrack || !serverSig || !currentSig || serverSig !== currentSig)
+      if (shouldReloadFromServer) playTrackObj(serverTrack, { remoteSync: true }).catch(() => {})
+      const p2pFresh = Date.now() - (_lastGuestP2pPlaybackAt || 0) < 4200
       const targetTime = Number(state?.currentTime || 0)
-      if (Number.isFinite(targetTime) && Math.abs(Number(audio.currentTime || 0) - targetTime) > 0.6) {
-        audio.currentTime = Math.max(0, targetTime)
+      const dur = Number(audio?.duration || 0)
+      const canSeek = Number.isFinite(targetTime) && Number.isFinite(dur) && dur > 0
+      const drift = canSeek ? Math.abs(Number(audio.currentTime || 0) - targetTime) : 0
+      if (shouldReloadFromServer) {
+        if (canSeek && drift > 0.45) audio.currentTime = Math.max(0, Math.min(targetTime, dur))
+        if (state?.paused === true && !audio.paused) audio.pause()
+        if (state?.paused === false && audio.paused) audio.play().catch(() => {})
+      } else if (!p2pFresh) {
+        if (canSeek && drift > 2.0) audio.currentTime = Math.max(0, Math.min(targetTime, dur))
+        if (state?.paused === true && !audio.paused) audio.pause()
+        if (state?.paused === false && audio.paused) audio.play().catch(() => {})
       }
-      if (state?.paused === true && !audio.paused) audio.pause()
-      if (state?.paused === false && audio.paused) audio.play().catch(() => {})
     }
   } catch {}
 }
@@ -4197,10 +4336,10 @@ function startRoomServerSync() {
   loadRoomStateFromServer(true).catch(() => {})
   _roomServerHeartbeatTimer = setInterval(() => {
     upsertRoomMemberPresence().catch(() => {})
-  }, 2500)
+  }, 1800)
   _roomServerFullSyncTimer = setInterval(() => {
     loadRoomStateFromServer(true).catch(() => {})
-  }, 12000)
+  }, 8000)
 }
 
 function renderRoomMembers() {

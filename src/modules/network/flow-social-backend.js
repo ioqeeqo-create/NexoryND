@@ -3,6 +3,8 @@
   const DEFAULT_BASE = 'http://85.239.34.229/social'
   /** Должен совпадать с FLOW_SOCIAL_SECRET на VPS (у тебя flowflow). */
   const DEFAULT_SECRET = 'flowflow'
+  /** Для релизной сборки: всегда используем встроенный backend без ручного ввода. */
+  const FORCE_DEFAULT_CONFIG = true
   const listeners = new Set()
   let ws = null
   let reconnectTimer = null
@@ -11,18 +13,47 @@
   let boundUsername = ''
   let lastTopics = []
 
+  function normalizeApiBase(rawBase) {
+    const input = String(rawBase || '').trim()
+    if (!input) return DEFAULT_BASE
+    // UI console URL is not an API endpoint.
+    if (/timeweb\.cloud\/my\/servers\/\d+\/console/i.test(input)) return DEFAULT_BASE
+    let parsed = null
+    try {
+      parsed = new URL(input)
+    } catch (_) {
+      return DEFAULT_BASE
+    }
+    const host = String(parsed.hostname || '').toLowerCase()
+    if (!host || host === 'localhost' || host === '127.0.0.1') return DEFAULT_BASE
+    parsed.hash = ''
+    parsed.search = ''
+    const cleanPath = String(parsed.pathname || '').replace(/\/+$/, '')
+    if (!cleanPath || cleanPath === '/') {
+      // Keep root for direct backend port (e.g. http://IP:3847),
+      // use /social for reverse-proxy setups on :80/:443.
+      parsed.pathname = parsed.port ? '/' : '/social'
+    } else {
+      parsed.pathname = cleanPath
+    }
+    return parsed.toString().replace(/\/$/, '')
+  }
+
   function getConfig() {
+    if (FORCE_DEFAULT_CONFIG) {
+      return { base: DEFAULT_BASE, secret: DEFAULT_SECRET }
+    }
     let base = DEFAULT_BASE
     let secret = DEFAULT_SECRET
     try {
-      const lsBase = String(localStorage.getItem('flow_social_api_base') || '').trim().replace(/\/$/, '')
+      const lsBase = normalizeApiBase(localStorage.getItem('flow_social_api_base') || '')
       const lsSecret = String(localStorage.getItem('flow_social_api_secret') || '').trim()
       if (lsBase) base = lsBase
       if (lsSecret) secret = lsSecret
       if (typeof window.getSettings === 'function') {
         const s = window.getSettings()
         if (s?.flowSocialApiBase) {
-          const sBase = String(s.flowSocialApiBase).trim().replace(/\/$/, '')
+          const sBase = normalizeApiBase(s.flowSocialApiBase)
           if (sBase) base = sBase
         }
         if (s?.flowSocialApiSecret) {
@@ -31,7 +62,7 @@
         }
       }
     } catch (_) {}
-    return { base, secret }
+    return { base: normalizeApiBase(base), secret }
   }
 
   function isConfigured() {
@@ -45,6 +76,10 @@
         fn(msg)
       } catch (_) {}
     })
+  }
+
+  function emitWsState(state, details = {}) {
+    emit(Object.assign({ t: 'ws_state', state: String(state || 'degraded') }, details || {}))
   }
 
   function authHeaders() {
@@ -114,9 +149,11 @@
     clearReconnect()
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return
     connectAttempt += 1
+    emitWsState('connecting', { attempt: connectAttempt })
     try {
       ws = new WebSocket(wsUrl())
     } catch (_) {
+      emitWsState('degraded', { reason: 'constructor_failed' })
       scheduleReconnect()
       return
     }
@@ -136,6 +173,7 @@
         return
       }
       if (msg.op === 'auth_ok') {
+        emitWsState('online', { attempt: connectAttempt })
         try {
           if (boundPeerId) {
             ws.send(JSON.stringify({ op: 'bind', peer_id: boundPeerId, username: boundUsername || undefined }))
@@ -147,6 +185,7 @@
         return
       }
       if (msg.op === 'auth_err') {
+        emitWsState('degraded', { reason: 'auth_err' })
         try {
           ws.close()
         } catch (_) {}
@@ -157,9 +196,11 @@
 
     ws.onclose = () => {
       ws = null
+      emitWsState('degraded', { reason: 'socket_closed' })
       scheduleReconnect()
     }
     ws.onerror = () => {
+      emitWsState('degraded', { reason: 'socket_error' })
       try {
         ws.close()
       } catch (_) {}
@@ -231,6 +272,7 @@
     } catch (_) {}
     ws = null
     connectAttempt = 0
+    emitWsState('degraded', { reason: 'invalidated' })
   }
 
   window.FlowSocialBackend = {
