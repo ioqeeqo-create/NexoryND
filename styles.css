@@ -2229,9 +2229,26 @@ body.flow-opt-no-animations * {
   width: 100%;
 }
 .my-wave-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 7px 10px;
   background: rgba(255,255,255,0.06);
   font-size: 12px;
+}
+.my-wave-mode .my-wave-mode-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.my-wave-mode .my-wave-mode-icon svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+.my-wave-mode .my-wave-mode-label {
+  line-height: 1.15;
 }
 .my-wave-mode[data-wave-mode="default"] { --wave-mode-c1:#ec4899; --wave-mode-c2:#8b5cf6; }
 .my-wave-mode[data-wave-mode="sad"] { --wave-mode-c1:#60a5fa; --wave-mode-c2:#a78bfa; }
@@ -3122,7 +3139,44 @@ body.flow-opt-no-animations * {
 /* Social steam-like layout */
 .social-hub { display:flex; flex-direction:column; gap:12px; }
 .social-head { display:flex; justify-content:space-between; align-items:center; gap:10px; }
-.social-status { opacity:.82; font-size:12px; }
+.social-status {
+  opacity:.96;
+  font-size:12px;
+  padding:4px 10px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.16);
+  background:rgba(255,255,255,0.04);
+  transition: all .24s ease;
+}
+.social-status--online {
+  color:#d1fff7;
+  border-color:rgba(0,229,255,0.42);
+  box-shadow:0 0 20px rgba(0,229,255,0.26);
+}
+.social-status--connecting {
+  color:#fff5d1;
+  border-color:rgba(255,213,79,0.45);
+  box-shadow:0 0 16px rgba(255,213,79,0.22);
+  animation: flowStatusPulse 1.5s ease-in-out infinite;
+}
+.social-status--degraded {
+  color:#ffdada;
+  border-color:rgba(255,122,122,0.46);
+  box-shadow:0 0 16px rgba(255,122,122,0.20);
+}
+.app-update-status--checking {
+  color:#fff5d1;
+  animation: flowStatusPulse 1.5s ease-in-out infinite;
+}
+.app-update-status--ready {
+  color:#d1fff7;
+  text-shadow:0 0 12px rgba(0,229,255,0.28);
+}
+.app-update-status--error { color:#ffdada; }
+@keyframes flowStatusPulse {
+  0%,100% { filter:brightness(1); transform:translateY(0); }
+  50% { filter:brightness(1.15); transform:translateY(-1px); }
+}
 .social-section-title { font-size:12px; color:var(--muted); margin-bottom:8px; text-transform:uppercase; letter-spacing:.05em; }
 .social-add-box,
 .social-friends-box,
@@ -8175,6 +8229,180 @@ body.flow-compact-ui .search-source-pill.active:focus-visible {
   color: #ff6eb5;
 }
 
+/* Моя волна Яндекс: настроение справа в плеере + бейдж источника */
+.player-meta-row {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+}
+.player-track-source-inline {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent2, #9ca3af) 22%, transparent);
+  color: color-mix(in srgb, var(--text, #e5e7eb) 88%, transparent);
+  white-space: nowrap;
+}
+.player-track-source-inline.hidden {
+  display: none !important;
+}
+#player-bar.player-bar--nover .player-right--nover-volume {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+.yandex-wave-mood-dock {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.yandex-wave-mood-dock.hidden {
+  display: none !important;
+}
+.yandex-wave-mood-toggle {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--accent2, #9ca3af) 35%, transparent);
+  background: color-mix(in srgb, var(--panel, #111827) 55%, transparent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text, #e5e7eb);
+  padding: 0;
+  transition: transform var(--anim-fast, 0.15s) ease, box-shadow var(--anim-fast, 0.15s) ease;
+}
+.yandex-wave-mood-toggle:hover {
+  transform: scale(1.04);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #6366f1) 22%, transparent);
+}
+.yandex-wave-mood-toggle .ui-icon,
+.yandex-wave-mood-toggle svg {
+  width: 20px;
+  height: 20px;
+}
+.yandex-wave-mood-panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 10px 12px;
+  max-width: min(320px, 72vw);
+  justify-content: flex-end;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--panel, #0f172a) 78%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent2, #9ca3af) 28%, transparent);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(6px) scale(0.96);
+  transform-origin: 100% 100%;
+  transition: opacity var(--anim-ui, 0.18s) ease, transform var(--anim-ui, 0.18s) ease;
+  z-index: 50;
+}
+.yandex-wave-mood-dock.is-open .yandex-wave-mood-panel {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+}
+.yandex-wave-mood-chip {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: color-mix(in srgb, var(--accent2, #9ca3af) 12%, transparent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text, #e5e7eb);
+  padding: 0;
+}
+.yandex-wave-mood-chip:hover {
+  border-color: color-mix(in srgb, var(--accent, #6366f1) 45%, transparent);
+}
+.yandex-wave-mood-chip.active {
+  border-color: color-mix(in srgb, var(--accent, #6366f1) 70%, transparent);
+  background: color-mix(in srgb, var(--accent, #6366f1) 18%, transparent);
+}
+.yandex-wave-mood-chip svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* Tabler wave mood icons — лёгкие анимации (иконки MIT Tabler Icons) */
+.yandex-wave-mood-toggle-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: 50% 50%;
+}
+.tabler-wave-icon {
+  display: block;
+  overflow: visible;
+  transform-origin: 50% 50%;
+}
+.yandex-wave-mood-toggle:hover .yandex-wave-mood-toggle-icon .tabler-wave-icon {
+  animation: tabler-wave-toggle-wiggle 0.55s cubic-bezier(0.34, 1.45, 0.64, 1);
+}
+@keyframes tabler-wave-toggle-wiggle {
+  0% { transform: scale(1) rotate(0deg); }
+  35% { transform: scale(1.12) rotate(-7deg); }
+  65% { transform: scale(1.06) rotate(5deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+.yandex-wave-mood-chip .tabler-wave-icon {
+  transition: transform var(--anim-fast, 0.15s) ease, filter var(--anim-fast, 0.15s) ease;
+}
+.yandex-wave-mood-chip:hover .tabler-wave-icon {
+  transform: scale(1.12) translateY(-1px);
+  filter: drop-shadow(0 2px 8px color-mix(in srgb, var(--accent, #6366f1) 35%, transparent));
+}
+.yandex-wave-mood-chip.active .tabler-wave-icon {
+  animation: tabler-wave-chip-breathe 2.4s ease-in-out infinite;
+}
+@keyframes tabler-wave-chip-breathe {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.07); opacity: 0.92; }
+}
+.yandex-wave-mood-dock.is-open .yandex-wave-mood-panel .yandex-wave-mood-chip {
+  animation: tabler-wave-chip-enter 0.4s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+.yandex-wave-mood-dock.is-open .yandex-wave-mood-panel .yandex-wave-mood-chip:nth-child(1) { animation-delay: 0.02s; }
+.yandex-wave-mood-dock.is-open .yandex-wave-mood-panel .yandex-wave-mood-chip:nth-child(2) { animation-delay: 0.06s; }
+.yandex-wave-mood-dock.is-open .yandex-wave-mood-panel .yandex-wave-mood-chip:nth-child(3) { animation-delay: 0.1s; }
+.yandex-wave-mood-dock.is-open .yandex-wave-mood-panel .yandex-wave-mood-chip:nth-child(4) { animation-delay: 0.14s; }
+.yandex-wave-mood-dock.is-open .yandex-wave-mood-panel .yandex-wave-mood-chip:nth-child(5) { animation-delay: 0.18s; }
+.yandex-wave-mood-dock.is-open .yandex-wave-mood-panel .yandex-wave-mood-chip:nth-child(6) { animation-delay: 0.22s; }
+.yandex-wave-mood-dock.is-open .yandex-wave-mood-panel .yandex-wave-mood-chip:nth-child(7) { animation-delay: 0.26s; }
+@keyframes tabler-wave-chip-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.88);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.my-wave-mode:hover .my-wave-mode-icon .tabler-wave-icon {
+  transform: scale(1.08);
+  transition: transform var(--anim-fast, 0.15s) ease;
+}
+.my-wave-mode .my-wave-mode-icon .tabler-wave-icon {
+  transition: transform var(--anim-fast, 0.15s) ease;
+}
+
 /* Доступность: убираем тяжёлые декоративные анимации, оставляем короткие переходы */
 @media (prefers-reduced-motion: reduce) {
   :root {
@@ -8200,6 +8428,17 @@ body.flow-compact-ui .search-source-pill.active:focus-visible {
   .auth-logo-glow { animation: none !important; }
   .spin-icon { animation: none !important; }
   .flow-progress-fill.indeterminate { animation: none !important; }
+  .tabler-wave-icon,
+  .yandex-wave-mood-toggle:hover .yandex-wave-mood-toggle-icon .tabler-wave-icon,
+  .yandex-wave-mood-chip.active .tabler-wave-icon,
+  .yandex-wave-mood-dock.is-open .yandex-wave-mood-panel .yandex-wave-mood-chip {
+    animation: none !important;
+  }
+  .yandex-wave-mood-chip:hover .tabler-wave-icon,
+  .my-wave-mode:hover .my-wave-mode-icon .tabler-wave-icon {
+    transform: none !important;
+    filter: none !important;
+  }
   .pm-lyrics-controls.pm-lyrics-popover {
     animation: none !important;
   }
