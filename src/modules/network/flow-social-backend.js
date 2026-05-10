@@ -12,6 +12,11 @@
   let boundPeerId = ''
   let boundUsername = ''
   let lastTopics = []
+  let wsAuthTimeout = null
+  let wsConnectingHang = null
+  /** Сообщения relay, отправленные пока сокет был закрыт — дольются после auth_ok */
+  const relayBacklog = []
+  const RELAY_BACKLOG_CAP = 64
 
   function normalizeApiBase(rawBase) {
     const input = String(rawBase || '').trim()
@@ -82,6 +87,24 @@
     emit(Object.assign({ t: 'ws_state', state: String(state || 'degraded') }, details || {}))
   }
 
+  function flushRelayBacklog() {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return
+    while (relayBacklog.length) {
+      const line = relayBacklog.shift()
+      try {
+        ws.send(line)
+      } catch (_) {
+        relayBacklog.unshift(line)
+        break
+      }
+    }
+  }
+
+  function pushRelayLine(line) {
+    if (relayBacklog.length >= RELAY_BACKLOG_CAP) relayBacklog.shift()
+    relayBacklog.push(line)
+  }
+
   function authHeaders() {
     const { secret } = getConfig()
     return {
@@ -133,6 +156,17 @@
     }
   }
 
+  function clearWsLifecycleTimers() {
+    if (wsAuthTimeout) {
+      clearTimeout(wsAuthTimeout)
+      wsAuthTimeout = null
+    }
+    if (wsConnectingHang) {
+      clearTimeout(wsConnectingHang)
+      wsConnectingHang = null
+    }
+  }
+
   function scheduleReconnect() {
     if (!isConfigured()) return
     clearReconnect()
@@ -158,11 +192,24 @@
       return
     }
 
+    const sock = ws
     ws.onopen = () => {
-      connectAttempt = 0
       try {
         ws.send(JSON.stringify({ op: 'auth', token: secret }))
       } catch (_) {}
+      clearWsLifecycleTimers()
+      wsAuthTimeout = setTimeout(() => {
+        wsAuthTimeout = null
+        try {
+          if (sock && (sock.readyState === WebSocket.OPEN || sock.readyState === WebSocket.CONNECTING)) sock.close()
+        } catch (_) {}
+      }, 12000)
+      wsConnectingHang = setTimeout(() => {
+        wsConnectingHang = null
+        try {
+          if (sock && sock.readyState === WebSocket.CONNECTING) sock.close()
+        } catch (_) {}
+      }, 15000)
     }
 
     ws.onmessage = (ev) => {
@@ -173,6 +220,8 @@
         return
       }
       if (msg.op === 'auth_ok') {
+        clearWsLifecycleTimers()
+        connectAttempt = 0
         emitWsState('online', { attempt: connectAttempt })
         try {
           if (boundPeerId) {
@@ -182,9 +231,11 @@
             ws.send(JSON.stringify({ op: 'sub', topics: lastTopics }))
           }
         } catch (_) {}
+        flushRelayBacklog()
         return
       }
       if (msg.op === 'auth_err') {
+        clearWsLifecycleTimers()
         emitWsState('degraded', { reason: 'auth_err' })
         try {
           ws.close()
@@ -195,8 +246,10 @@
     }
 
     ws.onclose = () => {
+      clearWsLifecycleTimers()
       ws = null
-      emitWsState('degraded', { reason: 'socket_closed' })
+      // Не «degraded» на каждом reconnect — иначе UI мигает красным при нормальной сети.
+      emitWsState('connecting', { reason: 'socket_closed', reconnecting: true })
       scheduleReconnect()
     }
     ws.onerror = () => {
@@ -240,18 +293,30 @@
 
   function relayDirect(payload) {
     ensureWs()
-    if (!ws || ws.readyState !== WebSocket.OPEN) return
+    const line = JSON.stringify({ op: 'relay_direct', payload: payload || {} })
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      pushRelayLine(line)
+      return
+    }
     try {
-      ws.send(JSON.stringify({ op: 'relay_direct', payload: payload || {} }))
-    } catch (_) {}
+      ws.send(line)
+    } catch (_) {
+      pushRelayLine(line)
+    }
   }
 
   function relayRoom(payload) {
     ensureWs()
-    if (!ws || ws.readyState !== WebSocket.OPEN) return
+    const line = JSON.stringify({ op: 'relay_room', payload: payload || {} })
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      pushRelayLine(line)
+      return
+    }
     try {
-      ws.send(JSON.stringify({ op: 'relay_room', payload: payload || {} }))
-    } catch (_) {}
+      ws.send(line)
+    } catch (_) {
+      pushRelayLine(line)
+    }
   }
 
   function roomPing(roomId) {
@@ -266,6 +331,8 @@
     boundPeerId = ''
     boundUsername = ''
     lastTopics = []
+    relayBacklog.length = 0
+    clearWsLifecycleTimers()
     clearReconnect()
     try {
       if (ws) ws.close()

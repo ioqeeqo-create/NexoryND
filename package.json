@@ -43,6 +43,7 @@
             "!dist"
         ],
         "win": {
+            "executableName": "Flow",
             "target": [
                 {
                     "target": "nsis",
@@ -59,12 +60,18 @@
             ],
             "icon": "assets/icon.ico"
         },
+        "portable": {
+            "artifactName": "${productName}-Portable.${ext}"
+        },
         "nsis": {
             "oneClick": false,
             "allowToChangeInstallationDirectory": true,
             "createDesktopShortcut": true,
             "createStartMenuShortcut": true,
-            "shortcutName": "Flow"
+            "shortcutName": "Flow",
+            "uninstallDisplayName": "Flow",
+            "include": "build/installer.nsh",
+            "artifactName": "${productName}-Setup.${ext}"
         },
         "directories": {
             "output": "dist"

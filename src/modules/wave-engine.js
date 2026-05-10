@@ -459,7 +459,34 @@
         const rows = Array.isArray(pack?.tracks) ? pack.tracks.map((t) => sanitizeTrack(t)).filter(Boolean) : []
         if (!rows.length) return []
         if (pack?.nextQueueTrackId) setYandexWaveQueueHint(String(pack.nextQueueTrackId))
-        return rows.slice(0, target)
+        const selected = new Set()
+        const selectedIds = new Set()
+        const selectedSigs = new Set()
+        ;(getQueue() || []).forEach((track) => {
+          const key = getMyWaveTrackKey(track)
+          if (key) selectedIds.add(key)
+          const sig = normalizeTrackSignature(track)
+          if (sig) selectedSigs.add(sig)
+        })
+        const ct = getCurrentTrack()
+        if (ct) {
+          const key = getMyWaveTrackKey(ct)
+          if (key) selectedIds.add(key)
+          const sig = normalizeTrackSignature(ct)
+          if (sig) selectedSigs.add(sig)
+        }
+        const filtered = rows.filter((track) => {
+          const key = getMyWaveTrackKey(track)
+          if (key && (selectedIds.has(key) || selected.has(key))) return false
+          const sig = normalizeTrackSignature(track)
+          if (!sig || selectedSigs.has(sig)) return false
+          const sec = getNormalizedTrackDurationSec(track)
+          if (sec != null && sec < WAVE_MY_WAVE_MIN_DURATION_SEC) return false
+          if (key) selected.add(key)
+          selectedSigs.add(sig)
+          return true
+        })
+        return filtered.slice(0, target)
       }
       const queries = buildMyWaveQueries(seedTracks, modeId, profile)
       const excluded = getMyWaveExcludedSignatures()

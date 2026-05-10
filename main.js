@@ -14,6 +14,12 @@ const {
   parseVkPlaylistRef,
 } = require('./src/modules/utils/parsers')
 
+if (process.platform === 'win32') {
+  try {
+    app.setAppUserModelId('flow.player')
+  } catch (_) {}
+}
+
 const SAFE_GPU_FLAG = '--flow-safe-gpu'
 const _isSafeGpuMode = process.argv.includes(SAFE_GPU_FLAG)
 let _safeGpuRestartRequested = false

@@ -530,7 +530,6 @@
             const seenFresh = !Number.isNaN(seen) && Date.now() - seen < freshWindowMs
             if (onlineFlag && !Number.isNaN(seen)) return resolve(seenFresh)
             if (onlineFlag) return resolve(true)
-            if (seenFresh) return resolve(true)
             resolve(false)
           })
           .catch(() => resolve(false))

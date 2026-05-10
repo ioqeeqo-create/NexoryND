@@ -135,6 +135,7 @@ let _pendingRoomInvite = null
 let _myWaveRenderedTracks = []
 let _myWaveBuilding = false
 let _myWavePreloading = false
+let _myWaveSeenKeys = new Set()
 let _myWaveMode = (() => {
   try { return localStorage.getItem('flow_my_wave_mode') || 'default' } catch { return 'default' }
 })()
@@ -145,6 +146,7 @@ let _lastServerStatusCheckAt = 0
 const FRIEND_POLL_INTERVAL_MS = 2500
 const FRIEND_FRESH_ONLINE_MS = 9000
 const FRIEND_PROFILE_REFRESH_MS = 7000
+const FRIEND_ONLINE_STALE_MS = 65000
 const FLOW_SERVER_DEFAULT_URL = 'http://85.239.34.229:8787'
 const FLOW_SOCIAL_DEFAULT_API_BASE = 'http://85.239.34.229/social'
 const FLOW_SOCIAL_DEFAULT_API_SECRET = 'flowflow'
@@ -4282,12 +4284,24 @@ async function loadRoomStateFromServer(force = false) {
       flowSocialGet(`/flow-api/v1/rooms/${rid}`),
       flowSocialGet(`/flow-api/v1/room-members/${rid}`),
     ])
-    if (room?.host_peer_id) {
-      _roomState.hostPeerId = String(room.host_peer_id)
-      const myPeerId = String(_socialPeer?.peer?.id || '')
+    const myPeerId = String(_socialPeer?.peer?.id || '')
+    const roomIdStr = String(_roomState.roomId || '').trim()
+    const iOwnRoomNamespace = Boolean(myPeerId && roomIdStr === myPeerId)
+    let serverHost = room?.host_peer_id != null && String(room.host_peer_id).trim() !== '' ? String(room.host_peer_id).trim() : ''
+    if (iOwnRoomNamespace && serverHost && serverHost !== myPeerId) {
+      _roomState.hostPeerId = myPeerId
+      _roomState.host = true
+      saveRoomStateToServer({ host_peer_id: myPeerId, shared_queue: sharedQueue }).catch(() => {})
+    } else if (serverHost) {
+      _roomState.hostPeerId = serverHost
       if (myPeerId) _roomState.host = _roomState.hostPeerId === myPeerId
+    } else if (roomIdStr.startsWith('flow-')) {
+      _roomState.hostPeerId = roomIdStr
+      if (myPeerId) _roomState.host = myPeerId === roomIdStr
     }
-    if (Array.isArray(room?.shared_queue)) {
+    // Хост не подменяет очередь снимком с сервера: иначе гонка с saveRoomStateToServer
+    // затирает локальную очередь (пропадают треки, «залипает» один старый).
+    if (Array.isArray(room?.shared_queue) && !_roomState.host) {
       sharedQueue = room.shared_queue.map((t) => sanitizeTrack(t)).filter(Boolean)
       renderRoomQueue()
     }
@@ -4303,7 +4317,7 @@ async function loadRoomStateFromServer(force = false) {
         Boolean(serverTrack) &&
         (noActiveAudio || !currentTrack || !serverSig || !currentSig || serverSig !== currentSig)
       if (shouldReloadFromServer) playTrackObj(serverTrack, { remoteSync: true }).catch(() => {})
-      const p2pFresh = Date.now() - (_lastGuestP2pPlaybackAt || 0) < 4200
+      const p2pFresh = Date.now() - (_lastGuestP2pPlaybackAt || 0) < 1200
       const targetTime = Number(state?.currentTime || 0)
       const dur = Number(audio?.duration || 0)
       const canSeek = Number.isFinite(targetTime) && Number.isFinite(dur) && dur > 0
@@ -4321,7 +4335,7 @@ async function loadRoomStateFromServer(force = false) {
   } catch {}
 }
 
-function startRoomServerSync() {
+function startRoomServerSync(opts = {}) {
   stopRoomServerSync()
   if (!_roomState?.roomId || !window.FlowSocialBackend?.isConfigured?.()) return
   window.FlowSocialBackend.ensureWs()
@@ -4333,13 +4347,13 @@ function startRoomServerSync() {
     loadRoomStateFromServer(false).catch(() => {})
   })
   upsertRoomMemberPresence().catch(() => {})
-  loadRoomStateFromServer(true).catch(() => {})
+  if (!opts.skipInitialLoad) loadRoomStateFromServer(true).catch(() => {})
   _roomServerHeartbeatTimer = setInterval(() => {
     upsertRoomMemberPresence().catch(() => {})
   }, 1800)
   _roomServerFullSyncTimer = setInterval(() => {
     loadRoomStateFromServer(true).catch(() => {})
-  }, 8000)
+  }, 2200)
 }
 
 function renderRoomMembers() {
