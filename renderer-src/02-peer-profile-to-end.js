@@ -329,6 +329,21 @@ function toggleMyWaveSourceMenu(ev) {
   btn?.setAttribute('aria-expanded', willOpen ? 'true' : 'false')
 }
 
+function openMyWaveSettingsFromStack() {
+  document.querySelector('#my-wave-source-slot .my-wave-settings-btn')?.click()
+    || document.querySelector('#rooms-wave-source-slot .my-wave-settings-btn')?.click()
+}
+window.openMyWaveSettingsFromStack = openMyWaveSettingsFromStack
+
+function pauseMyWaveInUi() {
+  try {
+    audio.pause()
+  } catch (_) {}
+  syncTransportPlayPauseUi()
+  syncMyWaveOrbPlayUi()
+}
+window.pauseMyWaveInUi = pauseMyWaveInUi
+
 function myWaveSourceFabMarkHtml(source) {
   const s = source === 'vk' ? 'vk' : 'yandex'
   const vkSvg =
@@ -619,10 +634,23 @@ function renderMyWave() {
     }
   })()
   listEl.innerHTML = `
-    <div class="my-wave-orb mode-${mode} ${_myWaveBuilding || _myWavePreloading ? 'is-loading' : ''}" aria-label="${modeCfg.label}">
-      <div class="my-wave-orb-ring"></div>
-      <div class="my-wave-orb-core"></div>
-      <button type="button" class="my-wave-orb-play-btn" onclick="toggleMyWaveOrbPlayback()" aria-label="Волна: плей / пауза">${orbPlayInner}</button>
+    <div class="my-wave-visual-stack">
+      <div class="my-wave-orb mode-${mode} my-wave-orb--hero ${_myWaveBuilding || _myWavePreloading ? 'is-loading' : ''}" aria-label="${modeCfg.label}">
+        <div class="my-wave-orb-ring"></div>
+        <div class="my-wave-orb-core"></div>
+      </div>
+      <div class="my-wave-inline-toolbar">
+        <span class="my-wave-inline-title">Моя волна</span>
+        <div class="my-wave-inline-playgroup">
+          <button type="button" class="my-wave-glass-btn my-wave-glass-btn--play" onclick="toggleMyWaveOrbPlayback()" aria-label="Плей / пауза">${orbPlayInner}</button>
+          <button type="button" class="my-wave-glass-btn my-wave-glass-btn--stop" onclick="pauseMyWaveInUi()" aria-label="Пауза" title="Пауза">
+            <svg class="my-wave-orb-play-svg" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor"/></svg>
+          </button>
+        </div>
+      </div>
+      <button type="button" class="my-wave-glass-btn my-wave-glass-btn--gear" onclick="openMyWaveSettingsFromStack()" title="Настройки волны" aria-label="Настройки волны">
+        <svg class="my-wave-gear-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+      </button>
     </div>
   `
   renderRoomsMyWave()
@@ -669,10 +697,23 @@ function renderRoomsMyWave() {
     }
   })()
   listEl.innerHTML = `
-    <div class="my-wave-orb mode-${mode} ${_myWaveBuilding || _myWavePreloading ? 'is-loading' : ''}" aria-label="${modeCfg.label}">
-      <div class="my-wave-orb-ring"></div>
-      <div class="my-wave-orb-core"></div>
-      <button type="button" class="my-wave-orb-play-btn" onclick="toggleMyWaveOrbPlayback()" aria-label="Волна: плей / пауза">${roomsOrbPlayInner}</button>
+    <div class="my-wave-visual-stack my-wave-visual-stack--rooms">
+      <div class="my-wave-orb mode-${mode} my-wave-orb--hero ${_myWaveBuilding || _myWavePreloading ? 'is-loading' : ''}" aria-label="${modeCfg.label}">
+        <div class="my-wave-orb-ring"></div>
+        <div class="my-wave-orb-core"></div>
+      </div>
+      <div class="my-wave-inline-toolbar">
+        <span class="my-wave-inline-title">Моя волна</span>
+        <div class="my-wave-inline-playgroup">
+          <button type="button" class="my-wave-glass-btn my-wave-glass-btn--play" onclick="toggleMyWaveOrbPlayback()" aria-label="Плей / пауза">${roomsOrbPlayInner}</button>
+          <button type="button" class="my-wave-glass-btn my-wave-glass-btn--stop" onclick="pauseMyWaveInUi()" aria-label="Пауза" title="Пауза">
+            <svg class="my-wave-orb-play-svg" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor"/></svg>
+          </button>
+        </div>
+      </div>
+      <button type="button" class="my-wave-glass-btn my-wave-glass-btn--gear" onclick="openMyWaveSettingsFromStack()" title="Настройки волны" aria-label="Настройки волны">
+        <svg class="my-wave-gear-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+      </button>
     </div>
   `
   toggleYandexWaveMoodDockPanel(false)
@@ -1471,7 +1512,55 @@ function ensureFriendInteractionUI() {
     `
     document.body.appendChild(modal)
   }
+  if (!document.getElementById('playlist-card-context-menu')) {
+    const menu = document.createElement('div')
+    menu.id = 'playlist-card-context-menu'
+    menu.className = 'friend-context-menu hidden glass-card'
+    menu.innerHTML = `
+      <button type="button" class="friend-context-item" onclick="playlistCardCtxEdit()">Изменить</button>
+      <button type="button" class="friend-context-item danger" onclick="playlistCardCtxDelete()">Удалить</button>
+    `
+    document.body.appendChild(menu)
+    document.addEventListener('click', () => closePlaylistCardContextMenu())
+  }
 }
+
+let _playlistCardCtxIdx = -1
+
+function closePlaylistCardContextMenu() {
+  document.getElementById('playlist-card-context-menu')?.classList.add('hidden')
+  _playlistCardCtxIdx = -1
+}
+
+function openPlaylistCardContextMenu(event, idx) {
+  event?.preventDefault?.()
+  event?.stopPropagation?.()
+  ensureFriendInteractionUI()
+  const menu = document.getElementById('playlist-card-context-menu')
+  if (!menu) return
+  _playlistCardCtxIdx = Number(idx)
+  menu.style.left = `${Math.max(8, Number(event?.clientX || 0))}px`
+  menu.style.top = `${Math.max(8, Number(event?.clientY || 0))}px`
+  menu.classList.remove('hidden')
+}
+
+function playlistCardCtxEdit() {
+  const i = Number(_playlistCardCtxIdx)
+  closePlaylistCardContextMenu()
+  if (!Number.isFinite(i) || i < 0) return
+  editPlaylistMeta(i)
+}
+
+function playlistCardCtxDelete() {
+  const i = Number(_playlistCardCtxIdx)
+  closePlaylistCardContextMenu()
+  if (!Number.isFinite(i) || i < 0) return
+  deletePlaylist(i)
+}
+
+window.playlistCardCtxEdit = playlistCardCtxEdit
+window.playlistCardCtxDelete = playlistCardCtxDelete
+window.openPlaylistCardContextMenu = openPlaylistCardContextMenu
 
 function openRoomMemberContextMenu(event, peerId = '', username = '') {
   event?.preventDefault?.()
@@ -1545,6 +1634,11 @@ function closeFriendContextMenu() {
 function friendMenuInviteRoom() {
   closeFriendContextMenu()
   if (!_friendContext?.username) return
+  const un = String(_friendContext.username || '').trim().toLowerCase()
+  if (!_friendPresence.get(un)?.online) {
+    showToast('Пригласить можно только друга в сети', true)
+    return
+  }
   sendRoomInviteToFriend(_friendContext.username, _friendContext.peerId || _friendContext.roomId || '')
 }
 
@@ -1640,11 +1734,15 @@ function sendRoomInviteToFriend(username, peerId = '') {
 function openRoomInvitePicker() {
   if (!_profile?.username || !peerSocial.getFriends) return
   const friends = peerSocial.getFriends(_profile.username) || []
-  if (!friends.length) return showToast('Список друзей пуст', true)
+  const onlineFriends = friends.filter((name) => {
+    const key = String(name || '').trim().toLowerCase()
+    return key && (_friendPresence.get(key)?.online)
+  })
+  if (!onlineFriends.length) return showToast('Нет друзей в сети — пригласить можно только онлайн', true)
   openPlaylistPickerModal({
     mode: 'room-invite-friend',
-    title: 'Пригласить друга в руму',
-    items: friends.map((name) => ({ id: String(name), label: name })),
+    title: 'Пригласить в руму (только онлайн)',
+    items: onlineFriends.map((name) => ({ id: String(name), label: `${name} • в сети` })),
     payload: {}
   })
 }
@@ -1784,15 +1882,13 @@ function ensureRoomsUI() {
       <div style="margin-top:8px"><button class="btn-small" onclick="openRoomOwnTracksPicker()">Свои треки</button></div>
       <div class="rooms-wave-embedded">
         <div class="my-wave rooms-wave-my-wave">
-          <div class="my-wave-hero">
+          <div class="my-wave-hero my-wave-hero--compact-title">
             <div class="my-wave-hero-top">
               <div class="my-wave-hero-copy">
-                <div class="my-wave-badge">Моя волна</div>
-                <h3>Волна для комнаты</h3>
                 <p id="rooms-wave-hint">Выбери режим и запусти волну для общей очереди</p>
               </div>
               <div class="my-wave-hero-trailing">
-                <div id="rooms-wave-source-slot" class="my-wave-source-slot"></div>
+                <div id="rooms-wave-source-slot" class="my-wave-source-slot my-wave-source-slot--offcanvas"></div>
                 <div id="rooms-yandex-wave-mood-dock" class="yandex-wave-mood-dock hidden" aria-label="Настроение волны Яндекса"></div>
               </div>
             </div>
@@ -2314,6 +2410,13 @@ function initPeerSocial() {
         const ts = Number(msg.playbackTs || msg._ts || 0)
         if (ts) _lastAppliedServerPlaybackTs = Math.max(_lastAppliedServerPlaybackTs || 0, ts)
         _lastGuestP2pPlaybackAt = Date.now()
+        if (Array.isArray(msg.sharedQueue)) {
+          sharedQueue = msg.sharedQueue.map((t) => sanitizeTrack(t)).filter(Boolean)
+          renderRoomQueue()
+        }
+        if (typeof msg.paused === 'boolean') {
+          if (msg.paused && !audio.paused) audio.pause()
+        }
         if (msg.track) {
           const incomingTrack = sanitizeTrack(msg.track)
           const incomingSig = normalizeTrackSignature(incomingTrack)
@@ -2336,16 +2439,11 @@ function initPeerSocial() {
           if (Math.abs(audio.currentTime - targetTime) > 0.12) audio.currentTime = targetTime
         }
         if (typeof msg.paused === 'boolean') {
-          if (msg.paused && !audio.paused) audio.pause()
-          if (!msg.paused && audio.paused) audio.play().catch(() => {})
+          if (!msg.paused && audio.paused && audio.src) audio.play().catch(() => {})
         }
         try {
           syncTransportPlayPauseUi()
         } catch (_) {}
-        if (Array.isArray(msg.sharedQueue)) {
-          sharedQueue = msg.sharedQueue.map((t) => sanitizeTrack(t)).filter(Boolean)
-          renderRoomQueue()
-        }
       }
       if (msg.type === 'presence-request' && fromPeerId && _socialPeer) {
         const payload = {
@@ -3039,7 +3137,7 @@ function applyUiTextOverrides() {
     if (el) el.textContent = value
   }
   setNavLabel('main', 'Главная')
-  setNavLabel('home', 'Воспроизведение')
+  setNavLabel('home', 'Медиа')
   setNavLabel('search', 'Поиск')
   setNavLabel('library', 'Библиотека')
   setNavLabel('liked', 'Любимые')
@@ -3068,7 +3166,7 @@ function applyUiTextOverrides() {
   setText('#page-search .content-sub', 'Найди трек')
   setText('#page-library .content-sub', 'Твои плейлисты')
   setText('#page-liked .content-sub', 'Треки, которые ты лайкнул')
-  setText('#page-home .content-header h2', 'Воспроизведение')
+  setText('#page-home .content-header h2', 'Медиа')
   setText('#page-home .content-header .content-sub', 'Управляй текущим треком и очередью')
 
   const labels = Array.from(document.querySelectorAll('#settings-panel-appearance .vs-label, #settings-panel-playback .vs-label'))
@@ -5698,6 +5796,34 @@ async function playTrackObj(track, opts = {}) {
     if (isStale()) throw new Error('stale playback request')
     setStage('Старт воспроизведения…')
     audio.src = url
+    const guestRoomBuffer =
+      Boolean(opts?.remoteSync) && Boolean(_roomState?.roomId) && !_roomState?.host
+    if (guestRoomBuffer) {
+      await new Promise((resolve) => {
+        let done = false
+        let t = null
+        const finish = () => {
+          if (done) return
+          done = true
+          if (t) clearTimeout(t)
+          try {
+            audio.removeEventListener('canplaythrough', finish)
+            audio.removeEventListener('canplay', onCan)
+          } catch (_) {}
+          resolve()
+        }
+        const onCan = () => {
+          if ((audio.readyState || 0) >= 3) finish()
+        }
+        if ((audio.readyState || 0) >= 4) {
+          finish()
+          return
+        }
+        t = setTimeout(finish, 14000)
+        audio.addEventListener('canplaythrough', finish, { once: true })
+        audio.addEventListener('canplay', onCan, { once: true })
+      })
+    }
     await audio.play()
     try {
       if (_audioCtx?.state === 'suspended') await _audioCtx.resume().catch(() => {})
@@ -5833,7 +5959,22 @@ async function playTrackObj(track, opts = {}) {
   _currentTrackStartedAt = Math.floor(Date.now() / 1000)
   pushLastFmNowPlaying(track)
   updateDiscordPresence(track, _roomState)
-  broadcastPlaybackSync(true)
+  if (_roomState?.roomId && _roomState?.host) {
+    const onceRoomHostSync = () => {
+      try {
+        audio.removeEventListener('playing', onceRoomHostSync)
+        audio.removeEventListener('canplaythrough', onceRoomHostSync)
+      } catch (_) {}
+      broadcastPlaybackSync(true)
+    }
+    if ((audio.readyState || 0) >= 4) broadcastPlaybackSync(true)
+    else {
+      audio.addEventListener('playing', onceRoomHostSync, { once: true })
+      audio.addEventListener('canplaythrough', onceRoomHostSync, { once: true })
+    }
+  } else {
+    broadcastPlaybackSync(true)
+  }
   syncHomeCloneUI()
   renderQueue()
   try {
@@ -5954,7 +6095,7 @@ function syncMyWaveOrbPlayUi() {
   const inner = playing
     ? `<svg class="my-wave-orb-play-svg" viewBox="0 0 24 24" aria-hidden="true">${PM_PAUSE_INNER}</svg>`
     : `<svg class="my-wave-orb-play-svg" viewBox="0 0 24 24" aria-hidden="true">${PM_PLAY_INNER}</svg>`
-  document.querySelectorAll('.my-wave-orb-play-btn').forEach((btn) => {
+  document.querySelectorAll('.my-wave-glass-btn--play').forEach((btn) => {
     btn.innerHTML = inner
     btn.setAttribute('aria-label', playing ? 'Пауза' : 'Запустить волну')
   })
@@ -6803,10 +6944,7 @@ function renderMainQuickLiked() {
   liked.forEach((track, idx) => {
     const row = makeTrackEl(track, false, false)
     row.classList.add('main-quick-liked-item')
-    const actions = document.createElement('div')
-    actions.className = 'main-hub-card-actions'
-    row.querySelectorAll('.track-like, .track-play').forEach((btn) => actions.appendChild(btn))
-    row.appendChild(actions)
+    row.querySelectorAll('.track-like, .track-play').forEach((btn) => btn.remove())
     row.addEventListener('click', (ev) => {
       if (ev.target.closest('button')) return
       queue = getLiked().slice()
@@ -7478,19 +7616,16 @@ function renderPlaylists() {
       const coverStyle = ''
       el.innerHTML=`
         <div class="playlist-icon" style="${coverStyle}" title="Плейлист">${playlistCover ? '' : '<svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'}</div>
-        <div class="playlist-info" onclick="openPlaylist(${currentIdx})" style="cursor:pointer">
+        <div class="playlist-info" style="cursor:pointer">
           <span class="playlist-name">${pl.name}</span>
           <span class="playlist-count">${pl.tracks.length} треков${pl.description ? ` • ${pl.description}` : ''}</span>
-        </div>
-        <div class="playlist-card-actions">
-          <button class="playlist-del" onclick="event.stopPropagation();editPlaylistMeta(${currentIdx})" title="Редактировать">✎</button>
-          <button class="playlist-del" onclick="event.stopPropagation();deletePlaylist(${currentIdx})">${ICONS.close}</button>
         </div>`
       if (playlistCover) {
         const icon = el.querySelector('.playlist-icon')
         observeLazyCoverBackground(icon, playlistCover, '', `playlist:${currentIdx}`)
       }
       el.addEventListener('click', () => openPlaylist(currentIdx))
+      el.addEventListener('contextmenu', (ev) => openPlaylistCardContextMenu(ev, currentIdx))
       fragment.appendChild(el)
     }
     container.appendChild(fragment)

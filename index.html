@@ -6,14 +6,18 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
   <!-- bump ?v= when profile/CSS/JS layout changes so Electron reloads assets -->
-  <link rel="stylesheet" href="styles.css?v=20260504-flat-bg-transitions">
+  <link rel="stylesheet" href="styles.css?v=20260510-wave-rooms-playlists">
 </head>
 <body>
 
 <div id="flow-boot-splash" class="flow-boot-splash" role="status" aria-live="polite" aria-label="Загрузка Flow">
   <div class="flow-boot-splash-inner">
     <div class="flow-boot-logo" aria-hidden="true"></div>
-    <div class="flow-boot-spinner" aria-hidden="true"></div>
+    <div class="flow-boot-progress" aria-hidden="true">
+      <div class="flow-boot-progress-track">
+        <div class="flow-boot-progress-fill"></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -98,8 +102,8 @@
       </a>
       </div>
       <div class="nav-group">
-      <a class="nav-item" data-nav-page="home" onclick="openPage('home')" href="#" title="Воспроизведение" aria-label="Воспроизведение">
-        <svg class="nav-icon flow-ref-nav" data-lucide="disc-3" viewBox="0 0 24 24"></svg><span class="nav-label">Воспроизведение</span>
+      <a class="nav-item" data-nav-page="home" onclick="openPage('home')" href="#" title="Медиа" aria-label="Медиа">
+        <svg class="nav-icon flow-ref-nav" data-lucide="disc-3" viewBox="0 0 24 24"></svg><span class="nav-label">Медиа</span>
       </a>
       <a class="nav-item search-liquid" data-nav-page="search" onclick="openPage('search')" href="#" title="Поиск" aria-label="Поиск">
         <svg class="nav-icon flow-ref-nav" data-lucide="search" viewBox="0 0 24 24"></svg><span class="nav-label">Поиск</span>
@@ -184,15 +188,13 @@
         <div class="main-hub-grid">
           <section class="main-hub-panel main-hub-panel--wave">
             <div class="my-wave glass-card" id="my-wave">
-              <div class="my-wave-hero">
+              <div class="my-wave-hero my-wave-hero--compact-title">
                 <div class="my-wave-hero-top">
                   <div class="my-wave-hero-copy">
-                    <div class="my-wave-badge">Моя волна</div>
-                    <h3>Моя Волна</h3>
                     <p id="my-wave-hint">Прослушай минимум 10 треков, чтобы собрать Мою волну</p>
                   </div>
                   <div class="my-wave-hero-trailing">
-                    <div id="my-wave-source-slot" class="my-wave-source-slot"></div>
+                    <div id="my-wave-source-slot" class="my-wave-source-slot my-wave-source-slot--offcanvas"></div>
                     <div id="yandex-wave-mood-dock" class="yandex-wave-mood-dock hidden" aria-label="Настроение волны Яндекса"></div>
                   </div>
                 </div>
@@ -225,7 +227,7 @@
 
     <div id="page-home" class="page">
       <div class="content-header">
-        <h2>Воспроизведение</h2>
+        <h2>Медиа</h2>
         <p class="content-sub">Управляй текущим треком и очередью</p>
       </div>
       <div class="playback-page-shell">

@@ -144,8 +144,12 @@
     const { base } = getConfig()
     const u = new URL(base.startsWith('http') ? base : `https://${base}`)
     u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:'
-    u.pathname = '/flow-api/ws'
+    // REST ходит на `${base}/flow-api/v1/...`; WS должен быть под тем же префиксом (например /social/... за nginx).
+    let p = String(u.pathname || '').replace(/\/+$/, '')
+    if (!p || p === '/') p = ''
+    u.pathname = p ? `${p}/flow-api/ws` : '/flow-api/ws'
     u.search = ''
+    u.hash = ''
     return u.toString()
   }
 

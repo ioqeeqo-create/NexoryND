@@ -1,6 +1,6 @@
 {
     "name": "flow",
-    "version": "2.7.8",
+    "version": "2.7.10",
     "description": "Flow — десктопный музыкальный плеер: поиск, плейлисты, SoundCloud, комнаты и персональная «Моя волна».",
     "author": "ioqeeqo-create",
     "license": "MIT",
@@ -22,6 +22,7 @@
         "social-migrate": "node server/migrate-supabase-export-to-sqlite.js",
         "build:yandex-helper": "dotnet publish tools/flow-yandex-helper -c Release -r win-x64 --self-contained false",
         "build": "electron-builder",
+        "prebuild:win": "node scripts/merge-renderer.js && node scripts/build-windows-icon.mjs",
         "build:win": "electron-builder --win",
         "publish:update:stable": "node scripts/publish-stable-update.cjs"
     },
@@ -71,6 +72,8 @@
             "createStartMenuShortcut": true,
             "shortcutName": "Flow",
             "uninstallDisplayName": "Flow",
+            "installerIcon": "assets/icon.ico",
+            "uninstallerIcon": "assets/icon.ico",
             "include": "build/installer.nsh",
             "artifactName": "${productName}-Setup.${ext}"
         },

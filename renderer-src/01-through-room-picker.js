@@ -151,7 +151,6 @@ const FLOW_SERVER_DEFAULT_URL = 'http://85.239.34.229:8787'
 const FLOW_SOCIAL_DEFAULT_API_BASE = 'http://85.239.34.229/social'
 const FLOW_SOCIAL_DEFAULT_API_SECRET = 'flowflow'
 const FRIEND_NOTIFY_COOLDOWN_MS = 90 * 1000
-const PROFILE_CACHE_TTL_MS = 60 * 1000
 /** Ленивый API «Моя волна» (реализация в src/modules/wave-engine.js). */
 let _waveEngineApi = null
 /** Яндекс «Моя волна» (rotor): queue в GET /tracks — id первого трека предыдущей выдачи. */
@@ -4043,9 +4042,9 @@ async function refreshFriendProfileFromCloud(username, force = false) {
   const safe = String(username || '').trim().toLowerCase()
   if (!safe) return null
   const now = Date.now()
-  const cached = getCachedPeerProfile(safe)
-  if (!force && cached?.updatedAt && (now - Number(cached.updatedAt || 0)) < PROFILE_CACHE_TTL_MS) return cached
   const lastPullAt = Number(_friendProfileRefreshAt.get(safe) || 0)
+  // Только интервал между запросами: старый PROFILE_CACHE_TTL по updatedAt блокировал
+  // подтягивание новых аватаров/баннеров до ~60 с, пока не придёт WS-пуш (при degraded — никогда).
   if (!force && (now - lastPullAt) < FRIEND_PROFILE_REFRESH_MS) return null
   _friendProfileRefreshAt.set(safe, now)
   const cloud = await fetchCloudPublicProfile(safe).catch(() => null)
@@ -4353,7 +4352,7 @@ function startRoomServerSync(opts = {}) {
   }, 1800)
   _roomServerFullSyncTimer = setInterval(() => {
     loadRoomStateFromServer(true).catch(() => {})
-  }, 2200)
+  }, 5200)
 }
 
 function renderRoomMembers() {
@@ -4363,15 +4362,25 @@ function renderRoomMembers() {
     el.innerHTML = '<div class="flow-empty-state compact"><strong>Рума не активна</strong><span>Создай комнату или вставь invite друга.</span></div>'
     return
   }
-  const members = Array.from(_roomMembers.values()).map((m) => {
-    if (!m?.username) return m
-    const cached = getCachedPeerProfile(m.username)
-    return cached ? mergeProfileData(cached, m, m?.peerId || cached?.peerId || '') : m
+  const hostPeerId = String(_roomState?.hostPeerId || '').trim()
+  const seen = new Set()
+  const members = []
+  Array.from(_roomMembers.values()).forEach((raw) => {
+    if (!raw?.peerId) return
+    const pid = String(raw.peerId)
+    if (seen.has(pid)) return
+    seen.add(pid)
+    let m = raw
+    if (m?.username) {
+      const cached = getCachedPeerProfile(m.username)
+      if (cached) m = mergeProfileData(cached, m, m?.peerId || cached?.peerId || '')
+    }
+    members.push(m)
   })
-  // Safety fallback: if profile packets are delayed, still show connected peers.
-  const connectedPeerIds = Array.from(_socialPeer?.connections?.keys?.() || [])
+  const connectedPeerIds = Array.from(_socialPeer?.connections?.keys?.() || []).map(String).sort()
   connectedPeerIds.forEach((peerId) => {
-    if (!peerId || _roomMembers.has(peerId)) return
+    if (!peerId || seen.has(peerId)) return
+    seen.add(peerId)
     const guessedName = String(peerId).replace(/^flow-/, '') || 'user'
     members.push({
       username: guessedName,
@@ -4385,14 +4394,20 @@ function renderRoomMembers() {
     })
   })
   if (!members.length && _profile?.username) members.push(getPublicProfilePayload(_profile.username))
+  members.sort((a, b) => {
+    const ah = hostPeerId && a.peerId === hostPeerId ? 0 : 1
+    const bh = hostPeerId && b.peerId === hostPeerId ? 0 : 1
+    if (ah !== bh) return ah - bh
+    return String(a.username || '').localeCompare(String(b.username || ''), 'ru')
+  })
   el.innerHTML = members.map((m) => {
     if (!m) return ''
-    const isHost = m.peerId && m.peerId === _roomState?.hostPeerId
-    const isSelfHost = !isHost && _roomState?.host && m.username === _profile?.username
+    const isHost = Boolean(hostPeerId && m.peerId && m.peerId === hostPeerId)
     const avatar = m.avatarData
       ? `<div class="social-friend-avatar social-friend-avatar-active" style="background-image:url(${m.avatarData})"></div>`
       : `<div class="social-friend-avatar social-friend-avatar-active">${String(m.username || '?').slice(0,1).toUpperCase()}</div>`
-    return `<div class="social-friend-card online" oncontextmenu="openRoomMemberContextMenu(event, '${m.peerId || ''}', '${m.username || ''}')">${avatar}<div class="social-friend-meta"><strong>${m.username || 'user'} ${(isHost || isSelfHost) ? 'HOST' : ''}</strong><span>${m.username === _profile?.username ? 'это вы' : 'в комнате'}</span></div></div>`
+    const hostTag = isHost ? '<span class="room-host-pill">хост</span>' : ''
+    return `<div class="social-friend-card online" oncontextmenu="openRoomMemberContextMenu(event, '${m.peerId || ''}', '${m.username || ''}')">${avatar}<div class="social-friend-meta"><strong>${m.username || 'user'} ${hostTag}</strong><span>${m.username === _profile?.username ? 'это вы' : 'в комнате'}</span></div></div>`
   }).join('') || '<div class="flow-empty-state compact"><strong>Нет участников</strong><span>Подключение появится здесь.</span></div>'
 }
 
