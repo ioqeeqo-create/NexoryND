@@ -303,9 +303,9 @@ window.flowTrackSourceBadgeHtml = flowTrackSourceBadgeHtml
 
 function closeMyWaveSourceMenus() {
   try {
-    document.querySelectorAll('.my-wave-source-anchor.is-open').forEach((a) => {
+    document.querySelectorAll('.my-wave-settings-anchor.is-open').forEach((a) => {
       a.classList.remove('is-open')
-      a.querySelector('.my-wave-source-fab')?.setAttribute('aria-expanded', 'false')
+      a.querySelector('.my-wave-settings-btn')?.setAttribute('aria-expanded', 'false')
     })
   } catch (_) {}
 }
@@ -316,13 +316,13 @@ function toggleMyWaveSourceMenu(ev) {
     ev?.stopPropagation?.()
   } catch (_) {}
   const btn = ev?.currentTarget
-  const anchor = btn?.closest?.('.my-wave-source-anchor')
+  const anchor = btn?.closest?.('.my-wave-settings-anchor')
   if (!anchor) return
   const willOpen = !anchor.classList.contains('is-open')
-  document.querySelectorAll('.my-wave-source-anchor.is-open').forEach((a) => {
+  document.querySelectorAll('.my-wave-settings-anchor.is-open').forEach((a) => {
     if (a !== anchor) {
       a.classList.remove('is-open')
-      a.querySelector('.my-wave-source-fab')?.setAttribute('aria-expanded', 'false')
+      a.querySelector('.my-wave-settings-btn')?.setAttribute('aria-expanded', 'false')
     }
   })
   anchor.classList.toggle('is-open', willOpen)
@@ -350,18 +350,33 @@ function myWaveSourceFabMarkHtml(source) {
 function renderMyWaveSourceSlotInto(slotEl) {
   if (!slotEl) return
   const source = getMyWaveSource()
+  const mode = getMyWaveMode()
+  const modeButtons = Object.entries(WE?.MY_WAVE_MODES || {}).map(([id, cfg]) => (
+    `<button type="button" class="my-wave-settings-mode-btn ${id === mode ? 'is-active' : ''}" onclick="setMyWaveMode('${escapeHtml(id)}')">${escapeHtml(sanitizeDisplayText(cfg?.label || id))}</button>`
+  )).join('')
   slotEl.innerHTML = `
-    <div class="my-wave-source-anchor">
-      <button type="button" class="my-wave-source-fab" onclick="toggleMyWaveSourceMenu(event)" title="Источник волны" aria-haspopup="true" aria-expanded="false">
-        ${myWaveSourceFabMarkHtml(source)}
+    <div class="my-wave-settings-anchor">
+      <button type="button" class="my-wave-settings-btn" onclick="toggleMyWaveSourceMenu(event)" title="Настройки волны" aria-haspopup="true" aria-expanded="false">
+        <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3.2"></circle>
+          <path d="M19.4 15a1 1 0 0 0 .2 1.1l.1.1a1.9 1.9 0 1 1-2.7 2.7l-.1-.1a1 1 0 0 0-1.1-.2 1 1 0 0 0-.6.9V20a2 2 0 1 1-4 0v-.2a1 1 0 0 0-.6-.9 1 1 0 0 0-1.1.2l-.1.1a1.9 1.9 0 0 1-2.7-2.7l.1-.1a1 1 0 0 0 .2-1.1 1 1 0 0 0-.9-.6H4a2 2 0 1 1 0-4h.2a1 1 0 0 0 .9-.6 1 1 0 0 0-.2-1.1l-.1-.1a1.9 1.9 0 1 1 2.7-2.7l.1.1a1 1 0 0 0 1.1.2h.1a1 1 0 0 0 .6-.9V4a2 2 0 1 1 4 0v.2a1 1 0 0 0 .6.9 1 1 0 0 0 1.1-.2l.1-.1a1.9 1.9 0 1 1 2.7 2.7l-.1.1a1 1 0 0 0-.2 1.1v.1a1 1 0 0 0 .9.6H20a2 2 0 1 1 0 4h-.2a1 1 0 0 0-.9.6z"></path>
+        </svg>
       </button>
-      <div class="my-wave-source-dropdown" role="menu">
-        <button type="button" role="menuitem" class="my-wave-source-dropdown-item ${source === 'yandex' ? 'is-active' : ''}" onclick="setMyWaveSource('yandex')">
-          ${myWaveSourceFabMarkHtml('yandex')} Яндекс
-        </button>
-        <button type="button" role="menuitem" class="my-wave-source-dropdown-item ${source === 'vk' ? 'is-active' : ''}" onclick="setMyWaveSource('vk')">
-          ${myWaveSourceFabMarkHtml('vk')} VK
-        </button>
+      <div class="my-wave-settings-dropdown" role="menu">
+        <div class="my-wave-settings-section-label">Источник волны</div>
+        <div class="my-wave-settings-source-row">
+          <button type="button" role="menuitem" class="my-wave-settings-source-btn ${source === 'yandex' ? 'is-active' : ''}" onclick="setMyWaveSource('yandex')">
+            ${myWaveSourceFabMarkHtml('yandex')} Яндекс
+          </button>
+          <button type="button" role="menuitem" class="my-wave-settings-source-btn ${source === 'vk' ? 'is-active' : ''}" onclick="setMyWaveSource('vk')">
+            ${myWaveSourceFabMarkHtml('vk')} VK
+          </button>
+        </div>
+        ${
+          source === 'yandex'
+            ? `<div class="my-wave-settings-section-label">Режим волны</div><div class="my-wave-settings-mode-grid">${modeButtons}</div>`
+            : '<div class="my-wave-settings-vk-note">Для VK доступен только выбор источника.</div>'
+        }
       </div>
     </div>
   `
@@ -376,6 +391,9 @@ function setMyWaveSource(source) {
   try { localStorage.setItem('flow_my_wave_source', next) } catch {}
   if (next === 'vk') {
     try { _yandexWaveRotorQueueHint = '' } catch (_) {}
+    _myWaveMode = 'default'
+    try { localStorage.setItem('flow_my_wave_mode', _myWaveMode) } catch {}
+    toggleYandexWaveMoodDockPanel(false)
   }
   if (next !== 'yandex') toggleYandexWaveModes(false)
   renderYandexWaveModes()
@@ -384,6 +402,7 @@ function setMyWaveSource(source) {
 }
 
 function setMyWaveMode(mode) {
+  if (getMyWaveSource() !== 'yandex') return
   _myWaveMode = WE?.MY_WAVE_MODES?.[mode] ? mode : 'default'
   try { localStorage.setItem('flow_my_wave_mode', _myWaveMode) } catch {}
   renderMyWave()
@@ -440,6 +459,17 @@ function toggleYandexWaveModes(force) {
 
 let _lastMyWavePreloadCheckAt = 0
 
+function getMyWaveTrackUniqueKey(track) {
+  const safe = sanitizeTrack(track || {})
+  const src = String(safe.source || '').trim().toLowerCase()
+  const id = String(safe.id || safe.ytId || safe.url || '').trim().toLowerCase()
+  if (src && id) return `${src}:${id}`
+  const sig = normalizeTrackSignature(safe)
+  if (sig) return `sig:${sig}`
+  const fallback = `${String(safe.artist || '').trim().toLowerCase()}::${String(safe.title || '').trim().toLowerCase()}`
+  return fallback !== '::' ? `meta:${fallback}` : ''
+}
+
 async function maybePreloadMyWave(force = false) {
   if (queueScope !== 'myWave' || _myWaveBuilding || _myWavePreloading) return
   const remaining = queue.length - queueIndex - 1
@@ -449,14 +479,30 @@ async function maybePreloadMyWave(force = false) {
   _myWavePreloading = true
   renderMyWave()
   try {
+    const dedupeWithExisting = (tracks = []) => {
+      const existing = new Set(
+        queue
+          .map((track) => getMyWaveTrackUniqueKey(track))
+          .filter(Boolean),
+      )
+      _myWaveSeenKeys.forEach((key) => existing.add(key))
+      const fresh = []
+      tracks.forEach((track) => {
+        const key = getMyWaveTrackUniqueKey(track)
+        if (!key || existing.has(key)) return
+        existing.add(key)
+        _myWaveSeenKeys.add(key)
+        fresh.push(track)
+      })
+      return fresh
+    }
     const additions = await findMyWaveRecommendations(10, getMyWaveMode())
-    const existing = new Set(queue.map((track) => normalizeTrackSignature(track)).filter(Boolean))
-    const fresh = additions.filter((track) => {
-      const sig = normalizeTrackSignature(track)
-      if (!sig || existing.has(sig)) return false
-      existing.add(sig)
-      return true
-    })
+    let fresh = dedupeWithExisting(additions)
+    if (!fresh.length && force && getMyWaveSource() === 'yandex') {
+      try { _yandexWaveRotorQueueHint = '' } catch (_) {}
+      const retry = await findMyWaveRecommendations(10, getMyWaveMode())
+      fresh = dedupeWithExisting(retry)
+    }
     if (fresh.length) {
       queue.push(...fresh)
       _myWaveRenderedTracks = queue.slice()
@@ -465,6 +511,34 @@ async function maybePreloadMyWave(force = false) {
       if (force && queueIndex >= startLength - 1 && queue[queueIndex + 1]) {
         queueIndex++
         await playTrackObj(queue[queueIndex])
+      }
+    } else if (force) {
+      // Fallback: если строгий dedupe не дал новых треков, берем из последнего ответа
+      // треки, которых нет рядом с текущим хвостом, чтобы волна не останавливалась.
+      const recentKeys = new Set(
+        queue
+          .slice(Math.max(0, queueIndex - 2), queueIndex + 6)
+          .map((t) => getMyWaveTrackUniqueKey(t))
+          .filter(Boolean),
+      )
+      const fallback = (additions || []).filter((track) => {
+        const key = getMyWaveTrackUniqueKey(track)
+        if (!key || recentKeys.has(key)) return false
+        return true
+      })
+      if (fallback.length) {
+        queue.push(...fallback)
+        fallback.forEach((track) => {
+          const key = getMyWaveTrackUniqueKey(track)
+          if (key) _myWaveSeenKeys.add(key)
+        })
+        _myWaveRenderedTracks = queue.slice()
+        renderQueue()
+        showToast(`Моя волна продолжила подборку (${fallback.length})`)
+        if (queueIndex >= startLength - 1 && queue[queueIndex + 1]) {
+          queueIndex++
+          await playTrackObj(queue[queueIndex])
+        }
       }
     }
   } catch (err) {
@@ -487,12 +561,20 @@ async function startMyWave() {
   showToast('Моя волна подбирает новые треки...')
   try {
     const tracks = await findMyWaveRecommendations(WE?.MY_WAVE_MIN_TRACKS ?? 10, getMyWaveMode())
-    if (!tracks.length) return showToast('Волна пока не нашла новые треки. Попробуй другой режим или послушай еще музыку', true)
-    _myWaveRenderedTracks = tracks.slice()
-    queue = tracks.slice()
+    const unique = []
+    _myWaveSeenKeys = new Set()
+    ;(tracks || []).forEach((track) => {
+      const key = getMyWaveTrackUniqueKey(track)
+      if (!key || _myWaveSeenKeys.has(key)) return
+      _myWaveSeenKeys.add(key)
+      unique.push(track)
+    })
+    if (!unique.length) return showToast('Волна пока не нашла новые треки. Попробуй другой режим или послушай еще музыку', true)
+    _myWaveRenderedTracks = unique.slice()
+    queue = unique.slice()
     queueIndex = 0
     queueScope = 'myWave'
-    showToast(`Моя волна собрала ${tracks.length} новых треков`)
+    showToast(`Моя волна собрала ${unique.length} новых треков`)
     await playTrackObj(queue[0])
   } catch (err) {
     showToast(`Моя волна не запустилась: ${sanitizeDisplayText(err?.message || err)}`, true)
@@ -520,12 +602,11 @@ function renderMyWave() {
   if (seedCount < 3) {
     hintEl.textContent = `Послушай или лайкни еще ${3 - seedCount} трек(ов), чтобы волна поняла твой вкус`
   } else if (_myWaveBuilding) {
-    hintEl.textContent = `${modeCfg.label}: ищу новые треки по твоему вкусу...`
+    hintEl.textContent = 'Подбираю новые треки по твоему вкусу...'
   } else if (_myWavePreloading) {
-    hintEl.textContent = `${modeCfg.label}: дозагружаю новые треки, чтобы волна не кончалась...`
+    hintEl.textContent = 'Дозагружаю новые треки, чтобы волна не кончалась...'
   } else {
-    const sourceLabel = source === 'vk' ? 'VK' : 'Яндекс'
-    hintEl.textContent = `${sourceLabel} • ${modeCfg.label}: ${modeCfg.hint}. Нажми запуск, и волна сама соберет новую очередь`
+    hintEl.textContent = 'Нажми запуск — волна соберет новую очередь.'
   }
   const orbPlayInner = (() => {
     try {
@@ -545,7 +626,7 @@ function renderMyWave() {
     </div>
   `
   renderRoomsMyWave()
-  renderYandexWaveMoodDock()
+  toggleYandexWaveMoodDockPanel(false)
   try {
     if (typeof hydrateFlowLucideIcons === 'function') {
       const w = document.getElementById('my-wave')
@@ -571,12 +652,11 @@ function renderRoomsMyWave() {
   if (seedCount < 3) {
     hintEl.textContent = `Послушай или лайкни еще ${3 - seedCount} трек(ов), чтобы волна поняла твой вкус`
   } else if (_myWaveBuilding) {
-    hintEl.textContent = `${modeCfg.label}: ищу новые треки по твоему вкусу...`
+    hintEl.textContent = 'Подбираю новые треки по твоему вкусу...'
   } else if (_myWavePreloading) {
-    hintEl.textContent = `${modeCfg.label}: дозагружаю новые треки, чтобы волна не кончалась...`
+    hintEl.textContent = 'Дозагружаю новые треки, чтобы волна не кончалась...'
   } else {
-    const sourceLabel = source === 'vk' ? 'VK' : 'Яндекс'
-    hintEl.textContent = `${sourceLabel} • ${modeCfg.label}: ${modeCfg.hint}. Нажми запуск, и волна сама соберет новую очередь`
+    hintEl.textContent = 'Нажми запуск — волна соберет новую очередь.'
   }
   const roomsOrbPlayInner = (() => {
     try {
@@ -595,7 +675,7 @@ function renderRoomsMyWave() {
       <button type="button" class="my-wave-orb-play-btn" onclick="toggleMyWaveOrbPlayback()" aria-label="Волна: плей / пауза">${roomsOrbPlayInner}</button>
     </div>
   `
-  renderYandexWaveMoodDock()
+  toggleYandexWaveMoodDockPanel(false)
   try {
     if (typeof hydrateFlowLucideIcons === 'function') {
       const box = document.querySelector('.rooms-wave-my-wave')
@@ -1778,18 +1858,31 @@ async function renderFriends() {
   `
 }
 
+let _socialLastOnlineAt = 0
+/** Время успешного auth_ok по WS (соц-слой). */
+let _lastWsAuthOkAt = 0
+/** initPeerSocial → ready (профиль поднят). */
+let _peerSocialReadyAt = 0
+
 function setSocialStatus(text) {
   const el = document.getElementById('social-status')
   if (!el) return
   const raw = String(text || '').trim().toLowerCase()
   let state = 'degraded'
   let label = String(text || 'degraded')
+  const now = Date.now()
   if (raw.startsWith('online')) {
     state = 'online'
     label = 'online'
+    _socialLastOnlineAt = now
   } else if (raw.startsWith('connecting')) {
-    state = 'connecting'
-    label = 'connecting'
+    if (_socialLastOnlineAt && (now - _socialLastOnlineAt) < 20000) {
+      state = 'online'
+      label = 'online'
+    } else {
+      state = 'connecting'
+      label = 'connecting'
+    }
   } else if (raw.startsWith('degraded')) {
     state = 'degraded'
     label = 'degraded'
@@ -2132,14 +2225,32 @@ function initPeerSocial() {
   if (!_profile?.username || !peerSocial.FlowPeerSocial) return
   startProfilesRealtimeSync()
   if (_socialPeer) _socialPeer.destroy()
+  _lastWsAuthOkAt = 0
+  _peerSocialReadyAt = 0
   _socialPeer = new peerSocial.FlowPeerSocial(_profile.username, {
     maxPeers: 3,
     onStatus: (evt) => {
-      if (evt.type === 'ready') setSocialStatus(`online: ${evt.id}`)
+      if (evt.type === 'ready') {
+        _peerSocialReadyAt = Date.now()
+        setSocialStatus(`online: ${evt.id}`)
+      }
       if (evt.type === 'ws-state') {
-        if (evt.state === 'online') setSocialStatus('online')
-        else if (evt.state === 'connecting') setSocialStatus(`connecting${evt.attempt ? ` (#${evt.attempt})` : ''}`)
-        else setSocialStatus(`degraded${evt.reason ? ` (${evt.reason})` : ''}`)
+        const now = Date.now()
+        if (evt.state === 'online') {
+          _lastWsAuthOkAt = now
+          setSocialStatus('online')
+        } else if (evt.state === 'connecting') {
+          const recentWs = _lastWsAuthOkAt && now - _lastWsAuthOkAt < 45000
+          const bootGrace = _peerSocialReadyAt && !_lastWsAuthOkAt && now - _peerSocialReadyAt < 28000
+          if (recentWs || bootGrace) setSocialStatus('online')
+          else if (!_lastWsAuthOkAt && _peerSocialReadyAt && now - _peerSocialReadyAt > 32000) {
+            setSocialStatus('degraded (нет ws)')
+          } else {
+            setSocialStatus(`connecting${evt.attempt ? ` (#${evt.attempt})` : ''}`)
+          }
+        } else {
+          setSocialStatus(`degraded${evt.reason ? ` (${evt.reason})` : ''}`)
+        }
       }
       if (evt.type === 'peer-joined') {
         setRoomStatus(`Рума ${_roomState.roomId || '—'}: участников ${_socialPeer.peersCount()}/3`)
@@ -2191,6 +2302,7 @@ function initPeerSocial() {
     },
     onMessage: (msg, fromPeerId) => {
       if (!msg || typeof msg !== 'object') return
+      if (fromPeerId || msg._peerId) setSocialStatus('online')
       if (msg.type === 'playback-sync' && msg.roomId === _roomState.roomId && !_roomState.host) {
         const expectedHostId = String(_roomState.hostPeerId || '').trim()
         const senderId = String(msg._peerId || fromPeerId || '').trim()
@@ -2475,7 +2587,7 @@ async function respondFriendRequest(fromUsername, accept) {
   pollFriendsPresence().catch(() => {})
 }
 
-function createRoom() {
+async function createRoom() {
   if (!_socialPeer) return
   const r = _socialPeer.createRoom()
   if (!r?.ok) return showToast(r?.error || 'Ошибка создания', true)
@@ -2489,13 +2601,13 @@ function createRoom() {
   if (_socialPeer?.peer?.id) _roomMembers.set(_socialPeer.peer.id, getPublicProfilePayload(_profile?.username))
   setRoomStatus(`Рума ${r.roomId}: участников 1/3`)
   resetRoomHeartbeat()
+  await saveRoomStateToServer({ shared_queue: [], now_playing: null, playback_ts: Date.now() }).catch(() => {})
   startRoomServerSync()
-  saveRoomStateToServer({ shared_queue: [], now_playing: null, playback_ts: Date.now() }).catch(() => {})
   updateRoomUi()
   showToast('Рума создана')
 }
 
-function joinRoomById(forceRoomId = '') {
+async function joinRoomById(forceRoomId = '') {
   const input = document.getElementById('join-room-input')
   const roomId = resolveInviteToRoomId(forceRoomId || String(input?.value || '').trim())
   if (!_socialPeer || !roomId) return
@@ -2512,8 +2624,8 @@ function joinRoomById(forceRoomId = '') {
   if (_socialPeer?.peer?.id) _roomMembers.set(_socialPeer.peer.id, getPublicProfilePayload(_profile?.username))
   setRoomStatus(`Подключение к руме ${r.roomId}...`)
   resetRoomHeartbeat()
-  startRoomServerSync()
-  loadRoomStateFromServer().catch(() => {})
+  startRoomServerSync({ skipInitialLoad: true })
+  await loadRoomStateFromServer(true).catch(() => {})
   updateRoomUi()
   showToast('Подключение к руме...')
 }
@@ -2733,8 +2845,11 @@ async function fetchServerFriendsPresence(username) {
     rows.forEach((row) => {
       const uname = String(row?.username || '').trim().toLowerCase()
       if (!uname) return
+      const seen = Date.parse(String(row?.last_seen || row?.lastSeen || ''))
+      const seenFresh = !Number.isNaN(seen) && (Date.now() - seen) < FRIEND_ONLINE_STALE_MS
+      const onlineRaw = row?.online === true || row?.online === 1 || String(row?.online || '') === '1'
       map.set(uname, {
-        online: Boolean(row?.online),
+        online: Boolean(onlineRaw && seenFresh),
         roomId: row?.room_id ? String(row.room_id) : null,
         peerId: row?.peer_id ? String(row.peer_id) : `flow-${uname}`,
         updatedAt: Date.now(),
@@ -5943,7 +6058,7 @@ function prevTrack() {
   }
   const resetThreshold = Math.max(1, Math.min(10, (Number(audio.duration) || 0) / 3 || 10))
   if (audio.currentTime > resetThreshold) { audio.currentTime = 0; return }
-  const allowShuffle = playbackMode.shuffle && queueScope === 'liked'
+  const allowShuffle = playbackMode.shuffle && (queueScope === 'liked' || queueScope === 'playlist')
   if (allowShuffle) {
     queueIndex = pickRandomQueueIndex()
     if (queueIndex >= 0) playTrackObj(queue[queueIndex])
@@ -6017,7 +6132,7 @@ function nextTrack(autoEnded = false) {
     audio.play().catch(() => {})
     return
   }
-  const allowShuffle = playbackMode.shuffle && queueScope === 'liked'
+  const allowShuffle = playbackMode.shuffle && (queueScope === 'liked' || queueScope === 'playlist')
   if (allowShuffle) {
     queueIndex = pickRandomQueueIndex()
     if (queueIndex >= 0) playTrackObj(queue[queueIndex])
@@ -6595,16 +6710,58 @@ function renderQueue() {
   listEl.appendChild(frag)
 }
 
+function bindHorizontalStripDrag(el) {
+  if (!el || el.dataset.hDragReady === '1') return
+  el.dataset.hDragReady = '1'
+  let drag = null
+  const onMove = (ev) => {
+    if (!drag) return
+    const dx = ev.clientX - drag.x
+    if (!drag.moved && Math.abs(dx) > 4) drag.moved = true
+    if (!drag.moved) return
+    ev.preventDefault()
+    el.scrollLeft = drag.left - dx
+  }
+  const onUp = () => {
+    if (!drag) return
+    if (drag.moved) el.dataset.hDragSuppressClickUntil = String(Date.now() + 220)
+    drag = null
+    el.classList.remove('is-dragging')
+    document.removeEventListener('mousemove', onMove)
+    document.removeEventListener('mouseup', onUp)
+  }
+  el.addEventListener('mousedown', (ev) => {
+    if (ev.button !== 0) return
+    drag = { x: ev.clientX, left: el.scrollLeft, moved: false }
+    el.classList.add('is-dragging')
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  })
+  el.addEventListener(
+    'click',
+    (ev) => {
+      const until = Number(el.dataset.hDragSuppressClickUntil || 0)
+      if (until && Date.now() < until) {
+        ev.preventDefault()
+        ev.stopPropagation()
+      }
+    },
+    true,
+  )
+}
+
 function renderMainHub() {
   renderMyWave()
   renderMainQuickPlaylists()
   renderMainQuickLiked()
+  bindHorizontalStripDrag(document.getElementById('main-quick-playlists'))
+  bindHorizontalStripDrag(document.getElementById('main-quick-liked'))
 }
 
 function renderMainQuickPlaylists() {
   const root = document.getElementById('main-quick-playlists')
   if (!root) return
-  const playlists = getPlaylists().map(normalizePlaylist).slice(0, 4)
+  const playlists = getPlaylists().map(normalizePlaylist)
   if (!playlists.length) {
     root.innerHTML = '<div class="empty-state compact"><p>Добавь несколько плейлистов для быстрого доступа</p></div>'
     return
@@ -6637,7 +6794,7 @@ function renderMainQuickPlaylists() {
 function renderMainQuickLiked() {
   const root = document.getElementById('main-quick-liked')
   if (!root) return
-  const liked = getLiked().slice(0, 4)
+  const liked = getLiked()
   if (!liked.length) {
     root.innerHTML = '<div class="empty-state compact"><p>Лайкни треки, чтобы они появились здесь</p></div>'
     return
@@ -6646,7 +6803,12 @@ function renderMainQuickLiked() {
   liked.forEach((track, idx) => {
     const row = makeTrackEl(track, false, false)
     row.classList.add('main-quick-liked-item')
-    row.addEventListener('click', () => {
+    const actions = document.createElement('div')
+    actions.className = 'main-hub-card-actions'
+    row.querySelectorAll('.track-like, .track-play').forEach((btn) => actions.appendChild(btn))
+    row.appendChild(actions)
+    row.addEventListener('click', (ev) => {
+      if (ev.target.closest('button')) return
       queue = getLiked().slice()
       queueIndex = idx
       queueScope = 'liked'
@@ -8237,7 +8399,7 @@ window.addEventListener('DOMContentLoaded', () => {
     'pointerdown',
     (ev) => {
       try {
-        if (ev?.target?.closest?.('.my-wave-source-anchor')) return
+        if (ev?.target?.closest?.('.my-wave-settings-anchor')) return
         closeMyWaveSourceMenus()
       } catch (_) {}
     },
