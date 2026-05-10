@@ -40,7 +40,8 @@
         "files": [
             "**/*",
             "!node_modules/.cache",
-            "!dist"
+            "!dist",
+            "!FlowPleerLoww/**"
         ],
         "win": {
             "executableName": "Flow",
