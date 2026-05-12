@@ -17,7 +17,7 @@ const DEFAULT_SRC = path.join(
   'projects',
   'c-Users-Trankvilizator-Documents-Codex-2026-04-21-files-mentioned-by-the-user-flow-fresh-extract2',
   'assets',
-  'c__Users_Trankvilizator_AppData_Roaming_Cursor_User_workspaceStorage_2c8d2eb933a247bf3cbe75832c0da375_images_image-47320a61-2c2f-4bfb-a134-8c97590d3429.png',
+  'c__Users_Trankvilizator_AppData_Roaming_Cursor_User_workspaceStorage_2c8d2eb933a247bf3cbe75832c0da375_images_image-e50c2c3f-b9f9-432a-a62f-27996b38f23c.png',
 )
 
 const SQ = 1024
