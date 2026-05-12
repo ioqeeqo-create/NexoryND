@@ -9202,56 +9202,7 @@ function setupMainPaneShift() {
 }
 
 function setupCardTilt() {
-  const selector = '.track-card, .playlist-card, .social-friend-card, .profile-card, .home-card'
-  let activeCard = null
-  let rafId = 0
-  let pendingEvt = null
-
-  const resetCard = (el) => {
-    if (!el) return
-    el.style.setProperty('--card-tilt-x', '0deg')
-    el.style.setProperty('--card-tilt-y', '0deg')
-    el.style.setProperty('--card-tilt-glow-x', '50%')
-    el.style.setProperty('--card-tilt-glow-y', '50%')
-    el.classList.remove('is-tilting')
-  }
-
-  const updateTilt = () => {
-    rafId = 0
-    const e = pendingEvt
-    const card = activeCard
-    if (!e || !card) return
-    const rect = card.getBoundingClientRect()
-    if (!rect.width || !rect.height) return
-    const px = (e.clientX - rect.left) / rect.width
-    const py = (e.clientY - rect.top) / rect.height
-    const rx = (0.5 - py) * 4.6
-    const ry = (px - 0.5) * 4.6
-    card.style.setProperty('--card-tilt-x', `${rx.toFixed(2)}deg`)
-    card.style.setProperty('--card-tilt-y', `${ry.toFixed(2)}deg`)
-    card.style.setProperty('--card-tilt-glow-x', `${Math.max(0, Math.min(100, px * 100)).toFixed(1)}%`)
-    card.style.setProperty('--card-tilt-glow-y', `${Math.max(0, Math.min(100, py * 100)).toFixed(1)}%`)
-    card.classList.add('is-tilting')
-  }
-
-  document.addEventListener('pointermove', (e) => {
-    const card = e.target?.closest?.(selector) || null
-    if (card !== activeCard) {
-      resetCard(activeCard)
-      activeCard = card
-    }
-    if (!activeCard) return
-    pendingEvt = e
-    if (!rafId) rafId = requestAnimationFrame(updateTilt)
-  }, { passive: true })
-
-  document.addEventListener('pointerleave', () => {
-    pendingEvt = null
-    if (rafId) cancelAnimationFrame(rafId)
-    rafId = 0
-    resetCard(activeCard)
-    activeCard = null
-  }, { passive: true })
+  /* 3D card tilt disabled: perspective + pointermove caused glitches on track rows. */
 }
 
 /** Только время и прогресс на клоне главной — вызывать из timeupdate (без обложки и без карточки профиля). */
