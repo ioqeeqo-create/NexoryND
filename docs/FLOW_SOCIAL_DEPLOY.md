@@ -4,7 +4,7 @@
 
 Сервис стартует только если существует **`server/flow-social-server.js`**. Если на VPS после `git pull` его нет — значит ветка на GitHub без этих коммитов: сделай `git push` с машины разработчика или скопируй файл вручную (`scp`).
 
-Репозиторий из `package.json`: `https://github.com/ioqeeqo-create/FlowPleerLoww.git`
+Репозиторий из `package.json`: `https://github.com/ioqeeqo-create/NexoryND.git`
 
 ## 1) Environment
 

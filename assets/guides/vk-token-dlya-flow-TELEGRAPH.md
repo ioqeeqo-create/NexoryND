@@ -47,6 +47,6 @@
 https://telegra.ph/Kak-podklyuchit-VKontakte-vo-Flow-05-04  
 
 **Резерв (HTML в репо):**  
-https://github.com/ioqeeqo-create/FlowPleerLoww/blob/cursor/liquid-glass-room-widget-0756/assets/guides/vk-token-dlya-flow.html  
+https://github.com/ioqeeqo-create/NexoryND/blob/cursor/liquid-glass-room-widget-0756/assets/guides/vk-token-dlya-flow.html  
 
 В коде: `FLOW_VK_TELEGRAPH_GUIDE_URL` (Telegraph) → иначе `FLOW_VK_GUIDE_GITHUB_BLOB` → иначе локальный `assets/guides/...`.

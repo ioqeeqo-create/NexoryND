@@ -2,16 +2,17 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>Nexory</title>
+  <title>NexoryND</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
   <!-- bump ?v= when profile/CSS/JS layout changes so Electron reloads assets -->
-  <link rel="stylesheet" href="styles.css?v=20260512-titlebar-no-mark-icon-v2711">
+  <link rel="stylesheet" href="styles.css?v=20260512-nexorynd-brand-boot">
 </head>
 <body>
 
-<div id="flow-boot-splash" class="flow-boot-splash" role="status" aria-live="polite" aria-label="Загрузка Nexory">
+<div id="flow-boot-splash" class="flow-boot-splash" role="status" aria-live="polite" aria-label="Загрузка NexoryND">
   <div class="flow-boot-splash-inner">
+    <div class="flow-boot-logo" aria-hidden="true"></div>
     <div class="flow-boot-progress" aria-hidden="true">
       <div class="flow-boot-progress-track">
         <div class="flow-boot-progress-fill"></div>
@@ -33,7 +34,7 @@
 
 <!-- TITLEBAR -->
 <div class="titlebar">
-  <span class="titlebar-logo" id="titlebar-logo"><span class="titlebar-name">Nexory</span><span class="titlebar-ver" id="titlebar-version"></span></span>
+  <span class="titlebar-logo" id="titlebar-logo"><span class="titlebar-name">NexoryND</span><span class="titlebar-ver" id="titlebar-version"></span></span>
   <div class="titlebar-center" id="titlebar-track-info"></div>
   <div class="titlebar-btns">
     <button type="button" onclick="window.api.minimize()" title="Свернуть" aria-label="Свернуть"><svg class="ui-icon" data-lucide="minus" viewBox="0 0 24 24"></svg></button>
@@ -52,10 +53,10 @@
   <div class="auth-box glass">
     <div class="auth-header">
       <div class="auth-logo-wrap">
-        <span class="auth-logo-hex" aria-label="Nexory"></span>
+        <span class="auth-logo-hex" aria-label="NexoryND"></span>
         <div class="auth-logo-glow"></div>
       </div>
-      <h1>Nexory</h1>
+      <h1>NexoryND</h1>
       <p>Музыка вокруг тебя</p>
     </div>
     <div class="auth-tabs">
@@ -84,7 +85,7 @@
     <div class="sidebar-resize-gutter sidebar-resize-gutter--left" id="sidebar-resize-gutter-left" role="separator" aria-orientation="vertical" aria-label="Левый край: изменить ширину панели" title="Потяни для изменения ширины (левый край)"></div>
     <div class="sidebar-resize-gutter sidebar-resize-gutter--right" id="sidebar-resize-gutter" role="separator" aria-orientation="vertical" aria-label="Правый край: изменить ширину панели" title="Потяни для изменения ширины (правый край)"></div>
     <div class="sidebar-head-row">
-      <div class="sidebar-logo"><span>Nexory</span></div>
+      <div class="sidebar-logo"><span>NexoryND</span></div>
       <div
         class="sidebar-head-drag-hit"
         id="sidebar-head-drag-hit"
@@ -285,7 +286,7 @@
       <div class="search-source-row">
         <span style="font-size:11px;color:var(--muted);margin-right:2px">Источник:</span>
         <div class="source-mode-grid source-mode-grid--compact">
-          <button class="source-mode-card active" data-src="hybrid" onclick="switchSearchSource('hybrid')" title="Nexory classic">
+          <button class="source-mode-card active" data-src="hybrid" onclick="switchSearchSource('hybrid')" title="NexoryND classic">
             <span class="source-mode-icon">F</span>
             <span class="source-mode-label">classic</span>
           </button>
@@ -354,7 +355,7 @@
     </div>
 
     <div id="page-profile" class="page">
-      <div class="content-header"><h2>Профиль</h2><p class="content-sub">Твой профиль Nexory</p></div>
+      <div class="content-header"><h2>Профиль</h2><p class="content-sub">Твой профиль NexoryND</p></div>
       <div class="profile-shell profile-unified flow-profile-card">
         <div class="profile-hero flow-profile-hero">
           <div class="profile-banner-shell">
@@ -416,7 +417,7 @@
           </button>
           <button type="button" class="settings-cat" data-settings-cat="playback" onclick="switchSettingsCategory('playback')">
             <span class="settings-cat-title">Плеер</span>
-            <span class="settings-cat-hint">Режимы и пресеты Nexory</span>
+            <span class="settings-cat-hint">Режимы и пресеты NexoryND</span>
           </button>
           <button type="button" class="settings-cat" data-settings-cat="optimization" onclick="switchSettingsCategory('optimization')">
             <span class="settings-cat-title">Оптимизация</span>
@@ -449,7 +450,7 @@
                   <span class="vsb-theme-icon">F</span>
                   <span class="vsb-theme-label">clasic</span>
                 </button>
-                <button class="vsb vsb-theme" id="vm-floated" onclick="setVisualMode('floated')" title="Nexory Custom">
+                <button class="vsb vsb-theme" id="vm-floated" onclick="setVisualMode('floated')" title="NexoryND Custom">
                   <span class="vsb-theme-icon">F⚙</span>
                   <span class="vsb-theme-label">nexory custom</span>
                 </button>
@@ -813,11 +814,11 @@
           </div>
 
           <div class="vs-section glass-card">
-            <div class="vs-section-title">Конфиг Nexory</div>
+            <div class="vs-section-title">Конфиг NexoryND</div>
             <div class="vs-row" style="align-items:flex-start;flex-direction:column;gap:8px">
               <label class="vs-label">Экспорт/импорт настроек для друзей</label>
               <div class="vs-btn-group">
-                <button class="vsb" onclick="exportFlowConfig()">Экспортировать preset Nexory</button>
+                <button class="vsb" onclick="exportFlowConfig()">Экспортировать preset NexoryND</button>
                 <input type="file" id="flow-config-input" accept=".flowpreset,.dotifypreset,.json,application/json" onchange="importFlowConfigFile(this)" style="display:none">
                 <button class="vsb" onclick="pickFlowConfigFile()">Импортировать preset</button>
               </div>
@@ -868,7 +869,7 @@
               <span class="opt-setting-icon" aria-hidden="true"><svg class="ui-icon lg" data-lucide="headphones" viewBox="0 0 24 24"></svg></span>
               <div class="opt-setting-text">
                 <div class="opt-setting-title">Игровой режим</div>
-                <p class="opt-setting-desc">Пока окно не на экране (свернуто или ты в другой программе) — «sleep»: без текста и тяжёлой отрисовки, только звук. Вернёшься в Nexory — всё как обычно.</p>
+                <p class="opt-setting-desc">Пока окно не на экране (свернуто или ты в другой программе) — «sleep»: без текста и тяжёлой отрисовки, только звук. Вернёшься в NexoryND — всё как обычно.</p>
               </div>
               <div class="vs-toggle" id="toggle-opt-game-sleep" onclick="toggleOptimizationSetting('optGameSleepMode')"><div class="vs-toggle-thumb"></div></div>
             </div>
@@ -879,17 +880,17 @@
       <div id="settings-panel-accounts" class="settings-category-panel">
         <div class="glass-card" style="padding:18px;border-radius:18px;margin-top:8px;max-width:760px;">
           <div class="vs-section-title" style="margin-bottom:8px;">Источники</div>
-          <div style="color:var(--muted);font-size:14px;line-height:1.55;margin-bottom:14px;">Откуда брать результаты поиска: классический Nexory (сервер), Яндекс Музыка или ВКонтакте (нужен токен с аудио).</div>
+          <div style="color:var(--muted);font-size:14px;line-height:1.55;margin-bottom:14px;">Откуда брать результаты поиска: классический NexoryND (сервер), Яндекс Музыка или ВКонтакте (нужен токен с аудио).</div>
           <div class="auth-token-guide-row">
             <button type="button" class="btn-small auth-token-guide-btn auth-token-guide-btn--half" onclick="openFlowYandexTelegraphGuide()" title="Открыть в браузере">Яндекс · Telegraph</button>
-            <button type="button" class="btn-small auth-token-guide-btn auth-token-guide-btn--half" onclick="openFlowVkTelegraphGuide()" title="Telegraph: как подключить ВКонтакте в Nexory">VK · Telegraph</button>
+            <button type="button" class="btn-small auth-token-guide-btn auth-token-guide-btn--half" onclick="openFlowVkTelegraphGuide()" title="Telegraph: как подключить ВКонтакте в NexoryND">VK · Telegraph</button>
           </div>
 
           <div class="auth-source-stack" id="auth-source-stack">
             <div class="auth-source-row" data-auth-row="hybrid">
-              <button type="button" class="auth-source-tile auth-source-tile--flow source-mode-card" data-src="hybrid" onclick="onAuthSourceTileClick(event, 'hybrid')" title="Классический Nexory">
-                <span class="auth-source-tile-img-wrap"><img class="auth-source-tile-img" src="assets/auth/flow.png" alt="Nexory" /></span>
-                <span class="source-mode-label">Nexory</span>
+              <button type="button" class="auth-source-tile auth-source-tile--flow source-mode-card" data-src="hybrid" onclick="onAuthSourceTileClick(event, 'hybrid')" title="Классический NexoryND">
+                <span class="auth-source-tile-img-wrap"><img class="auth-source-tile-img" src="assets/auth/flow.png" alt="NexoryND" /></span>
+                <span class="source-mode-label">NexoryND</span>
               </button>
               <div class="auth-source-drawer" data-auth-drawer="hybrid" aria-hidden="true">
                 <div class="auth-source-drawer-inner">
@@ -941,7 +942,7 @@
                   </div>
                   <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 0;">
                     <button class="btn-small" type="button" onclick="checkVkTokenFromCompact()">Проверить токен</button>
-                    <button class="btn-small" type="button" onclick="openFlowVkTelegraphGuide()" title="Telegraph: как подключить ВКонтакте в Nexory">VK · Telegraph</button>
+                    <button class="btn-small" type="button" onclick="openFlowVkTelegraphGuide()" title="Telegraph: как подключить ВКонтакте в NexoryND">VK · Telegraph</button>
                   </div>
                   <div id="vk-msg-compact" class="token-msg" style="display:block;margin-top:8px;" role="status" aria-live="polite"></div>
                 </div>
@@ -1038,7 +1039,7 @@
               <button class="btn-small" id="vk-get-btn" onclick="getVkToken()">Войти в VK и получить токен</button>
               <button class="btn-small" id="vk-browser-auth-btn" onclick="startVkBrowserAuth()">Открыть вход VK в браузере</button>
               <button class="btn-small" onclick="openVkHostTokenPage()">Открыть vkhost.github.io</button>
-              <button class="btn-small" type="button" onclick="openFlowVkTelegraphGuide()" title="Telegraph: как подключить ВКонтакте в Nexory">VK · Telegraph</button>
+              <button class="btn-small" type="button" onclick="openFlowVkTelegraphGuide()" title="Telegraph: как подключить ВКонтакте в NexoryND">VK · Telegraph</button>
             </div>
 
             <div style="font-size:12px;color:var(--muted);margin:12px 0 6px;">Токен VK (можно вставить вручную)</div>
@@ -1083,7 +1084,7 @@
               <strong>Актуально: OAuth Device Flow</strong>
               <span>1. Установи Python-библиотеку: <code>pip install -U yandex-music</code></span>
               <span>2. Запусти короткий скрипт из документации, открой ссылку и введи код.</span>
-              <span>3. Скопируй <code>access_token</code> сюда. Nexory берёт из Яндекса только названия и артистов, потом ищет треки обычным поиском.</span>
+              <span>3. Скопируй <code>access_token</code> сюда. NexoryND берёт из Яндекса только названия и артистов, потом ищет треки обычным поиском.</span>
               <span>Запасной вариант: браузерная OAuth-ссылка ниже. После входа скопируй <code>access_token</code> из URL.</span>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0;">
@@ -1120,9 +1121,9 @@
           </div>
         </div>
         <div class="glass-card" style="padding:18px;border-radius:18px;margin-top:12px;max-width:760px;">
-          <div class="vs-section-title" style="margin-bottom:8px;">Сервер Nexory</div>
+          <div class="vs-section-title" style="margin-bottom:8px;">Сервер NexoryND</div>
           <input id="proxy-base-url" class="token-field flow-input" placeholder="http://127.0.0.1:порт (опционально)" />
-          <div class="integration-hint">Используется для VK-импорта, статуса сервера и серверных функций Nexory. По умолчанию: http://85.239.34.229:8787</div>
+          <div class="integration-hint">Используется для VK-импорта, статуса сервера и серверных функций NexoryND. По умолчанию: http://85.239.34.229:8787</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
             <button class="btn-small" onclick="saveProxySettings()">Сохранить сервер</button>
             <button class="btn-small" onclick="checkFlowServerStatus()">Проверить сервер</button>
@@ -1133,9 +1134,9 @@
         </div>
         <div class="glass-card" style="padding:18px;border-radius:18px;margin-top:12px;max-width:760px;">
           <div class="vs-section-title" style="margin-bottom:8px;">Социальный слой (свой сервер вместо Supabase)</div>
-          <div class="integration-hint" style="margin-bottom:8px">В этой сборке social backend уже зафиксирован на сервер Nexory (stable) и работает без ручного ввода.</div>
-          <input id="flow-social-api-base" class="token-field flow-input" placeholder="Nexory Social API Base (fixed)" />
-          <input id="flow-social-api-secret" class="token-field flow-input" type="password" placeholder="Nexory Social Secret (fixed)" style="margin-top:8px" />
+          <div class="integration-hint" style="margin-bottom:8px">В этой сборке social backend уже зафиксирован на сервер NexoryND (stable) и работает без ручного ввода.</div>
+          <input id="flow-social-api-base" class="token-field flow-input" placeholder="NexoryND Social API Base (fixed)" />
+          <input id="flow-social-api-secret" class="token-field flow-input" type="password" placeholder="NexoryND Social Secret (fixed)" style="margin-top:8px" />
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
             <button class="btn-small" onclick="saveFlowSocialBackendSettings()">Сохранить социальный сервер</button>
             <button class="btn-small" onclick="checkFlowSocialBackendStatus()">Проверить API</button>
@@ -1144,7 +1145,7 @@
         </div>
         <div class="glass-card" style="padding:18px;border-radius:18px;margin-top:12px;max-width:760px;">
           <div class="vs-section-title" style="margin-bottom:8px;">Обновления приложения (stable)</div>
-          <div class="integration-hint" style="margin-bottom:8px">Nexory проверяет stable-канал и может скачать обновление без ручной раздачи .exe.</div>
+          <div class="integration-hint" style="margin-bottom:8px">NexoryND проверяет stable-канал и может скачать обновление без ручной раздачи .exe.</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
             <button class="btn-small" onclick="checkAppUpdatesNow()">Проверить обновления</button>
             <button class="btn-small" id="app-update-download-btn" onclick="downloadAppUpdateNow()">Скачать</button>
@@ -1457,7 +1458,7 @@
   <div class="flow-modal-backdrop" onclick="closeTextPlaylistImportModal()"></div>
   <div class="flow-modal-card glass-card">
     <h3>Импорт треков текстом</h3>
-    <p style="font-size:12px;opacity:.8;margin-top:6px">Вставь строки вида artist - title. Можно вставить JSON-ответ VK reload_audios, Nexory сам достанет названия.</p>
+    <p style="font-size:12px;opacity:.8;margin-top:6px">Вставь строки вида artist - title. Можно вставить JSON-ответ VK reload_audios, NexoryND сам достанет названия.</p>
     <textarea id="text-import-input" class="token-field flow-input flow-textarea" placeholder="Элджей, Feduk - Розовое вино&#10;SEREBRO - Между нами любовь&#10;ssshhhiiittt! - Танцы" style="margin-top:10px;min-height:180px;resize:vertical;width:100%"></textarea>
     <input id="text-import-name" class="token-field flow-input" placeholder="Название плейлиста (необязательно)" style="margin-top:10px" />
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
@@ -1514,7 +1515,7 @@
   <script src="src/modules/wave-engine.js"></script>
   <div id="flow-game-sleep-overlay" class="flow-game-sleep-overlay" aria-hidden="true">
     <div class="flow-game-sleep-title">Sleep mode</div>
-    <div class="flow-game-sleep-sub">Только воспроизведение · верни Nexory на экран</div>
+    <div class="flow-game-sleep-sub">Только воспроизведение · верни NexoryND на экран</div>
   </div>
   <script src="renderer.js?v=20260503-room-guest-visual"></script>
 </body>

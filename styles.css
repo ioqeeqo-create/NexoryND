@@ -339,25 +339,23 @@ body.audio-buffering .spin-icon {
 .titlebar-logo {
   display: inline-flex;
   align-items: baseline;
-  gap: 0;
+  gap: 0.35em;
   font-family: var(--font-title), system-ui, sans-serif;
-  font-weight: 650;
-  font-size: 15px;
-  line-height: 1.1;
-  color: color-mix(in srgb, var(--text, #f4f4f5) 88%, var(--accent2, #c4b5fd) 12%);
-  letter-spacing: 0.04em;
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 1.2;
+  color: var(--muted);
+  letter-spacing: 0.03em;
   -webkit-font-smoothing: antialiased;
   text-rendering: geometricPrecision;
   isolation: isolate;
 }
-.titlebar-name {
-  font-weight: 650;
-}
+.titlebar-name,
 .titlebar-ver {
   font-weight: 500;
-  font-size: 12.5px;
-  color: var(--muted);
-  letter-spacing: 0.02em;
+  font-size: inherit;
+  color: inherit;
+  letter-spacing: inherit;
 }
 .titlebar-center {
   font-size:12px; color:var(--muted); flex:1; text-align:center;
@@ -424,8 +422,17 @@ body.audio-buffering .spin-icon {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 18px;
+  gap: 22px;
   text-align: center;
+}
+.flow-boot-logo {
+  width: 112px;
+  height: 112px;
+  flex-shrink: 0;
+  border-radius: 20px;
+  box-sizing: border-box;
+  background: url("assets/nexory-mark.png") center / contain no-repeat;
+  filter: drop-shadow(0 12px 32px rgba(0, 0, 0, 0.5));
 }
 .flow-boot-progress {
   width: min(320px, 72vw);
@@ -7104,15 +7111,11 @@ body.visual-yandex .titlebar {
   border-bottom-color: rgba(255, 255, 255, 0.06);
 }
 body.visual-yandex .titlebar-logo {
-  color: rgba(255, 250, 225, 0.96);
-  font-weight: 600;
-  letter-spacing: 0.035em;
-  font-size: 14px;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
-}
-body.visual-yandex .titlebar-ver {
-  color: rgba(245, 245, 242, 0.48);
+  color: rgba(245, 245, 242, 0.52);
+  font-weight: 500;
+  letter-spacing: 0.03em;
   font-size: 12px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
 }
 body.visual-yandex .bg-layer,
 body.visual-yandex .bg-cover-blur,

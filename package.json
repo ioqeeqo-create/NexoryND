@@ -1,13 +1,13 @@
 {
-    "name": "flow",
-    "version": "2.7.11",
-    "description": "Nexory — десктопный музыкальный плеер: поиск, плейлисты, SoundCloud, комнаты и персональная «Моя волна».",
+    "name": "nexorynd",
+    "version": "2.7.12",
+    "description": "NexoryND — десктопный музыкальный плеер: поиск, плейлисты, SoundCloud, комнаты и персональная «Моя волна».",
     "author": "ioqeeqo-create",
     "license": "MIT",
-    "homepage": "https://github.com/ioqeeqo-create/Nexory#readme",
+    "homepage": "https://github.com/ioqeeqo-create/NexoryND#readme",
     "repository": {
         "type": "git",
-        "url": "https://github.com/ioqeeqo-create/Nexory.git"
+        "url": "https://github.com/ioqeeqo-create/NexoryND.git"
     },
     "main": "main.js",
     "scripts": {
@@ -34,8 +34,8 @@
         "sharp": "^0.34.5"
     },
     "build": {
-        "appId": "flow.player",
-        "productName": "Nexory",
+        "appId": "io.nexorynd.app",
+        "productName": "NexoryND",
         "asarUnpack": [
             "tools/**"
         ],
@@ -46,7 +46,7 @@
             "!FlowPleerLoww/**"
         ],
         "win": {
-            "executableName": "Nexory",
+            "executableName": "NexoryND",
             "target": [
                 {
                     "target": "nsis",
@@ -71,8 +71,8 @@
             "allowToChangeInstallationDirectory": true,
             "createDesktopShortcut": true,
             "createStartMenuShortcut": true,
-            "shortcutName": "Nexory",
-            "uninstallDisplayName": "Nexory",
+            "shortcutName": "NexoryND",
+            "uninstallDisplayName": "NexoryND",
             "installerIcon": "assets/icon.ico",
             "uninstallerIcon": "assets/icon.ico",
             "include": "build/installer.nsh",

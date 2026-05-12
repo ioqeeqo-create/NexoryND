@@ -1,6 +1,6 @@
 /**
- * Импорт мастер-лого Nexory: обрезка снизу + квадрат 1024 на прозрачном фоне (иконка без белых полос).
- * nexory-mark-ui.png — глиф как в мастере (после снятия светлой подложки), без «заливки в белый прямоугольник».
+ * Импорт мастер-лого NexoryND: квадрат 1024 на прозрачном фоне + UI-mark.
+ * На тёмном фоне мастера не применяем stripLightMatte (иначе съедается белый знак).
  * Использование: node scripts/prepare-nexory-logo.mjs [путь-к-исходнику.png]
  */
 import fs from 'fs'
@@ -23,8 +23,8 @@ const DEFAULT_SRC = path.join(
 const SQ = 1024
 /** Иконка приложения: без белых полос — глиф на прозрачном квадрате (ico кладётся на тёмный BG в build-windows-icon). */
 const TRANSPARENT = { r: 0, g: 0, b: 0, alpha: 0 }
-/** Доля высоты, срезаемая снизу (пустое поле под знаком). */
-const BOTTOM_CROP_RATIO = 0.11
+/** Доля высоты, срезаемая снизу (0 = не трогать квадратный арт). */
+const BOTTOM_CROP_RATIO = 0
 
 /** Убирает почти белые/светло-серые «плашки» (низкая насыщенность), оставляя сам знак. */
 async function stripLightMatte(pngBuf) {
@@ -64,6 +64,37 @@ async function hasVisibleContent(pngBuf) {
   return ch[3].mean > 1.2
 }
 
+/** Средняя яркость по углам (если тёмная — мастер «белое на чёрном», без dematte). */
+async function avgCornerLuminance(pngBuf, edge = 32) {
+  const m = await sharp(pngBuf).metadata()
+  const w = m.width || 1
+  const h = m.height || 1
+  const s = Math.min(edge, Math.floor(w / 4), Math.floor(h / 4), 48)
+  if (s < 2) return 200
+  const regions = [
+    { left: 0, top: 0, width: s, height: s },
+    { left: w - s, top: 0, width: s, height: s },
+    { left: 0, top: h - s, width: s, height: s },
+    { left: w - s, top: h - s, width: s, height: s },
+  ]
+  let sum = 0
+  let n = 0
+  for (const r of regions) {
+    const { data, info } = await sharp(pngBuf)
+      .extract(r)
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true })
+    if (info.channels !== 4) continue
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] < 20) continue
+      sum += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]
+      n++
+    }
+  }
+  return n ? sum / n : 200
+}
+
 const LOCAL_MASTER = path.join(root, 'assets', '_nexory-master-in.png')
 
 function resolveSrc() {
@@ -92,11 +123,14 @@ async function main() {
 
   const croppedPng = await sharp(cropped).png().toBuffer()
   let forIcon = croppedPng
-  try {
-    const dem = await stripLightMatte(croppedPng)
-    if (await hasVisibleContent(dem)) forIcon = dem
-  } catch (_) {
-    /* оставляем cropped */
+  const cornerLum = await avgCornerLuminance(croppedPng)
+  if (cornerLum > 88) {
+    try {
+      const dem = await stripLightMatte(croppedPng)
+      if (await hasVisibleContent(dem)) forIcon = dem
+    } catch (_) {
+      /* оставляем cropped */
+    }
   }
 
   const squareTrans = await sharp({
@@ -139,7 +173,13 @@ async function main() {
   }
   fs.writeFileSync(outUi, uiBuf)
 
-  console.log('OK', { src, was: `${W}×${H}`, cropBottom, out: `${SQ}×${SQ} transparent + ui dematte/trim` })
+  console.log('OK', {
+    src,
+    was: `${W}×${H}`,
+    cropBottom,
+    cornerLum: Math.round(cornerLum),
+    out: `${SQ}×${SQ} transparent + ui trim`,
+  })
   console.log('Wrote', outIcon, outMark, outAuth, outUi)
 }
 
