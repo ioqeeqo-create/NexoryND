@@ -1,6 +1,6 @@
-# Flow
+# Nexory
 
-Flow is an Electron desktop music player with social rooms, shared playback, and customizable UI.
+Nexory is an Electron desktop music player with social rooms, shared playback, and customizable UI.
 
 ## Current release
 
@@ -21,7 +21,7 @@ Flow is an Electron desktop music player with social rooms, shared playback, and
 - Server-side friend presence (online/offline) from social backend
 - Explicit host transfer + server election fallback
 - Authoritative room queue synchronization and host-only transport control
-- Invite flow and room member sync through cloud relay
+- Invite Nexory and room member sync through cloud relay
 
 ## Local development
 
