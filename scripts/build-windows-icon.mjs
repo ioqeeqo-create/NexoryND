@@ -1,6 +1,7 @@
 /**
  * Собирает assets/icon.ico из assets/icon-source.png для exe/installer.
- * Для 16×32 px в панели задач: поля вокруг глифа + отдельные кадры 16/32/48/256.
+ * Перед ресайзом — trim по альфе, иначе большой прозрачный поле вокруг глифа
+ * даёт крошечный знак в маленьких тайлах Windows / панели задач.
  */
 import fs from 'fs'
 import os from 'os'
@@ -55,11 +56,21 @@ async function maxOpaqueLuminance(pngBuf) {
   return mx
 }
 
-async function renderIconPng(size) {
-  const pad = Math.max(1, Math.round(size * 0.085))
+/** Убрать пустые поля по прозрачности — один раз на весь ICO. */
+async function trimAlphaPng(pngBuf) {
+  try {
+    return await sharp(pngBuf).ensureAlpha().trim({ threshold: 12 }).png().toBuffer()
+  } catch {
+    return pngBuf
+  }
+}
+
+async function renderIconPng(size, glyphSrcBuf) {
+  // Чуть плотнее к краю кадра, чем раньше — в Start tile знак крупнее.
+  const pad = Math.max(1, Math.round(size * 0.045))
   const inner = Math.max(4, size - pad * 2)
 
-  let logoBuf = await sharp(src)
+  let logoBuf = await sharp(glyphSrcBuf)
     .ensureAlpha()
     .resize(inner, inner, {
       fit: 'inside',
@@ -89,10 +100,13 @@ async function renderIconPng(size) {
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nexory-ico-'))
 try {
+  const srcPng = await sharp(src).ensureAlpha().png().toBuffer()
+  const glyphSrcBuf = await trimAlphaPng(srcPng)
+
   const order = [16, 32, 48, 256]
   const paths = []
   for (const s of order) {
-    const buf = await renderIconPng(s)
+    const buf = await renderIconPng(s, glyphSrcBuf)
     const p = path.join(tmpDir, `icon-${s}.png`)
     fs.writeFileSync(p, buf)
     paths.push(p)
