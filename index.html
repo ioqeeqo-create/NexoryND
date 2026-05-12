@@ -821,7 +821,7 @@
                 <input type="file" id="flow-config-input" accept=".flowpreset,.dotifypreset,.json,application/json" onchange="importFlowConfigFile(this)" style="display:none">
                 <button class="vsb" onclick="pickFlowConfigFile()">Импортировать preset</button>
               </div>
-              <div class="token-msg" id="flow-config-status" style="display:block">Экспорт сохраняет полный .flowpreset. Импорт подмешивает только фон, GIF-обложки, размытие/яркость фона и кастомные обложки треков — сессия и остальные настройки не трогаются.</div>
+              <div class="token-msg" id="flow-config-status" style="display:block">Экспорт — полный .flowpreset. Импорт подмешивает только внешний вид (фон, обложки, визуализатор, blur/яркость/стекло). Поддерживаются Dotify: старые <code>data.gifs</code> и новые <code>data.gifSettings</code> + <code>data.uiSettings</code>.</div>
             </div>
           </div>
 

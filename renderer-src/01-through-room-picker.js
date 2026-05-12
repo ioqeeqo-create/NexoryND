@@ -3674,7 +3674,7 @@ function pickFlowConfigFile() {
 
 /**
  * Импорт .flowpreset / dotify: только внешний вид — подмешиваем в текущий `flow_visual` поля
- * blur, bright, bgType, customBg, gifMode и при наличии `flow_track_covers`.
+ * blur, bright, bgType, customBg, gifMode, glass, panelBlur, homeWidget и при наличии `flow_track_covers`.
  * Остальные ключи localStorage не меняем (сессия, источники, тема UI и т.д.).
  */
 function applyPresetAppearanceOnly(storage) {
@@ -3702,6 +3702,14 @@ function applyPresetAppearanceOnly(storage) {
     const n = Number(incoming.bright)
     if (Number.isFinite(n)) patch.bright = Math.max(10, Math.min(100, n))
   }
+  if (Object.prototype.hasOwnProperty.call(incoming, 'glass')) {
+    const n = Number(incoming.glass)
+    if (Number.isFinite(n)) patch.glass = Math.max(0, Math.min(40, n))
+  }
+  if (Object.prototype.hasOwnProperty.call(incoming, 'panelBlur')) {
+    const n = Number(incoming.panelBlur)
+    if (Number.isFinite(n)) patch.panelBlur = Math.max(0, Math.min(60, n))
+  }
   if (Object.prototype.hasOwnProperty.call(incoming, 'bgType')) {
     const t = String(incoming.bgType || '')
     if (t === 'gradient' || t === 'cover' || t === 'custom') patch.bgType = t
@@ -3709,6 +3717,7 @@ function applyPresetAppearanceOnly(storage) {
   if (Object.prototype.hasOwnProperty.call(incoming, 'customBg')) {
     patch.customBg =
       incoming.customBg == null || incoming.customBg === '' ? null : String(incoming.customBg)
+    if (patch.customBg && !patch.bgType) patch.bgType = 'custom'
   }
   if (Object.prototype.hasOwnProperty.call(incoming, 'gifMode') && incoming.gifMode && typeof incoming.gifMode === 'object') {
     const g = incoming.gifMode
@@ -3718,6 +3727,22 @@ function applyPresetAppearanceOnly(storage) {
       track: typeof g.track === 'boolean' ? g.track : base.track,
       playlist: typeof g.playlist === 'boolean' ? g.playlist : base.playlist,
     })
+  }
+  if (Object.prototype.hasOwnProperty.call(incoming, 'homeWidget') && incoming.homeWidget && typeof incoming.homeWidget === 'object') {
+    const hw = incoming.homeWidget
+    const base = Object.assign(
+      { enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 },
+      cur.homeWidget || {},
+    )
+    patch.homeWidget = Object.assign({}, base)
+    if (typeof hw.enabled === 'boolean') patch.homeWidget.enabled = hw.enabled
+    const mode = String(hw.mode || '')
+    if (mode === 'image' || mode === 'bars' || mode === 'wave') patch.homeWidget.mode = mode
+    if (hw.image != null && String(hw.image).trim() !== '') patch.homeWidget.image = String(hw.image)
+    const inten = Number(hw.intensity)
+    if (Number.isFinite(inten)) patch.homeWidget.intensity = Math.max(60, Math.min(180, inten))
+    const sm = Number(hw.smoothing)
+    if (Number.isFinite(sm)) patch.homeWidget.smoothing = Math.max(20, Math.min(95, sm))
   }
 
   const hasCoversKey =
@@ -3825,38 +3850,98 @@ function normalizeImportedFlowPreset(parsed) {
 
 function convertDotifyPresetToFlowStorage(preset) {
   const data = preset?.data || {}
-  const ui = data.ui || {}
+  const ui = data.uiSettings || data.ui || {}
   const gifs = data.gifs || {}
   const visual = Object.assign({}, getVisual())
-  if (gifs.background) {
+
+  /** Dotify ≥ новый формат: gifSettings — объект с ключами "0","1",… или массив; у каждого usage: background | cover | visualizer | … */
+  const gifList = []
+  const rawGifSettings = data.gifSettings
+  if (rawGifSettings && typeof rawGifSettings === 'object') {
+    if (Array.isArray(rawGifSettings)) {
+      for (let i = 0; i < rawGifSettings.length; i++) if (rawGifSettings[i]) gifList.push(rawGifSettings[i])
+    } else {
+      Object.keys(rawGifSettings)
+        .filter((k) => /^\d+$/.test(k))
+        .sort((a, b) => Number(a) - Number(b))
+        .forEach((k) => {
+          const it = rawGifSettings[k]
+          if (it && typeof it === 'object') gifList.push(it)
+        })
+    }
+  }
+
+  let coverUrl = ''
+  for (let i = 0; i < gifList.length; i++) {
+    const item = gifList[i]
+    const usage = String(item.usage || '').toLowerCase()
+    const url = item.url != null ? String(item.url).trim() : ''
+    if (!url) continue
+    if (usage === 'background') {
+      visual.bgType = 'custom'
+      visual.customBg = url
+    } else if (usage === 'cover') {
+      coverUrl = url
+    } else if (usage === 'visualizer') {
+      visual.homeWidget = Object.assign(
+        { enabled: true, mode: 'image', image: null, intensity: 100, smoothing: 72 },
+        visual.homeWidget || {},
+        { enabled: true, mode: 'image', image: url },
+      )
+    }
+  }
+
+  if (!visual.customBg && gifs.background) {
     visual.bgType = 'custom'
     visual.customBg = String(gifs.background)
   }
-  if (gifs.visualizer) {
-    visual.homeWidget = Object.assign({ enabled: true, mode: 'image', image: null }, visual.homeWidget || {}, {
-      enabled: true,
-      mode: 'image',
-      image: String(gifs.visualizer),
-    })
-  } else if (ui.visualization?.style === 'wave') {
-    visual.homeWidget = Object.assign({ enabled: true, mode: 'bars', image: null }, visual.homeWidget || {}, {
-      enabled: true,
-      mode: 'wave',
-    })
+  if (!(visual.homeWidget && visual.homeWidget.image) && gifs.visualizer) {
+    visual.homeWidget = Object.assign(
+      { enabled: true, mode: 'image', image: null, intensity: 100, smoothing: 72 },
+      visual.homeWidget || {},
+      { enabled: true, mode: 'image', image: String(gifs.visualizer) },
+    )
+  } else if (!gifList.length && ui.visualization?.style === 'wave') {
+    visual.homeWidget = Object.assign(
+      { enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 },
+      visual.homeWidget || {},
+      { enabled: true, mode: 'wave' },
+    )
   }
+  if (!coverUrl && gifs.cover) coverUrl = String(gifs.cover)
+
   const transparency = ui.transparency || {}
   if (transparency.glass && typeof transparency.glass === 'object') {
-    const blur = Number(transparency.glass.blur)
+    const gBlur = Number(transparency.glass.blur)
     const strength = Number(transparency.glass.strength)
-    if (Number.isFinite(blur)) visual.panelBlur = Math.max(0, Math.min(40, blur))
-    if (Number.isFinite(strength)) visual.glass = Math.max(0, Math.min(40, strength))
+    if (Number.isFinite(gBlur)) {
+      visual.panelBlur = Math.max(0, Math.min(60, gBlur))
+      visual.blur = Math.max(0, Math.min(80, Math.round(gBlur * 6)))
+    }
+    if (Number.isFinite(strength)) {
+      visual.glass =
+        strength > 0 && strength <= 1
+          ? Math.max(0, Math.min(40, Math.round(strength * 40)))
+          : Math.max(0, Math.min(40, strength))
+    }
   }
-  const scale = Array.isArray(ui.scale?.default) ? Number(ui.scale.default[0]) : Number(ui.scale?.default)
+  const op = Number(transparency.opacity)
+  if (Number.isFinite(op)) {
+    visual.bright = Math.max(10, Math.min(100, Math.round(25 + (op / 100) * 70)))
+  }
+
+  const scaleRaw = ui.scale
+  let scale = NaN
+  if (typeof scaleRaw === 'number') scale = scaleRaw
+  else if (Array.isArray(scaleRaw?.default)) scale = Number(scaleRaw.default[0])
+  else scale = Number(scaleRaw?.default)
   if (Number.isFinite(scale)) visual.uiScale = Math.max(80, Math.min(130, scale))
-  if (ui.tabs?.position === 'top') visual.sidebarPosition = 'top'
+
+  if (ui.tabs === 'top' || ui.tabs?.position === 'top') visual.sidebarPosition = 'top'
   if (ui.customfont?.family) visual.customFontName = String(ui.customfont.family)
+
   const storage = { flow_visual: JSON.stringify(visual) }
-  if (gifs.cover) storage.flow_track_covers = JSON.stringify({ __global__: String(gifs.cover) })
+  if (coverUrl) storage.flow_track_covers = JSON.stringify({ __global__: coverUrl })
   return storage
 }
 
