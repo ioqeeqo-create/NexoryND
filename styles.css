@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════
-   FLOW — LIQUID GLASS UI
+   Nexory — LIQUID GLASS UI
 ══════════════════════════════════════════ */
 
 :root {
@@ -47,7 +47,7 @@
   --pm-lyrics-offset: -60px;
   --lyrics-size: 16px;
   --lyrics-blur: 4px;
-  /* Flow icon scale — единая сетка для nav / плеер / списки */
+  /* Nexory icon scale — единая сетка для nav / плеер / списки */
   --flow-icon-xs: 14px;
   --flow-icon-sm: 16px;
   --flow-icon-md: 20px;
@@ -73,7 +73,7 @@
 
 * { margin:0; padding:0; box-sizing:border-box; }
 
-/* ═══ Угловые ручки масштаба — единый «liquid» треугольник (как референс Flow) ═══ */
+/* ═══ Угловые ручки масштаба — единый «liquid» треугольник ═══ */
 .flow-resize-glyph {
   display: block;
   width: var(--flow-resize-corner);
@@ -681,7 +681,7 @@ body.visual-floated:not(.layout-top-nav) .sidebar-bottom .sidebar-user {
   margin-bottom: 0;
 }
 
-/* Заголовок Flow чуть крупнее и ниже от верха; меню компактнее к шапке; профиль выше нижней кромки. */
+/* Заголовок Nexory чуть крупнее и ниже от верха; меню компактнее к шапке; профиль выше нижней кромки. */
 body.visual-floated:not(.layout-top-nav):not(.visual-minimal) .sidebar-logo {
   font-size: 18px;
   letter-spacing: 0.052em;
@@ -1376,7 +1376,7 @@ body.visual-minimal .sidebar-layout-constructor {
     0 12px 0 color-mix(in srgb, var(--accent2) 12%, transparent);
   opacity: 0.85;
 }
-/* Полоса «Панель» убрана: перетаскивание в невидимой зоне справа от Flow (.sidebar-head-drag-hit). */
+/* Полоса «Панель» убрана: перетаскивание в невидимой зоне справа от логотипа (.sidebar-head-drag-hit). */
 body.visual-floated.flow-edit-enabled:not(.layout-top-nav) .sidebar-edit-drag-strip {
   display: none !important;
   flex: none !important;
@@ -5465,7 +5465,7 @@ body.flow-heavy-playlist #playlist-tracks .track-card:hover {
   gap: 16px;
   max-width: 1080px;
 }
-/* Как боковая колонка Flow: тот же стекло и ритм, что у .sidebar */
+/* Как боковая колонка сайдбара: тот же стекло и ритм, что у .sidebar */
 .settings-category-rail {
   flex: 0 0 min(228px, 32vw);
   display: flex;
@@ -7095,7 +7095,7 @@ body[data-active-page='profile'] .content::-webkit-scrollbar-thumb {
   border: 2px solid rgba(8, 10, 18, 0.35);
 }
 
-/* Яндекс-like UI preset: Flow logic, alternate shell. */
+/* Яндекс-like UI preset: та же логика, альтернативная оболочка. */
 body.visual-yandex {
   --accent: #f5f500;
   --accent2: #fbff28;

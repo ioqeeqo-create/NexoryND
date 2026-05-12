@@ -6,7 +6,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
   <!-- bump ?v= when profile/CSS/JS layout changes so Electron reloads assets -->
-  <link rel="stylesheet" href="styles.css?v=20260512-auth-mark-413-profile">
+  <link rel="stylesheet" href="styles.css?v=20260512-nexory-logo-branding">
 </head>
 <body>
 
@@ -889,7 +889,7 @@
           <div class="auth-source-stack" id="auth-source-stack">
             <div class="auth-source-row" data-auth-row="hybrid">
               <button type="button" class="auth-source-tile auth-source-tile--flow source-mode-card" data-src="hybrid" onclick="onAuthSourceTileClick(event, 'hybrid')" title="Классический Nexory">
-                <span class="auth-source-tile-img-wrap"><img class="auth-source-tile-img" src="assets/auth/flow.png" alt="Nexory" /></span>
+                <span class="auth-source-tile-img-wrap"><img class="auth-source-tile-img" src="assets/auth/nexory.png" alt="Nexory" /></span>
                 <span class="source-mode-label">Nexory</span>
               </button>
               <div class="auth-source-drawer" data-auth-drawer="hybrid" aria-hidden="true">
@@ -1060,7 +1060,7 @@
             <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);">
               <div style="font-size:12px;line-height:1.4;color:rgba(255,255,255,0.88);">
                 <div style="font-weight:600;margin-bottom:2px;">Обход через Chrome (Selenium)</div>
-                <div style="color:var(--muted);">Только если VK режет audio.*: отдельное окно Chrome, вход в VK, профиль в %LOCALAPPDATA%\Flow\vk_chrome_profile (имя папки историческое). По умолчанию выключено — поиск и импорт не запускают браузер сами.</div>
+                <div style="color:var(--muted);">Только если VK режет audio.*: отдельное окно Chrome, вход в VK, профиль в %LOCALAPPDATA%\Nexory\vk_chrome_profile. Если раньше использовался каталог Flow, переименуй его в Nexory. По умолчанию выключено — поиск и импорт не запускают браузер сами.</div>
               </div>
               <div class="vs-toggle" id="toggle-vk-selenium-bridge" onclick="toggleVkSeleniumBridgeSetting()" title="Разрешить обход через Chrome"><div class="vs-toggle-thumb"></div></div>
             </div>

@@ -39,6 +39,22 @@ async function meanOpaqueLuminance(pngBuf) {
   return n ? sum / n : 200
 }
 
+/** Макс. яркость по непрозрачным — отличает «светлый знак на тёмном фоне» от тёмного глифа. */
+async function maxOpaqueLuminance(pngBuf) {
+  const { data, info } = await sharp(pngBuf)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true })
+  if (info.channels !== 4) return 0
+  let mx = 0
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] < 14) continue
+    const L = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]
+    if (L > mx) mx = L
+  }
+  return mx
+}
+
 async function renderIconPng(size) {
   const pad = Math.max(1, Math.round(size * 0.085))
   const inner = Math.max(4, size - pad * 2)
@@ -53,7 +69,10 @@ async function renderIconPng(size) {
     .toBuffer()
 
   const lum = await meanOpaqueLuminance(logoBuf)
-  if (lum < 150) {
+  const lumMax = await maxOpaqueLuminance(logoBuf)
+  // Тёмный глиф на прозрачном / светлой подложке → инвертируем в светлый для тёмной titlebar.
+  // Белый знак на чёрном (официальный Nexory) — средняя низкая, но пик яркий; не инвертировать.
+  if (lum < 150 && lumMax < 198) {
     logoBuf = await sharp(logoBuf).negate({ alpha: false }).png().toBuffer()
   }
 

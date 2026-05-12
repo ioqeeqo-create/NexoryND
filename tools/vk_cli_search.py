@@ -113,7 +113,7 @@ def main():
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_argument("--start-maximized")
 
-    profile_dir = Path(os.getenv("LOCALAPPDATA", ".")) / "Flow" / "vk_chrome_profile"
+    profile_dir = Path(os.getenv("LOCALAPPDATA", ".")) / "Nexory" / "vk_chrome_profile"
     profile_dir.mkdir(parents=True, exist_ok=True)
     options.add_argument(f"--user-data-dir={profile_dir}")
 

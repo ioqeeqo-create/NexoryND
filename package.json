@@ -1,6 +1,6 @@
 {
     "name": "flow",
-    "version": "2.7.15",
+    "version": "2.7.16",
     "description": "Nexory — десктопный музыкальный плеер (репозиторий на GitHub: NexoryND).",
     "author": "ioqeeqo-create",
     "license": "MIT",
@@ -43,7 +43,7 @@
             "**/*",
             "!node_modules/.cache",
             "!dist",
-            "!FlowPleerLoww/**"
+            "!NexoryND/**"
         ],
         "win": {
             "executableName": "Nexory",

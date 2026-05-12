@@ -17,7 +17,7 @@ const DEFAULT_SRC = path.join(
   'projects',
   'c-Users-Trankvilizator-Documents-Codex-2026-04-21-files-mentioned-by-the-user-flow-fresh-extract2',
   'assets',
-  'c__Users_Trankvilizator_AppData_Roaming_Cursor_User_workspaceStorage_2c8d2eb933a247bf3cbe75832c0da375_images_image-6e8709fa-33c1-4949-82ac-ce8659705e6e.png',
+  'c__Users_Trankvilizator_AppData_Roaming_Cursor_User_workspaceStorage_2c8d2eb933a247bf3cbe75832c0da375_images_image-47320a61-2c2f-4bfb-a134-8c97590d3429.png',
 )
 
 const SQ = 1024
@@ -142,11 +142,13 @@ async function main() {
 
   const outIcon = path.join(root, 'assets', 'icon-source.png')
   const outMark = path.join(root, 'assets', 'nexory-mark.png')
-  const outAuth = path.join(root, 'assets', 'auth', 'flow.png')
+  const outAuth = path.join(root, 'assets', 'auth', 'nexory.png')
+  const outMarkLogin = path.join(root, 'assets', 'auth', 'mark-login.png')
 
   fs.writeFileSync(outIcon, squareTrans)
   fs.writeFileSync(outMark, squareTrans)
   fs.writeFileSync(outAuth, squareTrans)
+  fs.writeFileSync(outMarkLogin, squareTrans)
 
   /** UI: tight trim по альфе, без принудительной заливки в белый (иначе «белый прямоугольник»). */
   const outUi = path.join(root, 'assets', 'nexory-mark-ui.png')
@@ -180,7 +182,7 @@ async function main() {
     cornerLum: Math.round(cornerLum),
     out: `${SQ}×${SQ} transparent + ui trim`,
   })
-  console.log('Wrote', outIcon, outMark, outAuth, outUi)
+  console.log('Wrote', outIcon, outMark, outAuth, outMarkLogin, outUi)
 }
 
 main().catch((e) => {

@@ -1,4 +1,4 @@
-# Flow Social backend deploy
+# Nexory Social backend deploy
 
 ## 0) Важно: файл на сервере
 
@@ -103,7 +103,7 @@ flow-social.example.com {
 
 ```ini
 [Unit]
-Description=Flow Social Server
+Description=Nexory Social Server
 After=network.target
 
 [Service]
@@ -156,7 +156,7 @@ Accepted per-table files in `--input`:
 
 ## 8) Stable app updates (latest.yml + exe)
 
-Flow `2.6.0+` has built-in updater using feed:
+Nexory `2.6.0+` has built-in updater using feed:
 
 - `http://85.239.34.229/flow-updates/stable/latest.yml`
 
@@ -179,8 +179,8 @@ npm run publish:update:stable
 What is uploaded:
 
 - `dist/latest.yml`
-- installer from `latest.yml` (`Flow Setup x.y.z.exe`)
-- optional blockmap (`Flow Setup x.y.z.exe.blockmap`) if present
+- installer from `latest.yml` (`Nexory Setup x.y.z.exe`)
+- optional blockmap (`Nexory Setup x.y.z.exe.blockmap`) if present
 
 Server requirement:
 

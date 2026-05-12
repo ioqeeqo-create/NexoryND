@@ -81,7 +81,7 @@
     const password = String(rawPassword || '')
     if (password.length < 4) return { ok: false, error: 'Пароль: минимум 4 символа' }
     const be = getBackend()
-    if (!be) return { ok: false, error: 'Сервер недоступен (задай свой Flow Social API URL в настройках)' }
+    if (!be) return { ok: false, error: 'Сервер недоступен (задай URL социального сервера Nexory в настройках)' }
     try {
       const exists = await profileExistsOnServer(username)
       if (exists) return { ok: false, error: 'Такой Username уже занят' }
@@ -112,7 +112,7 @@
     if (!username) return { ok: false, error: 'Введите Username' }
     if (!password) return { ok: false, error: 'Введите пароль' }
     const be = getBackend()
-    if (!be) return { ok: false, error: 'Сервер недоступен (задай свой Flow Social API URL в настройках)' }
+    if (!be) return { ok: false, error: 'Сервер недоступен (задай URL социального сервера Nexory в настройках)' }
     let row = null
     try {
       row = await be.request('GET', `/flow-api/v1/profile-auth/${encodeURIComponent(username)}`)

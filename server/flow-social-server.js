@@ -1,5 +1,5 @@
 /**
- * Flow Social — свой бэкенд вместо Supabase (SQLite + REST + WebSocket).
+ * Nexory Social — свой бэкенд вместо Supabase (SQLite + REST + WebSocket).
  *
  * Локально:
  *   FLOW_SOCIAL_SECRET=... npm run social-server

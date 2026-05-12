@@ -3055,7 +3055,7 @@ async function checkVkToken() {
             ? `Профиль подтверждён (${who}). Официальные методы audio.* недоступны${ac}${detail}.${maskHint}`
             : `Официальные методы audio.* недоступны${ac}${detail}.${maskHint}`
           line += ' И новый токен Kate, и токен из веба при этом часто ведут себя одинаково — это ограничение VK, а не «испорченная вставка».'
-          line += ' По умолчанию Nexory не открывает Chrome сам: если нужен обход через Chrome+Selenium (Python, selenium, webdriver-manager; профиль %LOCALAPPDATA%\\Flow\\vk_chrome_profile), включи ниже «Обход через Chrome (Selenium)».'
+          line += ' По умолчанию Nexory не открывает Chrome сам: если нужен обход через Chrome+Selenium (Python, selenium, webdriver-manager; профиль %LOCALAPPDATA%\\Nexory\\vk_chrome_profile), включи ниже «Обход через Chrome (Selenium)».'
           if (msg) {
             msg.textContent = line
             msg.className = 'token-msg token-msg-warn'
