@@ -438,7 +438,6 @@ body.audio-buffering .spin-icon {
   position: absolute;
   inset: 0;
   background: url("assets/nexory-mark-ui.png") center / 82% no-repeat;
-  filter: brightness(0) invert(1);
   opacity: 0.94;
 }
 .flow-boot-progress {
@@ -826,7 +825,7 @@ body:not(.layout-top-nav) #sidebar.sidebar {
 }
 .sidebar-logo span { opacity: 0.82; }
 
-/* Знак в UI: без белой «плашки» — светлый силуэт + мягкая тень, в тон стеклянной теме. */
+/* Марк в PNG — белый силуэт на прозрачном (prepare-nexory-logo), без invert и без белой подложки. */
 .titlebar-logo::before {
   content: "";
   display: inline-block;
@@ -835,11 +834,7 @@ body:not(.layout-top-nav) #sidebar.sidebar {
   height: 30px;
   box-sizing: border-box;
   background: url("assets/nexory-mark-ui.png") center / contain no-repeat;
-  filter:
-    brightness(0)
-    invert(1)
-    drop-shadow(0 0 1px rgba(255, 255, 255, 0.2))
-    drop-shadow(0 1px 5px rgba(0, 0, 0, 0.55));
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.45)) drop-shadow(0 1px 4px rgba(0, 0, 0, 0.4));
   opacity: 0.96;
 }
 .sidebar-logo::before {
@@ -850,11 +845,7 @@ body:not(.layout-top-nav) #sidebar.sidebar {
   height: 30px;
   box-sizing: border-box;
   background: url("assets/nexory-mark-ui.png") center / contain no-repeat;
-  filter:
-    brightness(0)
-    invert(1)
-    drop-shadow(0 0 1px rgba(255, 255, 255, 0.18))
-    drop-shadow(0 1px 4px rgba(0, 0, 0, 0.5));
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.4)) drop-shadow(0 1px 3px rgba(0, 0, 0, 0.38));
   opacity: 0.95;
 }
 .auth-logo-hex::before {
@@ -878,7 +869,6 @@ body:not(.layout-top-nav) #sidebar.sidebar {
   position: absolute;
   inset: 0;
   background: url("assets/nexory-mark-ui.png") center / 74% no-repeat;
-  filter: brightness(0) invert(1);
   opacity: 0.93;
   pointer-events: none;
 }

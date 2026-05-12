@@ -1,5 +1,6 @@
 /**
- * Импорт мастер-лого Nexory: обрезка снизу (лишнее поле) + квадрат 1024 с центрированием.
+ * Импорт мастер-лого Nexory: обрезка снизу + квадрат 1024 на прозрачном фоне (иконка без белых полос).
+ * nexory-mark-ui.png — белый силуэт на прозрачном для тёмного UI (без CSS filter).
  * Использование: node scripts/prepare-nexory-logo.mjs [путь-к-исходнику.png]
  */
 import fs from 'fs'
@@ -20,10 +21,38 @@ const DEFAULT_SRC = path.join(
 )
 
 const SQ = 1024
-/** Квадратные экспорты (иконка, марк, auth) — белый фон, без «чёрной подложки». */
-const WHITE = { r: 255, g: 255, b: 255, alpha: 1 }
+/** Иконка приложения: без белых полос — глиф на прозрачном квадрате (ico кладётся на тёмный BG в build-windows-icon). */
+const TRANSPARENT = { r: 0, g: 0, b: 0, alpha: 0 }
 /** Доля высоты, срезаемая снизу (пустое поле под знаком). */
 const BOTTOM_CROP_RATIO = 0.11
+
+/** Любой непрозрачный пиксель → белый с той же альфой (для тёмного UI без CSS invert). */
+async function toWhiteOnTransparent(pngBuf) {
+  const { data, info } = await sharp(pngBuf)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true })
+  const { width, height, channels } = info
+  const out = Buffer.alloc(data.length)
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * channels
+      const a = data[i + 3]
+      if (a < 6) {
+        out[i] = 0
+        out[i + 1] = 0
+        out[i + 2] = 0
+        out[i + 3] = 0
+      } else {
+        out[i] = 255
+        out[i + 1] = 255
+        out[i + 2] = 255
+        out[i + 3] = a
+      }
+    }
+  }
+  return sharp(out, { raw: { width, height, channels: 4 } }).png().toBuffer()
+}
 
 const LOCAL_MASTER = path.join(root, 'assets', '_nexory-master-in.png')
 
@@ -51,8 +80,8 @@ async function main() {
     .png()
     .toBuffer()
 
-  const square = await sharp({
-    create: { width: SQ, height: SQ, channels: 4, background: WHITE },
+  const squareTrans = await sharp({
+    create: { width: SQ, height: SQ, channels: 4, background: TRANSPARENT },
   })
     .composite([{ input: cropped, gravity: 'centre' }])
     .png()
@@ -62,18 +91,18 @@ async function main() {
   const outMark = path.join(root, 'assets', 'nexory-mark.png')
   const outAuth = path.join(root, 'assets', 'auth', 'flow.png')
 
-  fs.writeFileSync(outIcon, square)
-  fs.writeFileSync(outMark, square)
-  fs.writeFileSync(outAuth, square)
+  fs.writeFileSync(outIcon, squareTrans)
+  fs.writeFileSync(outMark, squareTrans)
+  fs.writeFileSync(outAuth, squareTrans)
 
-  /** В шапке/сайдбаре — без огромных полей, иначе при 20px «знак» исчезает. */
+  /** Шапка/сайдбар: обрезка по содержимому, без белого квадрата; светлый силуэт в PNG (без filter в CSS). */
   const outUi = path.join(root, 'assets', 'nexory-mark-ui.png')
   let uiBuf
   try {
-    const trimmed = sharp(square).trim({ threshold: 24 })
+    const trimmed = sharp(cropped).trim({ threshold: 24 })
     const tm = await trimmed.metadata()
     const pad = Math.max(4, Math.round(Math.max(tm.width || 0, tm.height || 0) * 0.05))
-    uiBuf = await trimmed
+    const padded = await trimmed
       .extend({
         top: pad,
         bottom: pad,
@@ -83,12 +112,13 @@ async function main() {
       })
       .png()
       .toBuffer()
+    uiBuf = await toWhiteOnTransparent(padded)
   } catch (_) {
-    uiBuf = square
+    uiBuf = await toWhiteOnTransparent(squareTrans)
   }
   fs.writeFileSync(outUi, uiBuf)
 
-  console.log('OK', { src, was: `${W}×${H}`, cropBottom, out: `${SQ}×${SQ}` })
+  console.log('OK', { src, was: `${W}×${H}`, cropBottom, out: `${SQ}×${SQ} transparent + ui white silhouette` })
   console.log('Wrote', outIcon, outMark, outAuth, outUi)
 }
 
