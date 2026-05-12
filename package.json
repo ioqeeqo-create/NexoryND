@@ -1,7 +1,7 @@
 {
     "name": "nexorynd",
-    "version": "2.7.12",
-    "description": "NexoryND — десктопный музыкальный плеер: поиск, плейлисты, SoundCloud, комнаты и персональная «Моя волна».",
+    "version": "2.7.13",
+    "description": "Nexory — десктопный музыкальный плеер (репозиторий на GitHub: NexoryND).",
     "author": "ioqeeqo-create",
     "license": "MIT",
     "homepage": "https://github.com/ioqeeqo-create/NexoryND#readme",
@@ -34,8 +34,8 @@
         "sharp": "^0.34.5"
     },
     "build": {
-        "appId": "io.nexorynd.app",
-        "productName": "NexoryND",
+        "appId": "flow.player",
+        "productName": "Nexory",
         "asarUnpack": [
             "tools/**"
         ],
@@ -46,7 +46,7 @@
             "!FlowPleerLoww/**"
         ],
         "win": {
-            "executableName": "NexoryND",
+            "executableName": "Nexory",
             "target": [
                 {
                     "target": "nsis",
@@ -71,8 +71,8 @@
             "allowToChangeInstallationDirectory": true,
             "createDesktopShortcut": true,
             "createStartMenuShortcut": true,
-            "shortcutName": "NexoryND",
-            "uninstallDisplayName": "NexoryND",
+            "shortcutName": "Nexory",
+            "uninstallDisplayName": "Nexory",
             "installerIcon": "assets/icon.ico",
             "uninstallerIcon": "assets/icon.ico",
             "include": "build/installer.nsh",

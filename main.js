@@ -135,7 +135,7 @@ function getAppUpdatesDir() {
 
 async function downloadLatestAppUpdate(meta) {
   const downloadMeta = meta || _cachedAppUpdateMeta || await fetchLatestAppUpdateMeta()
-  const fileName = path.basename(String(downloadMeta.path || '').replace(/\\/g, '/')) || `NexoryND-${downloadMeta.version}.exe`
+  const fileName = path.basename(String(downloadMeta.path || '').replace(/\\/g, '/')) || `Nexory-${downloadMeta.version}.exe`
   const targetPath = path.join(getAppUpdatesDir(), fileName)
   const tempPath = `${targetPath}.part`
   const writer = fs.createWriteStream(tempPath)
@@ -364,7 +364,7 @@ async function downloadStreamToCacheFile(remoteUrl, destPart, maxBytes) {
     maxRedirects: 12,
     validateStatus: (s) => s >= 200 && s < 300,
     headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 NexoryND/1.0',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Nexory/1.0',
       Accept: '*/*',
     },
   })
@@ -457,7 +457,7 @@ function httpsGetJsonUrl(url, headers = {}, timeout = 12000) {
         path: u.pathname + u.search,
         method: 'GET',
         headers: {
-          'User-Agent': 'NexoryND/0.2 (Electron)',
+          'User-Agent': 'Nexory/0.2 (Electron)',
           'Accept': 'application/json',
           ...headers
         }
@@ -693,7 +693,7 @@ function httpsDownloadToFile(url, filePath, headers = {}, timeout = 30000) {
         path: u.pathname + u.search,
         method: 'GET',
         headers: {
-          'User-Agent': 'NexoryND/0.2 (Electron)',
+          'User-Agent': 'Nexory/0.2 (Electron)',
           'Accept': '*/*',
           ...headers
         }
@@ -746,7 +746,7 @@ async function checkAndDownloadYtDlp() {
 
   try {
     const r = await httpsGetJsonUrl('https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest', {
-      'User-Agent': 'NexoryND/0.2 (Electron)',
+      'User-Agent': 'Nexory/0.2 (Electron)',
       'Accept': 'application/vnd.github+json'
     }, 15000)
     if (r.status !== 200 || !r.body) return { ok: false, error: `GitHub API status ${r.status}` }
@@ -1214,12 +1214,12 @@ ipcMain.handle('discord-rpc-update', async (e, payload = {}) => {
   if (!_discordRpcClient || !_discordRpcReady) return { ok: false, error: 'Discord RPC is not connected' }
   try {
     await _discordRpcClient.setActivity({
-      details: String(payload?.details || 'Listening in NexoryND').slice(0, 128),
+      details: String(payload?.details || 'Listening in Nexory').slice(0, 128),
       state: String(payload?.state || '').slice(0, 128),
       largeImageKey: String(payload?.largeImageKey || 'flow'),
-      largeImageText: String(payload?.largeImageText || 'NexoryND'),
+      largeImageText: String(payload?.largeImageText || 'Nexory'),
       smallImageKey: String(payload?.smallImageKey || 'music'),
-      smallImageText: String(payload?.smallImageText || 'NexoryND'),
+      smallImageText: String(payload?.smallImageText || 'Nexory'),
       buttons: Array.isArray(payload?.buttons) ? payload.buttons.slice(0, 2) : undefined,
       partySize: Number(payload?.partySize) || undefined,
       partyMax: Number(payload?.partyMax) || undefined,
@@ -3164,7 +3164,7 @@ ipcMain.handle('youtube-stream', async (e, { videoId, instance, forceFresh = fal
       const ytdlpBin = await resolveYtDlpBinary()
       const hint = ytdlpBin
         ? 'YouTube: поток не получен через yt-dlp. Нажми "Обновить yt-dlp" в настройках и повтори.'
-        : 'YouTube: не найден yt-dlp. Установи yt-dlp (winget install yt-dlp) и перезапусти NexoryND.'
+        : 'YouTube: не найден yt-dlp. Установи yt-dlp (winget install yt-dlp) и перезапусти Nexory.'
       return { ok: false, error: hint }
     }
     const instances = instance ? [instance, ...INVIDIOUS_INSTANCES.filter(i => i !== instance)] : INVIDIOUS_INSTANCES
@@ -3232,7 +3232,7 @@ ipcMain.handle('youtube-stream', async (e, { videoId, instance, forceFresh = fal
     const ytdlpBin = await resolveYtDlpBinary()
     const hint = ytdlpBin
       ? 'YouTube: не удалось получить поток. Попробуй другой трек или обнови yt-dlp.'
-      : 'YouTube: нет стабильного движка потока. Установи yt-dlp (winget install yt-dlp) и перезапусти NexoryND.'
+      : 'YouTube: нет стабильного движка потока. Установи yt-dlp (winget install yt-dlp) и перезапусти Nexory.'
     return { ok: false, error: hint }
   })(), forceFresh ? 45000 : 35000, { ok: false, error: 'YouTube: timeout получения потока, попробуй ещё раз' })
     .finally(() => {
@@ -3370,7 +3370,7 @@ ipcMain.handle('get-lyrics', async (e, { title, artist, duration, source, trackI
     const tryGetByMeta = async (artistName, trackName) => {
       const r = await httpsGetJson('lrclib.net',
         `/api/get?track_name=${encodeURIComponent(trackName)}&artist_name=${encodeURIComponent(artistName)}${duration ? '&duration=' + Math.round(duration) : ''}`,
-        { 'User-Agent': 'NexoryNDPlayer/0.2 (github.com)' },
+        { 'User-Agent': 'NexoryPlayer/0.2 (github.com)' },
         10000
       )
       if (r.status === 200 && r.body) {
@@ -3387,7 +3387,7 @@ ipcMain.handle('get-lyrics', async (e, { title, artist, duration, source, trackI
       const q = encodeURIComponent(`${artistName} ${trackName}`.trim())
       const r = await httpsGetJson('lrclib.net',
         `/api/search?q=${q}`,
-        { 'User-Agent': 'NexoryNDPlayer/0.2 (github.com)' },
+        { 'User-Agent': 'NexoryPlayer/0.2 (github.com)' },
         10000
       )
       if (r.status === 200 && Array.isArray(r.body) && r.body.length > 0) {
@@ -3420,7 +3420,7 @@ ipcMain.handle('get-lyrics', async (e, { title, artist, duration, source, trackI
         const lyo = await httpsGetJson(
           'api.lyrics.ovh',
           `/v1/${encodeURIComponent(a)}/${encodeURIComponent(t)}`,
-          { 'User-Agent': 'NexoryNDPlayer/0.2 (github.com)' },
+          { 'User-Agent': 'NexoryPlayer/0.2 (github.com)' },
           10000
         )
         if (lyo.status === 200 && lyo.body?.lyrics) {

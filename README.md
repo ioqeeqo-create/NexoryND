@@ -1,5 +1,5 @@
-# NexoryND
+# Nexory
 
-NexoryND is an Electron desktop music player with social rooms, shared playback, and customizable UI.
+Desktop music player (Electron): social rooms, shared playback, customizable UI.
 
-Repository: https://github.com/ioqeeqo-create/NexoryND
+GitHub repository (project name): [NexoryND](https://github.com/ioqeeqo-create/NexoryND)

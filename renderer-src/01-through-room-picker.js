@@ -3026,7 +3026,7 @@ async function checkVkToken() {
             ? `Профиль подтверждён (${who}). Официальные методы audio.* недоступны${ac}${detail}.${maskHint}`
             : `Официальные методы audio.* недоступны${ac}${detail}.${maskHint}`
           line += ' И новый токен Kate, и токен из веба при этом часто ведут себя одинаково — это ограничение VK, а не «испорченная вставка».'
-          line += ' По умолчанию NexoryND не открывает Chrome сам: если нужен обход через Chrome+Selenium (Python, selenium, webdriver-manager; профиль %LOCALAPPDATA%\\Flow\\vk_chrome_profile), включи ниже «Обход через Chrome (Selenium)».'
+          line += ' По умолчанию Nexory не открывает Chrome сам: если нужен обход через Chrome+Selenium (Python, selenium, webdriver-manager; профиль %LOCALAPPDATA%\\Flow\\vk_chrome_profile), включи ниже «Обход через Chrome (Selenium)».'
           if (msg) {
             msg.textContent = line
             msg.className = 'token-msg token-msg-warn'
@@ -3036,7 +3036,7 @@ async function checkVkToken() {
         }
 
         let line = who
-          ? `Профиль подтверждён (${who}), но аудио в NexoryND недоступно${ac}${detail}. На vkhost выбери Kate Mobile и право «Аудио».`
+          ? `Профиль подтверждён (${who}), но аудио в Nexory недоступно${ac}${detail}. На vkhost выбери Kate Mobile и право «Аудио».`
           : `Аудио API недоступно${ac}${detail}. На vkhost — Kate Mobile и право «Аудио».`
         if (Number(r.audioCode) === 6) {
           line += ' Код 6 — слишком много запросов к VK: подожди 30–60 секунд и нажми проверку снова; не кликай «Проверить токен» много раз подряд.'
@@ -3519,7 +3519,7 @@ function collectFlowConfigPayload() {
   }
   return {
     format: 'flow-preset-v1',
-    app: 'NexoryND',
+    app: 'Nexory',
     exportedAt: new Date().toISOString(),
     storage,
   }
@@ -3623,8 +3623,8 @@ async function exportFlowConfig() {
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(link.href)
-    setFlowConfigStatus('NexoryND preset экспортирован. Можно отправлять .flowpreset другу.', false)
-    showToast('NexoryND preset экспортирован')
+    setFlowConfigStatus('Nexory preset экспортирован. Можно отправлять .flowpreset другу.', false)
+    showToast('Nexory preset экспортирован')
     if (failedEmbed && failedEmbed.length) {
       showToast(
         `Не удалось встроить ${failedEmbed.length} файл(ов) с диска — на другом ПК их не будет.`,
@@ -3742,8 +3742,8 @@ function importFlowConfigFile(input) {
         if (typeof value === 'string' && value.trim()) localStorage.setItem(key, value)
       })
       syncRuntimeCachesAfterPresetImport()
-      setFlowConfigStatus('NexoryND preset импортирован. Сессия аккаунта сохранена, перезагрузка не требуется.', false)
-      showToast('NexoryND preset импортирован')
+      setFlowConfigStatus('Nexory preset импортирован. Сессия аккаунта сохранена, перезагрузка не требуется.', false)
+      showToast('Nexory preset импортирован')
       try { applySettingsSectionsState() } catch {}
       // Важно: не вызывать applyVisualSettings() — она берёт значения из DOM и перезаписывает только что импортированный flow_visual.
       try { initVisualSettings() } catch {}
@@ -4599,7 +4599,7 @@ async function searchRoomQueueTracks() {
     list.innerHTML = '<div class="flow-empty-state compact"><strong>Начни поиск</strong><span>Введи название трека, чтобы добавить его в очередь.</span></div>'
     return
   }
-  list.innerHTML = '<div class="flow-empty-state compact"><strong>Ищу треки...</strong><span>Проверяю доступные источники NexoryND.</span></div>'
+  list.innerHTML = '<div class="flow-empty-state compact"><strong>Ищу треки...</strong><span>Проверяю доступные источники Nexory.</span></div>'
   clearTimeout(_roomSearchDebounceTimer)
   _roomSearchDebounceTimer = setTimeout(async () => {
     try {

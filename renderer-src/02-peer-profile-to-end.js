@@ -897,7 +897,7 @@ function flowProfileListeningBrandHtml(trackHint) {
   </div>`
 }
 
-/** Карточка «Listening to NexoryND» (аналог отдельного UI-компонента): обложка, прогресс, индикатор в углу. */
+/** Карточка «Listening to Nexory» (аналог отдельного UI-компонента): обложка, прогресс, индикатор в углу. */
 function buildProfileActivityCardHtml(track, progressPct, coverDomId) {
   const pct = Math.max(0, Math.min(100, Number(progressPct) || 0))
   const corner = '<span class="flow-profile-activity-corner-dot" aria-hidden="true"></span>'
@@ -956,7 +956,7 @@ function getFlowProfileBadgeStripHtml() {
   const trophyIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 21h8M12 17v4M6 3h12v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V3z"/><path d="M6 5H4a2 2 0 0 0 0 4h2M18 5h2a2 2 0 0 1 0 4h-2"/></svg>`
   const gemIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3l8 9-8 9-8-9 8-9z"/><path d="M4 12h16"/></svg>`
   const gearIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>`
-  return `<span class="flow-profile-badge-chip" title="NexoryND">${flowIcon}</span><span class="flow-profile-badge-chip">${trophyIcon}</span><span class="flow-profile-badge-chip">${gemIcon}</span><span class="flow-profile-badge-chip">${gearIcon}</span>`
+  return `<span class="flow-profile-badge-chip" title="Nexory">${flowIcon}</span><span class="flow-profile-badge-chip">${trophyIcon}</span><span class="flow-profile-badge-chip">${gemIcon}</span><span class="flow-profile-badge-chip">${gearIcon}</span>`
 }
 
 function injectFlowProfileBadgeRow(el) {
@@ -1800,14 +1800,14 @@ function showOnboardingIfNeeded() {
   modal.innerHTML = `
     <div class="flow-modal-backdrop" onclick="finishOnboarding()"></div>
     <div class="flow-modal-card glass-card onboarding-card">
-      <div class="onboarding-badge">NexoryND старт</div>
-      <h3>Добро пожаловать в NexoryND</h3>
+      <div class="onboarding-badge">Nexory старт</div>
+      <h3>Добро пожаловать в Nexory</h3>
       <p>Пару важных вещей, чтобы у тебя и друзей всё работало без ручной настройки.</p>
       <div class="onboarding-grid">
         <div class="onboarding-item"><strong>Аккаунт</strong><span>Логин и пароль сохраняют профиль на сервере, поэтому очистка кэша больше не убивает аккаунт.</span></div>
         <div class="onboarding-item"><strong>Сервер</strong><span>Адрес уже стоит по умолчанию. Его можно поменять в Настройки → Интеграции.</span></div>
         <div class="onboarding-item"><strong>Комнаты</strong><span>Создавай руму, кидай invite другу и управляй очередью вместе.</span></div>
-        <div class="onboarding-item"><strong>VK-импорт</strong><span>Сервер NexoryND читает плейлист VK, а приложение ищет эти треки в твоих источниках.</span></div>
+        <div class="onboarding-item"><strong>VK-импорт</strong><span>Сервер Nexory читает плейлист VK, а приложение ищет эти треки в твоих источниках.</span></div>
       </div>
       <div class="onboarding-actions">
         <button class="btn-small" onclick="openSettingsFromOnboarding()">Открыть настройки</button>
@@ -1840,7 +1840,7 @@ function ensureSocialUI() {
   box.style.padding = '14px'
   box.innerHTML = `
     <div class="social-head">
-      <strong>NexoryND Social (Cloud)</strong>
+      <strong>Nexory Social (Cloud)</strong>
       <span id="social-status" class="social-status">offline</span>
     </div>
     <div class="social-add-box">
@@ -1960,7 +1960,7 @@ async function renderFriends() {
   }
   el.innerHTML = `
     <div class="social-friends-section-title">В сети</div>
-    <div class="social-friends-grid">${online.length ? online.map((item) => fmtFriendCard(item, true)).join('') : '<div class="flow-empty-state compact"><strong>Никого онлайн</strong><span>NexoryND покажет друга сразу, как он появится в сети.</span></div>'}</div>
+    <div class="social-friends-grid">${online.length ? online.map((item) => fmtFriendCard(item, true)).join('') : '<div class="flow-empty-state compact"><strong>Никого онлайн</strong><span>Nexory покажет друга сразу, как он появится в сети.</span></div>'}</div>
     <div class="social-friends-section-title">Не в сети</div>
     <div class="social-friends-grid">${offline.length ? offline.map((item) => fmtFriendCard(item, false)).join('') : '<div class="flow-empty-state compact"><strong>Пусто</strong><span>Все друзья сейчас онлайн.</span></div>'}</div>
   `
@@ -2172,7 +2172,7 @@ function saveProxySettings() {
   const proxyBaseUrl = normalizeFlowServerUrl(input?.value || FLOW_SERVER_DEFAULT_URL)
   saveSettingsRaw({ proxyBaseUrl })
   if (input) input.value = proxyBaseUrl
-  showToast('Сервер NexoryND сохранён')
+  showToast('Сервер Nexory сохранён')
   checkFlowServerStatus().catch(() => {})
 }
 
@@ -2296,7 +2296,7 @@ async function updateDiscordPresence(track, roomInfo = null) {
     details: `Listening: ${track.title || 'Unknown'}`,
     state: `${track.artist || '—'}${roomInfo?.roomId ? ` • room ${roomInfo.roomId}` : ''}`,
     largeImageKey: 'flow',
-    largeImageText: 'NexoryND',
+    largeImageText: 'Nexory',
     smallImageKey: 'music',
     smallImageText: track.source || 'audio',
     buttons,
@@ -3171,7 +3171,7 @@ function applyUiTextOverrides() {
   setText('#page-library .content-header h2', 'Библиотека')
   setText('#page-liked .content-header h2', 'Любимые')
   setText('#page-profile .content-header h2', 'Профиль')
-  setText('#page-profile .content-sub', 'Твой профиль NexoryND')
+  setText('#page-profile .content-sub', 'Твой профиль Nexory')
   setText('#page-rooms .content-header h2', 'Комнаты')
   setText('#page-rooms .content-sub', 'Совместное прослушивание и общая очередь')
   setText('#page-search .content-header h2', 'Поиск')
@@ -7479,7 +7479,7 @@ async function importPlaylistFromText(text, name = '') {
     showToast('Не нашёл строк с artist/title', true)
     return
   }
-  showToast(`Нашёл строк: ${tracks.length}. Запускаю поиск NexoryND...`)
+  showToast(`Нашёл строк: ${tracks.length}. Запускаю поиск Nexory...`)
   const stats = await processPlaylistImport(tracks, {
     name: name || 'VK Artist Title',
     service: 'text',
