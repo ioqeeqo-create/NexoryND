@@ -1171,7 +1171,8 @@ async function pickProfileAvatar() {
     if (!file) return
     const dataUrl = await readFileAsDataUrl(file).catch(() => '')
     if (!dataUrl) return showToast('Не удалось загрузить аватар', true)
-    saveProfileCustom({ avatarData: dataUrl })
+    const prepared = await prepareProfileImageData(file, dataUrl, 'avatar').catch(() => dataUrl)
+    saveProfileCustom({ avatarData: prepared })
     syncProfileUi()
     renderProfilePage()
   }
@@ -1187,7 +1188,8 @@ async function pickProfileBanner() {
     if (!file) return
     const dataUrl = await readFileAsDataUrl(file).catch(() => '')
     if (!dataUrl) return showToast('Не удалось загрузить баннер', true)
-    saveProfileCustom({ bannerData: dataUrl })
+    const prepared = await prepareProfileImageData(file, dataUrl, 'banner').catch(() => dataUrl)
+    saveProfileCustom({ bannerData: prepared })
     renderProfilePage()
   }
   input.click()

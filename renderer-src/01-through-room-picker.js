@@ -467,6 +467,35 @@ function prepareProfileImageData(file, dataUrl, kind = 'avatar') {
   })
 }
 
+/** Сжатие data URL перед PUT (nginx / прокси часто режут тело ~1 МБ → 413). */
+function shrinkProfileDataUrlForApi(dataUrl, kind = 'avatar') {
+  return new Promise((resolve) => {
+    const raw = String(dataUrl || '')
+    if (!raw || typeof Image === 'undefined') return resolve(raw)
+    if (raw.length < 65_000) return resolve(raw)
+    const maxSide = kind === 'banner' ? 720 : 280
+    const quality = kind === 'banner' ? 0.68 : 0.78
+    const img = new Image()
+    img.onload = () => {
+      try {
+        const ratio = Math.min(1, maxSide / Math.max(img.width || 1, img.height || 1))
+        const w = Math.max(1, Math.round((img.width || 1) * ratio))
+        const h = Math.max(1, Math.round((img.height || 1) * ratio))
+        const canvas = document.createElement('canvas')
+        canvas.width = w
+        canvas.height = h
+        canvas.getContext('2d')?.drawImage(img, 0, 0, w, h)
+        const out = canvas.toDataURL('image/jpeg', quality)
+        resolve(out.length < raw.length ? out : raw)
+      } catch {
+        resolve(raw)
+      }
+    }
+    img.onerror = () => resolve(raw)
+    img.src = raw
+  })
+}
+
 const ICONS = {
   play: flowLucideSvg('play', 'ctrl-play-icon'),
   pause: (() => {
@@ -4068,38 +4097,42 @@ async function syncProfileCloudNow() {
   const stats = getListenStats()
   const totalTracks = toDbSafeBigint(stats.totalTracks, 0)
   const totalSeconds = toDbSafeBigint(stats.totalSeconds, 0)
-  const payload = {
+
+  let av = custom.avatarData || null
+  let bn = custom.bannerData || null
+  if (av) av = await shrinkProfileDataUrlForApi(av, 'avatar')
+  if (bn) bn = await shrinkProfileDataUrlForApi(bn, 'banner')
+
+  const core = {
     username: me.username,
     online: true,
     last_seen: new Date().toISOString(),
-    avatar_data: custom.avatarData || null,
-    banner_data: custom.bannerData || null,
-    profile_color: custom.profileColor || null,
     bio: custom.bio || '',
     pinned_tracks: Array.isArray(custom.pinnedTracks) ? custom.pinnedTracks.slice(0, 5) : [],
     pinned_playlists: Array.isArray(custom.pinnedPlaylists) ? custom.pinnedPlaylists.slice(0, 5) : [],
     total_tracks: totalTracks,
     total_seconds: totalSeconds,
   }
-  try {
-    await flowSocialPut('/flow-api/v1/profile', payload)
-  } catch (e1) {
+
+  const pc = custom.profileColor || null
+  const variants = [
+    { ...core, avatar_data: av, banner_data: bn, ...(pc ? { profile_color: pc } : {}) },
+    { ...core, avatar_data: av, banner_data: bn },
+    { ...core, avatar_data: null, banner_data: null, ...(pc ? { profile_color: pc } : {}) },
+    { ...core, avatar_data: null, banner_data: null },
+    { ...core, avatar_data: null, banner_data: null, total_tracks: 0, total_seconds: 0 },
+  ]
+
+  let lastErr = ''
+  for (const body of variants) {
     try {
-      const fallbackPayload = Object.assign({}, payload)
-      delete fallbackPayload.profile_color
-      await flowSocialPut('/flow-api/v1/profile', fallbackPayload)
-    } catch (e2) {
-      try {
-        await flowSocialPut(
-          '/flow-api/v1/profile',
-          Object.assign({}, payload, { total_tracks: 0, total_seconds: 0 })
-        )
-      } catch (e3) {
-        return { ok: false, error: e3?.message || e2?.message || e1?.message || String(e1) }
-      }
+      await flowSocialPut('/flow-api/v1/profile', body)
+      return { ok: true }
+    } catch (e) {
+      lastErr = e?.message || String(e)
     }
   }
-  return { ok: true }
+  return { ok: false, error: lastErr }
 }
 
 function scheduleProfileCloudSync() {

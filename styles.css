@@ -522,7 +522,14 @@ body.audio-buffering .spin-icon {
 }
 @keyframes pulse { 0%,100%{opacity:0.6;transform:scale(1)} 50%{opacity:1;transform:scale(1.1)} }
 .auth-header h1 { font-family:var(--font-title); font-size:28px; font-weight:800; letter-spacing:0.05em; }
-.auth-header p { color:var(--muted); margin-top:4px; font-size:13px; }
+.auth-header .auth-tagline {
+  color: var(--muted);
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+  opacity: 0.9;
+}
 
 .auth-tabs { display:flex; gap:0; margin-bottom:24px; background:rgba(255,255,255,0.04); border-radius:12px; padding:3px; }
 .tab { flex:1; padding:8px; border:none; background:transparent; color:var(--muted); border-radius:10px; cursor:pointer; font-size:13px; font-family:var(--font-ui);
@@ -839,9 +846,9 @@ body:not(.layout-top-nav) #sidebar.sidebar {
   content: "";
   position: absolute;
   inset: 0;
-  background: url("assets/nexory-mark-ui.png") center / 74% no-repeat;
-  filter: brightness(0) invert(1);
-  opacity: 0.93;
+  background: url("assets/auth/mark-login.png") center / 70% no-repeat;
+  filter: none;
+  opacity: 1;
   pointer-events: none;
 }
 

@@ -6,6 +6,14 @@
 
 Репозиторий из `package.json`: `https://github.com/ioqeeqo-create/NexoryND.git`
 
+Если перед Node стоит **nginx** и при сохранении профиля клиент получает **413 Request Entity Too Large**, подними лимит тела запроса (по умолчанию у nginx часто **1m**):
+
+```nginx
+client_max_body_size 32m;
+```
+
+(в `server` / `location` прокси на порт `FLOW_SOCIAL_PORT`.)
+
 ## 1) Environment
 
 Required:
