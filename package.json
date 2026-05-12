@@ -1,6 +1,6 @@
 {
     "name": "flow",
-    "version": "2.7.18",
+    "version": "2.7.20",
     "description": "Nexory — десктопный музыкальный плеер (репозиторий на GitHub: NexoryND).",
     "author": "ioqeeqo-create",
     "license": "MIT",
@@ -25,6 +25,7 @@
         "build": "electron-builder",
         "prebuild:win": "node scripts/merge-renderer.js && node scripts/build-windows-icon.mjs",
         "build:win": "electron-builder --win",
+        "release:win": "electron-builder --win --publish always",
         "publish:update:stable": "node scripts/publish-stable-update.cjs"
     },
     "devDependencies": {
@@ -80,6 +81,11 @@
         },
         "directories": {
             "output": "dist"
+        },
+        "publish": {
+            "provider": "github",
+            "owner": "ioqeeqo-create",
+            "repo": "NexoryND"
         }
     },
     "dependencies": {

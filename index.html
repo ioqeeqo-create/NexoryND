@@ -6,7 +6,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
   <!-- bump ?v= when profile/CSS/JS layout changes so Electron reloads assets -->
-  <link rel="stylesheet" href="styles.css?v=20260512-no-card-tilt">
+  <link rel="stylesheet" href="styles.css?v=20260512-minecraft-glass-queue">
 </head>
 <body>
 
@@ -259,7 +259,7 @@
           <div class="home-up-next-head">
             <div>
               <div class="home-up-next-badge">Дальше в очереди</div>
-              <h3>15 треков после текущего</h3>
+              <h3 id="home-up-next-headline">Очередь</h3>
               <p id="home-up-next-meta">Очередь пока пуста</p>
             </div>
             <button type="button" class="btn-small" onclick="openPage('liked')">Из любимых</button>

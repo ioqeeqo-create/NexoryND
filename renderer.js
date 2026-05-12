@@ -11448,20 +11448,45 @@ function updatePlayerLikeBtn() {
   if (pmCoverBtn) { pmCoverBtn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; pmCoverBtn.classList.toggle('liked', liked) }
 }
 
+/** Склонение для «N трек/трека/треков» (рус.). */
+function ruTrackWordAfterCurrent(n) {
+  const a = Math.abs(Math.floor(Number(n) || 0)) % 100
+  const b = a % 10
+  if (a > 10 && a < 20) return 'треков'
+  if (b === 1) return 'трек'
+  if (b >= 2 && b <= 4) return 'трека'
+  return 'треков'
+}
+
 function renderQueue() {
   const listEl = document.getElementById('home-up-next-list')
   const metaEl = document.getElementById('home-up-next-meta')
+  const headlineEl = document.getElementById('home-up-next-headline')
   if (!listEl) return
+
+  const qlen = Array.isArray(queue) ? queue.length : 0
+  const after = Math.max(0, qlen - (Number(queueIndex) + 1))
   const nextTracks = Array.isArray(queue) ? queue.slice(queueIndex + 1, queueIndex + 11) : []
-  if (!nextTracks.length) {
+  const emptyListHtml = '<div class="empty-state compact"><p>Запусти трек, и тут появятся следующие позиции очереди</p></div>'
+
+  if (!qlen) {
+    if (headlineEl) headlineEl.textContent = 'Очередь пуста'
     if (metaEl) metaEl.textContent = 'Очередь пока пуста'
-    listEl.innerHTML = '<div class="empty-state compact"><p>Запусти трек, и тут появятся следующие позиции очереди</p></div>'
+    listEl.innerHTML = emptyListHtml
     return
   }
-  if (metaEl) {
-    const left = Math.max(0, Number(queue.length || 0) - (Number(queueIndex || 0) + 1))
-    metaEl.textContent = `Следующих треков: ${left}`
+
+  if (after === 0) {
+    if (headlineEl) headlineEl.textContent = 'Сейчас последний в очереди'
+    if (metaEl) metaEl.textContent = 'Следующих треков: 0'
+    listEl.innerHTML =
+      '<div class="empty-state compact"><p>Дальше в очереди ничего нет — добавь треки или выбери другой плейлист</p></div>'
+    return
   }
+
+  if (headlineEl) headlineEl.textContent = `${after} ${ruTrackWordAfterCurrent(after)} после текущего`
+  if (metaEl) metaEl.textContent = `Следующих треков: ${after}`
+
   listEl.innerHTML = ''
   const frag = document.createDocumentFragment()
   nextTracks.forEach((track, pos) => {
