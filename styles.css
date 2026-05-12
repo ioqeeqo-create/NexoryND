@@ -329,7 +329,7 @@ body.audio-buffering .spin-icon {
   position: fixed; top:0; left:0; right:0;
   height: var(--titlebar-h);
   display: flex; align-items: center; justify-content: space-between;
-  padding: 0 14px;
+  padding: 0 14px 0 10px;
   z-index: 9999;
   -webkit-app-region: drag;
   background: rgba(6,6,12,0.8);
@@ -339,9 +339,16 @@ body.audio-buffering .spin-icon {
 .titlebar-logo {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-family:var(--font-title); font-weight:700; font-size:13px;
-  color:var(--accent2); letter-spacing:0.06em;
+  gap: 8px;
+  font-family: var(--font-title), system-ui, sans-serif;
+  font-weight: 650;
+  font-size: 14px;
+  line-height: 1.1;
+  color: color-mix(in srgb, var(--text, #f4f4f5) 88%, var(--accent2, #c4b5fd) 12%);
+  letter-spacing: 0.04em;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+  isolation: isolate;
 }
 .titlebar-center {
   font-size:12px; color:var(--muted); flex:1; text-align:center;
@@ -412,17 +419,17 @@ body.audio-buffering .spin-icon {
   text-align: center;
 }
 .flow-boot-logo {
-  width: 88px;
-  height: 88px;
-  border-radius: 22px;
+  width: 104px;
+  height: 104px;
+  border-radius: 24px;
+  box-sizing: border-box;
   background:
-    url("assets/nexory-mark.png") center / 82% no-repeat,
-    radial-gradient(120% 100% at 50% 0%, rgba(255, 255, 255, 0.06), transparent 55%),
-    #050508;
+    url("assets/nexory-mark-ui.png") center / 80% no-repeat,
+    #ffffff;
   box-shadow:
-    0 26px 60px rgba(0, 0, 0, 0.5),
-    0 0 0 1px rgba(255, 255, 255, 0.08) inset,
-    0 0 42px rgba(255, 255, 255, 0.06);
+    0 24px 56px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(0, 0, 0, 0.12),
+    0 1px 0 rgba(255, 255, 255, 0.95) inset;
 }
 .flow-boot-progress {
   width: min(320px, 72vw);
@@ -792,31 +799,67 @@ body:not(.layout-top-nav) #sidebar.sidebar {
 .sidebar-logo {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-family:var(--font-title); font-weight:800; font-size:16px;
-  color:var(--accent2); padding:4px 10px 20px; letter-spacing:0.05em;
+  gap: 10px;
+  font-family: var(--font-title), system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 17px;
+  line-height: 1.15;
+  color: color-mix(in srgb, var(--text, #f4f4f5) 82%, var(--accent2, #c4b5fd) 18%);
+  padding: 4px 10px 20px;
+  letter-spacing: 0.05em;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+  isolation: isolate;
 }
-.sidebar-logo span { opacity:0.7; }
+.sidebar-logo span { opacity: 0.82; }
 
-.titlebar-logo::before,
-.sidebar-logo::before,
+.titlebar-logo::before {
+  content: "";
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 11px;
+  box-sizing: border-box;
+  background:
+    url("assets/nexory-mark-ui.png") center / 78% no-repeat,
+    #ffffff;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.18),
+    0 2px 10px rgba(0, 0, 0, 0.35),
+    0 1px 0 rgba(255, 255, 255, 0.92) inset;
+}
+.sidebar-logo::before {
+  content: "";
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  box-sizing: border-box;
+  background:
+    url("assets/nexory-mark-ui.png") center / 76% no-repeat,
+    #ffffff;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.16),
+    0 2px 8px rgba(0, 0, 0, 0.28),
+    0 1px 0 rgba(255, 255, 255, 0.9) inset;
+}
 .auth-logo-hex::before {
   content: "";
   display: inline-block;
   flex: 0 0 auto;
-  background: url("assets/nexory-mark.png") center / contain no-repeat;
-}
-.titlebar-logo::before {
-  width: 16px;
-  height: 16px;
-}
-.sidebar-logo::before {
-  width: 18px;
-  height: 18px;
-}
-.auth-logo-hex::before {
-  width: 54px;
-  height: 54px;
+  width: 58px;
+  height: 58px;
+  border-radius: 17px;
+  box-sizing: border-box;
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.32),
+    0 0 0 1px rgba(0, 0, 0, 0.12),
+    0 1px 0 rgba(255, 255, 255, 0.92) inset;
+  background:
+    url("assets/nexory-mark-ui.png") center / 76% no-repeat,
+    #ffffff;
 }
 
 /* Строка шапки: логотип + невидимая зона перетаскивания панели (только floated + редактор). */
@@ -2567,11 +2610,22 @@ body.visual-minimal .main-hub-panel--wave .my-wave {
   padding: 18px;
 }
 body.visual-minimal .main-hub-panel--wave .my-wave-list {
-  min-height: 168px;
+  min-height: 0;
 }
 body.visual-minimal .main-hub-panel--wave .my-wave-orb {
   min-height: 154px;
   border-radius: 30px;
+}
+body.visual-minimal .main-hub-panel--wave .my-wave-orb.my-wave-orb--hero:not(.my-wave-orb--rooms) {
+  min-height: clamp(252px, 36vh, 420px);
+  border-radius: 20px;
+}
+body.visual-minimal .main-hub-panel--wave .my-wave-orb.my-wave-orb--hero.my-wave-orb--rooms {
+  min-height: 188px;
+}
+body.visual-minimal .main-hub-panel--wave .my-wave-orb--hero:not(.my-wave-orb--rooms) .my-wave-orb-core.my-wave-orb-core--hero {
+  height: clamp(200px, 48vmin, 340px);
+  transform: translate(-50%, -40%);
 }
 body.visual-minimal .main-quick-liked {
   gap: 10px;
@@ -3215,6 +3269,16 @@ body.visual-minimal .main-quick-playlist-meta span {
   flex: 1;
   min-width: 0;
 }
+.my-wave-hero--no-hint .my-wave-hero-copy {
+  display: none;
+}
+.my-wave-hero--no-hint .my-wave-hero-top {
+  min-height: 0;
+}
+.my-wave-hero--no-hint .my-wave-hero-trailing {
+  top: 6px;
+  right: 8px;
+}
 .my-wave-source-slot--offcanvas {
   position: absolute;
   width: 1px;
@@ -3228,17 +3292,150 @@ body.visual-minimal .main-quick-playlist-meta span {
 .my-wave-visual-stack {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   gap: 10px;
   width: 100%;
-  padding: 4px 0 2px;
+  padding: 2px 0 0;
+  box-sizing: border-box;
 }
 .my-wave-visual-stack--rooms {
   padding-top: 2px;
 }
 .my-wave-orb--hero {
-  min-height: 178px;
-  border-radius: 26px;
+  min-height: 256px;
+  border-radius: 22px;
+}
+.my-wave .my-wave-orb.my-wave-orb--hero {
+  min-height: 256px;
+}
+/* Главная: светло-серое полупрозрачное стекло, без насыщенной волны */
+.main-hub-panel--wave #my-wave .my-wave-orb.my-wave-orb--hero:not(.my-wave-orb--rooms) {
+  min-height: clamp(288px, 38vh, 460px);
+  border-radius: 20px;
+  width: 100%;
+  max-width: none;
+  border-color: rgba(255, 255, 255, 0.18);
+  background:
+    radial-gradient(95% 70% at 50% 0%, rgba(255, 255, 255, 0.2), transparent 58%),
+    radial-gradient(85% 55% at 50% 100%, rgba(255, 255, 255, 0.06), transparent 62%),
+    linear-gradient(
+      188deg,
+      rgba(255, 255, 255, 0.16) 0%,
+      rgba(232, 234, 242, 0.1) 38%,
+      rgba(200, 204, 216, 0.07) 72%,
+      rgba(24, 26, 34, 0.45) 100%
+    );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.06),
+    0 10px 36px rgba(0, 0, 0, 0.2);
+}
+/* Мягкий перелив цвета режима (--wave-c1/c2) поверх серого стекла */
+.main-hub-panel--wave #my-wave .my-wave-orb.my-wave-orb--hero:not(.my-wave-orb--rooms)::before,
+.main-hub-panel--wave #my-wave .my-wave-orb.my-wave-orb--hero:not(.my-wave-orb--rooms)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 1;
+  mix-blend-mode: soft-light;
+}
+.main-hub-panel--wave #my-wave .my-wave-orb.my-wave-orb--hero:not(.my-wave-orb--rooms)::before {
+  background: radial-gradient(88% 72% at 16% 30%, color-mix(in srgb, var(--wave-c1) 44%, transparent), transparent 68%);
+  animation: myWaveMoodDriftA 8.5s ease-in-out infinite alternate;
+}
+.main-hub-panel--wave #my-wave .my-wave-orb.my-wave-orb--hero:not(.my-wave-orb--rooms)::after {
+  background: radial-gradient(82% 68% at 84% 42%, color-mix(in srgb, var(--wave-c2) 40%, transparent), transparent 65%);
+  animation: myWaveMoodDriftB 10.5s ease-in-out infinite alternate;
+}
+.main-hub-panel--wave #my-wave .my-wave-orb--hero:not(.my-wave-orb--rooms) .my-wave-orb-core {
+  z-index: 2;
+}
+@keyframes myWaveMoodDriftA {
+  0% {
+    opacity: 0.16;
+    transform: scale(0.96) translate(-2%, -1.5%);
+  }
+  100% {
+    opacity: 0.52;
+    transform: scale(1.05) translate(3%, 2%);
+  }
+}
+@keyframes myWaveMoodDriftB {
+  0% {
+    opacity: 0.14;
+    transform: scale(1.03) translate(2%, 1%);
+  }
+  100% {
+    opacity: 0.44;
+    transform: scale(0.94) translate(-3%, -2%);
+  }
+}
+.rooms-wave-my-wave .my-wave-orb.my-wave-orb--hero.my-wave-orb--rooms::before,
+.rooms-wave-my-wave .my-wave-orb.my-wave-orb--hero.my-wave-orb--rooms::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 1;
+  mix-blend-mode: soft-light;
+}
+.rooms-wave-my-wave .my-wave-orb.my-wave-orb--hero.my-wave-orb--rooms::before {
+  background: radial-gradient(90% 75% at 20% 28%, color-mix(in srgb, var(--wave-c1) 34%, transparent), transparent 70%);
+  animation: myWaveMoodDriftA 9s ease-in-out infinite alternate;
+}
+.rooms-wave-my-wave .my-wave-orb.my-wave-orb--hero.my-wave-orb--rooms::after {
+  background: radial-gradient(78% 65% at 80% 46%, color-mix(in srgb, var(--wave-c2) 30%, transparent), transparent 68%);
+  animation: myWaveMoodDriftB 11s ease-in-out infinite alternate;
+}
+.rooms-wave-my-wave .my-wave-orb.my-wave-orb--hero.my-wave-orb--rooms .my-wave-orb-core {
+  z-index: 2;
+}
+.main-hub-panel--wave #my-wave {
+  padding: 8px 10px 12px;
+}
+#page-main .main-hub-panel--wave .my-wave.glass-card {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background:
+    linear-gradient(
+      168deg,
+      rgba(255, 255, 255, 0.12) 0%,
+      rgba(236, 238, 246, 0.07) 45%,
+      rgba(190, 194, 208, 0.05) 100%
+    );
+}
+.my-wave-orb--hero.my-wave-orb--rooms {
+  min-height: 212px;
+}
+.my-wave-orb--hero .my-wave-orb-ring,
+.my-wave-orb--hero .my-wave-orb-core {
+  left: 50%;
+  top: 50%;
+}
+.my-wave-orb--hero:not(.my-wave-orb--rooms) .my-wave-orb-ring {
+  width: min(46vw, 320px);
+  height: min(46vw, 320px);
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+  opacity: 0.32;
+  box-shadow: 0 0 48px color-mix(in srgb, var(--wave-c1) 26%, transparent);
+}
+/* На главной кольцо убираем — остаётся только мягкая цветная «полоса» (ядро) */
+.main-hub-panel--wave #my-wave .my-wave-orb--hero:not(.my-wave-orb--rooms) .my-wave-orb-ring {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  box-shadow: none;
+}
+.my-wave-orb--hero.my-wave-orb--rooms .my-wave-orb-ring {
+  width: min(40vw, 280px);
+  height: min(40vw, 280px);
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+  opacity: 0.55;
+  box-shadow: 0 0 44px color-mix(in srgb, var(--wave-c1) 26%, transparent);
 }
 .my-wave-inline-toolbar {
   display: flex;
@@ -3307,9 +3504,241 @@ body.visual-minimal .main-quick-playlist-meta span {
   width: 20px;
   height: 20px;
 }
+/* Тонкие пересекающиеся линии у низа орба (бесконечный сдвиг) */
+.my-wave-fine-lines {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 7%;
+  height: 29%;
+  min-height: 52px;
+  max-height: 150px;
+  z-index: 2;
+  pointer-events: none;
+  overflow: hidden;
+  opacity: 0.97;
+  -webkit-mask-image: linear-gradient(to top, #000 0%, #000 58%, transparent 100%);
+  mask-image: linear-gradient(to top, #000 0%, #000 58%, transparent 100%);
+}
+.my-wave-orb--rooms .my-wave-fine-lines {
+  bottom: 6%;
+  height: 27%;
+  max-height: 104px;
+  min-height: 44px;
+  opacity: 0.9;
+}
+.my-wave-fine-lines__svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.my-wave-fine-lines__g {
+  will-change: transform;
+}
+.my-wave-fine-lines__g--1 {
+  animation: myWaveFineMarquee 11s linear infinite;
+}
+.my-wave-fine-lines__g--2 {
+  animation: myWaveFineMarquee 15s linear infinite reverse;
+}
+.my-wave-fine-lines__g--3 {
+  animation: myWaveFineMarquee 19.5s linear infinite;
+}
+@keyframes myWaveFineMarquee {
+  from {
+    transform: translate(0, 0);
+  }
+  to {
+    transform: translate(-1440px, 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .my-wave-fine-lines__g--1,
+  .my-wave-fine-lines__g--2,
+  .my-wave-fine-lines__g--3 {
+    animation: none !important;
+  }
+  .main-hub-panel--wave #my-wave .my-wave-orb.my-wave-orb--hero:not(.my-wave-orb--rooms)::before,
+  .main-hub-panel--wave #my-wave .my-wave-orb.my-wave-orb--hero:not(.my-wave-orb--rooms)::after,
+  .rooms-wave-my-wave .my-wave-orb.my-wave-orb--hero.my-wave-orb--rooms::before,
+  .rooms-wave-my-wave .my-wave-orb.my-wave-orb--hero.my-wave-orb--rooms::after {
+    animation: none !important;
+  }
+}
+.my-wave-orb-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 16px clamp(12px, 3vw, 28px) 22px;
+  width: 100%;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+.my-wave-orb-overlay .my-wave-overlay-top,
+.my-wave-orb-overlay .my-wave-settings-dock-wrap {
+  pointer-events: auto;
+}
+.my-wave-settings-dock-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 220px;
+}
+.my-wave-settings-dock-wrap .my-wave-source-slot--wave-dock {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+.my-wave-source-slot--wave-dock .my-wave-settings-anchor {
+  pointer-events: auto;
+}
+.my-wave-source-slot--wave-dock .my-wave-settings-btn {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  opacity: 0;
+  pointer-events: none;
+}
+.my-wave-source-slot--wave-dock .my-wave-settings-dropdown {
+  left: 50%;
+  right: auto;
+  top: auto;
+  bottom: calc(100% + 10px);
+  transform: translateX(-50%) translateY(6px) scale(0.97);
+  transform-origin: 50% 100%;
+}
+.my-wave-source-slot--wave-dock .my-wave-settings-anchor.is-open .my-wave-settings-dropdown {
+  transform: translateX(-50%) translateY(0) scale(1);
+}
+.my-wave-hero--no-hint ~ .my-wave-list {
+  margin-top: 2px;
+}
+.my-wave-overlay-top {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.my-wave-inline-title--inorb {
+  font-family: var(--font-title, inherit);
+  font-size: clamp(18px, 2.2vw, 24px);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.93);
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.55);
+}
+.my-wave-glass-btn--inorb {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.11);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+.my-wave-glass-btn--inorb:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.main-hub-panel--wave #my-wave .my-wave-glass-btn--inorb {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.09);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: none;
+}
+.main-hub-panel--wave #my-wave .my-wave-glass-btn--inorb:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+.my-wave-settings-rect {
+  appearance: none;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-radius: 12px;
+  padding: 9px 26px;
+  min-width: 156px;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.16s ease, color 0.16s ease;
+}
+.main-hub-panel--wave #my-wave .my-wave-settings-rect {
+  color: rgba(255, 255, 255, 0.68);
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.035);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.my-wave-settings-rect:hover {
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.22);
+  transform: translateY(-1px);
+}
+.main-hub-panel--wave #my-wave .my-wave-settings-rect:hover {
+  color: rgba(255, 255, 255, 0.88);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+/* Ядро по умолчанию (не комнаты): нейтральное; на главной перекрываем серым ниже */
+.my-wave-orb--hero:not(.my-wave-orb--rooms) .my-wave-orb-core.my-wave-orb-core--hero {
+  width: min(82%, 560px);
+  max-width: calc(100% - 40px);
+  height: clamp(210px, 50vmin, 360px);
+  border-radius: clamp(32px, 4.5vw, 52px);
+  transform: translate(-50%, -44%);
+  filter: blur(30px);
+  opacity: 0.66;
+}
+.main-hub-panel--wave #my-wave .my-wave-orb--hero:not(.my-wave-orb--rooms) .my-wave-orb-core.my-wave-orb-core--hero {
+  background: linear-gradient(
+    168deg,
+    color-mix(in srgb, var(--wave-c1) 24%, rgba(248, 249, 252, 0.34)),
+    color-mix(in srgb, var(--wave-c2) 20%, rgba(218, 222, 232, 0.24)) 46%,
+    rgba(188, 192, 206, 0.2) 100%
+  );
+  filter: blur(38px);
+  opacity: 0.52;
+}
+.my-wave-orb--hero.my-wave-orb--rooms .my-wave-orb-core.my-wave-orb-core--hero {
+  width: min(38vw, 320px);
+  height: 84px;
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+  filter: blur(12px);
+  opacity: 0.76;
+}
+.main-hub-panel--wave #my-wave .my-wave-list {
+  min-height: 0;
+  margin-top: 4px;
+}
 .my-wave-list {
   margin-top: 8px;
-  min-height: 288px;
+  min-height: 328px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3339,6 +3768,9 @@ body.visual-minimal .my-wave-hero h3 {
   border: 1px solid color-mix(in srgb, var(--wave-c2) 36%, rgba(255,255,255,0.13));
   box-shadow: inset 0 0 60px rgba(255,255,255,0.04), 0 12px 34px rgba(0,0,0,0.14);
 }
+.my-wave-orb.my-wave-orb--hero {
+  overflow: visible;
+}
 .my-wave-orb.mode-default { --wave-c1:#ec4899; --wave-c2:#8b5cf6; }
 .my-wave-orb.mode-sad { --wave-c1:#60a5fa; --wave-c2:#a78bfa; }
 .my-wave-orb.mode-happy { --wave-c1:#facc15; --wave-c2:#fb7185; }
@@ -3364,12 +3796,35 @@ body.visual-minimal .my-wave-hero h3 {
   filter: blur(12px);
   opacity: .72;
 }
-.my-wave-orb.is-loading .my-wave-orb-ring {
+.my-wave-orb.is-loading:not(.my-wave-orb--hero) .my-wave-orb-ring {
   animation: myWavePulse 1.25s ease-in-out infinite;
+}
+.my-wave-orb--hero.is-loading .my-wave-orb-ring {
+  animation: myWavePulseHero 1.35s ease-in-out infinite;
+}
+.main-hub-panel--wave #my-wave .my-wave-orb--hero:not(.my-wave-orb--rooms).is-loading .my-wave-orb-ring {
+  animation: none;
+}
+.main-hub-panel--wave #my-wave .my-wave-orb--hero:not(.my-wave-orb--rooms).is-loading .my-wave-orb-core.my-wave-orb-core--hero {
+  animation: myWaveCoreBreath 1.35s ease-in-out infinite;
 }
 @keyframes myWavePulse {
   0%, 100% { transform: scale(.84); opacity: .45; }
   50% { transform: scale(1.08); opacity: .9; }
+}
+@keyframes myWavePulseHero {
+  0%, 100% { transform: translate(-50%, -50%) scale(0.98); opacity: 0.4; }
+  50% { transform: translate(-50%, -50%) scale(1.04); opacity: 0.72; }
+}
+@keyframes myWaveCoreBreath {
+  0%, 100% {
+    opacity: 0.4;
+    transform: translate(-50%, -44%) scale(0.985);
+  }
+  50% {
+    opacity: 0.56;
+    transform: translate(-50%, -44%) scale(1.02);
+  }
 }
 .my-wave-track {
   display: flex;
@@ -4307,6 +4762,16 @@ body.visual-minimal .my-wave-hero h3 {
 .rooms-wave-my-wave .my-wave-orb-core {
   width:min(24vw, 145px);
   height:34px;
+}
+.rooms-wave-my-wave .my-wave-orb.my-wave-orb--hero {
+  min-height: 212px;
+}
+.rooms-wave-my-wave .my-wave-orb.my-wave-orb--hero .my-wave-orb-ring {
+  width: min(40vw, 280px);
+  height: min(40vw, 280px);
+}
+.rooms-wave-my-wave .my-wave-list:has(.my-wave-orb--hero) {
+  min-height: 212px;
 }
 .room-connect-panel {
   min-width:0;
@@ -6663,9 +7128,11 @@ body.visual-yandex .titlebar {
   border-bottom-color: rgba(255, 255, 255, 0.06);
 }
 body.visual-yandex .titlebar-logo {
-  color: #fbff28;
-  font-weight: 800;
-  letter-spacing: -0.02em;
+  color: rgba(255, 250, 225, 0.96);
+  font-weight: 600;
+  letter-spacing: 0.035em;
+  font-size: 14px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
 }
 body.visual-yandex .bg-layer,
 body.visual-yandex .bg-cover-blur,
@@ -6712,16 +7179,17 @@ body.visual-yandex .sidebar-logo {
   align-items: center;
   gap: 7px;
   padding: 0 0 12px;
-  color: #fbff28;
-  font-size: 19px;
-  font-weight: 900;
-  letter-spacing: -0.03em;
+  color: rgba(255, 248, 210, 0.98);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.025em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
 }
 body.visual-yandex .sidebar-logo::first-letter {
-  color: #fbff28;
+  color: rgba(255, 248, 210, 0.98);
 }
 body.visual-yandex .sidebar-logo span {
-  color: #fbff28;
+  color: rgba(255, 248, 210, 0.92);
   opacity: 1;
 }
 body.visual-yandex .sidebar-nav-shell {

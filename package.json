@@ -21,6 +21,7 @@
         "test:gateway": "node scripts/test-flow-gateway.cjs",
         "social-migrate": "node server/migrate-supabase-export-to-sqlite.js",
         "build:yandex-helper": "dotnet publish tools/flow-yandex-helper -c Release -r win-x64 --self-contained false",
+        "prepare:nexory-logo": "node scripts/prepare-nexory-logo.mjs",
         "build": "electron-builder",
         "prebuild:win": "node scripts/merge-renderer.js && node scripts/build-windows-icon.mjs",
         "build:win": "electron-builder --win",

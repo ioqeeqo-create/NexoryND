@@ -4972,9 +4972,16 @@ function toggleMyWaveSourceMenu(ev) {
   btn?.setAttribute('aria-expanded', willOpen ? 'true' : 'false')
 }
 
-function openMyWaveSettingsFromStack() {
-  document.querySelector('#my-wave-source-slot .my-wave-settings-btn')?.click()
-    || document.querySelector('#rooms-wave-source-slot .my-wave-settings-btn')?.click()
+function openMyWaveSettingsFromStack(which) {
+  try {
+    closeMyWaveSourceMenus()
+    const key = String(which || 'main').toLowerCase()
+    const slotId = key === 'rooms' ? 'rooms-wave-source-slot' : 'my-wave-source-slot'
+    const anchor = document.querySelector(`#${slotId} .my-wave-settings-anchor`)
+    if (!anchor) return
+    anchor.classList.add('is-open')
+    anchor.querySelector('.my-wave-settings-btn')?.setAttribute('aria-expanded', 'true')
+  } catch (_) {}
 }
 window.openMyWaveSettingsFromStack = openMyWaveSettingsFromStack
 
@@ -5207,6 +5214,24 @@ async function maybePreloadMyWave(force = false) {
   }
 }
 
+/** Тонкие пересекающиеся линии-«волны» в нижней части орба (SVG + CSS-анимация). */
+function myWaveFineLinesLayerHtml() {
+  const d1 = 'M0,50 C160,24 320,76 480,50 S800,24 960,50 S1120,76 1280,50 S1440,24 1440,50'
+  const d2 = 'M0,66 C160,90 320,42 480,66 S800,90 960,66 S1120,42 1280,66 S1440,90 1440,66'
+  const d3 = 'M0,34 C160,10 320,58 480,34 S800,10 960,34 S1120,58 1280,34 S1440,10 1440,34'
+  const path = (d, stroke) =>
+    `<path fill="none" stroke="${stroke}" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" d="${d}"/>`
+  const pair = (d, stroke) => `${path(d, stroke)}<g transform="translate(1440 0)">${path(d, stroke)}</g>`
+  return `
+    <div class="my-wave-fine-lines" aria-hidden="true">
+      <svg class="my-wave-fine-lines__svg" viewBox="0 0 720 92" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+        <g class="my-wave-fine-lines__g my-wave-fine-lines__g--1">${pair(d1, 'rgba(255,255,255,0.4)')}</g>
+        <g class="my-wave-fine-lines__g my-wave-fine-lines__g--2">${pair(d2, 'rgba(255,255,255,0.3)')}</g>
+        <g class="my-wave-fine-lines__g my-wave-fine-lines__g--3">${pair(d3, 'rgba(255,255,255,0.34)')}</g>
+      </svg>
+    </div>`
+}
+
 async function startMyWave() {
   if (_myWaveBuilding) return
   const seedTracks = getMyWaveSeedTracks()
@@ -5246,25 +5271,18 @@ function renderMyWave() {
   const listEl = document.getElementById('my-wave-list')
   const hintEl = document.getElementById('my-wave-hint')
   const modesEl = document.getElementById('my-wave-modes')
-  if (!listEl || !hintEl) return
+  if (!listEl) return
   const mode = getMyWaveMode()
-  const source = getMyWaveSource()
   const modeCfg = WE?.MY_WAVE_MODES?.[mode] || WE?.MY_WAVE_MODES?.default
-  const seedCount = getMyWaveSeedTracks().length
-  const sourceSlot = document.getElementById('my-wave-source-slot')
-  if (sourceSlot) renderMyWaveSourceSlotInto(sourceSlot)
+  if (hintEl) {
+    hintEl.textContent = ''
+    hintEl.classList.add('hidden')
+    hintEl.style.display = 'none'
+    hintEl.setAttribute('aria-hidden', 'true')
+  }
   if (modesEl) {
     modesEl.innerHTML = ''
     modesEl.style.display = 'none'
-  }
-  if (seedCount < 3) {
-    hintEl.textContent = `Послушай или лайкни еще ${3 - seedCount} трек(ов), чтобы волна поняла твой вкус`
-  } else if (_myWaveBuilding) {
-    hintEl.textContent = 'Подбираю новые треки по твоему вкусу...'
-  } else if (_myWavePreloading) {
-    hintEl.textContent = 'Дозагружаю новые треки, чтобы волна не кончалась...'
-  } else {
-    hintEl.textContent = 'Нажми запуск — волна соберет новую очередь.'
   }
   const orbPlayInner = (() => {
     try {
@@ -5280,22 +5298,23 @@ function renderMyWave() {
     <div class="my-wave-visual-stack">
       <div class="my-wave-orb mode-${mode} my-wave-orb--hero ${_myWaveBuilding || _myWavePreloading ? 'is-loading' : ''}" aria-label="${modeCfg.label}">
         <div class="my-wave-orb-ring"></div>
-        <div class="my-wave-orb-core"></div>
-      </div>
-      <div class="my-wave-inline-toolbar">
-        <span class="my-wave-inline-title">Моя волна</span>
-        <div class="my-wave-inline-playgroup">
-          <button type="button" class="my-wave-glass-btn my-wave-glass-btn--play" onclick="toggleMyWaveOrbPlayback()" aria-label="Плей / пауза">${orbPlayInner}</button>
-          <button type="button" class="my-wave-glass-btn my-wave-glass-btn--stop" onclick="pauseMyWaveInUi()" aria-label="Пауза" title="Пауза">
-            <svg class="my-wave-orb-play-svg" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor"/></svg>
-          </button>
+        <div class="my-wave-orb-core my-wave-orb-core--hero"></div>
+        ${myWaveFineLinesLayerHtml()}
+        <div class="my-wave-orb-overlay">
+          <div class="my-wave-overlay-top">
+            <button type="button" class="my-wave-glass-btn my-wave-glass-btn--play my-wave-glass-btn--inorb" onclick="toggleMyWaveOrbPlayback()" aria-label="Плей / пауза">${orbPlayInner}</button>
+            <span class="my-wave-inline-title my-wave-inline-title--inorb">Моя волна</span>
+          </div>
+          <div class="my-wave-settings-dock-wrap">
+            <button type="button" class="my-wave-settings-rect" onclick="openMyWaveSettingsFromStack('main')" title="Настройки волны">Настройки</button>
+            <div id="my-wave-source-slot" class="my-wave-source-slot my-wave-source-slot--wave-dock"></div>
+          </div>
         </div>
       </div>
-      <button type="button" class="my-wave-glass-btn my-wave-glass-btn--gear" onclick="openMyWaveSettingsFromStack()" title="Настройки волны" aria-label="Настройки волны">
-        <svg class="my-wave-gear-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-      </button>
     </div>
   `
+  const mainWaveSlot = document.getElementById('my-wave-source-slot')
+  if (mainWaveSlot) renderMyWaveSourceSlotInto(mainWaveSlot)
   renderRoomsMyWave()
   toggleYandexWaveMoodDockPanel(false)
   try {
@@ -5311,24 +5330,17 @@ function renderRoomsMyWave() {
   const hintEl = document.getElementById('rooms-wave-hint')
   const modesEl = document.getElementById('rooms-wave-modes')
   const listEl = document.getElementById('rooms-wave-list')
-  if (!hintEl || !modesEl || !listEl) return
+  if (!modesEl || !listEl) return
+  if (hintEl) {
+    hintEl.textContent = ''
+    hintEl.classList.add('hidden')
+    hintEl.style.display = 'none'
+    hintEl.setAttribute('aria-hidden', 'true')
+  }
   const mode = getMyWaveMode()
-  const source = getMyWaveSource()
   const modeCfg = WE?.MY_WAVE_MODES?.[mode] || WE?.MY_WAVE_MODES?.default
-  const seedCount = getMyWaveSeedTracks().length
-  const roomsSourceSlot = document.getElementById('rooms-wave-source-slot')
-  if (roomsSourceSlot) renderMyWaveSourceSlotInto(roomsSourceSlot)
   modesEl.innerHTML = ''
   modesEl.style.display = 'none'
-  if (seedCount < 3) {
-    hintEl.textContent = `Послушай или лайкни еще ${3 - seedCount} трек(ов), чтобы волна поняла твой вкус`
-  } else if (_myWaveBuilding) {
-    hintEl.textContent = 'Подбираю новые треки по твоему вкусу...'
-  } else if (_myWavePreloading) {
-    hintEl.textContent = 'Дозагружаю новые треки, чтобы волна не кончалась...'
-  } else {
-    hintEl.textContent = 'Нажми запуск — волна соберет новую очередь.'
-  }
   const roomsOrbPlayInner = (() => {
     try {
       const playing = Boolean(audio && !audio.paused && !audio.ended && queueScope === 'myWave')
@@ -5341,24 +5353,25 @@ function renderRoomsMyWave() {
   })()
   listEl.innerHTML = `
     <div class="my-wave-visual-stack my-wave-visual-stack--rooms">
-      <div class="my-wave-orb mode-${mode} my-wave-orb--hero ${_myWaveBuilding || _myWavePreloading ? 'is-loading' : ''}" aria-label="${modeCfg.label}">
+      <div class="my-wave-orb mode-${mode} my-wave-orb--hero my-wave-orb--rooms ${_myWaveBuilding || _myWavePreloading ? 'is-loading' : ''}" aria-label="${modeCfg.label}">
         <div class="my-wave-orb-ring"></div>
-        <div class="my-wave-orb-core"></div>
-      </div>
-      <div class="my-wave-inline-toolbar">
-        <span class="my-wave-inline-title">Моя волна</span>
-        <div class="my-wave-inline-playgroup">
-          <button type="button" class="my-wave-glass-btn my-wave-glass-btn--play" onclick="toggleMyWaveOrbPlayback()" aria-label="Плей / пауза">${roomsOrbPlayInner}</button>
-          <button type="button" class="my-wave-glass-btn my-wave-glass-btn--stop" onclick="pauseMyWaveInUi()" aria-label="Пауза" title="Пауза">
-            <svg class="my-wave-orb-play-svg" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor"/></svg>
-          </button>
+        <div class="my-wave-orb-core my-wave-orb-core--hero"></div>
+        ${myWaveFineLinesLayerHtml()}
+        <div class="my-wave-orb-overlay">
+          <div class="my-wave-overlay-top">
+            <button type="button" class="my-wave-glass-btn my-wave-glass-btn--play my-wave-glass-btn--inorb" onclick="toggleMyWaveOrbPlayback()" aria-label="Плей / пауза">${roomsOrbPlayInner}</button>
+            <span class="my-wave-inline-title my-wave-inline-title--inorb">Моя волна</span>
+          </div>
+          <div class="my-wave-settings-dock-wrap">
+            <button type="button" class="my-wave-settings-rect" onclick="openMyWaveSettingsFromStack('rooms')" title="Настройки волны">Настройки</button>
+            <div id="rooms-wave-source-slot" class="my-wave-source-slot my-wave-source-slot--wave-dock"></div>
+          </div>
         </div>
       </div>
-      <button type="button" class="my-wave-glass-btn my-wave-glass-btn--gear" onclick="openMyWaveSettingsFromStack()" title="Настройки волны" aria-label="Настройки волны">
-        <svg class="my-wave-gear-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-      </button>
     </div>
   `
+  const roomsWaveSlot = document.getElementById('rooms-wave-source-slot')
+  if (roomsWaveSlot) renderMyWaveSourceSlotInto(roomsWaveSlot)
   toggleYandexWaveMoodDockPanel(false)
   try {
     if (typeof hydrateFlowLucideIcons === 'function') {
@@ -6525,13 +6538,12 @@ function ensureRoomsUI() {
       <div style="margin-top:8px"><button class="btn-small" onclick="openRoomOwnTracksPicker()">Свои треки</button></div>
       <div class="rooms-wave-embedded">
         <div class="my-wave rooms-wave-my-wave">
-          <div class="my-wave-hero my-wave-hero--compact-title">
+          <div class="my-wave-hero my-wave-hero--compact-title my-wave-hero--no-hint">
             <div class="my-wave-hero-top">
               <div class="my-wave-hero-copy">
-                <p id="rooms-wave-hint">Выбери режим и запусти волну для общей очереди</p>
+                <p id="rooms-wave-hint" class="hidden" aria-hidden="true"></p>
               </div>
               <div class="my-wave-hero-trailing">
-                <div id="rooms-wave-source-slot" class="my-wave-source-slot my-wave-source-slot--offcanvas"></div>
                 <div id="rooms-yandex-wave-mood-dock" class="yandex-wave-mood-dock hidden" aria-label="Настроение волны Яндекса"></div>
               </div>
             </div>
