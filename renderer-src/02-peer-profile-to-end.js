@@ -6820,9 +6820,12 @@ function renderQueue() {
     row.className = 'home-up-next-item'
     const cover = getListCoverUrl(t)
     const fallbackBg = t.bg || 'linear-gradient(135deg,#7c3aed,#a855f7)'
+    const coverStyle = cover
+      ? `background-image:url('${escapeHtml(cover)}');background-color:#0e0e14;`
+      : `background:${fallbackBg};`
     row.innerHTML = `
       <span class="home-up-next-order">${queueIndex + pos + 2}</span>
-      <span class="home-up-next-cover" style="background:${fallbackBg};${cover ? `background-image:url('${escapeHtml(cover)}');` : ''}"></span>
+      <span class="home-up-next-cover" style="${coverStyle}"></span>
       <span class="home-up-next-meta-wrap">
         <strong>${escapeHtml(sanitizeDisplayText(t.title || 'Без названия'))}</strong>
         <span>${escapeHtml(sanitizeDisplayText(t.artist || '—'))}</span>

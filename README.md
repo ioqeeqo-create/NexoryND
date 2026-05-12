@@ -4,14 +4,14 @@
 
 ## Current release
 
-- **Version:** 2.7.20 (see `package.json` for the exact value on your checkout).
+- **Version:** 2.7.21 (see `package.json` for the exact value on your checkout).
 - **Windows:** run `npm run build:win` to produce `dist/Nexory-Setup.exe` (installer) and `dist/Nexory-Portable.exe` (portable).
 
 Publishing a GitHub Release with artifacts:
 
 - **electron-builder** (needs `GH_TOKEN` with `repo` scope): `npm run release:win`
 - **GitHub CLI** (after `npm run build:win`):  
-  `gh release create v2.7.20 --repo ioqeeqo-create/NexoryND dist/Nexory-Setup.exe dist/Nexory-Portable.exe --title "Nexory 2.7.20" --generate-notes`
+  `gh release create v2.7.21 --repo ioqeeqo-create/NexoryND dist/Nexory-Setup.exe dist/Nexory-Portable.exe --title "Nexory 2.7.21" --generate-notes`
 
 ## Key features
 
