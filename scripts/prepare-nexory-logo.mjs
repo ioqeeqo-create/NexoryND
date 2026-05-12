@@ -140,38 +140,12 @@ async function main() {
     .png()
     .toBuffer()
 
-  /** Для icon-source / ICO: trim + крупный масштаб в кадре — иначе в Start tile крошечная «точка». */
-  async function packGlyphForShellIcon(pngBuf) {
-    let tight
-    try {
-      tight = await sharp(pngBuf).trim({ threshold: 12 }).png().toBuffer()
-    } catch {
-      tight = pngBuf
-    }
-    const target = Math.round(SQ * 0.9)
-    const scaled = await sharp(tight)
-      .resize(target, target, {
-        fit: 'inside',
-        background: TRANSPARENT,
-      })
-      .png()
-      .toBuffer()
-    return sharp({
-      create: { width: SQ, height: SQ, channels: 4, background: TRANSPARENT },
-    })
-      .composite([{ input: scaled, gravity: 'centre' }])
-      .png()
-      .toBuffer()
-  }
-
-  const packedIconSource = await packGlyphForShellIcon(forIcon)
-
   const outIcon = path.join(root, 'assets', 'icon-source.png')
   const outMark = path.join(root, 'assets', 'nexory-mark.png')
   const outAuth = path.join(root, 'assets', 'auth', 'nexory.png')
   const outMarkLogin = path.join(root, 'assets', 'auth', 'mark-login.png')
 
-  fs.writeFileSync(outIcon, packedIconSource)
+  fs.writeFileSync(outIcon, squareTrans)
   fs.writeFileSync(outMark, squareTrans)
   fs.writeFileSync(outAuth, squareTrans)
   fs.writeFileSync(outMarkLogin, squareTrans)
