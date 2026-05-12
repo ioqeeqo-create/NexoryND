@@ -3672,6 +3672,73 @@ function pickFlowConfigFile() {
   input.click()
 }
 
+/**
+ * Импорт .flowpreset / dotify: только внешний вид — подмешиваем в текущий `flow_visual` поля
+ * blur, bright, bgType, customBg, gifMode и при наличии `flow_track_covers`.
+ * Остальные ключи localStorage не меняем (сессия, источники, тема UI и т.д.).
+ */
+function applyPresetAppearanceOnly(storage) {
+  if (!storage || typeof storage !== 'object') return { appliedVisual: false, appliedCovers: false }
+
+  const incomingStr = storage.flow_visual
+  let incoming = {}
+  if (incomingStr != null && String(incomingStr).trim()) {
+    try {
+      incoming = JSON.parse(String(incomingStr))
+    } catch {
+      incoming = {}
+    }
+    if (!incoming || typeof incoming !== 'object') incoming = {}
+  }
+
+  const cur = getVisual()
+  const patch = {}
+
+  if (Object.prototype.hasOwnProperty.call(incoming, 'blur')) {
+    const n = Number(incoming.blur)
+    if (Number.isFinite(n)) patch.blur = Math.max(0, Math.min(80, n))
+  }
+  if (Object.prototype.hasOwnProperty.call(incoming, 'bright')) {
+    const n = Number(incoming.bright)
+    if (Number.isFinite(n)) patch.bright = Math.max(10, Math.min(100, n))
+  }
+  if (Object.prototype.hasOwnProperty.call(incoming, 'bgType')) {
+    const t = String(incoming.bgType || '')
+    if (t === 'gradient' || t === 'cover' || t === 'custom') patch.bgType = t
+  }
+  if (Object.prototype.hasOwnProperty.call(incoming, 'customBg')) {
+    patch.customBg =
+      incoming.customBg == null || incoming.customBg === '' ? null : String(incoming.customBg)
+  }
+  if (Object.prototype.hasOwnProperty.call(incoming, 'gifMode') && incoming.gifMode && typeof incoming.gifMode === 'object') {
+    const g = incoming.gifMode
+    const base = Object.assign({ bg: true, track: true, playlist: true }, cur.gifMode || {})
+    patch.gifMode = Object.assign({}, base, {
+      bg: typeof g.bg === 'boolean' ? g.bg : base.bg,
+      track: typeof g.track === 'boolean' ? g.track : base.track,
+      playlist: typeof g.playlist === 'boolean' ? g.playlist : base.playlist,
+    })
+  }
+
+  const hasCoversKey =
+    Object.prototype.hasOwnProperty.call(storage, 'flow_track_covers') && storage.flow_track_covers != null
+
+  let appliedVisual = false
+  if (Object.keys(patch).length) {
+    _flowVisualMemo = null
+    localStorage.setItem('flow_visual', JSON.stringify(Object.assign({}, cur, patch)))
+    appliedVisual = true
+  }
+
+  let appliedCovers = false
+  if (hasCoversKey) {
+    localStorage.setItem('flow_track_covers', String(storage.flow_track_covers))
+    appliedCovers = true
+  }
+
+  return { appliedVisual, appliedCovers }
+}
+
 /** После записи ключей пресета в localStorage подтянуть in-memory состояние и не затирать flow_visual ползунками формы. */
 function syncRuntimeCachesAfterPresetImport() {
   try {
@@ -3706,73 +3773,22 @@ function importFlowConfigFile(input) {
   const reader = new FileReader()
   reader.onload = () => {
     try {
-      const sessionBackup = {
-        flow_profiles: localStorage.getItem('flow_profiles'),
-        flow_current_user: localStorage.getItem('flow_current_user'),
-        flow_auth_last_user: localStorage.getItem('flow_auth_last_user'),
-      }
       const parsed = JSON.parse(String(reader.result || '{}'))
       const preset = normalizeImportedFlowPreset(parsed)
       const storage = preset?.storage
       if (!storage || typeof storage !== 'object') {
         throw new Error('Неверный формат файла')
       }
-      if (preset.replaceAll) {
-        const protectedKeys = new Set([
-          'flow_profile',
-          'flow_profile_accounts',
-          'flow_profile_active',
-          'flow_profile_presence',
-          'flow_profile_pending_messages',
-          'flow_profile_presence_room_id',
-          'flow_profile_password',
-          'flow_profile_password_hash',
-          'flow_profile_password_salt',
-          'flow_social_accounts',
-          'flow_social_session',
-          'flow_social_profile',
-          'flow_social_pending',
-          'flow_friends_cache',
-          'flow_auth_last_user',
-          'flow_profiles',
-          'flow_current_user',
-        ])
-        const toDelete = []
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i)
-          if (key && key.startsWith('flow_') && !protectedKeys.has(key) && !key.startsWith('flow_friends_')) toDelete.push(key)
-        }
-        toDelete.forEach((key) => localStorage.removeItem(key))
+      const { appliedVisual, appliedCovers } = applyPresetAppearanceOnly(storage)
+      if (!appliedVisual && !appliedCovers) {
+        throw new Error('В файле нет данных о фоне, размытии, яркости или обложках')
       }
-      Object.entries(storage).forEach(([key, value]) => {
-        if (!key.startsWith('flow_')) return
-        if (
-          key === 'flow_profile'
-          || key === 'flow_profile_accounts'
-          || key === 'flow_profile_active'
-          || key === 'flow_profile_presence'
-          || key === 'flow_profile_pending_messages'
-          || key === 'flow_profile_password'
-          || key === 'flow_profile_password_hash'
-          || key === 'flow_profile_password_salt'
-          || key === 'flow_social_accounts'
-          || key === 'flow_social_session'
-          || key === 'flow_social_profile'
-          || key === 'flow_social_pending'
-          || key === 'flow_auth_last_user'
-          || key === 'flow_profiles'
-          || key === 'flow_current_user'
-          || key.startsWith('flow_friends_')
-        ) return
-        localStorage.setItem(key, String(value ?? ''))
-      })
-      // Force-restore auth session keys regardless of preset payload content.
-      Object.entries(sessionBackup).forEach(([key, value]) => {
-        if (typeof value === 'string' && value.trim()) localStorage.setItem(key, value)
-      })
       syncRuntimeCachesAfterPresetImport()
-      setFlowConfigStatus('Nexory preset импортирован. Сессия аккаунта сохранена, перезагрузка не требуется.', false)
-      showToast('Nexory preset импортирован')
+      const parts = []
+      if (appliedVisual) parts.push('фон, GIF-обложки, размытие и яркость фона')
+      if (appliedCovers) parts.push('кастомные обложки треков')
+      setFlowConfigStatus(`Импортировано: ${parts.join('; ')}. Остальные настройки не менялись.`, false)
+      showToast('Внешний вид из preset применён')
       try { applySettingsSectionsState() } catch {}
       // Важно: не вызывать applyVisualSettings() — она берёт значения из DOM и перезаписывает только что импортированный flow_visual.
       try { initVisualSettings() } catch {}
