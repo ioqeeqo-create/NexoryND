@@ -1,6 +1,6 @@
 /**
  * Импорт мастер-лого Nexory: обрезка снизу + квадрат 1024 на прозрачном фоне (иконка без белых полос).
- * nexory-mark-ui.png — белый силуэт на прозрачном для тёмного UI (без CSS filter).
+ * nexory-mark-ui.png — глиф как в мастере (после снятия светлой подложки), без «заливки в белый прямоугольник».
  * Использование: node scripts/prepare-nexory-logo.mjs [путь-к-исходнику.png]
  */
 import fs from 'fs'
@@ -26,32 +26,42 @@ const TRANSPARENT = { r: 0, g: 0, b: 0, alpha: 0 }
 /** Доля высоты, срезаемая снизу (пустое поле под знаком). */
 const BOTTOM_CROP_RATIO = 0.11
 
-/** Любой непрозрачный пиксель → белый с той же альфой (для тёмного UI без CSS invert). */
-async function toWhiteOnTransparent(pngBuf) {
+/** Убирает почти белые/светло-серые «плашки» (низкая насыщенность), оставляя сам знак. */
+async function stripLightMatte(pngBuf) {
   const { data, info } = await sharp(pngBuf)
     .ensureAlpha()
     .raw()
     .toBuffer({ resolveWithObject: true })
   const { width, height, channels } = info
-  const out = Buffer.alloc(data.length)
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const i = (y * width + x) * channels
-      const a = data[i + 3]
-      if (a < 6) {
-        out[i] = 0
-        out[i + 1] = 0
-        out[i + 2] = 0
-        out[i + 3] = 0
-      } else {
-        out[i] = 255
-        out[i + 1] = 255
-        out[i + 2] = 255
-        out[i + 3] = a
-      }
+  if (channels !== 4) throw new Error('expected RGBA')
+  const out = Buffer.from(data)
+  const minLum = 232
+  const maxSat = 44
+  for (let i = 0; i < out.length; i += 4) {
+    const r = out[i]
+    const g = out[i + 1]
+    const b = out[i + 2]
+    const a = out[i + 3]
+    if (a < 6) continue
+    const mx = Math.max(r, g, b)
+    const mn = Math.min(r, g, b)
+    const sat = mx - mn
+    const lum = 0.299 * r + 0.587 * g + 0.114 * b
+    if (lum >= minLum && sat <= maxSat) {
+      out[i] = 0
+      out[i + 1] = 0
+      out[i + 2] = 0
+      out[i + 3] = 0
     }
   }
   return sharp(out, { raw: { width, height, channels: 4 } }).png().toBuffer()
+}
+
+async function hasVisibleContent(pngBuf) {
+  const s = await sharp(pngBuf).stats()
+  const ch = s.channels
+  if (ch.length < 4) return true
+  return ch[3].mean > 1.2
 }
 
 const LOCAL_MASTER = path.join(root, 'assets', '_nexory-master-in.png')
@@ -80,10 +90,19 @@ async function main() {
     .png()
     .toBuffer()
 
+  const croppedPng = await sharp(cropped).png().toBuffer()
+  let forIcon = croppedPng
+  try {
+    const dem = await stripLightMatte(croppedPng)
+    if (await hasVisibleContent(dem)) forIcon = dem
+  } catch (_) {
+    /* оставляем cropped */
+  }
+
   const squareTrans = await sharp({
     create: { width: SQ, height: SQ, channels: 4, background: TRANSPARENT },
   })
-    .composite([{ input: cropped, gravity: 'centre' }])
+    .composite([{ input: forIcon, gravity: 'centre' }])
     .png()
     .toBuffer()
 
@@ -95,14 +114,17 @@ async function main() {
   fs.writeFileSync(outMark, squareTrans)
   fs.writeFileSync(outAuth, squareTrans)
 
-  /** Шапка/сайдбар: обрезка по содержимому, без белого квадрата; светлый силуэт в PNG (без filter в CSS). */
+  /** UI: tight trim по альфе, без принудительной заливки в белый (иначе «белый прямоугольник»). */
   const outUi = path.join(root, 'assets', 'nexory-mark-ui.png')
   let uiBuf
   try {
-    const trimmed = sharp(cropped).trim({ threshold: 24 })
-    const tm = await trimmed.metadata()
-    const pad = Math.max(4, Math.round(Math.max(tm.width || 0, tm.height || 0) * 0.05))
-    const padded = await trimmed
+    const tmeta = await sharp(forIcon).trim({ threshold: 12 }).metadata()
+    const pad = Math.max(
+      4,
+      Math.round(Math.max(tmeta.width || 0, tmeta.height || 0) * 0.05),
+    )
+    uiBuf = await sharp(forIcon)
+      .trim({ threshold: 12 })
       .extend({
         top: pad,
         bottom: pad,
@@ -112,13 +134,12 @@ async function main() {
       })
       .png()
       .toBuffer()
-    uiBuf = await toWhiteOnTransparent(padded)
   } catch (_) {
-    uiBuf = await toWhiteOnTransparent(squareTrans)
+    uiBuf = forIcon
   }
   fs.writeFileSync(outUi, uiBuf)
 
-  console.log('OK', { src, was: `${W}×${H}`, cropBottom, out: `${SQ}×${SQ} transparent + ui white silhouette` })
+  console.log('OK', { src, was: `${W}×${H}`, cropBottom, out: `${SQ}×${SQ} transparent + ui dematte/trim` })
   console.log('Wrote', outIcon, outMark, outAuth, outUi)
 }
 
