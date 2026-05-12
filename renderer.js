@@ -13143,8 +13143,8 @@ window.addEventListener('DOMContentLoaded', () => {
   if (window.api?.appVersion) {
     window.api.appVersion().then((r) => {
       if (!r?.ok || !r?.version) return
-      const logo = document.getElementById('titlebar-logo')
-      if (logo) logo.textContent = `Nexory v${r.version}`
+      const verEl = document.getElementById('titlebar-version')
+      if (verEl) verEl.textContent = ` v${r.version}`
       const welcomeSub = document.querySelector('#page-home .content-sub')
       if (welcomeSub) welcomeSub.textContent = `Выбери источник и начни слушать • билд ${r.version}`
       showToast(`Запущен билд v${r.version}`)

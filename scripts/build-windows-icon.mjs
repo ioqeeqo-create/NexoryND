@@ -19,14 +19,31 @@ if (!fs.existsSync(src)) {
   process.exit(1)
 }
 
-/** Тёмная подложка как у нормальных Win-иконок (не «серый квадрат» на панели). */
-const BG = { r: 14, g: 14, b: 18, alpha: 1 }
+/** Тёмная подложка под панель задач Windows. */
+const BG = { r: 12, g: 12, b: 16, alpha: 1 }
+
+/** Средняя яркость непрозрачных пикселей (0–255). */
+async function meanOpaqueLuminance(pngBuf) {
+  const { data, info } = await sharp(pngBuf)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true })
+  if (info.channels !== 4) return 200
+  let sum = 0
+  let n = 0
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] < 14) continue
+    sum += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]
+    n++
+  }
+  return n ? sum / n : 200
+}
 
 async function renderIconPng(size) {
-  const pad = Math.max(2, Math.round(size * 0.17))
+  const pad = Math.max(1, Math.round(size * 0.085))
   const inner = Math.max(4, size - pad * 2)
 
-  const logoBuf = await sharp(src)
+  let logoBuf = await sharp(src)
     .ensureAlpha()
     .resize(inner, inner, {
       fit: 'inside',
@@ -35,12 +52,17 @@ async function renderIconPng(size) {
     .png()
     .toBuffer()
 
+  const lum = await meanOpaqueLuminance(logoBuf)
+  if (lum < 150) {
+    logoBuf = await sharp(logoBuf).negate({ alpha: false }).png().toBuffer()
+  }
+
   let outSharp = sharp({
     create: { width: size, height: size, channels: 4, background: BG },
   }).composite([{ input: logoBuf, gravity: 'centre' }])
 
   if (size <= 32) {
-    outSharp = outSharp.sharpen({ sigma: 0.55, m1: 1.15, m2: 0.28 })
+    outSharp = outSharp.sharpen({ sigma: 0.48, m1: 1.1, m2: 0.24 })
   }
 
   return outSharp.png().toBuffer()

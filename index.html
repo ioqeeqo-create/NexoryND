@@ -6,13 +6,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
   <!-- bump ?v= when profile/CSS/JS layout changes so Electron reloads assets -->
-  <link rel="stylesheet" href="styles.css?v=20260512-nexory-mark-dematte">
+  <link rel="stylesheet" href="styles.css?v=20260512-titlebar-no-mark-icon-v2711">
 </head>
 <body>
 
 <div id="flow-boot-splash" class="flow-boot-splash" role="status" aria-live="polite" aria-label="Загрузка Nexory">
   <div class="flow-boot-splash-inner">
-    <div class="flow-boot-logo" aria-hidden="true"></div>
     <div class="flow-boot-progress" aria-hidden="true">
       <div class="flow-boot-progress-track">
         <div class="flow-boot-progress-fill"></div>
@@ -34,7 +33,7 @@
 
 <!-- TITLEBAR -->
 <div class="titlebar">
-  <span class="titlebar-logo" id="titlebar-logo">Nexory</span>
+  <span class="titlebar-logo" id="titlebar-logo"><span class="titlebar-name">Nexory</span><span class="titlebar-ver" id="titlebar-version"></span></span>
   <div class="titlebar-center" id="titlebar-track-info"></div>
   <div class="titlebar-btns">
     <button type="button" onclick="window.api.minimize()" title="Свернуть" aria-label="Свернуть"><svg class="ui-icon" data-lucide="minus" viewBox="0 0 24 24"></svg></button>
