@@ -412,15 +412,17 @@ body.audio-buffering .spin-icon {
   text-align: center;
 }
 .flow-boot-logo {
-  width: 76px;
-  height: 76px;
+  width: 88px;
+  height: 88px;
   border-radius: 22px;
   background:
-    linear-gradient(145deg, color-mix(in srgb, var(--accent2, #ddd6fe) 72%, #ffffff), color-mix(in srgb, var(--accent, #818cf8) 62%, #312e81));
+    url("assets/nexory-mark.png") center / 82% no-repeat,
+    radial-gradient(120% 100% at 50% 0%, rgba(255, 255, 255, 0.06), transparent 55%),
+    #050508;
   box-shadow:
-    0 26px 60px rgba(0, 0, 0, 0.42),
-    0 0 0 1px rgba(255, 255, 255, 0.09) inset,
-    0 0 48px color-mix(in srgb, var(--accent2, #c4b5fd) 28%, transparent);
+    0 26px 60px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.08) inset,
+    0 0 42px rgba(255, 255, 255, 0.06);
 }
 .flow-boot-progress {
   width: min(320px, 72vw);
@@ -802,7 +804,7 @@ body:not(.layout-top-nav) #sidebar.sidebar {
   content: "";
   display: inline-block;
   flex: 0 0 auto;
-  background: url("assets/flow-mark.svg") center / contain no-repeat;
+  background: url("assets/nexory-mark.png") center / contain no-repeat;
 }
 .titlebar-logo::before {
   width: 16px;

@@ -1,10 +1,10 @@
-# Flow
+# Nexory
 
-Flow is an Electron desktop music player with social rooms, shared playback, and customizable UI.
+Nexory is an Electron desktop music player with social rooms, shared playback, and customizable UI.
 
 ## Current release
 
-- App version: `2.6.6`
+- App version: see `package.json`
 - Update channel: `stable` (`latest.yml` + installer artifacts)
 - Social mode: cloud-first (`/social/flow-api/v1`)
 
@@ -12,9 +12,9 @@ Flow is an Electron desktop music player with social rooms, shared playback, and
 
 - Full player with lyrics/karaoke, playlists, likes, and profile customization
 - Room listening with host controls and shared queue
-- Multi-source music search (Yandex, VK, SoundCloud, Spotify fallback flow, etc.)
+- Multi-source music search (Yandex, VK, SoundCloud, Spotify fallback, etc.)
 - Built-in app updater (check/download/install)
-- Animated Flow-style UI with glass effects and visual modes
+- Animated glass UI with visual modes
 
 ## Social/Room status (2.6.x line)
 
@@ -38,6 +38,4 @@ npm run build:win
 
 ## Publish stable update artifacts
 
-```bash
-npm run publish:update:stable -- --host <host> --user <user> --port <port> --dir /var/www/flow-updates/stable
-```
+See `scripts/publish-stable-update.cjs` and internal deploy notes.
