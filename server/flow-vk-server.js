@@ -542,5 +542,5 @@ const server = http.createServer(async (req, res) => {
 })
 
 server.listen(PORT, HOST, () => {
-  console.log(`Flow VK server running on http://${HOST}:${PORT}`)
+  console.log(`Nexory VK server running on http://${HOST}:${PORT}`)
 })

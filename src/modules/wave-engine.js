@@ -1,39 +1,58 @@
 ;(function initWaveEngine(global) {
   const MY_WAVE_MIN_TRACKS = 10
   const MY_WAVE_MAX_TRACKS = 30
+  // Иконки настроения: Lucide (ISC) https://lucide.dev — sparkles, frown, laugh, zap, moon, heart
   const MY_WAVE_MODES = {
     default: {
       label: 'Обычная',
+      ymMoodEnergy: 'all',
+      moodIconSvg:
+        '<svg class="lucide-wave-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg>',
       hint: 'глубокая очередь по общему вкусу, жанрам и похожим артистам',
       keywords: ['official', 'audio', 'music', 'mix', 'single', 'album', 'remix', 'feat', 'prod', 'viral', 'trend', 'trending', 'hit', 'popular', 'vibe', 'tiktok', 'hyperpop', 'phonk', 'dreamcore'],
       queryTerms: ['viral hits', 'tiktok vibe', 'trending music', 'popular mix', 'hyperpop viral', 'phonk viral', 'slowed reverb popular'],
     },
     sad: {
       label: 'Грустная',
+      ymMoodEnergy: 'sad',
+      moodIconSvg:
+        '<svg class="lucide-wave-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M16 16s-1.5-2-4-2-4 2-4 2"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="9" y2="9"/></svg>',
       hint: 'мягкая и меланхоличная очередь из твоих предпочтений',
       keywords: ['sad', 'slow', 'slowed', 'reverb', 'dreamcore', 'doll', 'mirrors', 'lofi', 'lo-fi', 'melancholy', 'melancholic', 'alone', 'lonely', 'cry', 'tears', 'rain', 'night', 'dark', 'blue', 'broken', 'heartbreak', 'empty', 'pain', 'груст', 'печаль', 'слез', 'один', 'одна', 'одиноч', 'дожд', 'ноч', 'боль', 'разбит', 'тоска', 'пуст', 'плак', 'забыть'],
       queryTerms: ['sad viral', 'sad tiktok', 'slowed reverb popular', 'dreamcore music', 'sad aesthetic tiktok', 'depression cherry vibe', 'melancholic pop'],
     },
     happy: {
       label: 'Веселая',
+      ymMoodEnergy: 'fun',
+      moodIconSvg:
+        '<svg class="lucide-wave-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M18 13a6 6 0 0 1-6 5 6 6 0 0 1-6-5h12Z"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="9" y2="9"/></svg>',
       hint: 'более светлая и позитивная очередь по твоему вкусу',
       keywords: ['happy', 'smile', 'summer', 'sun', 'sunny', 'party', 'dance', 'fun', 'joy', 'love', 'good', 'vibe', 'vibes', 'club', 'bright', 'feel good', 'hyperpop', 'glitchcore', 'весел', 'улыб', 'лето', 'солн', 'танц', 'кайф', 'радост', 'любов', 'позитив', 'движ', 'туса', 'вечерин'],
       queryTerms: ['happy viral', 'tiktok happy', 'feel good', 'hyperpop happy', 'glitchcore pop', 'summer vibe', 'party mix'],
     },
     energetic: {
       label: 'Энергичная',
+      ymMoodEnergy: 'active',
+      moodIconSvg:
+        '<svg class="lucide-wave-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg>',
       hint: 'треклист поживее, чтобы разогнаться',
       keywords: ['energy', 'energetic', 'speed', 'fast', 'power', 'rock', 'metal', 'drum', 'bass', 'dnb', 'phonk', 'rave', 'club', 'hard', 'workout', 'rage', 'trap', 'banger', 'aggressive', 'brazilian', 'drift', 'gym', 'фонк', 'энерг', 'быстр', 'мощ', 'рок', 'метал', 'рейв', 'клуб', 'фонк', 'драм', 'бас', 'разнос', 'жестк'],
       queryTerms: ['phonk viral', 'aggressive phonk', 'brazilian funk popular', 'gym phonk', 'tiktok hype', 'energetic viral', 'club banger'],
     },
     calm: {
       label: 'Спокойная',
+      ymMoodEnergy: 'calm',
+      moodIconSvg:
+        '<svg class="lucide-wave-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>',
       hint: 'ровная очередь без резких прыжков',
       keywords: ['calm', 'chill', 'relax', 'ambient', 'acoustic', 'piano', 'sleep', 'dream', 'soft', 'quiet', 'slow', 'lofi', 'lo-fi', 'dreamcore', 'softcore', 'спокой', 'чил', 'расслаб', 'акуст', 'пианино', 'сон', 'мечт', 'тих', 'медлен', 'мягк'],
       queryTerms: ['chill viral', 'calm tiktok', 'soft night', 'lofi vibe', 'dreamcore chill', 'ambient playlist', 'relax mix'],
     },
     romantic: {
       label: 'Романтика',
+      ymMoodEnergy: 'calm',
+      moodIconSvg:
+        '<svg class="lucide-wave-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>',
       hint: 'больше треков про любовь и мягкий вайб',
       keywords: ['love', 'heart', 'kiss', 'romance', 'romantic', 'baby', 'darling', 'sweet', 'relationship', 'miss you', 'slowed', 'soft', 'любов', 'сердц', 'роман', 'поцел', 'мила', 'милый', 'нежн', 'скуч', 'твоя', 'твой', 'влюб'],
       queryTerms: ['romantic viral', 'love tiktok', 'soft love', 'heartbreak love', 'slowed love songs', 'night romance', 'relationship songs'],
@@ -62,6 +81,10 @@
     const normalizeTrackSignature = typeof ctx.normalizeTrackSignature === 'function' ? ctx.normalizeTrackSignature : () => ''
     const getQueue = typeof ctx.getQueue === 'function' ? ctx.getQueue : () => []
     const getCurrentTrack = typeof ctx.getCurrentTrack === 'function' ? ctx.getCurrentTrack : () => null
+    const fetchYandexRotorMyWave = typeof ctx.fetchYandexRotorMyWave === 'function' ? ctx.fetchYandexRotorMyWave : null
+    const getYandexWaveQueueHint = typeof ctx.getYandexWaveQueueHint === 'function' ? ctx.getYandexWaveQueueHint : () => ''
+    const setYandexWaveQueueHint = typeof ctx.setYandexWaveQueueHint === 'function' ? ctx.setYandexWaveQueueHint : () => {}
+    const onWaveEarlySkip = typeof ctx.onWaveEarlySkip === 'function' ? ctx.onWaveEarlySkip : null
 
     function getMyWaveTrackKey(track) {
       const safe = sanitizeTrack(track)
@@ -192,6 +215,9 @@
       bumpWaveNeg(taste.artistNeg, getMyWavePrimaryArtist(safe), 5)
       getMyWaveTokens(safe).slice(0, 6).forEach((tok) => bumpWaveNeg(taste.tokenNeg, tok, 3))
       saveWaveTasteMap(taste)
+      try {
+        onWaveEarlySkip && onWaveEarlySkip(safe)
+      } catch (_) {}
     }
 
     function recordWavePositiveListen(track) {
@@ -417,14 +443,58 @@
       const profile = buildMyWavePreferenceProfile(candidates)
       const target = Math.min(MY_WAVE_MAX_TRACKS, Math.max(MY_WAVE_MIN_TRACKS, Number(min) || MY_WAVE_MIN_TRACKS))
       const seedTracks = getMyWaveSeedTracks()
+      const settings = getSettings()
+      const sourceModeRaw = String(getMyWaveSource() || 'hybrid').toLowerCase()
+      const sourceMode = sourceModeRaw === 'vk' || sourceModeRaw === 'yandex' ? sourceModeRaw : 'hybrid'
+      if (sourceMode === 'yandex' && fetchYandexRotorMyWave) {
+        const tok = String(settings?.yandexToken || '').trim()
+        if (!tok) return []
+        // Как в клиенте Я.Музыки: один «кусок» волны за раз (меньше дублей и параллельных стримов).
+        const yaChunk = 1
+        const queueHint = String(getYandexWaveQueueHint() || '').trim()
+        let pack = null
+        try {
+          pack = await fetchYandexRotorMyWave({ mode: modeId, queueTrackId: queueHint })
+        } catch {
+          pack = null
+        }
+        const rows = Array.isArray(pack?.tracks) ? pack.tracks.map((t) => sanitizeTrack(t)).filter(Boolean) : []
+        if (!rows.length) return []
+        if (pack?.nextQueueTrackId) setYandexWaveQueueHint(String(pack.nextQueueTrackId))
+        const selected = new Set()
+        const selectedIds = new Set()
+        const selectedSigs = new Set()
+        ;(getQueue() || []).forEach((track) => {
+          const key = getMyWaveTrackKey(track)
+          if (key) selectedIds.add(key)
+          const sig = normalizeTrackSignature(track)
+          if (sig) selectedSigs.add(sig)
+        })
+        const ct = getCurrentTrack()
+        if (ct) {
+          const key = getMyWaveTrackKey(ct)
+          if (key) selectedIds.add(key)
+          const sig = normalizeTrackSignature(ct)
+          if (sig) selectedSigs.add(sig)
+        }
+        const filtered = rows.filter((track) => {
+          const key = getMyWaveTrackKey(track)
+          if (key && (selectedIds.has(key) || selected.has(key))) return false
+          const sig = normalizeTrackSignature(track)
+          if (!sig || selectedSigs.has(sig)) return false
+          const sec = getNormalizedTrackDurationSec(track)
+          if (sec != null && sec < WAVE_MY_WAVE_MIN_DURATION_SEC) return false
+          if (key) selected.add(key)
+          selectedSigs.add(sig)
+          return true
+        })
+        return filtered.slice(0, yaChunk)
+      }
       const queries = buildMyWaveQueries(seedTracks, modeId, profile)
       const excluded = getMyWaveExcludedSignatures()
       const selected = new Set()
       const selectedArtists = new Map()
       const found = []
-      const settings = getSettings()
-      const sourceModeRaw = String(getMyWaveSource() || 'hybrid').toLowerCase()
-      const sourceMode = sourceModeRaw === 'vk' || sourceModeRaw === 'yandex' ? sourceModeRaw : 'hybrid'
       const searchByWaveSource = async (query) => {
         if (sourceMode === 'hybrid') {
           const hybrid = await searchHybridTracks(query, settings)

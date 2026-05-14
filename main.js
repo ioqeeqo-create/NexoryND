@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron')
+const { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage } = require('electron')
 const { execFile } = require('child_process')
 const path = require('path')
 const fs = require('fs')
@@ -13,6 +13,12 @@ const {
   parseYandexAlbumId,
   parseVkPlaylistRef,
 } = require('./src/modules/utils/parsers')
+
+if (process.platform === 'win32') {
+  try {
+    app.setAppUserModelId('flow.player')
+  } catch (_) {}
+}
 
 const SAFE_GPU_FLAG = '--flow-safe-gpu'
 const _isSafeGpuMode = process.argv.includes(SAFE_GPU_FLAG)
@@ -73,6 +79,85 @@ let _resolvedYtDlpBinary = null
 let _lastYtDlpResolveAt = 0
 let _ytDlpResolveInFlight = null
 const YTDLP_RESOLVE_CACHE_MS = 10 * 60 * 1000
+
+const FLOW_UPDATE_CHANNEL = 'stable'
+const FLOW_UPDATE_FEED_BASE = String(process.env.FLOW_UPDATE_FEED_BASE || 'http://85.239.34.229/flow-updates/stable').trim().replace(/\/+$/, '')
+const FLOW_UPDATE_TIMEOUT_MS = 15000
+let _cachedAppUpdateMeta = null
+
+function parseSemver(v = '') {
+  const m = String(v || '').trim().match(/^(\d+)\.(\d+)\.(\d+)/)
+  if (!m) return null
+  return [Number(m[1]), Number(m[2]), Number(m[3])]
+}
+
+function compareSemver(a = '', b = '') {
+  const aa = parseSemver(a)
+  const bb = parseSemver(b)
+  if (!aa || !bb) return 0
+  for (let i = 0; i < 3; i += 1) {
+    if (aa[i] > bb[i]) return 1
+    if (aa[i] < bb[i]) return -1
+  }
+  return 0
+}
+
+function parseLatestYml(raw = '') {
+  const text = String(raw || '')
+  const version = (text.match(/^version:\s*(.+)$/m)?.[1] || '').trim().replace(/^['"]|['"]$/g, '')
+  const pathValue = (text.match(/^path:\s*(.+)$/m)?.[1] || '').trim().replace(/^['"]|['"]$/g, '')
+  if (!version || !pathValue) return null
+  return {
+    version,
+    path: pathValue,
+    url: `${FLOW_UPDATE_FEED_BASE}/${pathValue.replace(/^\/+/, '')}`,
+  }
+}
+
+async function fetchLatestAppUpdateMeta() {
+  const latestUrl = `${FLOW_UPDATE_FEED_BASE}/latest.yml`
+  const resp = await axios.get(latestUrl, {
+    responseType: 'text',
+    timeout: FLOW_UPDATE_TIMEOUT_MS,
+    headers: { 'Cache-Control': 'no-cache' },
+  })
+  const parsed = parseLatestYml(resp?.data || '')
+  if (!parsed) throw new Error('bad latest.yml format')
+  _cachedAppUpdateMeta = parsed
+  return parsed
+}
+
+function getAppUpdatesDir() {
+  const dir = path.join(app.getPath('userData'), 'updates', FLOW_UPDATE_CHANNEL)
+  fs.mkdirSync(dir, { recursive: true })
+  return dir
+}
+
+async function downloadLatestAppUpdate(meta) {
+  const downloadMeta = meta || _cachedAppUpdateMeta || await fetchLatestAppUpdateMeta()
+  const fileName = path.basename(String(downloadMeta.path || '').replace(/\\/g, '/')) || `Nexory-${downloadMeta.version}.exe`
+  const targetPath = path.join(getAppUpdatesDir(), fileName)
+  const tempPath = `${targetPath}.part`
+  const writer = fs.createWriteStream(tempPath)
+  try {
+    const response = await axios.get(downloadMeta.url, {
+      responseType: 'stream',
+      timeout: 0,
+      maxRedirects: 5,
+    })
+    await new Promise((resolve, reject) => {
+      response.data.pipe(writer)
+      writer.on('finish', resolve)
+      writer.on('error', reject)
+    })
+    fs.renameSync(tempPath, targetPath)
+    return targetPath
+  } catch (e) {
+    try { writer.close() } catch {}
+    try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath) } catch {}
+    throw e
+  }
+}
 
 function getManagedYtDlpPaths() {
   try {
@@ -279,7 +364,7 @@ async function downloadStreamToCacheFile(remoteUrl, destPart, maxBytes) {
     maxRedirects: 12,
     validateStatus: (s) => s >= 200 && s < 300,
     headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Flow/1.0',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Nexory/1.0',
       Accept: '*/*',
     },
   })
@@ -372,7 +457,7 @@ function httpsGetJsonUrl(url, headers = {}, timeout = 12000) {
         path: u.pathname + u.search,
         method: 'GET',
         headers: {
-          'User-Agent': 'Flow/0.2 (Electron)',
+          'User-Agent': 'Nexory/0.2 (Electron)',
           'Accept': 'application/json',
           ...headers
         }
@@ -608,7 +693,7 @@ function httpsDownloadToFile(url, filePath, headers = {}, timeout = 30000) {
         path: u.pathname + u.search,
         method: 'GET',
         headers: {
-          'User-Agent': 'Flow/0.2 (Electron)',
+          'User-Agent': 'Nexory/0.2 (Electron)',
           'Accept': '*/*',
           ...headers
         }
@@ -661,7 +746,7 @@ async function checkAndDownloadYtDlp() {
 
   try {
     const r = await httpsGetJsonUrl('https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest', {
-      'User-Agent': 'Flow/0.2 (Electron)',
+      'User-Agent': 'Nexory/0.2 (Electron)',
       'Accept': 'application/vnd.github+json'
     }, 15000)
     if (r.status !== 200 || !r.body) return { ok: false, error: `GitHub API status ${r.status}` }
@@ -1029,10 +1114,169 @@ ipcMain.handle('app-version', async () => {
   }
 })
 
+ipcMain.handle('app-update-check', async () => {
+  try {
+    const currentVersion = String(app.getVersion() || '')
+    const latest = await fetchLatestAppUpdateMeta()
+    const available = compareSemver(String(latest.version || ''), currentVersion) > 0
+    return {
+      ok: true,
+      channel: FLOW_UPDATE_CHANNEL,
+      feedBase: FLOW_UPDATE_FEED_BASE,
+      currentVersion,
+      latestVersion: String(latest.version || ''),
+      available,
+    }
+  } catch (e) {
+    return { ok: false, error: e?.message || String(e) }
+  }
+})
+
+ipcMain.handle('app-update-download', async () => {
+  try {
+    const currentVersion = String(app.getVersion() || '')
+    const latest = _cachedAppUpdateMeta || await fetchLatestAppUpdateMeta()
+    if (compareSemver(String(latest.version || ''), currentVersion) <= 0) {
+      return { ok: false, error: 'already up to date' }
+    }
+    const downloadedPath = await downloadLatestAppUpdate(latest)
+    return {
+      ok: true,
+      latestVersion: String(latest.version || ''),
+      downloadedPath,
+    }
+  } catch (e) {
+    return { ok: false, error: e?.message || String(e) }
+  }
+})
+
+ipcMain.handle('app-update-install', async (_e, { downloadedPath } = {}) => {
+  try {
+    const installerPath = String(downloadedPath || '').trim()
+    if (!installerPath || !fs.existsSync(installerPath)) {
+      return { ok: false, error: 'installer not found' }
+    }
+    const child = execFile(installerPath, [], {
+      detached: true,
+      windowsHide: false,
+    })
+    child.unref()
+    setTimeout(() => {
+      try { app.quit() } catch (_) {}
+    }, 250)
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e?.message || String(e) }
+  }
+})
+
 let _discordRpcClient = null
 let _discordRpcReady = false
 let _discordRpcClientId = null
 let _mainWindow = null
+
+/** Сворачивание в трей вместо полного закрытия (Windows / Linux). */
+const TRAY_CLOSE_SUPPORTED = process.platform === 'win32' || process.platform === 'linux'
+let _appTray = null
+let _trayQuitting = false
+let _allowMainWindowClose = false
+let _minimizeToTrayOnClose = true
+
+function destroyAppTray() {
+  if (!_appTray) return
+  try {
+    _appTray.removeAllListeners()
+    _appTray.destroy()
+  } catch (_) {}
+  _appTray = null
+}
+
+function buildTrayImage() {
+  try {
+    const p = path.join(__dirname, 'assets/icon.ico')
+    const img = nativeImage.createFromPath(p)
+    if (!img.isEmpty()) return img
+  } catch (_) {}
+  try {
+    return nativeImage.createFromBuffer(
+      Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+        'base64',
+      ),
+    )
+  } catch (_) {}
+  return nativeImage.createEmpty()
+}
+
+function ensureAppTray(win) {
+  if (!TRAY_CLOSE_SUPPORTED || _appTray || !win || win.isDestroyed()) return
+  const img = buildTrayImage()
+  if (img.isEmpty()) return
+  const tray = new Tray(img)
+  _appTray = tray
+  tray.setToolTip('Nexory')
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      {
+        label: 'Открыть Nexory',
+        click: () => {
+          try {
+            if (!win.isDestroyed()) {
+              win.show()
+              win.focus()
+            }
+          } catch (_) {}
+        },
+      },
+      { type: 'separator' },
+      {
+        label: 'Выход',
+        click: () => {
+          _trayQuitting = true
+          _allowMainWindowClose = true
+          destroyAppTray()
+          try {
+            if (win && !win.isDestroyed()) win.destroy()
+          } catch (_) {}
+          try {
+            app.quit()
+          } catch (_) {}
+        },
+      },
+    ]),
+  )
+  tray.on('double-click', () => {
+    try {
+      if (!win.isDestroyed()) {
+        win.show()
+        win.focus()
+      }
+    } catch (_) {}
+  })
+}
+
+ipcMain.on('flow-set-tray-on-close', (e, v) => {
+  _minimizeToTrayOnClose = Boolean(v)
+})
+
+ipcMain.handle('get-launch-at-login', () => {
+  try {
+    const s = app.getLoginItemSettings()
+    return { ok: true, enabled: Boolean(s?.openAtLogin) }
+  } catch (err) {
+    return { ok: false, error: err?.message || String(err), enabled: false }
+  }
+})
+
+ipcMain.handle('set-launch-at-login', (e, enabled) => {
+  try {
+    app.setLoginItemSettings({ openAtLogin: Boolean(enabled) })
+    const s = app.getLoginItemSettings()
+    return { ok: true, enabled: Boolean(s?.openAtLogin) }
+  } catch (err) {
+    return { ok: false, error: err?.message || String(err) }
+  }
+})
 
 function getDiscordRpcLib() {
   try {
@@ -1073,12 +1317,12 @@ ipcMain.handle('discord-rpc-update', async (e, payload = {}) => {
   if (!_discordRpcClient || !_discordRpcReady) return { ok: false, error: 'Discord RPC is not connected' }
   try {
     await _discordRpcClient.setActivity({
-      details: String(payload?.details || 'Listening in Flow').slice(0, 128),
+      details: String(payload?.details || 'Listening in Nexory').slice(0, 128),
       state: String(payload?.state || '').slice(0, 128),
       largeImageKey: String(payload?.largeImageKey || 'flow'),
-      largeImageText: String(payload?.largeImageText || 'Flow'),
+      largeImageText: String(payload?.largeImageText || 'Nexory'),
       smallImageKey: String(payload?.smallImageKey || 'music'),
-      smallImageText: String(payload?.smallImageText || 'Flow'),
+      smallImageText: String(payload?.smallImageText || 'Nexory'),
       buttons: Array.isArray(payload?.buttons) ? payload.buttons.slice(0, 2) : undefined,
       partySize: Number(payload?.partySize) || undefined,
       partyMax: Number(payload?.partyMax) || undefined,
@@ -1170,7 +1414,9 @@ ipcMain.handle('lastfm-scrobble', async (e, payload = {}) => {
 function createWindow() {
   const win = new BrowserWindow({
     width: 1200, height: 800, minWidth: 900, minHeight: 600,
-    frame: false, backgroundColor: '#0a0a0f',
+    frame: false,
+    show: false,
+    backgroundColor: '#0a0a0f',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -1182,6 +1428,18 @@ function createWindow() {
   })
   win.loadFile('index.html')
   _mainWindow = win
+  win.on('close', (e) => {
+    if (_trayQuitting || _allowMainWindowClose) {
+      _allowMainWindowClose = false
+      return
+    }
+    if (!TRAY_CLOSE_SUPPORTED || !_minimizeToTrayOnClose) return
+    e.preventDefault()
+    ensureAppTray(win)
+    try {
+      win.hide()
+    } catch (_) {}
+  })
   const broadcastWindowPresence = () => {
     try {
       if (win.isDestroyed() || !win.webContents || win.webContents.isDestroyed()) return
@@ -1204,6 +1462,9 @@ function createWindow() {
     queueMicrotask(() => broadcastWindowPresence())
     setTimeout(broadcastWindowPresence, 350)
     setTimeout(broadcastWindowPresence, 900)
+    try {
+      if (!win.isDestroyed()) win.show()
+    } catch (_) {}
   })
   win.on('unresponsive', () => relaunchInSafeGpuMode('window-unresponsive'))
   win.webContents.on('render-process-gone', (event, details) => {
@@ -1217,6 +1478,7 @@ function createWindow() {
   })
   win.on('closed', () => {
     if (_mainWindow === win) _mainWindow = null
+    destroyAppTray()
   })
 }
 
@@ -1253,6 +1515,7 @@ app.whenReady().then(() => {
 })
 
 app.on('before-quit', () => {
+  destroyAppTray()
   if (_proxyServer) _proxyServer.close()
   if (_discordRpcClient) {
     try { _discordRpcClient.clearActivity() } catch {}
@@ -1273,9 +1536,23 @@ ipcMain.on('window-minimize', (e) => {
   const w = BrowserWindow.fromWebContents(e.sender)
   if (w && !w.isDestroyed()) w.minimize()
 })
-ipcMain.on('window-close', (e) => {
+ipcMain.on('window-close', (e, payload = {}) => {
   const w = BrowserWindow.fromWebContents(e.sender)
-  if (w && !w.isDestroyed()) w.close()
+  if (!w || w.isDestroyed()) return
+  const toTrayPref = Object.prototype.hasOwnProperty.call(payload, 'toTray')
+    ? Boolean(payload.toTray)
+    : _minimizeToTrayOnClose
+  if (TRAY_CLOSE_SUPPORTED && toTrayPref) {
+    ensureAppTray(w)
+    try {
+      w.hide()
+    } catch (_) {}
+    return
+  }
+  _allowMainWindowClose = true
+  try {
+    w.close()
+  } catch (_) {}
 })
 
 ipcMain.handle('window-maximize-toggle', (e) => {
@@ -3018,7 +3295,7 @@ ipcMain.handle('youtube-stream', async (e, { videoId, instance, forceFresh = fal
       const ytdlpBin = await resolveYtDlpBinary()
       const hint = ytdlpBin
         ? 'YouTube: поток не получен через yt-dlp. Нажми "Обновить yt-dlp" в настройках и повтори.'
-        : 'YouTube: не найден yt-dlp. Установи yt-dlp (winget install yt-dlp) и перезапусти Flow.'
+        : 'YouTube: не найден yt-dlp. Установи yt-dlp (winget install yt-dlp) и перезапусти Nexory.'
       return { ok: false, error: hint }
     }
     const instances = instance ? [instance, ...INVIDIOUS_INSTANCES.filter(i => i !== instance)] : INVIDIOUS_INSTANCES
@@ -3086,7 +3363,7 @@ ipcMain.handle('youtube-stream', async (e, { videoId, instance, forceFresh = fal
     const ytdlpBin = await resolveYtDlpBinary()
     const hint = ytdlpBin
       ? 'YouTube: не удалось получить поток. Попробуй другой трек или обнови yt-dlp.'
-      : 'YouTube: нет стабильного движка потока. Установи yt-dlp (winget install yt-dlp) и перезапусти Flow.'
+      : 'YouTube: нет стабильного движка потока. Установи yt-dlp (winget install yt-dlp) и перезапусти Nexory.'
     return { ok: false, error: hint }
   })(), forceFresh ? 45000 : 35000, { ok: false, error: 'YouTube: timeout получения потока, попробуй ещё раз' })
     .finally(() => {
@@ -3224,7 +3501,7 @@ ipcMain.handle('get-lyrics', async (e, { title, artist, duration, source, trackI
     const tryGetByMeta = async (artistName, trackName) => {
       const r = await httpsGetJson('lrclib.net',
         `/api/get?track_name=${encodeURIComponent(trackName)}&artist_name=${encodeURIComponent(artistName)}${duration ? '&duration=' + Math.round(duration) : ''}`,
-        { 'User-Agent': 'FlowPlayer/0.2 (github.com)' },
+        { 'User-Agent': 'NexoryPlayer/0.2 (github.com)' },
         10000
       )
       if (r.status === 200 && r.body) {
@@ -3241,7 +3518,7 @@ ipcMain.handle('get-lyrics', async (e, { title, artist, duration, source, trackI
       const q = encodeURIComponent(`${artistName} ${trackName}`.trim())
       const r = await httpsGetJson('lrclib.net',
         `/api/search?q=${q}`,
-        { 'User-Agent': 'FlowPlayer/0.2 (github.com)' },
+        { 'User-Agent': 'NexoryPlayer/0.2 (github.com)' },
         10000
       )
       if (r.status === 200 && Array.isArray(r.body) && r.body.length > 0) {
@@ -3274,7 +3551,7 @@ ipcMain.handle('get-lyrics', async (e, { title, artist, duration, source, trackI
         const lyo = await httpsGetJson(
           'api.lyrics.ovh',
           `/v1/${encodeURIComponent(a)}/${encodeURIComponent(t)}`,
-          { 'User-Agent': 'FlowPlayer/0.2 (github.com)' },
+          { 'User-Agent': 'NexoryPlayer/0.2 (github.com)' },
           10000
         )
         if (lyo.status === 200 && lyo.body?.lyrics) {
@@ -3593,6 +3870,209 @@ ipcMain.handle('yandex-stream', async (e, { trackId, token }) => {
     return { ok: true, url: urlOut }
   } catch (err) {
     return { ok: false, error: 'РЇРЅРґРµРєСЃ: ' + err.message }
+  }
+})
+
+const YM_MY_WAVE_STATION = 'user:onyourwave'
+
+function ymOAuthFromRawToken(rawToken) {
+  const t = String(rawToken || '').trim()
+  const extracted = t.match(/access_token=([^&#]+)/)
+  const decoded = extracted ? decodeURIComponent(extracted[1]) : t
+  return decoded.trim()
+}
+
+function ymOAuthHeaders(oauth) {
+  return {
+    Authorization: `OAuth ${oauth}`,
+    'X-Yandex-Music-Client': 'WindowsPhone/3.20',
+    'User-Agent': 'Windows 10',
+  }
+}
+
+function mapFlowWaveModeToYmMoodEnergy(mode) {
+  const m = {
+    default: 'all',
+    sad: 'sad',
+    happy: 'fun',
+    energetic: 'active',
+    calm: 'calm',
+    romantic: 'calm',
+  }
+  return m[String(mode || '').trim()] || 'all'
+}
+
+function mapYmRotorTrackToFlow(t, batchId, station) {
+  if (!t || typeof t !== 'object') return null
+  const id = extractYandexTrackOriginalId(t, {})
+  if (!id) return null
+  return {
+    title: String(t.title || '').trim() || 'Без названия',
+    artist: Array.isArray(t.artists) ? t.artists.map((a) => a?.name).filter(Boolean).join(', ') : '—',
+    url: null,
+    cover: t.coverUri ? 'https://' + String(t.coverUri).replace('%%', '300x300') : null,
+    bg: 'linear-gradient(135deg,#fc3f1d,#ff6534)',
+    source: 'yandex',
+    id: String(id),
+    duration_ms: Number(t.durationMs || 0) || undefined,
+    yandexRotor: { batchId: String(batchId || ''), station: String(station || YM_MY_WAVE_STATION) },
+  }
+}
+
+function parseYmRotorTracksBody(body) {
+  const res = body?.result
+  if (!res || typeof res !== 'object') return { tracks: [], batchId: '', nextQueueTrackId: '' }
+  const batchId = String(res.batchId || res.batch_id || '')
+  const sequence = Array.isArray(res.sequence) ? res.sequence : []
+  const tracks = []
+  for (const item of sequence) {
+    const typ = String(item?.type || '').toLowerCase()
+    if (typ !== 'track' || !item?.track) continue
+    const row = mapYmRotorTrackToFlow(item.track, batchId, YM_MY_WAVE_STATION)
+    if (row) tracks.push(row)
+  }
+  // Для следующего GET /tracks параметр queue — якорь цепочки (как в официальном API: первый трек выдачи).
+  const head = tracks.length ? tracks[0] : null
+  const nextQueueTrackId = head?.id ? String(head.id) : ''
+  return { tracks, batchId, nextQueueTrackId }
+}
+
+/** POST /rotor/station/.../feedback (form); batch-id в query при необходимости. */
+async function ymRotorPostFeedback(oauth, station, type, fields = {}, batchId = '') {
+  const form = new URLSearchParams()
+  form.set('type', String(type || ''))
+  form.set('timestamp', String(Number(fields.timestamp != null ? fields.timestamp : Date.now() / 1000)))
+  if (fields.trackId != null) form.set('trackId', String(fields.trackId))
+  if (fields.totalPlayedSeconds != null) form.set('totalPlayedSeconds', String(fields.totalPlayedSeconds))
+  if (fields.from) form.set('from', String(fields.from))
+  const path =
+    `/rotor/station/${encodeURIComponent(station)}/feedback` +
+    (batchId ? `?batch-id=${encodeURIComponent(batchId)}` : '')
+  const r = await httpsPostFormJson('api.music.yandex.net', path, Object.fromEntries(form), ymOAuthHeaders(oauth), 15000)
+  const okBody = r?.body?.result === 'ok' || r?.body === 'ok' || String(r?.body?.result || '').toLowerCase() === 'ok'
+  return Boolean(okBody || (Number(r?.status) >= 200 && Number(r?.status) < 300 && !r?.body?.error))
+}
+
+ipcMain.handle('yandex-my-wave-fetch', async (e, { token, mode, queueTrackId, radioFrom }) => {
+  try {
+    const oauth = ymOAuthFromRawToken(token)
+    if (!oauth) return { ok: false, error: 'Пустой токен Яндекса' }
+    const h = ymOAuthHeaders(oauth)
+    // Не дробим волну по «настроению» из Flow — как дефолтная Моя волна в Я.Музыке (без sad/fun/active).
+    const settingsForm = new URLSearchParams()
+    settingsForm.set('moodEnergy', 'all')
+    settingsForm.set('diversity', 'default')
+    settingsForm.set('language', 'any')
+    settingsForm.set('type', 'rotor')
+    const setPath = `/rotor/station/${encodeURIComponent(YM_MY_WAVE_STATION)}/settings3`
+    try {
+      await httpsPostFormJson('api.music.yandex.net', setPath, Object.fromEntries(settingsForm), h, 15000)
+    } catch (_) {}
+    const q = String(queueTrackId || '').trim()
+    // radioStarted на каждой дозагрузке сбрасывает контекст волны и глушит moodEnergy — только при «чистом» старте.
+    if (!q) {
+      const from = String(radioFrom || `flow-desktop-${Date.now()}`).slice(0, 120)
+      try {
+        await ymRotorPostFeedback(oauth, YM_MY_WAVE_STATION, 'radioStarted', { from }, '')
+      } catch (_) {}
+    }
+
+    let path = `/rotor/station/${encodeURIComponent(YM_MY_WAVE_STATION)}/tracks?settings2=true`
+    if (q) path += `&queue=${encodeURIComponent(q)}`
+    const tr = await httpsGetJson('api.music.yandex.net', path, h, 25000)
+    if (tr?.body?.error) {
+      return { ok: false, error: String(tr.body.error?.message || tr.body.error?.name || 'tracks') }
+    }
+    const parsed = parseYmRotorTracksBody(tr.body)
+    if (!parsed.tracks.length) return { ok: false, error: 'Яндекс волна: пустой ответ' }
+    return { ok: true, ...parsed, moodEnergy: 'all' }
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err) }
+  }
+})
+
+ipcMain.handle('yandex-rotor-feedback', async (e, { token, station, type, trackId, batchId, totalPlayedSeconds, from }) => {
+  try {
+    const oauth = ymOAuthFromRawToken(token)
+    if (!oauth) return { ok: false, error: 'Пустой токен' }
+    const st = String(station || YM_MY_WAVE_STATION).trim() || YM_MY_WAVE_STATION
+    const ok = await ymRotorPostFeedback(
+      oauth,
+      st,
+      String(type || ''),
+      {
+        trackId: trackId != null ? trackId : undefined,
+        totalPlayedSeconds: totalPlayedSeconds != null ? totalPlayedSeconds : undefined,
+        from: from || undefined,
+      },
+      String(batchId || ''),
+    )
+    return { ok: Boolean(ok) }
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err) }
+  }
+})
+
+ipcMain.handle('yandex-track-dislike', async (e, { token, trackId }) => {
+  try {
+    const oauth = ymOAuthFromRawToken(token)
+    if (!oauth) return { ok: false, error: 'Пустой токен' }
+    const h = ymOAuthHeaders(oauth)
+    const uid = await getYandexMusicAccountUid(h)
+    if (!uid) return { ok: false, error: 'Не удалось получить uid аккаунта' }
+    const tid = String(trackId || '').trim()
+    if (!tid) return { ok: false, error: 'Нет track id' }
+    const path = `/users/${encodeURIComponent(uid)}/dislikes/tracks/add-multiple`
+    const form = new URLSearchParams()
+    form.append('track-ids', tid)
+    const r = await httpsPostFormJson('api.music.yandex.net', path, Object.fromEntries(form), h, 15000)
+    const rev = r?.body?.revision != null || r?.body?.result?.revision != null
+    if (r?.body?.error) return { ok: false, error: String(r.body.error?.message || r.body.error?.name || 'dislike') }
+    return { ok: Boolean(rev || (Number(r?.status) >= 200 && Number(r?.status) < 300)) }
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err) }
+  }
+})
+
+ipcMain.handle('yandex-track-like', async (e, { token, trackId }) => {
+  try {
+    const oauth = ymOAuthFromRawToken(token)
+    if (!oauth) return { ok: false, error: 'Пустой токен' }
+    const h = ymOAuthHeaders(oauth)
+    const uid = await getYandexMusicAccountUid(h)
+    if (!uid) return { ok: false, error: 'Не удалось получить uid аккаунта' }
+    const tid = String(trackId || '').trim()
+    if (!tid) return { ok: false, error: 'Нет track id' }
+    const path = `/users/${encodeURIComponent(uid)}/likes/tracks/add-multiple`
+    const form = new URLSearchParams()
+    form.append('track-ids', tid)
+    const r = await httpsPostFormJson('api.music.yandex.net', path, Object.fromEntries(form), h, 15000)
+    const rev = r?.body?.revision != null || r?.body?.result?.revision != null
+    if (r?.body?.error) return { ok: false, error: String(r.body.error?.message || r.body.error?.name || 'like') }
+    return { ok: Boolean(rev || (Number(r?.status) >= 200 && Number(r?.status) < 300 && !r?.body?.error)) }
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err) }
+  }
+})
+
+ipcMain.handle('yandex-track-unlike', async (e, { token, trackId }) => {
+  try {
+    const oauth = ymOAuthFromRawToken(token)
+    if (!oauth) return { ok: false, error: 'Пустой токен' }
+    const h = ymOAuthHeaders(oauth)
+    const uid = await getYandexMusicAccountUid(h)
+    if (!uid) return { ok: false, error: 'Не удалось получить uid аккаунта' }
+    const tid = String(trackId || '').trim()
+    if (!tid) return { ok: false, error: 'Нет track id' }
+    const path = `/users/${encodeURIComponent(uid)}/likes/tracks/remove-multiple`
+    const form = new URLSearchParams()
+    form.append('track-ids', tid)
+    const r = await httpsPostFormJson('api.music.yandex.net', path, Object.fromEntries(form), h, 15000)
+    const rev = r?.body?.revision != null || r?.body?.result?.revision != null
+    if (r?.body?.error) return { ok: false, error: String(r.body.error?.message || r.body.error?.name || 'unlike') }
+    return { ok: Boolean(rev || (Number(r?.status) >= 200 && Number(r?.status) < 300 && !r?.body?.error)) }
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err) }
   }
 })
 

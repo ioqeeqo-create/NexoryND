@@ -2,7 +2,17 @@ const { audioPlayer = {}, smartCleaning = {}, dragDrop = {}, peerSocial = {}, wa
 const audio = (audioPlayer.createPlayerAudio || ((onErr) => {
   const el = new Audio()
   el.volume = 0.8
-  el.onerror = () => onErr(el)
+  el.onerror = () => {
+    if (typeof window.__flowPlayerAudioError === 'function') {
+      try {
+        window.__flowPlayerAudioError(el)
+        return
+      } catch (e) {
+        console.warn('__flowPlayerAudioError failed', e)
+      }
+    }
+    onErr(el)
+  }
   return el
 }))(() => {
   console.error('AUDIO ERROR', {
@@ -80,7 +90,16 @@ let playbackMode = (() => {
   catch { return { ...defaultPlayback } }
 })()
 
-const COVER_ICON = '<svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'
+function flowLucideSvg(name, extraClass = '') {
+  const L = typeof FLOW_LUCIDE_INNER !== 'undefined' ? FLOW_LUCIDE_INNER : {}
+  const paths = L[name] || ''
+  const cls = ('ui-icon ' + String(extraClass || '').trim()).trim()
+  if (!paths) return `<svg class="${cls}" viewBox="0 0 24 24"></svg>`
+  if (name === 'play') return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" aria-hidden="true">${paths}</svg>`
+  if (name === 'pause') return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" aria-hidden="true">${paths}</svg>`
+  return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`
+}
+const COVER_ICON = flowLucideSvg('music-2', 'lg')
 let _audioCtx = null
 let _analyser = null
 let _freqData = null
@@ -99,6 +118,7 @@ let _lastAppliedServerPlaybackTs = 0
 /** Монотонный номер sync от хоста — гость отбрасывает только устаревшие пакеты, не «равные по ts» с pause. */
 let _lastPlaybackSyncSeq = 0
 let _hostPlaybackSyncSeq = 0
+let _lastGuestP2pPlaybackAt = 0
 let _lastRoomServerLoadAt = 0
 let _friendPresence = new Map()
 let _friendsPollTimer = null
@@ -125,6 +145,7 @@ let _pendingRoomInvite = null
 let _myWaveRenderedTracks = []
 let _myWaveBuilding = false
 let _myWavePreloading = false
+let _myWaveSeenKeys = new Set()
 let _myWaveMode = (() => {
   try { return localStorage.getItem('flow_my_wave_mode') || 'default' } catch { return 'default' }
 })()
@@ -135,13 +156,15 @@ let _lastServerStatusCheckAt = 0
 const FRIEND_POLL_INTERVAL_MS = 2500
 const FRIEND_FRESH_ONLINE_MS = 9000
 const FRIEND_PROFILE_REFRESH_MS = 7000
+const FRIEND_ONLINE_STALE_MS = 65000
 const FLOW_SERVER_DEFAULT_URL = 'http://85.239.34.229:8787'
 const FLOW_SOCIAL_DEFAULT_API_BASE = 'http://85.239.34.229/social'
 const FLOW_SOCIAL_DEFAULT_API_SECRET = 'flowflow'
 const FRIEND_NOTIFY_COOLDOWN_MS = 90 * 1000
-const PROFILE_CACHE_TTL_MS = 60 * 1000
 /** Ленивый API «Моя волна» (реализация в src/modules/wave-engine.js). */
 let _waveEngineApi = null
+/** Яндекс «Моя волна» (rotor): queue в GET /tracks — id первого трека предыдущей выдачи. */
+let _yandexWaveRotorQueueHint = ''
 function waveEngine() {
   if (!_waveEngineApi && WE?.createWaveEngine) {
     _waveEngineApi = WE.createWaveEngine({
@@ -158,6 +181,19 @@ function waveEngine() {
       normalizeTrackSignature,
       getQueue: () => queue,
       getCurrentTrack: () => currentTrack,
+      getYandexWaveQueueHint: () => _yandexWaveRotorQueueHint,
+      setYandexWaveQueueHint: (id) => {
+        _yandexWaveRotorQueueHint = String(id || '').trim()
+      },
+      fetchYandexRotorMyWave: async ({ mode, queueTrackId }) => {
+        const tok = String(getSettings()?.yandexToken || '').trim()
+        if (!tok || !window.api?.yandexMyWaveFetch) return null
+        return window.api.yandexMyWaveFetch({
+          token: tok,
+          mode: String(mode || 'default'),
+          queueTrackId: String(queueTrackId || '').trim(),
+        })
+      },
     })
   }
   return _waveEngineApi
@@ -409,10 +445,19 @@ async function saveCustomMediaFile(file, purpose = 'media') {
       purpose,
       bytes,
     })
-    if (saved?.ok && saved.url) return String(saved.url)
+    if (saved?.ok && saved.url) {
+      try {
+        bumpCustomizationGalleryRecent(String(saved.url))
+      } catch (_) {}
+      return String(saved.url)
+    }
     throw new Error(saved?.error || 'media save failed')
   }
-  return readFileAsDataUrl(file)
+  const dataUrl = await readFileAsDataUrl(file)
+  try {
+    bumpCustomizationGalleryRecent(dataUrl)
+  } catch (_) {}
+  return dataUrl
 }
 
 function prepareProfileImageData(file, dataUrl, kind = 'avatar') {
@@ -441,17 +486,57 @@ function prepareProfileImageData(file, dataUrl, kind = 'avatar') {
   })
 }
 
-const ICONS = {
-  play: '<svg class="ui-icon ctrl-play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M9 8 L17 12 L9 16 Z"/></svg>',
-  pause: '<svg class="ui-icon ctrl-play-icon" viewBox="0 0 24 24" fill="currentColor"><rect x="7.25" y="5.75" width="4" height="12.5" rx="1.15"/><rect x="12.75" y="5.75" width="4" height="12.5" rx="1.15"/></svg>',
-  plus: '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>',
-  close: '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>'
+/** Сжатие data URL перед PUT (nginx / прокси часто режут тело ~1 МБ → 413). */
+function shrinkProfileDataUrlForApi(dataUrl, kind = 'avatar') {
+  return new Promise((resolve) => {
+    const raw = String(dataUrl || '')
+    if (!raw || typeof Image === 'undefined') return resolve(raw)
+    if (raw.length < 65_000) return resolve(raw)
+    const maxSide = kind === 'banner' ? 720 : 280
+    const quality = kind === 'banner' ? 0.68 : 0.78
+    const img = new Image()
+    img.onload = () => {
+      try {
+        const ratio = Math.min(1, maxSide / Math.max(img.width || 1, img.height || 1))
+        const w = Math.max(1, Math.round((img.width || 1) * ratio))
+        const h = Math.max(1, Math.round((img.height || 1) * ratio))
+        const canvas = document.createElement('canvas')
+        canvas.width = w
+        canvas.height = h
+        canvas.getContext('2d')?.drawImage(img, 0, 0, w, h)
+        const out = canvas.toDataURL('image/jpeg', quality)
+        resolve(out.length < raw.length ? out : raw)
+      } catch {
+        resolve(raw)
+      }
+    }
+    img.onerror = () => resolve(raw)
+    img.src = raw
+  })
 }
-const HEART_OUTLINE = '<svg class="ui-icon flow-ref-heart" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M12 20.4s6.5-4.35 8.82-7.74A5.05 5.05 0 0012 6.42a5.05 5.05 0 00-8.82 6.24C5.47 15.93 12 20.35 12 20.42z"/></svg>'
-const HEART_FILLED = '<svg class="ui-icon flow-ref-heart" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M12 20.4s6.5-4.35 8.82-7.74A5.05 5.05 0 0012 6.42a5.05 5.05 0 00-8.82 6.24C5.47 15.93 12 20.35 12 20.42z"/><path fill="#e11d48" d="M12 16c-.72-.62-2.65-2.35-2.65-4a1.75 1.75 0 013.38-.72A1.75 1.75 0 0114.65 12c0 1.65-1.93 3.38-2.65 4z"/></svg>'
-const PM_PLAY_INNER = '<path fill="currentColor" d="M9 8 L17 12 L9 16 Z"/>'
-const PM_PAUSE_INNER = '<rect fill="currentColor" x="7.25" y="5.75" width="4" height="12.5" rx="1.15"/><rect fill="currentColor" x="12.75" y="5.75" width="4" height="12.5" rx="1.15"/>'
-const ICON_SIMILAR = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M14.83 14.83a4 4 0 0 1-6.63 1.1 4 4 0 0 1 1.53-6.73 4 4 0 0 1 5 .37l5.74 5.32"/><path d="M9.17 9.17a4 4 0 0 0 6.63-1.1 4 4 0 0 0-1.53 6.73 4 4 0 0 0-5-.37l-5.74-5.32"/></svg>'
+
+const ICONS = {
+  play: flowLucideSvg('play', 'ctrl-play-icon'),
+  pause: (() => {
+    const L = typeof FLOW_LUCIDE_INNER !== 'undefined' ? FLOW_LUCIDE_INNER : {}
+    const p = L.pause || ''
+    return `<svg class="ui-icon ctrl-play-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`
+  })(),
+  plus: flowLucideSvg('plus'),
+  close: flowLucideSvg('x'),
+}
+const HEART_OUTLINE = flowLucideSvg('heart', 'flow-ref-heart')
+/** Полная заливка цветом «любимых», без обводки-«точки». */
+const HEART_FILLED =
+  '<svg class="ui-icon flow-ref-heart flow-ref-heart--filled" viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+  '<path fill="#f472b6" stroke="none" d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>' +
+  '</svg>'
+const PM_PLAY_INNER = (typeof FLOW_LUCIDE_INNER !== 'undefined' && FLOW_LUCIDE_INNER.play) ? FLOW_LUCIDE_INNER.play : '<path fill="currentColor" d="M9 8 L17 12 L9 16 Z"/>'
+const PM_PAUSE_INNER =
+  (typeof FLOW_LUCIDE_INNER !== 'undefined' && FLOW_LUCIDE_INNER.pause)
+    ? FLOW_LUCIDE_INNER.pause
+    : '<rect fill="currentColor" x="14" y="4" width="4" height="16" rx="1" stroke="none"/><rect fill="currentColor" x="6" y="4" width="4" height="16" rx="1" stroke="none"/>'
+const ICON_SIMILAR = flowLucideSvg('audio-lines')
 
 // в”Ђв”Ђв”Ђ VISUAL SETTINGS в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 const defaultVisual = {
@@ -468,7 +553,7 @@ const defaultVisual = {
   uiScale: 100,
   customBg: null,
   homeSliderStyle: 'line',
-  homeWidget: { enabled: true, mode: 'bars', image: null },
+  homeWidget: { enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 },
   effects: { orbs: false, glow: true, dyncolor: false, accentFromCover: false },
   navActiveHighlight: false,
   sidebarPosition: 'left',
@@ -476,6 +561,44 @@ const defaultVisual = {
   toastPosition: 'default',
   gifMode: { bg: true, track: true, playlist: true },
   lyrics: { scrollMode: 'smooth', align: 'left', size: 16, blur: 4 }
+}
+
+/** Нормализация сохранённого положения меню (устраняет «перепутанные» значения из импорта/старых ключей). */
+function normalizeSidebarDockPosition(value) {
+  const raw = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+  const map = {
+    l: 'left',
+    r: 'right',
+    t: 'top',
+    b: 'bottom',
+    tabs_top: 'top',
+    tabs_bottom: 'bottom',
+    tabs_right: 'right',
+    tabs_left: 'left',
+    start: 'left',
+    end: 'right',
+  }
+  const step = map[raw] != null ? map[raw] : raw
+  const allowed = new Set(['left', 'top', 'bottom', 'right'])
+  return allowed.has(step) ? step : 'left'
+}
+
+const VS_GLASS_SLIDER_MAX = 40
+
+/** Ползунок «прозрачность стекла»: 0 — минимум прозрачности (плотнее), дальше — прозрачнее. В `flow_visual.glass` хранится сила белой подложки (0 — почти невидима, 40 — плотнее). */
+function glassTransparencyFromStored(glassStored) {
+  const g = Number(glassStored)
+  const gs = Number.isFinite(g) ? Math.max(0, Math.min(VS_GLASS_SLIDER_MAX, g)) : 8
+  return VS_GLASS_SLIDER_MAX - gs
+}
+
+function glassStoredFromSliderTransparency(t) {
+  const x = parseFloat(String(t))
+  const tr = Number.isFinite(x) ? Math.max(0, Math.min(VS_GLASS_SLIDER_MAX, x)) : glassTransparencyFromStored(8)
+  return VS_GLASS_SLIDER_MAX - tr
 }
 
 /** Кэш parse localStorage — getVisual() вызывается очень часто (в т.ч. каждый кадр домашнего визуализатора). */
@@ -498,6 +621,7 @@ function getVisual() {
       try { raw = JSON.parse(rawStr) } catch (_) { raw = {} }
     }
     const out = Object.assign({}, defaultVisual, raw)
+    out.sidebarPosition = normalizeSidebarDockPosition(out.sidebarPosition)
     _flowVisualMemo = { s: rawStr, out }
     return Object.assign({}, out)
   } catch {
@@ -523,6 +647,9 @@ function applyToastPosition(position = getVisual().toastPosition) {
   document.body.setAttribute('data-toast-position', safe)
   document.querySelectorAll('[data-toast-position-option]').forEach((btn) => {
     btn.classList.toggle('active', btn.getAttribute('data-toast-position-option') === safe)
+  })
+  document.querySelectorAll('[data-toast-pos]').forEach((btn) => {
+    btn.classList.toggle('active', btn.getAttribute('data-toast-pos') === safe)
   })
 }
 
@@ -662,6 +789,7 @@ function applyVisualMode(mode) {
   } else {
     document.body.classList.add('visual-minimal')
   }
+  syncNexoryDeskClass()
   const minimalBtn = document.getElementById('vm-minimal')
   const floatedBtn = document.getElementById('vm-floated')
   const liquidBtn = document.getElementById('vm-liquid')
@@ -1267,15 +1395,45 @@ function applyVisualBackdropFilters(blurPx, brightPercent) {
 function applyVisualSettings() {
   const blur   = document.getElementById('vs-blur')?.value ?? 40
   const bright = document.getElementById('vs-bright')?.value ?? 50
-  const glass  = document.getElementById('vs-glass')?.value ?? 8
+  const glassEl = document.getElementById('vs-glass')
+  const glass = glassEl
+    ? glassStoredFromSliderTransparency(glassEl.value)
+    : (getVisual().glass ?? 8)
   const pb     = document.getElementById('vs-panel-blur')?.value ?? 30
-  const scale  = document.getElementById('vs-scale')?.value ?? 100
+  const scaleLegacyEl = document.getElementById('vs-scale')
+  const scaleWindowEl = document.getElementById('vs-scale-window')
+  const scaleFullscreenEl = document.getElementById('vs-scale-fullscreen')
+  const clampScale = (n, lo = 75, hi = 140) => {
+    const x = Number(n)
+    return Number.isFinite(x) ? Math.max(lo, Math.min(hi, x)) : 100
+  }
+  const v0 = getVisual()
+  const activeScaleId = document.activeElement?.id || ''
+  const legacyScale = clampScale(scaleLegacyEl?.value ?? v0.uiScale ?? 100, 75, 140)
+  const windowScale = clampScale(scaleWindowEl?.value ?? legacyScale, 75, 130)
+  const fullscreenScale = clampScale(scaleFullscreenEl?.value ?? legacyScale, 75, 140)
+  let scale = windowScale
+  if (activeScaleId === 'vs-scale-fullscreen') scale = fullscreenScale
+  else if (activeScaleId === 'vs-scale-window') scale = windowScale
+  else if (activeScaleId === 'vs-scale') scale = legacyScale
+  else if (scaleWindowEl) scale = windowScale
+  else if (scaleFullscreenEl) scale = fullscreenScale
+  else scale = legacyScale
+
+  // Keep all scale sliders in sync so blur/brightness changes never reset UI scale.
+  if (scaleLegacyEl && Number(scaleLegacyEl.value) !== scale) scaleLegacyEl.value = String(scale)
+  if (scaleWindowEl && Number(scaleWindowEl.value) !== scale) scaleWindowEl.value = String(Math.max(75, Math.min(130, scale)))
+  if (scaleFullscreenEl && Number(scaleFullscreenEl.value) !== scale) scaleFullscreenEl.value = String(scale)
 
   document.getElementById('vs-blur-val').textContent   = blur + 'px'
   document.getElementById('vs-bright-val').textContent = bright + '%'
-  document.getElementById('vs-glass-val').textContent  = glass + '%'
+  const glassTr = glassTransparencyFromStored(glass)
+  const glassTrLabel = Number.isInteger(glassTr) ? `${glassTr}%` : `${glassTr.toFixed(1)}%`
+  if (document.getElementById('vs-glass-val')) document.getElementById('vs-glass-val').textContent = glassTrLabel
   document.getElementById('vs-panel-blur-val').textContent = pb + 'px'
   if (document.getElementById('vs-scale-val')) document.getElementById('vs-scale-val').textContent = scale + '%'
+  if (document.getElementById('vs-scale-window-val')) document.getElementById('vs-scale-window-val').textContent = scale + '%'
+  if (document.getElementById('vs-scale-fullscreen-val')) document.getElementById('vs-scale-fullscreen-val').textContent = scale + '%'
 
   const v = getVisual()
   saveVisual({ blur:+blur, bright:+bright, glass:+glass, panelBlur:+pb, uiScale:+scale })
@@ -1409,7 +1567,7 @@ function applyHomeSliderStyle() {
 
 function toggleHomeWidgetEnabled() {
   const v = getVisual()
-  const homeWidget = Object.assign({ enabled: true, mode: 'bars', image: null }, v.homeWidget || {})
+  const homeWidget = Object.assign({ enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }, v.homeWidget || {})
   homeWidget.enabled = !homeWidget.enabled
   saveVisual({ homeWidget })
   syncHomeWidgetUI()
@@ -1419,8 +1577,26 @@ function setHomeWidgetMode(mode) {
   const modes = ['bars', 'wave', 'dots', 'image']
   const safe = modes.includes(mode) ? mode : 'bars'
   const v = getVisual()
-  const homeWidget = Object.assign({ enabled: true, mode: 'bars', image: null }, v.homeWidget || {})
+  const homeWidget = Object.assign({ enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }, v.homeWidget || {})
   homeWidget.mode = safe
+  saveVisual({ homeWidget })
+  syncHomeWidgetUI()
+}
+
+function setHomeWidgetIntensity(value) {
+  const n = Math.max(60, Math.min(180, Number(value) || 100))
+  const v = getVisual()
+  const homeWidget = Object.assign({ enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }, v.homeWidget || {})
+  homeWidget.intensity = Math.round(n)
+  saveVisual({ homeWidget })
+  syncHomeWidgetUI()
+}
+
+function setHomeWidgetSmoothing(value) {
+  const n = Math.max(20, Math.min(95, Number(value) || 72))
+  const v = getVisual()
+  const homeWidget = Object.assign({ enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }, v.homeWidget || {})
+  homeWidget.smoothing = Math.round(n)
   saveVisual({ homeWidget })
   syncHomeWidgetUI()
 }
@@ -1431,7 +1607,7 @@ async function setHomeWidgetImage(input) {
   try {
     const mediaUrl = await saveCustomMediaFile(file, 'home-widget')
     const v = getVisual()
-    const homeWidget = Object.assign({ enabled: true, mode: 'image', image: null }, v.homeWidget || {})
+    const homeWidget = Object.assign({ enabled: true, mode: 'image', image: null, intensity: 100, smoothing: 72 }, v.homeWidget || {})
     homeWidget.image = mediaUrl
     homeWidget.mode = 'image'
     saveVisual({ homeWidget })
@@ -1446,7 +1622,7 @@ async function setHomeWidgetImage(input) {
 
 function clearHomeWidgetImage() {
   const v = getVisual()
-  const homeWidget = Object.assign({ enabled: true, mode: 'bars', image: null }, v.homeWidget || {})
+  const homeWidget = Object.assign({ enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }, v.homeWidget || {})
   homeWidget.image = null
   if (homeWidget.mode === 'image') homeWidget.mode = 'bars'
   saveVisual({ homeWidget })
@@ -1455,7 +1631,7 @@ function clearHomeWidgetImage() {
 
 function syncHomeWidgetUI() {
   const v = getVisual()
-  const hw = Object.assign({ enabled: true, mode: 'bars', image: null }, v.homeWidget || {})
+  const hw = Object.assign({ enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }, v.homeWidget || {})
   const wrap = document.getElementById('home-visualizer-wrap')
   const img = document.getElementById('home-visualizer-image')
   const canvas = document.getElementById('home-visualizer-canvas')
@@ -1473,6 +1649,46 @@ function syncHomeWidgetUI() {
   })
   const imageRow = document.getElementById('home-widget-image-row')
   if (imageRow) imageRow.style.display = hw.mode === 'image' ? 'flex' : 'none'
+  const intensityInput = document.getElementById('home-widget-intensity')
+  const intensityVal = document.getElementById('home-widget-intensity-val')
+  if (intensityInput) intensityInput.value = String(Math.max(60, Math.min(180, Number(hw.intensity) || 100)))
+  if (intensityVal) intensityVal.textContent = `${Math.round(Math.max(60, Math.min(180, Number(hw.intensity) || 100)))}%`
+  const smoothingInput = document.getElementById('home-widget-smoothing')
+  const smoothingVal = document.getElementById('home-widget-smoothing-val')
+  if (smoothingInput) smoothingInput.value = String(Math.max(20, Math.min(95, Number(hw.smoothing) || 72)))
+  if (smoothingVal) smoothingVal.textContent = `${Math.round(Math.max(20, Math.min(95, Number(hw.smoothing) || 72)))}%`
+}
+
+function getSoundEnhancerProfile() {
+  try {
+    const raw = String(localStorage.getItem('flow_sound_profile') || 'clean').trim().toLowerCase()
+    if (raw === 'balanced' || raw === 'bright') return raw
+    return 'clean'
+  } catch {
+    return 'clean'
+  }
+}
+
+function syncSoundEnhancerUI() {
+  const cur = getSoundEnhancerProfile()
+  ;['balanced', 'clean', 'bright'].forEach((id) => {
+    const el = document.getElementById(`sound-profile-${id}`)
+    if (el) el.classList.toggle('active', id === cur)
+  })
+}
+
+function setSoundEnhancerProfile(profile) {
+  const safe = profile === 'balanced' || profile === 'bright' ? profile : 'clean'
+  try { localStorage.setItem('flow_sound_profile', safe) } catch {}
+  syncSoundEnhancerUI()
+  showToast(`Профиль звука: ${safe === 'balanced' ? 'Сбалансированный' : safe === 'bright' ? 'Яркий' : 'Чистый'}`)
+  // Чтобы применить профиль сразу, переинициализируем граф WebAudio.
+  try {
+    if (audio && !audio.paused) {
+      teardownAudioAnalyzer()
+      ensureAudioAnalyzer()
+    }
+  } catch (_) {}
 }
 
 function normalizeAccentHex(c) {
@@ -1584,8 +1800,22 @@ function updateOrbsFromCover(coverUrl) {
         document.getElementById('gorb2').style.background = `color-mix(in srgb, ${c2} 24%, transparent)`
       }
       if (effects.accentFromCover) {
-        document.documentElement.style.setProperty('--accent', c1)
-        document.documentElement.style.setProperty('--accent2', c2)
+        const relLum = (rr, gg, bb) => {
+          const srgb = (x) => {
+            const v = x / 255
+            return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
+          }
+          const R = srgb(rr)
+          const G = srgb(gg)
+          const B = srgb(bb)
+          return 0.2126 * R + 0.7152 * G + 0.0722 * B
+        }
+        const L = relLum(r, g, b)
+        const nearWhite = L > 0.9 || (r > 236 && g > 236 && b > 236)
+        const a1 = nearWhite ? (v.accent || defaultVisual.accent) : c1
+        const a2 = nearWhite ? (v.accent2 || defaultVisual.accent2) : c2
+        document.documentElement.style.setProperty('--accent', a1)
+        document.documentElement.style.setProperty('--accent2', a2)
       }
       if (document.getElementById('pm-cover-glow')) {
         document.getElementById('pm-cover-glow').style.background = `color-mix(in srgb, ${c1} 28%, transparent)`
@@ -1653,18 +1883,28 @@ function updateYandexPlayerTheme(track = currentTrack) {
 function initVisualSettings() {
   const v = getVisual()
   // Apply sliders
-  const setSlider = (id, val) => { const el = document.getElementById(id); if (el) el.value = val }
+  const setSlider = (id, val) => {
+    const el = document.getElementById(id)
+    if (el) el.value = val == null ? '' : String(val)
+  }
   setSlider('vs-blur', v.blur)
   setSlider('vs-bright', v.bright)
-  setSlider('vs-glass', v.glass)
+  setSlider('vs-glass', glassTransparencyFromStored(v.glass))
   setSlider('vs-panel-blur', v.panelBlur)
   setSlider('vs-scale', v.uiScale || 100)
+  setSlider('vs-scale-window', v.uiScale || 100)
+  setSlider('vs-scale-fullscreen', v.uiScale || 100)
   // Labels
   if (document.getElementById('vs-blur-val')) document.getElementById('vs-blur-val').textContent = v.blur + 'px'
   if (document.getElementById('vs-bright-val')) document.getElementById('vs-bright-val').textContent = v.bright + '%'
-  if (document.getElementById('vs-glass-val')) document.getElementById('vs-glass-val').textContent = v.glass + '%'
+  const gTr = glassTransparencyFromStored(v.glass)
+  if (document.getElementById('vs-glass-val')) {
+    document.getElementById('vs-glass-val').textContent = Number.isInteger(gTr) ? `${gTr}%` : `${gTr.toFixed(1)}%`
+  }
   if (document.getElementById('vs-panel-blur-val')) document.getElementById('vs-panel-blur-val').textContent = v.panelBlur + 'px'
   if (document.getElementById('vs-scale-val')) document.getElementById('vs-scale-val').textContent = (v.uiScale || 100) + '%'
+  if (document.getElementById('vs-scale-window-val')) document.getElementById('vs-scale-window-val').textContent = (v.uiScale || 100) + '%'
+  if (document.getElementById('vs-scale-fullscreen-val')) document.getElementById('vs-scale-fullscreen-val').textContent = (v.uiScale || 100) + '%'
   // CSS vars
   document.documentElement.style.setProperty('--accent', v.accent)
   document.documentElement.style.setProperty('--accent2', v.accent2)
@@ -1699,6 +1939,7 @@ function initVisualSettings() {
   applyFontSettings(true)
   applyHomeSliderStyle()
   syncHomeWidgetUI()
+  syncSoundEnhancerUI()
   document.body.classList.toggle('nav-active-highlight', Boolean(v.navActiveHighlight))
   applyCardDensity(v.cardDensity || 'comfort')
   const navToggle = document.getElementById('toggle-nav-active')
@@ -1731,6 +1972,28 @@ function initVisualSettings() {
     setupFlowOptimizationChannel()
   } catch (_) {}
   applyOptimizationSettings()
+  installFlowLayoutPickerDelegatedClicks()
+  try {
+    refreshCustomizationPanel()
+  } catch (_) {}
+}
+
+let _flowSidebarLayoutClickInstalled = false
+function installFlowLayoutPickerDelegatedClicks() {
+  if (_flowSidebarLayoutClickInstalled) return
+  _flowSidebarLayoutClickInstalled = true
+  document.addEventListener(
+    'click',
+    (e) => {
+      const btn = e.target && e.target.closest && e.target.closest('[data-flow-sidebar-layout]')
+      if (!btn) return
+      e.preventDefault()
+      const raw = btn.getAttribute('data-flow-sidebar-layout')
+      const pos = normalizeSidebarDockPosition(raw)
+      if (pos) setSidebarPosition(pos)
+    },
+    false,
+  )
 }
 
 function reorderVisualSettingsSections() {
@@ -1743,12 +2006,60 @@ function toggleNavActiveHighlight() {
   applyVisualSettings()
 }
 
+/** Вертикальная колонка меню слева (классический док). */
+function isSidebarDockedLeft() {
+  return (
+    !document.body.classList.contains('layout-top-nav') &&
+    !document.body.classList.contains('layout-bottom-nav') &&
+    !document.body.classList.contains('layout-right-nav')
+  )
+}
+
+/** Горизонтальная полоса меню сверху или снизу. */
+function isSidebarHorizontalDock() {
+  return (
+    document.body.classList.contains('layout-top-nav') ||
+    document.body.classList.contains('layout-bottom-nav')
+  )
+}
+
+/** Nexory «рабочий стол»: заметнее и при меню справа. */
+function syncNexoryDeskClass() {
+  try {
+    const v = getVisual()
+    const floated = normalizeVisualThemeMode(v.visualMode) === 'floated'
+    const pos = normalizeSidebarDockPosition(v.sidebarPosition)
+    const horizontal = pos === 'top' || pos === 'bottom'
+    const dockRight = pos === 'right'
+    document.body.classList.toggle('nexory-desk', Boolean(floated || horizontal || dockRight))
+  } catch (_) {}
+}
+
+/** Меню снизу: переключатель расположения — отдельной полосой над плеером (не внутри #player-bar). */
+function syncLayoutDockMount() {
+  try {
+    const dock = document.getElementById('player-bar-layout-dock')
+    const playerBar = document.getElementById('player-bar')
+    const screenMain = document.getElementById('screen-main')
+    if (!dock || !playerBar || !screenMain) return
+    const safe = normalizeSidebarDockPosition(getVisual()?.sidebarPosition || 'left')
+    if (safe === 'bottom') {
+      if (dock.parentElement !== screenMain) screenMain.insertBefore(dock, playerBar)
+      else if (dock.nextElementSibling !== playerBar) screenMain.insertBefore(dock, playerBar)
+    } else if (dock.parentElement !== playerBar || playerBar.firstElementChild !== dock) {
+      playerBar.insertBefore(dock, playerBar.firstChild)
+    }
+  } catch (_) {}
+}
+
 function applySidebarPosition(position) {
-  const safe = position === 'top' ? 'top' : 'left'
+  const safe = normalizeSidebarDockPosition(position)
   document.body.classList.toggle('layout-top-nav', safe === 'top')
+  document.body.classList.toggle('layout-bottom-nav', safe === 'bottom')
+  document.body.classList.toggle('layout-right-nav', safe === 'right')
   const sidebar = document.getElementById('sidebar')
-  if (sidebar && safe === 'top') sidebar.classList.remove('collapsed')
-  if (safe === 'top') {
+  if (sidebar && (safe === 'top' || safe === 'bottom')) sidebar.classList.remove('collapsed')
+  if (safe === 'top' || safe === 'bottom') {
     document.documentElement.style.setProperty('--sidebar-shift', '0px')
   } else {
     try {
@@ -1760,37 +2071,31 @@ function applySidebarPosition(position) {
       try { window.dispatchEvent(new Event('resize')) } catch (_) {}
     })
   }
-  const leftBtn = document.getElementById('layout-left')
-  const topBtn = document.getElementById('layout-top')
-  if (leftBtn) leftBtn.classList.toggle('active', safe === 'left')
-  if (topBtn) topBtn.classList.toggle('active', safe === 'top')
+  ;['left', 'top', 'bottom', 'right'].forEach((id) => {
+    const el = document.getElementById(`layout-${id}`)
+    if (el) el.classList.toggle('active', safe === id)
+  })
+  document.querySelectorAll('.pbl-dock-btn[data-flow-sidebar-layout]').forEach((el) => {
+    const p = normalizeSidebarDockPosition(el.getAttribute('data-flow-sidebar-layout'))
+    el.classList.toggle('active', p === safe)
+  })
+  syncLayoutDockMount()
+  syncNexoryDeskClass()
 }
 
 function setSidebarPosition(position) {
-  const safe = position === 'top' ? 'top' : 'left'
+  const safe = normalizeSidebarDockPosition(position)
   saveVisual({ sidebarPosition: safe })
   applySidebarPosition(safe)
-  showToast(safe === 'top' ? 'Меню перемещено наверх' : 'Меню возвращено влево')
-}
-
-function getSafeToastPosition(position) {
-  const allowed = new Set(['default', 'top-left', 'top-right', 'bottom-left', 'bottom-right'])
-  return allowed.has(position) ? position : 'default'
-}
-
-function applyToastPosition(position = getVisual().toastPosition) {
-  const safe = getSafeToastPosition(position)
-  document.body.setAttribute('data-toast-position', safe)
-  document.querySelectorAll('[data-toast-pos]').forEach((btn) => {
-    btn.classList.toggle('active', btn.getAttribute('data-toast-pos') === safe)
-  })
-}
-
-function setToastPosition(position) {
-  const safe = getSafeToastPosition(position)
-  saveVisual({ toastPosition: safe })
-  applyToastPosition(safe)
-  showToast('Позиция уведомлений сохранена')
+  const msg =
+    safe === 'top'
+      ? 'Меню сверху'
+      : safe === 'bottom'
+        ? 'Меню снизу'
+        : safe === 'right'
+          ? 'Меню справа'
+          : 'Меню слева'
+  showToast(msg)
 }
 
 /** true = секция свёрнута (как в блоках аккаунтов). Всегда храним полный объект ключей. */
@@ -1872,7 +2177,7 @@ const SETTINGS_TAB_TO_CATEGORY = {
 }
 
 function switchSettingsCategory(cat) {
-  const allowed = new Set(['appearance', 'playback', 'optimization', 'accounts', 'services'])
+  const allowed = new Set(['appearance', 'customization', 'playback', 'optimization', 'accounts', 'services'])
   const c = allowed.has(cat) ? cat : 'appearance'
   _settingsCategory = c
   document.querySelectorAll('.settings-cat').forEach((btn) => {
@@ -1883,6 +2188,11 @@ function switchSettingsCategory(cat) {
     panel.classList.toggle('active', on)
   })
   applyUiTextOverrides()
+  if (c === 'customization') {
+    try {
+      refreshCustomizationPanel()
+    } catch (_) {}
+  }
 }
 
 /** Совместимость со старыми вызовами switchSettingsTab('visual'|'sources'|'integrations'). */
@@ -1891,6 +2201,950 @@ function switchSettingsTab(tab) {
   switchSettingsCategory(mapped)
 }
 window.switchSettingsCategory = switchSettingsCategory
+
+// ——— Settings: «Кастомизация» (галерея, недавние, пресеты вида) ———
+const FLOW_CUSTOM_GALLERY_RECENT_V1 = 'flow_custom_gallery_recent_v1'
+const FLOW_CUST_PRESETS_V1 = 'flow_cust_presets_v1'
+const CUST_BG_COVER_SENT = '__cover__'
+const CUST_BG_GRADIENT_SENT = '__gradient__'
+const CUST_GALLERY_RECENT_CAP = 24
+const CUST_PRESETS_CAP = 28
+
+function bumpCustomizationGalleryRecent(url) {
+  const u = String(url || '').trim()
+  if (!u) return
+  let list = []
+  try {
+    list = JSON.parse(localStorage.getItem(FLOW_CUSTOM_GALLERY_RECENT_V1) || '[]')
+  } catch (_) {
+    list = []
+  }
+  if (!Array.isArray(list)) list = []
+  list = [u, ...list.filter((x) => x !== u)].slice(0, CUST_GALLERY_RECENT_CAP)
+  try {
+    localStorage.setItem(FLOW_CUSTOM_GALLERY_RECENT_V1, JSON.stringify(list))
+  } catch (_) {}
+  try {
+    if (isCustomizationSettingsCategoryActive()) renderCustRecentStrip()
+  } catch (_) {}
+}
+
+function getCustomizationGalleryRecentList() {
+  try {
+    const list = JSON.parse(localStorage.getItem(FLOW_CUSTOM_GALLERY_RECENT_V1) || '[]')
+    return Array.isArray(list) ? list.filter(Boolean) : []
+  } catch (_) {
+    return []
+  }
+}
+
+function clearCustomizationGalleryRecent() {
+  try {
+    localStorage.removeItem(FLOW_CUSTOM_GALLERY_RECENT_V1)
+  } catch (_) {}
+  try {
+    if (isCustomizationSettingsCategoryActive()) renderCustRecentStrip()
+  } catch (_) {}
+  showToast('Недавние загрузки очищены')
+}
+
+/** Квадрат / широкий / высокий по размерам из main-процесса; иначе unknown. */
+function classifyCustomMediaAspectKind(f) {
+  const w = Number(f?.width)
+  const h = Number(f?.height)
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w < 2 || h < 2) return 'unknown'
+  const r = w / h
+  if (r >= 0.9 && r <= 1.11) return 'square'
+  if (r > 1.11) return 'wide'
+  return 'tall'
+}
+
+function bindHorizontalDragScroll(el, opts) {
+  if (!el || el.dataset.hscrollBound === '1') return
+  el.dataset.hscrollBound = '1'
+  const faceTap = Boolean(opts && opts.faceTap)
+  let session = null
+
+  const endWindow = () => {
+    if (!session) return
+    window.removeEventListener('pointermove', onWinMove, true)
+    window.removeEventListener('pointerup', onWinUp, true)
+    window.removeEventListener('pointercancel', onWinUp, true)
+    session.el.classList.remove('cust-hscroll--dragging')
+    session = null
+  }
+
+  const onWinMove = (e) => {
+    if (!session || e.pointerId !== session.pid) return
+    const dx = e.clientX - session.sx
+    const dy = e.clientY - session.sy
+    if (!session.drag) {
+      if (Math.hypot(dx, dy) < 6) return
+      const canH = el.scrollWidth > el.clientWidth + 2
+      if (canH && Math.abs(dx) >= Math.abs(dy)) {
+        session.drag = true
+        session.moved = true
+        el.classList.add('cust-hscroll--dragging')
+      } else {
+        endWindow()
+        return
+      }
+    }
+    if (session && session.drag) {
+      el.scrollLeft = session.sl - dx
+      try {
+        e.preventDefault()
+      } catch (_) {}
+    }
+  }
+
+  const onWinUp = (e) => {
+    if (!session || (e.pointerId != null && e.pointerId !== session.pid)) return
+    const s = session
+    const { downTarget: dt, drag, moved } = s
+    endWindow()
+    if (drag) return
+    if (faceTap && !moved && dt && dt.closest && dt.closest('.cust-gal-face')) {
+      const tile = dt.closest('.cust-gal-tile')
+      if (tile) {
+        const willOpen = !tile.classList.contains('cust-gal-tile--actions-open')
+        el.querySelectorAll('.cust-gal-tile--actions-open').forEach((t) => t.classList.remove('cust-gal-tile--actions-open'))
+        if (willOpen) tile.classList.add('cust-gal-tile--actions-open')
+      }
+    }
+  }
+
+  el.addEventListener(
+    'pointerdown',
+    (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return
+      if (e.target.closest && e.target.closest('button')) return
+      if (session) endWindow()
+      session = {
+        el,
+        sx: e.clientX,
+        sy: e.clientY,
+        sl: el.scrollLeft,
+        pid: e.pointerId,
+        moved: false,
+        drag: false,
+        downTarget: e.target,
+      }
+      window.addEventListener('pointermove', onWinMove, true)
+      window.addEventListener('pointerup', onWinUp, true)
+      window.addEventListener('pointercancel', onWinUp, true)
+    },
+    true,
+  )
+
+  el.addEventListener(
+    'wheel',
+    (e) => {
+      if (el.scrollWidth <= el.clientWidth + 2) return
+      const ax = Math.abs(e.deltaX)
+      const ay = Math.abs(e.deltaY)
+      if (ax > ay && ax > 0.5) {
+        el.scrollLeft += e.deltaX
+        e.preventDefault()
+      } else if (e.shiftKey && ay > ax && ay > 0.5) {
+        el.scrollLeft += e.deltaY
+        e.preventDefault()
+      }
+    },
+    { passive: false },
+  )
+}
+
+function getCustomizationPresets() {
+  try {
+    const list = JSON.parse(localStorage.getItem(FLOW_CUST_PRESETS_V1) || '[]')
+    return Array.isArray(list) ? list : []
+  } catch (_) {
+    return []
+  }
+}
+
+function saveCustomizationPresetsList(arr) {
+  const list = Array.isArray(arr) ? arr.slice(0, CUST_PRESETS_CAP) : []
+  try {
+    localStorage.setItem(FLOW_CUST_PRESETS_V1, JSON.stringify(list))
+  } catch (_) {}
+}
+
+function newCustomizationPresetId() {
+  return `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+}
+
+function custUrlCssBackground(u) {
+  const s = String(u || '').trim()
+  if (!s) return ''
+  return `url(${JSON.stringify(s)})`
+}
+
+function normalizeMediaUrlKey(url) {
+  try {
+    const s = String(url || '').trim()
+    if (!s) return ''
+    const u = new URL(s)
+    const path = String(u.pathname || '').replace(/\\/g, '/')
+    return `${String(u.protocol || '').toLowerCase()}//${String(u.hostname || '').toLowerCase()}${path.toLowerCase()}`
+  } catch (_) {
+    return String(url || '').trim().toLowerCase()
+  }
+}
+
+/** Имя вида `purpose-<ts>-<sha1-16>.ext` из save-custom-media — одинаковое содержимое → один тайл. */
+function contentHashFromCustomMediaFilename(name) {
+  const m = String(name || '').toLowerCase().match(/-([a-f0-9]{16})(\.[a-z0-9]+)$/)
+  return m ? m[1] : ''
+}
+
+function dedupeCustomMediaFiles(files) {
+  const sorted = [...(files || [])].sort((a, b) => (Number(b.mtime) || 0) - (Number(a.mtime) || 0))
+  const seenUrl = new Set()
+  const seenContent = new Set()
+  const out = []
+  for (let i = 0; i < sorted.length; i++) {
+    const f = sorted[i]
+    const urlKey = normalizeMediaUrlKey(f?.url)
+    if (!urlKey || seenUrl.has(urlKey)) continue
+    const ch = contentHashFromCustomMediaFilename(f?.name || '')
+    if (ch) {
+      if (seenContent.has(ch)) continue
+      seenContent.add(ch)
+    }
+    seenUrl.add(urlKey)
+    out.push(f)
+  }
+  return out
+}
+
+function custPreviewEffectiveCoverUrl() {
+  if (!currentTrack) return ''
+  const u = String(getEffectiveCoverUrl(currentTrack) || '').trim()
+  let disp = sanitizeMediaByGifMode(u, 'track')
+  if (disp) return disp
+  const raw = String(currentTrack.cover || '').trim()
+  return raw || ''
+}
+
+function customizationCoverMetaText() {
+  if (!currentTrack) return 'Включи трек — здесь появится обложка из источника или своя.'
+  const map = getCustomCoverMap()
+  if (getGlobalCustomCover(map)) return 'Источник: своя картинка для плеера (глобально).'
+  const keys = getTrackCoverKeys(currentTrack)
+  const per = keys.map((k) => map[k]).find(Boolean)
+  if (per) return 'Источник: своя обложка, привязанная к этому треку.'
+  return 'Источник: обложка из сервиса / локального файла.'
+}
+
+function customizationBgMetaText() {
+  const v = getVisual()
+  if (v.bgType === 'custom' && v.customBg) return 'Источник: свой фон (файл из галереи или загрузки).'
+  if (v.bgType === 'cover') return 'Источник: размытая обложка текущего трека.'
+  return 'Источник: градиент и орбы (без своего файла).'
+}
+
+function customizationVizMetaText() {
+  const hw = Object.assign({ enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }, getVisual().homeWidget || {})
+  const names = { bars: 'столбцы', wave: 'волна', dots: 'точки', image: 'своё фото', web: 'Web' }
+  if (hw.mode === 'image' && hw.image) return 'Источник: своё изображение в виджете на главной.'
+  return `Источник: анимация «${names[hw.mode] || hw.mode}».`
+}
+
+function galleryRoleMatchesUrl(role, fileUrl) {
+  const key = normalizeMediaUrlKey(fileUrl)
+  if (!key) return false
+  if (role === 'cover') {
+    const map = getCustomCoverMap()
+    const g = getGlobalCustomCover(map)
+    if (g && normalizeMediaUrlKey(g) === key) return true
+    if (currentTrack) {
+      const c = getTrackCoverKeys(currentTrack).map((k) => map[k]).find(Boolean)
+      if (c && normalizeMediaUrlKey(String(c)) === key) return true
+    }
+    return false
+  }
+  if (role === 'bg') {
+    const v = getVisual()
+    return v.bgType === 'custom' && v.customBg && normalizeMediaUrlKey(String(v.customBg)) === key
+  }
+  if (role === 'viz') {
+    const hw = Object.assign({ enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }, getVisual().homeWidget || {})
+    return hw.mode === 'image' && hw.image && normalizeMediaUrlKey(String(hw.image)) === key
+  }
+  return false
+}
+
+function collectCurrentCustomizationSnapshot() {
+  const v = getVisual()
+  const map = getCustomCoverMap()
+  let cover = String(getGlobalCustomCover(map) || '').trim()
+  if (!cover && currentTrack) {
+    const ks = getTrackCoverKeys(currentTrack)
+    cover = String(ks.map((k) => map[k]).find(Boolean) || '').trim()
+  }
+  let bg = CUST_BG_GRADIENT_SENT
+  if (v.bgType === 'custom' && v.customBg) bg = String(v.customBg).trim()
+  else if (v.bgType === 'cover') bg = CUST_BG_COVER_SENT
+  const hw = Object.assign({ enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }, v.homeWidget || {})
+  const viz = hw.mode === 'image' && hw.image ? String(hw.image).trim() : ''
+  return { cover, bg, viz }
+}
+
+function savedViewPresetMatchesCurrentScreen(p) {
+  if (!p || typeof p !== 'object') return false
+  const cur = collectCurrentCustomizationSnapshot()
+  const sameStr = (a, b) => String(a ?? '') === String(b ?? '')
+  const sameMedia = (a, b) => {
+    if (sameStr(a, b)) return true
+    const sa = String(a || '').trim()
+    const sb = String(b || '').trim()
+    if (!sa || !sb) return sa === sb
+    if (/^(file:|https?:|data:)/i.test(sa) && /^(file:|https?:|data:)/i.test(sb))
+      return normalizeMediaUrlKey(sa) === normalizeMediaUrlKey(sb)
+    return false
+  }
+  return sameMedia(p.cover, cur.cover) && sameMedia(p.bg, cur.bg) && sameMedia(p.viz, cur.viz)
+}
+
+function applyCustomizationMediaFromGallery(url, role) {
+  const u = String(url || '').trim()
+  if (!u) return
+  if (role === 'bg') {
+    saveVisual({ bgType: 'custom', customBg: u })
+    refreshCustomBgPreview()
+    updateBackground()
+    showToast('Фон обновлён')
+  } else if (role === 'viz') {
+    const v = getVisual()
+    const homeWidget = Object.assign({ enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }, v.homeWidget || {})
+    homeWidget.image = u
+    homeWidget.mode = 'image'
+    saveVisual({ homeWidget })
+    syncHomeWidgetUI()
+    showToast('Визуализатор обновлён')
+  } else {
+    const map = getCustomCoverMap()
+    map.__global__ = u
+    if (currentTrack) getTrackCoverKeys(currentTrack).forEach((k) => { map[k] = u })
+    saveCustomCoverMap(map)
+    _coverLoadState.clear()
+    syncPlayerUIFromTrack()
+    try {
+      renderQueue()
+    } catch (_) {}
+    try {
+      renderPlaylists()
+    } catch (_) {}
+    try {
+      renderLiked()
+    } catch (_) {}
+    try {
+      renderRoomQueue()
+    } catch (_) {}
+    try {
+      syncTrackCoverStatus()
+    } catch (_) {}
+    try {
+      refreshTrackCoverPreview()
+    } catch (_) {}
+    showToast('Обложка обновлена')
+  }
+  try {
+    refreshCustomizationPanel()
+  } catch (_) {}
+  try {
+    const go = document.getElementById('cust-gallery-overlay')
+    if (go && !go.classList.contains('hidden')) void renderCustGalleryContent()
+  } catch (_) {}
+}
+
+function syncCustPreviewMedia(container, imageUrl, emptyBackgroundCss) {
+  if (!container) return
+  container.querySelectorAll(':scope > img.cust-prev-thumb').forEach((n) => n.remove())
+  container.style.backgroundImage = ''
+  container.style.backgroundSize = ''
+  container.style.backgroundPosition = ''
+  const u = String(imageUrl || '').trim()
+  if (u) {
+    container.style.background = '#13151d'
+    const img = document.createElement('img')
+    img.className = 'cust-prev-thumb'
+    img.alt = ''
+    img.decoding = 'async'
+    img.loading = 'eager'
+    img.draggable = false
+    if (/^https?:\/\//i.test(u)) img.referrerPolicy = 'no-referrer'
+    img.src = u
+    img.onerror = () => {
+      img.remove()
+      try {
+        container.style.backgroundImage = custUrlCssBackground(u)
+        container.style.backgroundSize = 'cover'
+        container.style.backgroundPosition = 'center'
+        container.style.backgroundColor = '#13151d'
+      } catch (_) {
+        container.style.backgroundImage = ''
+        container.style.background = emptyBackgroundCss
+      }
+    }
+    container.appendChild(img)
+  } else {
+    container.style.background = emptyBackgroundCss
+  }
+}
+
+function mountPresetStripThumb(el, url, fallbackCss) {
+  if (!el) return
+  el.textContent = ''
+  el.style.backgroundImage = ''
+  const u = String(url || '').trim()
+  if (!u) {
+    el.style.background = fallbackCss || 'rgba(12,14,20,.9)'
+    return
+  }
+  el.style.background = '#12141c'
+  const img = document.createElement('img')
+  img.className = 'cust-preset-thumb-img'
+  img.alt = ''
+  img.decoding = 'async'
+  img.loading = 'lazy'
+  img.draggable = false
+  if (/^https?:\/\//i.test(u)) img.referrerPolicy = 'no-referrer'
+  img.src = u
+  img.onerror = () => {
+    img.remove()
+    try {
+      el.style.backgroundImage = custUrlCssBackground(u)
+      el.style.backgroundSize = 'cover'
+      el.style.backgroundPosition = 'center'
+    } catch (_) {
+      el.style.background = fallbackCss || 'rgba(12,14,20,.9)'
+    }
+  }
+  el.appendChild(img)
+}
+
+function renderPresetCardBgLayer(bgEl, p) {
+  if (!bgEl) return
+  const v = getVisual()
+  if (p.bg && p.bg !== CUST_BG_COVER_SENT && p.bg !== CUST_BG_GRADIENT_SENT) {
+    mountPresetStripThumb(bgEl, p.bg, 'rgba(20,22,30,.95)')
+    return
+  }
+  if (p.bg === CUST_BG_COVER_SENT) {
+    const u = currentTrack ? sanitizeMediaByGifMode(custPreviewEffectiveCoverUrl(), 'bg') : ''
+    mountPresetStripThumb(bgEl, u, 'rgba(20,22,30,.95)')
+    return
+  }
+  const o1 = v.orb1Color || v.accent || '#7c3aed'
+  const o2 = v.orb2Color || v.accent2 || '#3b82f6'
+  bgEl.textContent = ''
+  bgEl.style.background = `linear-gradient(125deg, ${o1}44, ${o2}55, #0c0e14)`
+}
+
+function isCustomizationSettingsCategoryActive() {
+  return _settingsCategory === 'customization'
+}
+
+function refreshCustomizationPanel() {
+  const elCover = document.getElementById('cust-prev-cover')
+  const elBg = document.getElementById('cust-prev-bg')
+  const elViz = document.getElementById('cust-prev-viz')
+  const mCov = document.getElementById('cust-prev-cover-meta')
+  const mBg = document.getElementById('cust-prev-bg-meta')
+  const mViz = document.getElementById('cust-prev-viz-meta')
+  const v = getVisual()
+
+  const coverUrl = custPreviewEffectiveCoverUrl()
+  syncCustPreviewMedia(elCover, coverUrl, 'linear-gradient(145deg,#2d2238,#151a24)')
+  if (mCov) mCov.textContent = customizationCoverMetaText()
+
+  if (elBg) {
+    if (v.bgType === 'custom' && v.customBg) {
+      const raw = String(v.customBg).trim()
+      const u = sanitizeMediaByGifMode(raw, 'bg') || raw
+      syncCustPreviewMedia(elBg, u, 'linear-gradient(125deg,#2a1f32,#12141c)')
+    } else if (v.bgType === 'cover' && currentTrack) {
+      const u0 = custPreviewEffectiveCoverUrl()
+      const bgU = sanitizeMediaByGifMode(u0, 'bg') || u0
+      syncCustPreviewMedia(elBg, bgU, 'linear-gradient(125deg,#2a1f32,#12141c)')
+    } else {
+      const o1 = v.orb1Color || v.accent || '#7c3aed'
+      const o2 = v.orb2Color || v.accent2 || '#3b82f6'
+      syncCustPreviewMedia(elBg, '', `linear-gradient(125deg, ${o1}38, ${o2}42, #0d1018)`)
+    }
+  }
+  if (mBg) mBg.textContent = customizationBgMetaText()
+
+  if (elViz) {
+    const hw = Object.assign({ enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }, v.homeWidget || {})
+    if (hw.mode === 'image' && hw.image) {
+      syncCustPreviewMedia(elViz, String(hw.image).trim(), 'linear-gradient(180deg,rgba(124,58,237,.35),rgba(59,130,246,.2)),repeating-linear-gradient(90deg,rgba(255,255,255,.08) 0 2px,transparent 2px 6px)')
+    } else {
+      syncCustPreviewMedia(elViz, '', 'linear-gradient(180deg,rgba(124,58,237,.35),rgba(59,130,246,.2)),repeating-linear-gradient(90deg,rgba(255,255,255,.08) 0 2px,transparent 2px 6px)')
+    }
+  }
+  if (mViz) mViz.textContent = customizationVizMetaText()
+
+  if (!isCustomizationSettingsCategoryActive()) return
+  try {
+    renderCustRecentStrip()
+  } catch (_) {}
+  try {
+    renderCustPresetStrip()
+  } catch (_) {}
+}
+
+function renderCustRecentStrip() {
+  const wrap = document.getElementById('cust-recent-strip')
+  if (!wrap) return
+  const list = getCustomizationGalleryRecentList()
+  wrap.textContent = ''
+  if (!list.length) {
+    wrap.innerHTML =
+      '<span class="cust-hint" style="margin:0;padding:4px 0">Пока нет — загрузи баннер, обложку или картинку виджета в разделе «Оформление».</span>'
+    return
+  }
+  list.forEach((u) => {
+    const t = document.createElement('button')
+    t.type = 'button'
+    t.className = 'cust-recent-tile'
+    t.title = 'Применить как фон'
+    const url = String(u || '').trim()
+    if (url) {
+      const img = document.createElement('img')
+      img.className = 'cust-recent-thumb'
+      img.alt = ''
+      img.decoding = 'async'
+      img.loading = 'lazy'
+      img.draggable = false
+      img.src = url
+      img.onerror = () => {
+        img.remove()
+        t.style.background = 'linear-gradient(145deg,#2a2230,#151a24)'
+      }
+      t.appendChild(img)
+    } else {
+      t.style.background = 'linear-gradient(145deg,#2a2230,#151a24)'
+    }
+    t.addEventListener('click', () => {
+      applyCustomizationMediaFromGallery(u, 'bg')
+    })
+    wrap.appendChild(t)
+  })
+  bindHorizontalDragScroll(wrap)
+}
+
+function renderCustPresetStrip() {
+  const wrap = document.getElementById('cust-preset-strip')
+  if (!wrap) return
+  const list = getCustomizationPresets()
+  wrap.textContent = ''
+  if (!list.length) {
+    wrap.innerHTML = '<span class="cust-hint" style="margin:0;padding:4px 0">Нет сохранённых видов.</span>'
+    return
+  }
+  list.forEach((p) => {
+    if (!p || !p.id) return
+    const card = document.createElement('div')
+    card.className = 'cust-preset-card'
+    if (savedViewPresetMatchesCurrentScreen(p)) card.classList.add('cust-preset-card--matches-current')
+    card.dataset.presetId = p.id
+    const bg = document.createElement('div')
+    bg.className = 'cust-preset-bg'
+    renderPresetCardBgLayer(bg, p)
+    const cover = document.createElement('div')
+    cover.className = 'cust-preset-cover'
+    mountPresetStripThumb(cover, p.cover, 'rgba(12,14,20,.55)')
+    const viz = document.createElement('div')
+    viz.className = 'cust-preset-viz'
+    if (p.viz) mountPresetStripThumb(viz, p.viz, 'rgba(0,0,0,.35)')
+    else {
+      viz.textContent = ''
+      viz.style.background =
+        'repeating-linear-gradient(90deg,rgba(255,255,255,.12) 0 2px,transparent 2px 5px)'
+    }
+    card.appendChild(bg)
+    card.appendChild(cover)
+    card.appendChild(viz)
+    card.addEventListener('click', (e) => {
+      if (e.button !== 0) return
+      applyCustomizationPresetById(p.id)
+    })
+    card.addEventListener('contextmenu', (e) => {
+      e.preventDefault()
+      deleteCustomizationPresetById(p.id)
+    })
+    wrap.appendChild(card)
+  })
+  bindHorizontalDragScroll(wrap)
+}
+
+function applyCustomizationPresetById(id, opts) {
+  const list = getCustomizationPresets()
+  const p = list.find((x) => x && x.id === id)
+  if (!p) return
+  const skipToast = opts && opts.skipToast
+  const map = getCustomCoverMap()
+  if (p.cover) {
+    map.__global__ = p.cover
+    if (currentTrack) getTrackCoverKeys(currentTrack).forEach((k) => { map[k] = p.cover })
+  } else {
+    delete map.__global__
+    if (currentTrack) getTrackCoverKeys(currentTrack).forEach((k) => { delete map[k] })
+  }
+  saveCustomCoverMap(map)
+  _coverLoadState.clear()
+  syncPlayerUIFromTrack()
+  try {
+    renderQueue()
+  } catch (_) {}
+  try {
+    renderPlaylists()
+  } catch (_) {}
+  try {
+    renderLiked()
+  } catch (_) {}
+  try {
+    renderRoomQueue()
+  } catch (_) {}
+  try {
+    syncTrackCoverStatus()
+  } catch (_) {}
+  try {
+    refreshTrackCoverPreview()
+  } catch (_) {}
+
+  const v0 = getVisual()
+  const hwBase = { enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }
+  const merged = Object.assign(hwBase, v0.homeWidget || {})
+  if (p.viz) {
+    merged.mode = 'image'
+    merged.image = p.viz
+  } else {
+    merged.image = null
+    if (merged.mode === 'image') merged.mode = 'bars'
+  }
+  if (p.bg === CUST_BG_COVER_SENT) saveVisual({ bgType: 'cover', customBg: null, homeWidget: merged })
+  else if (p.bg === CUST_BG_GRADIENT_SENT) saveVisual({ bgType: 'gradient', customBg: null, homeWidget: merged })
+  else if (p.bg) saveVisual({ bgType: 'custom', customBg: p.bg, homeWidget: merged })
+  else saveVisual({ homeWidget: merged })
+
+  try {
+    initVisualSettings()
+  } catch (_) {}
+  try {
+    updateBackground()
+  } catch (_) {}
+  try {
+    refreshCustomizationPanel()
+  } catch (_) {}
+  if (!skipToast) showToast('Вид применён')
+}
+
+function deleteCustomizationPresetById(id) {
+  const prev = getCustomizationPresets()
+  const next = prev.filter((x) => x && x.id !== id)
+  if (next.length === prev.length) return
+  saveCustomizationPresetsList(next)
+  try {
+    if (isCustomizationSettingsCategoryActive()) renderCustPresetStrip()
+  } catch (_) {}
+  showToast('Пресет удалён')
+}
+
+function saveCustomizationPresetSnapshot() {
+  const snap = collectCurrentCustomizationSnapshot()
+  const next = [{ id: newCustomizationPresetId(), ts: Date.now(), ...snap }, ...getCustomizationPresets()].slice(0, CUST_PRESETS_CAP)
+  saveCustomizationPresetsList(next)
+  try {
+    if (isCustomizationSettingsCategoryActive()) renderCustPresetStrip()
+  } catch (_) {}
+  showToast('Текущий вид сохранён')
+}
+
+let _custGalGridBound = false
+let _custGalEscBound = false
+
+function ensureCustGalleryGridDelegate() {
+  if (_custGalGridBound) return
+  const grid = document.getElementById('cust-gallery-grid')
+  if (!grid) return
+  _custGalGridBound = true
+  grid.addEventListener('click', (e) => {
+    const btn = e.target && e.target.closest && e.target.closest('[data-cust-gal]')
+    if (!btn) return
+    e.preventDefault()
+    const role = btn.getAttribute('data-cust-gal')
+    const url = btn.getAttribute('data-url')
+    if (!role || !url) return
+    applyCustomizationMediaFromGallery(url, role)
+  })
+}
+
+function ensureCustGalleryEscClose() {
+  if (_custGalEscBound) return
+  _custGalEscBound = true
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return
+    const ov = document.getElementById('cust-gallery-overlay')
+    if (!ov || ov.classList.contains('hidden')) return
+    closeCustomizationGallery()
+  })
+}
+
+let _custGalSheetClickBound = false
+function ensureCustGallerySheetClickCollapse() {
+  if (_custGalSheetClickBound) return
+  _custGalSheetClickBound = true
+  document.addEventListener(
+    'click',
+    (e) => {
+      const sheet = document.querySelector('.cust-gallery-sheet')
+      if (!sheet || !sheet.contains(e.target)) return
+      if (e.target.closest && e.target.closest('.cust-gal-tile')) return
+      document.querySelectorAll('.cust-gal-tile--actions-open').forEach((t) => t.classList.remove('cust-gal-tile--actions-open'))
+    },
+    true,
+  )
+}
+
+async function renderCustGalleryContent() {
+  const grid = document.getElementById('cust-gallery-grid')
+  if (!grid) return
+  grid.innerHTML = '<span class="cust-hint">Загрузка…</span>'
+  try {
+    if (!window.api?.listCustomMedia) {
+      grid.innerHTML = '<span class="cust-hint">Галерея недоступна в этом режиме.</span>'
+      return
+    }
+    const res = await window.api.listCustomMedia()
+    const raw = res && res.ok && Array.isArray(res.files) ? res.files : []
+    const files = dedupeCustomMediaFiles(raw)
+    if (!files.length) {
+      grid.innerHTML = '<span class="cust-hint">В папке пока нет файлов.</span>'
+      return
+    }
+    const byKind = { square: [], wide: [], tall: [], unknown: [] }
+    files.forEach((f) => {
+      const u = String(f.url || '').trim()
+      if (!u) return
+      const k = classifyCustomMediaAspectKind(f)
+      byKind[k].push(f)
+    })
+    const sections = [
+      ['square', 'Квадратные (≈ 1∶1)'],
+      ['wide', 'Широкие'],
+      ['tall', 'Высокие'],
+      ['unknown', 'Размер неизвестен'],
+    ]
+    grid.textContent = ''
+    let any = false
+    for (let si = 0; si < sections.length; si++) {
+      const key = sections[si][0]
+      const title = sections[si][1]
+      const list = byKind[key]
+      if (!list.length) continue
+      any = true
+      const sec = document.createElement('div')
+      sec.className = 'cust-gal-section'
+      const h = document.createElement('div')
+      h.className = 'cust-gal-section-title'
+      h.textContent = title
+      sec.appendChild(h)
+      const row = document.createElement('div')
+      row.className = 'cust-gal-scroll-row'
+      list.forEach((f) => {
+        const u = String(f.url || '').trim()
+        if (!u) return
+        const tile = document.createElement('div')
+        tile.className = 'cust-gal-tile'
+        tile.classList.add(`cust-gal-tile--shape-${key}`)
+        if (['cover', 'bg', 'viz'].some((r) => galleryRoleMatchesUrl(r, u))) tile.classList.add('cust-gal-tile--on')
+        const w = Number(f.width)
+        const h0 = Number(f.height)
+        if (Number.isFinite(w) && Number.isFinite(h0) && w > 0 && h0 > 0) {
+          tile.style.setProperty('--cust-ar', String(w / h0))
+        } else {
+          tile.style.setProperty('--cust-ar', '1')
+        }
+
+        const face = document.createElement('div')
+        face.className = 'cust-gal-face'
+        const img = document.createElement('img')
+        img.className = 'cust-gal-thumb'
+        img.alt = ''
+        img.loading = 'lazy'
+        img.decoding = 'async'
+        img.draggable = false
+        if (/^https?:\/\//i.test(u)) img.referrerPolicy = 'no-referrer'
+        img.src = u
+        img.onerror = () => {
+          img.remove()
+          try {
+            face.style.backgroundImage = custUrlCssBackground(u)
+            face.style.backgroundSize = 'contain'
+            face.style.backgroundPosition = 'center'
+            face.style.backgroundRepeat = 'no-repeat'
+          } catch (_) {
+            face.classList.add('cust-gal-face--broken')
+          }
+        }
+        img.addEventListener('load', () => {
+          try {
+            const nw = img.naturalWidth
+            const nh = img.naturalHeight
+            if (nw > 1 && nh > 1) tile.style.setProperty('--cust-ar', String(nw / nh))
+          } catch (_) {}
+        })
+        face.appendChild(img)
+        tile.appendChild(face)
+
+        const actions = document.createElement('div')
+        actions.className = 'cust-gal-actions'
+        ;[
+          ['cover', 'Обложка'],
+          ['bg', 'Фон'],
+          ['viz', 'Виджет'],
+        ].forEach(([role, label]) => {
+          const b = document.createElement('button')
+          b.type = 'button'
+          b.className = 'vsb cust-gal-btn'
+          if (galleryRoleMatchesUrl(role, u)) b.classList.add('active')
+          b.dataset.custGal = role
+          b.dataset.url = u
+          b.textContent = label
+          actions.appendChild(b)
+        })
+        tile.appendChild(actions)
+        row.appendChild(tile)
+      })
+      sec.appendChild(row)
+      grid.appendChild(sec)
+      bindHorizontalDragScroll(row, { faceTap: true })
+    }
+    if (!any) {
+      grid.innerHTML = '<span class="cust-hint">В папке пока нет файлов.</span>'
+    }
+  } catch (err) {
+    grid.innerHTML = `<span class="cust-hint">Ошибка: ${escapeHtml(String(err?.message || err))}</span>`
+  }
+}
+
+function exportSavedViewPresetsJson() {
+  try {
+    const presets = getCustomizationPresets()
+    const payload = {
+      format: 'nexory-saved-views-v1',
+      app: 'Nexory',
+      exportedAt: new Date().toISOString(),
+      presets,
+    }
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+    const stamp = new Date().toISOString().slice(0, 10)
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `nexory-saved-views-${stamp}.json`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(link.href)
+    showToast('Список сохранённых видов экспортирован')
+  } catch (err) {
+    showToast(`Экспорт не удался: ${sanitizeDisplayText(err?.message || err)}`, true)
+  }
+}
+
+function pickSavedViewPresetsFile() {
+  document.getElementById('cust-views-import-input')?.click()
+}
+
+function importSavedViewPresetsFromFile(input) {
+  const file = input?.files?.[0]
+  const reset = () => {
+    try {
+      input.value = ''
+    } catch (_) {}
+  }
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = () => {
+    try {
+      const parsed = JSON.parse(String(reader.result || '{}'))
+      let incoming = []
+      if (Array.isArray(parsed)) incoming = parsed
+      else if (parsed && Array.isArray(parsed.presets)) incoming = parsed.presets
+      if (!incoming.length) throw new Error('В файле нет пресетов')
+      const cleaned = []
+      for (let i = 0; i < incoming.length; i++) {
+        const p = incoming[i]
+        if (!p || typeof p !== 'object') continue
+        const id = typeof p.id === 'string' && p.id ? p.id : newCustomizationPresetId()
+        const bgRaw = p.bg != null ? String(p.bg).trim() : ''
+        let bg = CUST_BG_GRADIENT_SENT
+        if (bgRaw === CUST_BG_COVER_SENT || bgRaw === CUST_BG_GRADIENT_SENT) bg = bgRaw
+        else if (bgRaw) bg = bgRaw
+        cleaned.push({
+          id,
+          ts: Number.isFinite(Number(p.ts)) ? Number(p.ts) : Date.now(),
+          cover: p.cover != null ? String(p.cover) : '',
+          bg,
+          viz: p.viz != null ? String(p.viz) : '',
+        })
+      }
+      if (!cleaned.length) throw new Error('Не удалось разобрать пресеты')
+      const impIds = new Set(cleaned.map((p) => p.id))
+      const rest = getCustomizationPresets().filter((p) => p && !impIds.has(p.id))
+      saveCustomizationPresetsList([...cleaned, ...rest].slice(0, CUST_PRESETS_CAP))
+      if (cleaned[0]?.id) {
+        try {
+          applyCustomizationPresetById(cleaned[0].id, { skipToast: true })
+        } catch (_) {}
+      } else {
+        try {
+          refreshCustomizationPanel()
+        } catch (_) {}
+      }
+      showToast(`Импортировано видов: ${cleaned.length}. Первый из списка применён к экрану.`)
+    } catch (err) {
+      showToast(`Импорт: ${sanitizeDisplayText(err?.message || err)}`, true)
+    } finally {
+      reset()
+    }
+  }
+  reader.onerror = () => {
+    showToast('Не удалось прочитать файл', true)
+    reset()
+  }
+  reader.readAsText(file)
+}
+
+function openCustomizationGallery() {
+  ensureCustGalleryGridDelegate()
+  ensureCustGalleryEscClose()
+  ensureCustGallerySheetClickCollapse()
+  const ov = document.getElementById('cust-gallery-overlay')
+  if (ov) {
+    ov.classList.remove('hidden')
+    ov.setAttribute('aria-hidden', 'false')
+  }
+  void renderCustGalleryContent()
+}
+
+function closeCustomizationGallery() {
+  const ov = document.getElementById('cust-gallery-overlay')
+  if (ov) {
+    ov.classList.add('hidden')
+    ov.setAttribute('aria-hidden', 'true')
+  }
+}
+
+window.openCustomizationGallery = openCustomizationGallery
+window.closeCustomizationGallery = closeCustomizationGallery
+window.saveCustomizationPresetSnapshot = saveCustomizationPresetSnapshot
+window.clearCustomizationGalleryRecent = clearCustomizationGalleryRecent
 
 // в”Ђв”Ђв”Ђ FULLSCREEN PLAYER MODE в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 function enterPlayerMode() {
@@ -1924,6 +3178,14 @@ function refreshLyricsPanelsVisibility() {
     if (sidePanel) sidePanel.classList.add('hidden')
     if (pmPanel) pmPanel.classList.toggle('hidden', !_lyricsOpen)
     pmRoot?.classList.toggle('lyrics-mode', _lyricsOpen)
+    try {
+      if (pmRoot && _lyricsOpen) {
+        pmRoot.classList.remove('pm-lyrics-opening')
+        void pmRoot.offsetWidth
+        pmRoot.classList.add('pm-lyrics-opening')
+        window.setTimeout(() => pmRoot.classList.remove('pm-lyrics-opening'), 640)
+      }
+    } catch (_) {}
   } else {
     if (pmPanel) pmPanel.classList.add('hidden')
     if (sidePanel) sidePanel.classList.toggle('hidden', !_lyricsOpen)
@@ -1935,6 +3197,50 @@ function refreshLyricsPanelsVisibility() {
       queueMicrotask(() => syncLyrics(getLyricsSmoothedTime()))
     }
   } catch (_) {}
+}
+
+function cssQuoteForUrl(value) {
+  if (value == null || typeof value !== 'string') return ''
+  return String(value).trim().replace(/\\/g, '/').replace(/'/g, '%27')
+}
+
+function syncPmQueuePreviews() {
+  const strip = document.getElementById('pm-queue-strip')
+  const countEl = document.getElementById('pm-queue-count')
+  if (!strip || !_playerModeActive) return
+  strip.innerHTML = ''
+  const qlen = Array.isArray(queue) ? queue.length : 0
+  const qIdx = Number(queueIndex) || 0
+  const upcoming = Math.max(0, qlen - qIdx - 1)
+  if (countEl) countEl.textContent = upcoming > 0 ? String(upcoming) : ''
+  if (!qlen || upcoming <= 0) {
+    const empty = document.createElement('span')
+    empty.className = 'pm-queue-empty'
+    empty.textContent = qlen && qIdx >= qlen - 1 ? 'Конец очереди' : 'Нет треков впереди'
+    strip.appendChild(empty)
+    return
+  }
+  const start = qIdx + 1
+  const slice = queue.slice(start, start + 10)
+  slice.forEach((tr, i) => {
+    const targetIdx = start + i
+    const url = getEffectiveCoverUrl(tr)
+    const btn = document.createElement('button')
+    btn.type = 'button'
+    btn.className = 'pm-queue-thumb'
+    btn.setAttribute('role', 'listitem')
+    btn.title = `${tr.title || 'Трек'}${tr.artist ? ' — ' + tr.artist : ''}`
+    const safe = cssQuoteForUrl(url)
+    if (safe) btn.style.backgroundImage = `url('${safe}')`
+    else btn.classList.add('pm-queue-thumb--empty')
+    btn.addEventListener('click', () => {
+      if (typeof playTrackObj !== 'function') return
+      if (targetIdx < 0 || targetIdx >= queue.length) return
+      queueIndex = targetIdx
+      playTrackObj(queue[queueIndex]).catch(() => {})
+    })
+    strip.appendChild(btn)
+  })
 }
 
 function syncPlayerModeUI() {
@@ -1955,6 +3261,17 @@ function syncPlayerModeUI() {
   if (t) {
     pmTitle.textContent  = t.title || 'РќРµРёР·РІРµСЃС‚РЅРѕ'
     pmArtist.textContent = t.artist || 'вЂ”'
+    const pmSrc = document.getElementById('pm-source-badge')
+    if (pmSrc && typeof window.flowTrackSourceBadgeHtml === 'function') {
+      const html = window.flowTrackSourceBadgeHtml(t)
+      if (html) {
+        pmSrc.innerHTML = html
+        pmSrc.classList.remove('hidden')
+      } else {
+        pmSrc.innerHTML = ''
+        pmSrc.classList.add('hidden')
+      }
+    }
     const effectiveCover = getEffectiveCoverUrl(t)
     if (effectiveCover) {
       applyCoverArt(pmCover, effectiveCover, t.bg || 'linear-gradient(135deg,#7c3aed,#a855f7)')
@@ -1988,6 +3305,7 @@ function syncPlayerModeUI() {
   const pmCoverVol = document.getElementById('pm-cover-volume')
   if (pmCoverVol) pmCoverVol.value = audio.volume
   if (pmCoverLyrics) pmCoverLyrics.classList.toggle('active', _lyricsOpen)
+  syncPmQueuePreviews()
 }
 
 // в”Ђв”Ђв”Ђ TIME FORMATTING в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
@@ -2294,6 +3612,8 @@ function getSettings() {
     discordClientId: '', discordRpcEnabled: false, lastfmApiKey: '', lastfmSharedSecret: '', lastfmSessionKey: '',
     proxyBaseUrl: FLOW_SERVER_DEFAULT_URL,
     compactUi: false,
+    minimizeToTrayOnClose: true,
+    launchAtLogin: false,
     flowSocialApiBase: FLOW_SOCIAL_DEFAULT_API_BASE,
     flowSocialApiSecret: FLOW_SOCIAL_DEFAULT_API_SECRET,
   }
@@ -2308,6 +3628,8 @@ function getSettings() {
   if (typeof raw.optFreezePlayerWhenMinimized !== 'boolean') raw.optFreezePlayerWhenMinimized = true
   if (typeof raw.optPauseHeavyBgWhenBackgrounded !== 'boolean') raw.optPauseHeavyBgWhenBackgrounded = true
   if (typeof raw.optGameSleepMode !== 'boolean') raw.optGameSleepMode = false
+  if (typeof raw.minimizeToTrayOnClose !== 'boolean') raw.minimizeToTrayOnClose = true
+  if (typeof raw.launchAtLogin !== 'boolean') raw.launchAtLogin = false
   if (typeof raw.vkSeleniumBridge !== 'boolean') raw.vkSeleniumBridge = false
   const prevActive = raw.activeSource
   raw.activeSource = normalizeStoredActiveSource(raw.activeSource)
@@ -2457,8 +3779,71 @@ function applyOptimizationSettings() {
   document.body.classList.toggle('flow-opt-no-animations', Boolean(s.optDisableAnimations))
   document.body.classList.toggle('flow-performance', Boolean(s.optSimpleGraphics))
   syncOptimizationPanelToggles()
+  syncPlaybackSystemToggles()
   refreshOptimizationAmbientClasses()
 }
+
+function syncPlaybackSystemToggles() {
+  const s = getSettings()
+  const tray = document.getElementById('toggle-minimize-to-tray')
+  if (tray) tray.classList.toggle('active', Boolean(s.minimizeToTrayOnClose))
+  const login = document.getElementById('toggle-launch-at-login')
+  if (login) login.classList.toggle('active', Boolean(s.launchAtLogin))
+}
+
+function syncTrayClosePreferenceToMain() {
+  try {
+    if (!window.api?.setTrayOnClose) return
+    const s = getSettings()
+    window.api.setTrayOnClose(Boolean(s.minimizeToTrayOnClose))
+  } catch (_) {}
+}
+
+function toggleMinimizeToTrayOnClose() {
+  const cur = getSettings()
+  saveSettingsRaw({ minimizeToTrayOnClose: !Boolean(cur.minimizeToTrayOnClose) })
+  syncPlaybackSystemToggles()
+  syncTrayClosePreferenceToMain()
+  showToast(getSettings().minimizeToTrayOnClose ? 'Закрытие: в трей (музыка играет)' : 'Закрытие: выход из приложения')
+}
+window.toggleMinimizeToTrayOnClose = toggleMinimizeToTrayOnClose
+
+async function toggleLaunchAtLogin() {
+  if (!window.api?.setLaunchAtLogin || !window.api?.getLaunchAtLogin) return
+  const cur = getSettings()
+  const next = !Boolean(cur.launchAtLogin)
+  try {
+    const r = await window.api.setLaunchAtLogin(next)
+    if (!r?.ok) {
+      showToast(String(r?.error || 'Не удалось изменить автозапуск'), true)
+      return
+    }
+    saveSettingsRaw({ launchAtLogin: Boolean(r.enabled) })
+    syncPlaybackSystemToggles()
+    showToast(r.enabled ? 'Автозапуск включён' : 'Автозапуск выключен')
+  } catch (err) {
+    showToast(String(err?.message || err), true)
+  }
+}
+window.toggleLaunchAtLogin = toggleLaunchAtLogin
+
+async function refreshLaunchAtLoginFromMain() {
+  if (!window.api?.getLaunchAtLogin) return
+  try {
+    const r = await window.api.getLaunchAtLogin()
+    if (r?.ok && typeof r.enabled === 'boolean') saveSettingsRaw({ launchAtLogin: r.enabled })
+    syncPlaybackSystemToggles()
+  } catch (_) {}
+}
+
+function flowHandleTitlebarClose() {
+  try {
+    if (!window.api?.close) return
+    const s = getSettings()
+    window.api.close({ toTray: Boolean(s.minimizeToTrayOnClose) })
+  } catch (_) {}
+}
+window.flowHandleTitlebarClose = flowHandleTitlebarClose
 
 function toggleOptimizationSetting(key) {
   const allowed = new Set(['optDisableAnimations', 'optSimpleGraphics', 'optFreezePlayerWhenMinimized', 'optPauseHeavyBgWhenBackgrounded', 'optGameSleepMode'])
@@ -2567,7 +3952,7 @@ const FLOW_YANDEX_TELEGRAPH_GUIDE_URL = 'https://telegra.ph/Kak-podklyuchit-YAnd
 const FLOW_VK_TELEGRAPH_GUIDE_URL = 'https://telegra.ph/Kak-podklyuchit-VKontakte-vo-Flow-05-04'
 /** Публичный гайд по токену VK (HTML в репозитории). */
 const FLOW_VK_GUIDE_GITHUB_BLOB =
-  'https://github.com/ioqeeqo-create/FlowPleerLoww/blob/cursor/liquid-glass-room-widget-0756/assets/guides/vk-token-dlya-flow.html'
+  'https://github.com/ioqeeqo-create/NexoryND/blob/main/assets/guides/vk-token-dlya-flow.html'
 
 function openFlowYandexTelegraphGuide() {
   openUrl(FLOW_YANDEX_TELEGRAPH_GUIDE_URL)
@@ -2868,7 +4253,7 @@ async function checkVkToken() {
             ? `Профиль подтверждён (${who}). Официальные методы audio.* недоступны${ac}${detail}.${maskHint}`
             : `Официальные методы audio.* недоступны${ac}${detail}.${maskHint}`
           line += ' И новый токен Kate, и токен из веба при этом часто ведут себя одинаково — это ограничение VK, а не «испорченная вставка».'
-          line += ' По умолчанию Flow не открывает Chrome сам: если нужен обход через Chrome+Selenium (Python, selenium, webdriver-manager; профиль %LOCALAPPDATA%\\Flow\\vk_chrome_profile), включи ниже «Обход через Chrome (Selenium)».'
+          line += ' По умолчанию Nexory не открывает Chrome сам: если нужен обход через Chrome+Selenium (Python, selenium, webdriver-manager; профиль %LOCALAPPDATA%\\Nexory\\vk_chrome_profile), включи ниже «Обход через Chrome (Selenium)».'
           if (msg) {
             msg.textContent = line
             msg.className = 'token-msg token-msg-warn'
@@ -2878,7 +4263,7 @@ async function checkVkToken() {
         }
 
         let line = who
-          ? `Профиль подтверждён (${who}), но аудио в Flow недоступно${ac}${detail}. На vkhost выбери Kate Mobile и право «Аудио».`
+          ? `Профиль подтверждён (${who}), но аудио в Nexory недоступно${ac}${detail}. На vkhost выбери Kate Mobile и право «Аудио».`
           : `Аудио API недоступно${ac}${detail}. На vkhost — Kate Mobile и право «Аудио».`
         if (Number(r.audioCode) === 6) {
           line += ' Код 6 — слишком много запросов к VK: подожди 30–60 секунд и нажми проверку снова; не кликай «Проверить токен» много раз подряд.'
@@ -3176,7 +4561,6 @@ function loadSettingsPage() {
   requestAnimationFrame(() => {
     syncPlaybackModeUI()
     syncTrackCoverStatus()
-    setFlowConfigStatus('Экспорт создаёт JSON с визуалом, профилем, плейлистами и настройками.', false)
     syncFontControls()
     syncHomeWidgetUI()
     applyHomeSliderStyle()
@@ -3197,6 +4581,8 @@ function syncPlaybackModeUI() {
   const shSettings = document.getElementById('toggle-shuffle-btn')
   const rpSettings = document.getElementById('toggle-repeat-btn')
   if (shBtn) shBtn.classList.toggle('active', Boolean(playbackMode.shuffle))
+  const pmSh = document.getElementById('pm-shuffle-btn')
+  if (pmSh) pmSh.classList.toggle('active', Boolean(playbackMode.shuffle))
   if (homeShBtn) homeShBtn.classList.toggle('active', Boolean(playbackMode.shuffle))
   if (shSettings) {
     shSettings.textContent = playbackMode.shuffle ? 'Включена' : 'Выключена'
@@ -3207,6 +4593,11 @@ function syncPlaybackModeUI() {
     rpBtn.classList.toggle('active', playbackMode.repeat !== 'off')
     rpBtn.title = `Повтор: ${repeatLabel}`
   }
+  const pmRp = document.getElementById('pm-repeat-pm-btn')
+  if (pmRp) {
+    pmRp.classList.toggle('active', playbackMode.repeat !== 'off')
+    pmRp.title = `Повтор: ${repeatLabel}`
+  }
   if (homeRpBtn) {
     homeRpBtn.classList.toggle('active', playbackMode.repeat !== 'off')
     homeRpBtn.title = `Повтор: ${repeatLabel}`
@@ -3215,6 +4606,15 @@ function syncPlaybackModeUI() {
     rpSettings.textContent = repeatLabel
     rpSettings.classList.toggle('active', playbackMode.repeat !== 'off')
   }
+  const repeatLucide = playbackMode.repeat === 'one' ? 'repeat-1' : 'repeat'
+  ;['repeat-btn', 'home-repeat-btn', 'pm-repeat-pm-btn'].forEach((id) => {
+    const btn = document.getElementById(id)
+    const svg = btn?.querySelector?.('svg[data-lucide]')
+    if (svg) {
+      svg.setAttribute('data-lucide', repeatLucide)
+      if (typeof hydrateFlowLucideIcons === 'function') hydrateFlowLucideIcons(btn)
+    }
+  })
 }
 
 function toggleShuffleMode() {
@@ -3335,12 +4735,86 @@ function refreshTrackCoverPreview(fileName = '') {
   setMediaPreviewBox('track-cover', custom, label, true)
 }
 
-function setFlowConfigStatus(text, isError = false) {
-  const el = document.getElementById('flow-config-status')
-  if (!el) return
-  el.textContent = text
-  el.classList.toggle('token-msg-err', Boolean(isError))
-  el.classList.toggle('token-msg-ok', !isError)
+function guessExtFromMime(m) {
+  const t = String(m || '').toLowerCase()
+  if (t.includes('png')) return '.png'
+  if (t.includes('webp')) return '.webp'
+  if (t.includes('gif')) return '.gif'
+  if (t.includes('jpeg') || t.includes('jpg')) return '.jpg'
+  return '.bin'
+}
+
+async function mirrorRemoteUrlToCustomGallery(url, purpose) {
+  const u = String(url || '').trim()
+  if (!u) return ''
+  if (/^file:\/\//i.test(u)) return u
+  if (!/^https?:|^data:/i.test(u)) return u
+  try {
+    const res = await fetch(u, { mode: 'cors', credentials: 'omit', referrerPolicy: 'no-referrer' })
+    if (!res.ok) return u
+    const blob = await res.blob()
+    if (!blob || !blob.size) return u
+    const ext = guessExtFromMime(blob.type)
+    const file = new File([blob], `preset-${purpose}-${Date.now()}${ext}`, {
+      type: blob.type || 'application/octet-stream',
+    })
+    return await saveCustomMediaFile(file, purpose)
+  } catch (_) {
+    return u
+  }
+}
+
+/** После импорта пресета: http(s)/data URL фона и виджета копируются в папку галереи и переписываются на file://. */
+async function mirrorPresetVisualUrlsToGallery() {
+  const v0 = getVisual()
+  const patch = {}
+  if (v0.bgType === 'custom' && v0.customBg && /^https?:|^data:/i.test(String(v0.customBg))) {
+    const nu = await mirrorRemoteUrlToCustomGallery(v0.customBg, 'background')
+    if (nu && nu !== v0.customBg) patch.customBg = nu
+  }
+  const hw = Object.assign({ enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }, v0.homeWidget || {})
+  if (hw.image && /^https?:|^data:/i.test(String(hw.image))) {
+    const nu = await mirrorRemoteUrlToCustomGallery(hw.image, 'home-widget')
+    if (nu && nu !== hw.image) {
+      patch.homeWidget = Object.assign({}, hw, { image: nu })
+      if (hw.mode === 'image' || patch.homeWidget.mode === 'image') patch.homeWidget.mode = 'image'
+    }
+  }
+  if (Object.keys(patch).length) {
+    saveVisual(patch)
+    _flowVisualMemo = null
+  }
+}
+
+async function mirrorHttpUrlsInCustomCoverMap() {
+  const map = getCustomCoverMap()
+  const next = { ...map }
+  let changed = false
+  const keys = Object.keys(next)
+  for (let i = 0; i < keys.length; i++) {
+    const k = keys[i]
+    const v = next[k]
+    if (v == null || typeof v !== 'string') continue
+    const t = v.trim()
+    if (!/^https?:|^data:/i.test(t)) continue
+    try {
+      const nu = await mirrorRemoteUrlToCustomGallery(t, 'track-cover')
+      if (nu && nu !== t) {
+        next[k] = nu
+        changed = true
+      }
+    } catch (_) {}
+  }
+  if (changed) {
+    saveCustomCoverMap(next)
+    try {
+      _coverLoadState.clear()
+    } catch (_) {}
+  }
+}
+
+function setFlowConfigStatus(_text, _isError = false) {
+  /* Статус под карточкой пресета убран из UI — оставлена заглушка для совместимости. */
 }
 
 function collectFlowConfigPayload() {
@@ -3352,7 +4826,7 @@ function collectFlowConfigPayload() {
   }
   return {
     format: 'flow-preset-v1',
-    app: 'Flow',
+    app: 'Nexory',
     exportedAt: new Date().toISOString(),
     storage,
   }
@@ -3456,8 +4930,7 @@ async function exportFlowConfig() {
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(link.href)
-    setFlowConfigStatus('Flow preset экспортирован. Можно отправлять .flowpreset другу.', false)
-    showToast('Flow preset экспортирован')
+    showToast('Nexory preset экспортирован')
     if (failedEmbed && failedEmbed.length) {
       showToast(
         `Не удалось встроить ${failedEmbed.length} файл(ов) с диска — на другом ПК их не будет.`,
@@ -3465,8 +4938,7 @@ async function exportFlowConfig() {
       )
     }
   } catch (err) {
-    setFlowConfigStatus(`Ошибка экспорта: ${err?.message || err}`, true)
-    showToast('Не удалось экспортировать preset', true)
+    showToast(`Не удалось экспортировать preset: ${err?.message || err}`, true)
   }
 }
 
@@ -3474,6 +4946,97 @@ function pickFlowConfigFile() {
   const input = document.getElementById('flow-config-input')
   if (!input) return
   input.click()
+}
+
+/**
+ * Импорт .flowpreset / dotify: только внешний вид — подмешиваем в текущий `flow_visual` поля
+ * bgType, customBg, gifMode, glass, panelBlur, homeWidget и при наличии `flow_track_covers`.
+ * Размытие, яркость и прозрачность стекла (blur, bright, glass) из файла не применяются — остаются текущие значения пользователя.
+ * Остальные ключи localStorage не меняем (сессия, источники, тема UI и т.д.).
+ */
+function applyPresetAppearanceOnly(storage) {
+  if (!storage || typeof storage !== 'object') return { appliedVisual: false, appliedCovers: false }
+
+  const incomingStr = storage.flow_visual
+  let incoming = {}
+  if (incomingStr != null && String(incomingStr).trim()) {
+    try {
+      incoming = JSON.parse(String(incomingStr))
+    } catch {
+      incoming = {}
+    }
+    if (!incoming || typeof incoming !== 'object') incoming = {}
+  }
+
+  const cur = getVisual()
+  const patch = {}
+
+  if (Object.prototype.hasOwnProperty.call(incoming, 'panelBlur')) {
+    const n = Number(incoming.panelBlur)
+    if (Number.isFinite(n)) patch.panelBlur = Math.max(0, Math.min(60, n))
+  }
+  if (Object.prototype.hasOwnProperty.call(incoming, 'bgType')) {
+    const t = String(incoming.bgType || '')
+    if (t === 'gradient' || t === 'cover' || t === 'custom') patch.bgType = t
+  }
+  if (Object.prototype.hasOwnProperty.call(incoming, 'customBg')) {
+    patch.customBg =
+      incoming.customBg == null || incoming.customBg === '' ? null : String(incoming.customBg)
+    if (patch.customBg && !patch.bgType) patch.bgType = 'custom'
+  }
+  if (Object.prototype.hasOwnProperty.call(incoming, 'gifMode') && incoming.gifMode && typeof incoming.gifMode === 'object') {
+    const g = incoming.gifMode
+    const base = Object.assign({ bg: true, track: true, playlist: true }, cur.gifMode || {})
+    patch.gifMode = Object.assign({}, base, {
+      bg: typeof g.bg === 'boolean' ? g.bg : base.bg,
+      track: typeof g.track === 'boolean' ? g.track : base.track,
+      playlist: typeof g.playlist === 'boolean' ? g.playlist : base.playlist,
+    })
+  }
+  if (Object.prototype.hasOwnProperty.call(incoming, 'homeWidget') && incoming.homeWidget && typeof incoming.homeWidget === 'object') {
+    const hw = incoming.homeWidget
+    const base = Object.assign(
+      { enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 },
+      cur.homeWidget || {},
+    )
+    patch.homeWidget = Object.assign({}, base)
+    if (typeof hw.enabled === 'boolean') patch.homeWidget.enabled = hw.enabled
+    const mode = String(hw.mode || '')
+    if (mode === 'image' || mode === 'bars' || mode === 'wave') patch.homeWidget.mode = mode
+    if (hw.image != null && String(hw.image).trim() !== '') patch.homeWidget.image = String(hw.image)
+    const inten = Number(hw.intensity)
+    if (Number.isFinite(inten)) patch.homeWidget.intensity = Math.max(60, Math.min(180, inten))
+    const sm = Number(hw.smoothing)
+    if (Number.isFinite(sm)) patch.homeWidget.smoothing = Math.max(20, Math.min(95, sm))
+  }
+
+  const hasCoversKey =
+    Object.prototype.hasOwnProperty.call(storage, 'flow_track_covers') && storage.flow_track_covers != null
+
+  let appliedVisual = false
+  if (Object.keys(patch).length) {
+    _flowVisualMemo = null
+    localStorage.setItem('flow_visual', JSON.stringify(Object.assign({}, cur, patch)))
+    appliedVisual = true
+  }
+
+  let appliedCovers = false
+  if (hasCoversKey) {
+    localStorage.setItem('flow_track_covers', String(storage.flow_track_covers))
+    appliedCovers = true
+  }
+
+  return { appliedVisual, appliedCovers }
+}
+
+/** После импорта .flowpreset — карточка «сохранённый вид» с текущим экраном, чтобы сразу было видно заполненный превью-ряд. */
+function pushCustomizationSnapshotAfterFlowpresetImport() {
+  try {
+    const snap = collectCurrentCustomizationSnapshot()
+    const list = getCustomizationPresets()
+    const entry = { id: newCustomizationPresetId(), ts: Date.now(), ...snap }
+    saveCustomizationPresetsList([entry, ...list].slice(0, CUST_PRESETS_CAP))
+  } catch (_) {}
 }
 
 /** После записи ключей пресета в localStorage подтянуть in-memory состояние и не затирать flow_visual ползунками формы. */
@@ -3508,78 +5071,39 @@ function importFlowConfigFile(input) {
   const file = input?.files?.[0]
   if (!file) return
   const reader = new FileReader()
-  reader.onload = () => {
+  reader.onload = async () => {
     try {
-      const sessionBackup = {
-        flow_profiles: localStorage.getItem('flow_profiles'),
-        flow_current_user: localStorage.getItem('flow_current_user'),
-        flow_auth_last_user: localStorage.getItem('flow_auth_last_user'),
-      }
       const parsed = JSON.parse(String(reader.result || '{}'))
       const preset = normalizeImportedFlowPreset(parsed)
       const storage = preset?.storage
       if (!storage || typeof storage !== 'object') {
         throw new Error('Неверный формат файла')
       }
-      if (preset.replaceAll) {
-        const protectedKeys = new Set([
-          'flow_profile',
-          'flow_profile_accounts',
-          'flow_profile_active',
-          'flow_profile_presence',
-          'flow_profile_pending_messages',
-          'flow_profile_presence_room_id',
-          'flow_profile_password',
-          'flow_profile_password_hash',
-          'flow_profile_password_salt',
-          'flow_social_accounts',
-          'flow_social_session',
-          'flow_social_profile',
-          'flow_social_pending',
-          'flow_friends_cache',
-          'flow_auth_last_user',
-          'flow_profiles',
-          'flow_current_user',
-        ])
-        const toDelete = []
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i)
-          if (key && key.startsWith('flow_') && !protectedKeys.has(key) && !key.startsWith('flow_friends_')) toDelete.push(key)
-        }
-        toDelete.forEach((key) => localStorage.removeItem(key))
+      const { appliedVisual, appliedCovers } = applyPresetAppearanceOnly(storage)
+      if (!appliedVisual && !appliedCovers) {
+        throw new Error('В файле нет данных о фоне, обложках или виджете')
       }
-      Object.entries(storage).forEach(([key, value]) => {
-        if (!key.startsWith('flow_')) return
-        if (
-          key === 'flow_profile'
-          || key === 'flow_profile_accounts'
-          || key === 'flow_profile_active'
-          || key === 'flow_profile_presence'
-          || key === 'flow_profile_pending_messages'
-          || key === 'flow_profile_password'
-          || key === 'flow_profile_password_hash'
-          || key === 'flow_profile_password_salt'
-          || key === 'flow_social_accounts'
-          || key === 'flow_social_session'
-          || key === 'flow_social_profile'
-          || key === 'flow_social_pending'
-          || key === 'flow_auth_last_user'
-          || key === 'flow_profiles'
-          || key === 'flow_current_user'
-          || key.startsWith('flow_friends_')
-        ) return
-        localStorage.setItem(key, String(value ?? ''))
-      })
-      // Force-restore auth session keys regardless of preset payload content.
-      Object.entries(sessionBackup).forEach(([key, value]) => {
-        if (typeof value === 'string' && value.trim()) localStorage.setItem(key, value)
-      })
       syncRuntimeCachesAfterPresetImport()
-      setFlowConfigStatus('Flow preset импортирован. Сессия аккаунта сохранена, перезагрузка не требуется.', false)
-      showToast('Flow preset импортирован')
+      try {
+        await mirrorPresetVisualUrlsToGallery()
+      } catch (_) {}
+      try {
+        await mirrorHttpUrlsInCustomCoverMap()
+      } catch (_) {}
+      try {
+        pushCustomizationSnapshotAfterFlowpresetImport()
+      } catch (_) {}
+      showToast('Внешний вид применён; в «Сохранённые виды» добавлена карточка текущего экрана')
+      try {
+        switchSettingsCategory('customization')
+      } catch (_) {}
+      try {
+        refreshCustomizationPanel()
+      } catch (_) {}
       try { applySettingsSectionsState() } catch {}
       // Важно: не вызывать applyVisualSettings() — она берёт значения из DOM и перезаписывает только что импортированный flow_visual.
       try { initVisualSettings() } catch {}
+      try { updateBackground() } catch {}
       try { syncIntegrationsUI() } catch {}
       try { applyUiTextOverrides() } catch {}
       requestAnimationFrame(() => {
@@ -3592,8 +5116,7 @@ function importFlowConfigFile(input) {
       try { renderFriends().catch(() => {}) } catch {}
       try { pollFriendsPresence(true).catch(() => {}) } catch {}
     } catch (err) {
-      setFlowConfigStatus(`Ошибка импорта: ${err?.message || err}`, true)
-      showToast('Не удалось импортировать preset', true)
+      showToast(`Ошибка импорта: ${err?.message || err}`, true)
     } finally {
       input.value = ''
     }
@@ -3613,38 +5136,100 @@ function normalizeImportedFlowPreset(parsed) {
 
 function convertDotifyPresetToFlowStorage(preset) {
   const data = preset?.data || {}
-  const ui = data.ui || {}
+  const ui = data.uiSettings || data.ui || {}
   const gifs = data.gifs || {}
-  const visual = Object.assign({}, getVisual())
-  if (gifs.background) {
+  const visual = Object.assign({}, defaultVisual)
+
+  /** Dotify ≥ новый формат: gifSettings — объект с ключами "0","1",… или массив; у каждого usage: background | cover | visualizer | … */
+  const gifList = []
+  const rawGifSettings = data.gifSettings
+  if (rawGifSettings && typeof rawGifSettings === 'object') {
+    if (Array.isArray(rawGifSettings)) {
+      for (let i = 0; i < rawGifSettings.length; i++) if (rawGifSettings[i]) gifList.push(rawGifSettings[i])
+    } else {
+      Object.keys(rawGifSettings)
+        .filter((k) => /^\d+$/.test(k))
+        .sort((a, b) => Number(a) - Number(b))
+        .forEach((k) => {
+          const it = rawGifSettings[k]
+          if (it && typeof it === 'object') gifList.push(it)
+        })
+    }
+  }
+
+  let coverUrl = ''
+  for (let i = 0; i < gifList.length; i++) {
+    const item = gifList[i]
+    const usage = String(item.usage || '').toLowerCase()
+    const url = item.url != null ? String(item.url).trim() : ''
+    if (!url) continue
+    if (usage === 'background') {
+      visual.bgType = 'custom'
+      visual.customBg = url
+    } else if (usage === 'cover') {
+      coverUrl = url
+    } else if (usage === 'visualizer') {
+      visual.homeWidget = Object.assign(
+        { enabled: true, mode: 'image', image: null, intensity: 100, smoothing: 72 },
+        visual.homeWidget || {},
+        { enabled: true, mode: 'image', image: url },
+      )
+    }
+  }
+
+  if (!visual.customBg && gifs.background) {
     visual.bgType = 'custom'
     visual.customBg = String(gifs.background)
   }
-  if (gifs.visualizer) {
-    visual.homeWidget = Object.assign({ enabled: true, mode: 'image', image: null }, visual.homeWidget || {}, {
-      enabled: true,
-      mode: 'image',
-      image: String(gifs.visualizer),
-    })
-  } else if (ui.visualization?.style === 'wave') {
-    visual.homeWidget = Object.assign({ enabled: true, mode: 'bars', image: null }, visual.homeWidget || {}, {
-      enabled: true,
-      mode: 'wave',
-    })
+  if (!(visual.homeWidget && visual.homeWidget.image) && gifs.visualizer) {
+    visual.homeWidget = Object.assign(
+      { enabled: true, mode: 'image', image: null, intensity: 100, smoothing: 72 },
+      visual.homeWidget || {},
+      { enabled: true, mode: 'image', image: String(gifs.visualizer) },
+    )
+  } else if (!gifList.length && ui.visualization?.style === 'wave') {
+    visual.homeWidget = Object.assign(
+      { enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 },
+      visual.homeWidget || {},
+      { enabled: true, mode: 'wave' },
+    )
   }
+  if (!coverUrl && gifs.cover) coverUrl = String(gifs.cover)
+
   const transparency = ui.transparency || {}
   if (transparency.glass && typeof transparency.glass === 'object') {
-    const blur = Number(transparency.glass.blur)
+    const gBlur = Number(transparency.glass.blur)
     const strength = Number(transparency.glass.strength)
-    if (Number.isFinite(blur)) visual.panelBlur = Math.max(0, Math.min(40, blur))
-    if (Number.isFinite(strength)) visual.glass = Math.max(0, Math.min(40, strength))
+    if (Number.isFinite(gBlur)) {
+      visual.panelBlur = Math.max(0, Math.min(60, gBlur))
+      visual.blur = Math.max(0, Math.min(80, Math.round(gBlur * 6)))
+    }
+    if (Number.isFinite(strength)) {
+      visual.glass =
+        strength > 0 && strength <= 1
+          ? Math.max(0, Math.min(40, Math.round(strength * 40)))
+          : Math.max(0, Math.min(40, strength))
+    }
   }
-  const scale = Array.isArray(ui.scale?.default) ? Number(ui.scale.default[0]) : Number(ui.scale?.default)
+  const op = Number(transparency.opacity)
+  if (Number.isFinite(op)) {
+    visual.bright = Math.max(10, Math.min(100, Math.round(25 + (op / 100) * 70)))
+  }
+
+  const scaleRaw = ui.scale
+  let scale = NaN
+  if (typeof scaleRaw === 'number') scale = scaleRaw
+  else if (Array.isArray(scaleRaw?.default)) scale = Number(scaleRaw.default[0])
+  else scale = Number(scaleRaw?.default)
   if (Number.isFinite(scale)) visual.uiScale = Math.max(80, Math.min(130, scale))
-  if (ui.tabs?.position === 'top') visual.sidebarPosition = 'top'
+
+  if (ui.tabs === 'top' || ui.tabs?.position === 'top') visual.sidebarPosition = 'top'
+  else if (ui.tabs === 'bottom' || ui.tabs?.position === 'bottom') visual.sidebarPosition = 'bottom'
+  else if (ui.tabs === 'right' || ui.tabs?.position === 'right') visual.sidebarPosition = 'right'
   if (ui.customfont?.family) visual.customFontName = String(ui.customfont.family)
+
   const storage = { flow_visual: JSON.stringify(visual) }
-  if (gifs.cover) storage.flow_track_covers = JSON.stringify({ __global__: String(gifs.cover) })
+  if (coverUrl) storage.flow_track_covers = JSON.stringify({ __global__: coverUrl })
   return storage
 }
 
@@ -3875,9 +5460,9 @@ async function refreshFriendProfileFromCloud(username, force = false) {
   const safe = String(username || '').trim().toLowerCase()
   if (!safe) return null
   const now = Date.now()
-  const cached = getCachedPeerProfile(safe)
-  if (!force && cached?.updatedAt && (now - Number(cached.updatedAt || 0)) < PROFILE_CACHE_TTL_MS) return cached
   const lastPullAt = Number(_friendProfileRefreshAt.get(safe) || 0)
+  // Только интервал между запросами: старый PROFILE_CACHE_TTL по updatedAt блокировал
+  // подтягивание новых аватаров/баннеров до ~60 с, пока не придёт WS-пуш (при degraded — никогда).
   if (!force && (now - lastPullAt) < FRIEND_PROFILE_REFRESH_MS) return null
   _friendProfileRefreshAt.set(safe, now)
   const cloud = await fetchCloudPublicProfile(safe).catch(() => null)
@@ -3901,38 +5486,42 @@ async function syncProfileCloudNow() {
   const stats = getListenStats()
   const totalTracks = toDbSafeBigint(stats.totalTracks, 0)
   const totalSeconds = toDbSafeBigint(stats.totalSeconds, 0)
-  const payload = {
+
+  let av = custom.avatarData || null
+  let bn = custom.bannerData || null
+  if (av) av = await shrinkProfileDataUrlForApi(av, 'avatar')
+  if (bn) bn = await shrinkProfileDataUrlForApi(bn, 'banner')
+
+  const core = {
     username: me.username,
     online: true,
     last_seen: new Date().toISOString(),
-    avatar_data: custom.avatarData || null,
-    banner_data: custom.bannerData || null,
-    profile_color: custom.profileColor || null,
     bio: custom.bio || '',
     pinned_tracks: Array.isArray(custom.pinnedTracks) ? custom.pinnedTracks.slice(0, 5) : [],
     pinned_playlists: Array.isArray(custom.pinnedPlaylists) ? custom.pinnedPlaylists.slice(0, 5) : [],
     total_tracks: totalTracks,
     total_seconds: totalSeconds,
   }
-  try {
-    await flowSocialPut('/flow-api/v1/profile', payload)
-  } catch (e1) {
+
+  const pc = custom.profileColor || null
+  const variants = [
+    { ...core, avatar_data: av, banner_data: bn, ...(pc ? { profile_color: pc } : {}) },
+    { ...core, avatar_data: av, banner_data: bn },
+    { ...core, avatar_data: null, banner_data: null, ...(pc ? { profile_color: pc } : {}) },
+    { ...core, avatar_data: null, banner_data: null },
+    { ...core, avatar_data: null, banner_data: null, total_tracks: 0, total_seconds: 0 },
+  ]
+
+  let lastErr = ''
+  for (const body of variants) {
     try {
-      const fallbackPayload = Object.assign({}, payload)
-      delete fallbackPayload.profile_color
-      await flowSocialPut('/flow-api/v1/profile', fallbackPayload)
-    } catch (e2) {
-      try {
-        await flowSocialPut(
-          '/flow-api/v1/profile',
-          Object.assign({}, payload, { total_tracks: 0, total_seconds: 0 })
-        )
-      } catch (e3) {
-        return { ok: false, error: e3?.message || e2?.message || e1?.message || String(e1) }
-      }
+      await flowSocialPut('/flow-api/v1/profile', body)
+      return { ok: true }
+    } catch (e) {
+      lastErr = e?.message || String(e)
     }
   }
-  return { ok: true }
+  return { ok: false, error: lastErr }
 }
 
 function scheduleProfileCloudSync() {
@@ -4045,15 +5634,26 @@ async function removeRoomMemberPresence(roomId = _roomState?.roomId) {
 async function saveRoomStateToServer(patch = {}) {
   try {
     if (!_roomState?.roomId || !_profile?.username || !isFlowSocialReady()) return
+    const isHost = Boolean(_roomState.host)
+    const payloadPatch = Object.assign({}, patch || {})
+    if (!isHost) {
+      delete payloadPatch.shared_queue
+      delete payloadPatch.now_playing
+      delete payloadPatch.playback_state
+      delete payloadPatch.playback_ts
+    }
     const hostPeerId = _roomState.host
       ? String(_socialPeer?.peer?.id || _roomState.roomId)
       : ((_roomState.hostPeerId && _roomState.hostPeerId !== _roomState.roomId) ? String(_roomState.hostPeerId) : null)
-    const payload = Object.assign({
-      room_id: _roomState.roomId,
-      shared_queue: sharedQueue,
-      updated_by_peer_id: String(_socialPeer?.peer?.id || hostPeerId || _roomState.roomId),
-      updated_at: new Date().toISOString(),
-    }, patch || {})
+    const payload = Object.assign(
+      {
+        room_id: _roomState.roomId,
+        updated_by_peer_id: String(_socialPeer?.peer?.id || hostPeerId || _roomState.roomId),
+        updated_at: new Date().toISOString(),
+      },
+      isHost ? { shared_queue: sharedQueue } : {},
+      payloadPatch
+    )
     if (hostPeerId) payload.host_peer_id = hostPeerId
     await flowSocialPut('/flow-api/v1/rooms', payload)
   } catch {}
@@ -4068,6 +5668,31 @@ function scheduleRoomStateSave(patch = {}, delay = 450) {
   }, Math.max(120, Number(delay || 450)))
 }
 
+function applyRoomMembersRowsFromServer(rows) {
+  if (!Array.isArray(rows)) return
+  const merged = new Map(_roomMembers)
+  rows.forEach((m) => {
+    const pid = String(m?.peer_id || '').trim()
+    if (!pid) return
+    const base =
+      merged.get(pid) ||
+      _peerProfiles.get(pid) ||
+      getCachedPeerProfile(m?.username || pid.replace(/^flow-/, '')) || { username: m?.username || pid.replace(/^flow-/, '') }
+    const profile = mergeProfileData(
+      base,
+      Object.assign({ username: m?.username || pid.replace(/^flow-/, '') }, m?.profile || {}, { peerId: pid }),
+      pid
+    )
+    merged.set(pid, profile)
+    cachePeerProfile(profile, pid)
+  })
+  if (_socialPeer?.peer?.id && _profile?.username) {
+    merged.set(_socialPeer.peer.id, getPublicProfilePayload(_profile.username))
+  }
+  _roomMembers = merged
+  renderRoomMembers()
+}
+
 async function loadRoomStateFromServer(force = false) {
   try {
     if (!_roomState?.roomId) return
@@ -4076,54 +5701,62 @@ async function loadRoomStateFromServer(force = false) {
     _lastRoomServerLoadAt = now
     if (!isFlowSocialReady()) return
     const rid = encodeURIComponent(_roomState.roomId)
-    const nowIso = new Date(Date.now() - 20000).toISOString()
-    const membersPath = force
-      ? `/flow-api/v1/room-members/${rid}`
-      : `/flow-api/v1/room-members/${rid}?since=${encodeURIComponent(nowIso)}`
     const [room, members] = await Promise.all([
       flowSocialGet(`/flow-api/v1/rooms/${rid}`),
-      flowSocialGet(membersPath),
+      flowSocialGet(`/flow-api/v1/room-members/${rid}`),
     ])
-    if (room?.host_peer_id) _roomState.hostPeerId = String(room.host_peer_id)
-    if (Array.isArray(room?.shared_queue)) {
+    const myPeerId = String(_socialPeer?.peer?.id || '')
+    const roomIdStr = String(_roomState.roomId || '').trim()
+    const iOwnRoomNamespace = Boolean(myPeerId && roomIdStr === myPeerId)
+    let serverHost = room?.host_peer_id != null && String(room.host_peer_id).trim() !== '' ? String(room.host_peer_id).trim() : ''
+    if (iOwnRoomNamespace && serverHost && serverHost !== myPeerId) {
+      _roomState.hostPeerId = myPeerId
+      _roomState.host = true
+      saveRoomStateToServer({ host_peer_id: myPeerId, shared_queue: sharedQueue }).catch(() => {})
+    } else if (serverHost) {
+      _roomState.hostPeerId = serverHost
+      if (myPeerId) _roomState.host = _roomState.hostPeerId === myPeerId
+    } else if (roomIdStr.startsWith('flow-')) {
+      _roomState.hostPeerId = roomIdStr
+      if (myPeerId) _roomState.host = myPeerId === roomIdStr
+    }
+    // Хост не подменяет очередь снимком с сервера: иначе гонка с saveRoomStateToServer
+    // затирает локальную очередь (пропадают треки, «залипает» один старый).
+    if (Array.isArray(room?.shared_queue) && !_roomState.host) {
       sharedQueue = room.shared_queue.map((t) => sanitizeTrack(t)).filter(Boolean)
       renderRoomQueue()
     }
-    if (Array.isArray(members)) {
-      const next = new Map()
-      members.forEach((m) => {
-        const pid = String(m?.peer_id || '').trim()
-        if (!pid) return
-    const profile = mergeProfileData(
-      getCachedPeerProfile(m?.username || pid.replace(/^flow-/, '')) || _peerProfiles.get(pid) || { username: m?.username || pid.replace(/^flow-/, '') },
-      Object.assign({ username: m?.username || pid.replace(/^flow-/, '') }, m?.profile || {}, { peerId: pid }),
-      pid
-    )
-        next.set(pid, profile)
-        cachePeerProfile(profile, pid)
-      })
-      if (_socialPeer?.peer?.id && _profile?.username) next.set(_socialPeer.peer.id, getPublicProfilePayload(_profile.username))
-      _roomMembers = next
-      renderRoomMembers()
-    }
+    applyRoomMembersRowsFromServer(members)
     if (!_roomState.host && room?.now_playing && Number(room?.playback_ts || 0) > _lastAppliedServerPlaybackTs) {
       _lastAppliedServerPlaybackTs = Number(room.playback_ts || 0)
       const serverTrack = sanitizeTrack(room.now_playing)
       const state = room?.playback_state || {}
-      if (serverTrack && serverTrack.id !== currentTrack?.id) {
-        playTrackObj(serverTrack, { remoteSync: true }).catch(() => {})
-      }
+      const serverSig = normalizeTrackSignature(serverTrack || {})
+      const currentSig = normalizeTrackSignature(currentTrack || {})
+      const noActiveAudio = !audio?.src || audio?.ended || audio?.error
+      const shouldReloadFromServer =
+        Boolean(serverTrack) &&
+        (noActiveAudio || !currentTrack || !serverSig || !currentSig || serverSig !== currentSig)
+      if (shouldReloadFromServer) playTrackObj(serverTrack, { remoteSync: true }).catch(() => {})
+      const p2pFresh = Date.now() - (_lastGuestP2pPlaybackAt || 0) < 1200
       const targetTime = Number(state?.currentTime || 0)
-      if (Number.isFinite(targetTime) && Math.abs(Number(audio.currentTime || 0) - targetTime) > 0.6) {
-        audio.currentTime = Math.max(0, targetTime)
+      const dur = Number(audio?.duration || 0)
+      const canSeek = Number.isFinite(targetTime) && Number.isFinite(dur) && dur > 0
+      const drift = canSeek ? Math.abs(Number(audio.currentTime || 0) - targetTime) : 0
+      if (shouldReloadFromServer) {
+        if (canSeek && drift > 0.45) audio.currentTime = Math.max(0, Math.min(targetTime, dur))
+        if (state?.paused === true && !audio.paused) audio.pause()
+        if (state?.paused === false && audio.paused) audio.play().catch(() => {})
+      } else if (!p2pFresh) {
+        if (canSeek && drift > 2.0) audio.currentTime = Math.max(0, Math.min(targetTime, dur))
+        if (state?.paused === true && !audio.paused) audio.pause()
+        if (state?.paused === false && audio.paused) audio.play().catch(() => {})
       }
-      if (state?.paused === true && !audio.paused) audio.pause()
-      if (state?.paused === false && audio.paused) audio.play().catch(() => {})
     }
   } catch {}
 }
 
-function startRoomServerSync() {
+function startRoomServerSync(opts = {}) {
   stopRoomServerSync()
   if (!_roomState?.roomId || !window.FlowSocialBackend?.isConfigured?.()) return
   window.FlowSocialBackend.ensureWs()
@@ -4135,13 +5768,13 @@ function startRoomServerSync() {
     loadRoomStateFromServer(false).catch(() => {})
   })
   upsertRoomMemberPresence().catch(() => {})
-  loadRoomStateFromServer(true).catch(() => {})
+  if (!opts.skipInitialLoad) loadRoomStateFromServer(true).catch(() => {})
   _roomServerHeartbeatTimer = setInterval(() => {
     upsertRoomMemberPresence().catch(() => {})
-  }, 2500)
+  }, 1800)
   _roomServerFullSyncTimer = setInterval(() => {
     loadRoomStateFromServer(true).catch(() => {})
-  }, 12000)
+  }, 5200)
 }
 
 function renderRoomMembers() {
@@ -4151,15 +5784,25 @@ function renderRoomMembers() {
     el.innerHTML = '<div class="flow-empty-state compact"><strong>Рума не активна</strong><span>Создай комнату или вставь invite друга.</span></div>'
     return
   }
-  const members = Array.from(_roomMembers.values()).map((m) => {
-    if (!m?.username) return m
-    const cached = getCachedPeerProfile(m.username)
-    return cached ? mergeProfileData(cached, m, m?.peerId || cached?.peerId || '') : m
+  const hostPeerId = String(_roomState?.hostPeerId || '').trim()
+  const seen = new Set()
+  const members = []
+  Array.from(_roomMembers.values()).forEach((raw) => {
+    if (!raw?.peerId) return
+    const pid = String(raw.peerId)
+    if (seen.has(pid)) return
+    seen.add(pid)
+    let m = raw
+    if (m?.username) {
+      const cached = getCachedPeerProfile(m.username)
+      if (cached) m = mergeProfileData(cached, m, m?.peerId || cached?.peerId || '')
+    }
+    members.push(m)
   })
-  // Safety fallback: if profile packets are delayed, still show connected peers.
-  const connectedPeerIds = Array.from(_socialPeer?.connections?.keys?.() || [])
+  const connectedPeerIds = Array.from(_socialPeer?.connections?.keys?.() || []).map(String).sort()
   connectedPeerIds.forEach((peerId) => {
-    if (!peerId || _roomMembers.has(peerId)) return
+    if (!peerId || seen.has(peerId)) return
+    seen.add(peerId)
     const guessedName = String(peerId).replace(/^flow-/, '') || 'user'
     members.push({
       username: guessedName,
@@ -4173,14 +5816,20 @@ function renderRoomMembers() {
     })
   })
   if (!members.length && _profile?.username) members.push(getPublicProfilePayload(_profile.username))
+  members.sort((a, b) => {
+    const ah = hostPeerId && a.peerId === hostPeerId ? 0 : 1
+    const bh = hostPeerId && b.peerId === hostPeerId ? 0 : 1
+    if (ah !== bh) return ah - bh
+    return String(a.username || '').localeCompare(String(b.username || ''), 'ru')
+  })
   el.innerHTML = members.map((m) => {
     if (!m) return ''
-    const isHost = m.peerId && m.peerId === _roomState?.hostPeerId
-    const isSelfHost = !isHost && _roomState?.host && m.username === _profile?.username
+    const isHost = Boolean(hostPeerId && m.peerId && m.peerId === hostPeerId)
     const avatar = m.avatarData
       ? `<div class="social-friend-avatar social-friend-avatar-active" style="background-image:url(${m.avatarData})"></div>`
       : `<div class="social-friend-avatar social-friend-avatar-active">${String(m.username || '?').slice(0,1).toUpperCase()}</div>`
-    return `<div class="social-friend-card online" oncontextmenu="openRoomMemberContextMenu(event, '${m.peerId || ''}', '${m.username || ''}')">${avatar}<div class="social-friend-meta"><strong>${m.username || 'user'} ${(isHost || isSelfHost) ? 'HOST' : ''}</strong><span>${m.username === _profile?.username ? 'это вы' : 'в комнате'}</span></div></div>`
+    const hostTag = isHost ? '<span class="room-host-pill">хост</span>' : ''
+    return `<div class="social-friend-card online" oncontextmenu="openRoomMemberContextMenu(event, '${m.peerId || ''}', '${m.username || ''}')">${avatar}<div class="social-friend-meta"><strong>${m.username || 'user'} ${hostTag}</strong><span>${m.username === _profile?.username ? 'это вы' : 'в комнате'}</span></div></div>`
   }).join('') || '<div class="flow-empty-state compact"><strong>Нет участников</strong><span>Подключение появится здесь.</span></div>'
 }
 
@@ -4205,7 +5854,7 @@ function syncRoomPresenceHeartbeat() {
     _socialPeer.send({ type: 'room-profile-state', roomId: _roomState.roomId, profile: me, sharedQueue })
     broadcastRoomMembersState()
   } else {
-    _socialPeer.send({ type: 'room-profile-state', roomId: _roomState.roomId, profile: me, sharedQueue })
+    _socialPeer.send({ type: 'room-profile-state', roomId: _roomState.roomId, profile: me })
     _socialPeer.send({ type: 'room-queue-sync-request', roomId: _roomState.roomId })
   }
   updateRoomUi()
@@ -4316,20 +5965,8 @@ function enqueueSharedTrack(track) {
     broadcastQueueUpdate()
     return showToast('Трек добавлен в очередь комнаты')
   }
-  sharedQueue.push(cleanTrack)
-  renderRoomQueue()
-  ;(async () => {
-    try {
-      if (!isFlowSocialReady()) return
-      const rid = encodeURIComponent(_roomState.roomId)
-      const data = await flowSocialGet(`/flow-api/v1/rooms/${rid}`)
-      const nextQueue = Array.isArray(data?.shared_queue)
-        ? data.shared_queue.map((t) => sanitizeTrack(t)).filter(Boolean)
-        : []
-      nextQueue.push(cleanTrack)
-      await saveRoomStateToServer({ shared_queue: nextQueue })
-    } catch {}
-  })()
+  // Гость только отправляет запрос хосту: локальная запись sharedQueue
+  // создаёт гонки и "пропадающие" треки при серверной синхронизации.
   const payload = { type: 'room-queue-add', roomId: _roomState.roomId, track: cleanTrack }
   _socialPeer?.send(payload)
   if (typeof _socialPeer?.sendToPeer === 'function' && _roomState?.hostPeerId) {
@@ -4384,7 +6021,7 @@ async function searchRoomQueueTracks() {
     list.innerHTML = '<div class="flow-empty-state compact"><strong>Начни поиск</strong><span>Введи название трека, чтобы добавить его в очередь.</span></div>'
     return
   }
-  list.innerHTML = '<div class="flow-empty-state compact"><strong>Ищу треки...</strong><span>Проверяю доступные источники Flow.</span></div>'
+  list.innerHTML = '<div class="flow-empty-state compact"><strong>Ищу треки...</strong><span>Проверяю доступные источники Nexory.</span></div>'
   clearTimeout(_roomSearchDebounceTimer)
   _roomSearchDebounceTimer = setTimeout(async () => {
     try {
@@ -4609,22 +6246,257 @@ function getMyWaveSource() {
   }
 }
 
+let _yandexRotorTrackStartedForId = null
+let _yandexWaveMoodDockOpen = false
+
+function flowWaveSourceBadgeLine(track) {
+  const t = track && typeof track === 'object' ? track : null
+  if (!t?.source) return ''
+  const raw = String(t.source).toLowerCase()
+  const base = raw === 'ya' || raw === 'ym' ? 'yandex' : raw
+  if (base === 'yandex') {
+    const ymWave = getMyWaveSource() === 'yandex' && queueScope === 'myWave'
+    const m = getMyWaveMode()
+    const lab = WE?.MY_WAVE_MODES?.[m]?.label || ''
+    if (ymWave && lab) return `Яндекс · Волна · ${lab}`
+    return 'Яндекс'
+  }
+  const short = { soundcloud: 'SoundCloud', vk: 'VK', youtube: 'YouTube', spotify: 'Spotify' }[base]
+  return short || String(base).toUpperCase()
+}
+
+/** Цветной бейдж источника (SC / VK / Ян …) как в списках треков. */
+function flowTrackSourceBadgeHtml(track) {
+  const t = track && typeof track === 'object' ? track : null
+  if (!t?.source) return ''
+  const badgeKey = trackSourceBadgeKey(t.source)
+  const SHORT = { soundcloud: 'SC', vk: 'VK', youtube: 'YT', spotify: 'SP', yandex: 'Ян' }
+  const lbl = SHORT[badgeKey]
+  if (!lbl) return ''
+  return `<span class="track-source track-source-${badgeKey}">${lbl}</span>`
+}
+
+function syncInlineTrackSourcePill(track) {
+  const el = document.getElementById('player-track-source-inline')
+  if (!el) return
+  const html = flowTrackSourceBadgeHtml(track || currentTrack)
+  if (!html) {
+    el.classList.add('hidden')
+    el.innerHTML = ''
+    return
+  }
+  el.innerHTML = html
+  el.classList.remove('hidden')
+}
+
+function updateYandexWaveDislikeButtonsVisible() {
+  const show = Boolean(
+    queueScope === 'myWave' &&
+    getMyWaveSource() === 'yandex' &&
+    currentTrack &&
+    String(currentTrack.source || '').toLowerCase() === 'yandex' &&
+    Boolean(currentTrack?.yandexRotor?.batchId)
+  )
+  ;['player-wave-dislike-btn', 'pm-wave-dislike-btn'].forEach((id) => {
+    const b = document.getElementById(id)
+    if (b) b.classList.toggle('hidden', !show)
+  })
+}
+
+function renderYandexWaveMoodDock() {
+  const docks = document.querySelectorAll('.yandex-wave-mood-dock')
+  if (!docks.length) return
+  if (getMyWaveSource() !== 'yandex') {
+    docks.forEach((dock) => {
+      dock.classList.add('hidden')
+      dock.classList.remove('is-open')
+    })
+    return
+  }
+  const mode = getMyWaveMode()
+  const modes = Object.entries(WE?.MY_WAVE_MODES || {})
+  const activeCfg = WE?.MY_WAVE_MODES?.[mode] || WE?.MY_WAVE_MODES?.default
+  const icon = activeCfg?.moodIconSvg || (WE?.MY_WAVE_MODES?.default?.moodIconSvg || '')
+  const html = `
+    <div class="yandex-wave-mood-panel" role="menu">
+      ${modes.map(([id, cfg]) => {
+        const ic = cfg?.moodIconSvg || ''
+        return `<button type="button" class="yandex-wave-mood-chip ${id === mode ? 'active' : ''}" data-wave-mood="${escapeHtml(id)}" title="${escapeHtml(sanitizeDisplayText(cfg.label || id))}" aria-pressed="${id === mode ? 'true' : 'false'}" onclick="setMyWaveMode('${escapeHtml(id)}'); toggleYandexWaveMoodDockPanel(false)">${ic}</button>`
+      }).join('')}
+    </div>
+    <button type="button" class="yandex-wave-mood-toggle" onclick="toggleYandexWaveMoodDockPanel()" title="Настроение волны (${escapeHtml(sanitizeDisplayText(activeCfg?.label || ''))})" aria-expanded="${_yandexWaveMoodDockOpen ? 'true' : 'false'}">
+      <span class="yandex-wave-mood-toggle-icon">${icon}</span>
+    </button>
+  `
+  docks.forEach((dock) => {
+    dock.classList.remove('hidden')
+    dock.innerHTML = html
+    dock.classList.toggle('is-open', Boolean(_yandexWaveMoodDockOpen))
+  })
+}
+
+function toggleYandexWaveMoodDockPanel(force) {
+  const docks = document.querySelectorAll('.yandex-wave-mood-dock')
+  const first = docks[0]
+  if (!first || first.classList.contains('hidden')) return
+  if (typeof force === 'boolean') _yandexWaveMoodDockOpen = force
+  else _yandexWaveMoodDockOpen = !_yandexWaveMoodDockOpen
+  docks.forEach((dock) => {
+    dock.classList.toggle('is-open', _yandexWaveMoodDockOpen)
+    const btn = dock.querySelector('.yandex-wave-mood-toggle')
+    if (btn) btn.setAttribute('aria-expanded', _yandexWaveMoodDockOpen ? 'true' : 'false')
+  })
+}
+
+async function dislikeCurrentYandexWaveTrack() {
+  const t = sanitizeTrack(currentTrack || {})
+  if (!t?.id || String(t.source || '').toLowerCase() !== 'yandex') return
+  if (!t?.yandexRotor?.batchId) return
+  if (queueScope !== 'myWave' || getMyWaveSource() !== 'yandex') return
+  const tok = String(getSettings()?.yandexToken || '').trim()
+  if (!tok || !window.api?.yandexTrackDislike) return showToast('Нужен токен Яндекса', true)
+  const r = await window.api.yandexTrackDislike({ token: tok, trackId: t.id }).catch(() => ({ ok: false }))
+  if (r?.ok) showToast('Не рекомендовать: синхрон с Яндексом')
+  else showToast('Яндекс: не удалось отметить трек', true)
+  recordWaveEarlySkip(t)
+  nextTrack()
+}
+window.toggleYandexWaveMoodDockPanel = toggleYandexWaveMoodDockPanel
+window.dislikeCurrentYandexWaveTrack = dislikeCurrentYandexWaveTrack
+window.flowWaveSourceBadgeLine = flowWaveSourceBadgeLine
+window.flowTrackSourceBadgeHtml = flowTrackSourceBadgeHtml
+
+function closeMyWaveSourceMenus() {
+  try {
+    document.querySelectorAll('.my-wave-settings-anchor.is-open').forEach((a) => {
+      a.classList.remove('is-open')
+      a.querySelector('.my-wave-settings-btn')?.setAttribute('aria-expanded', 'false')
+    })
+  } catch (_) {}
+}
+
+function toggleMyWaveSourceMenu(ev) {
+  try {
+    ev?.preventDefault?.()
+    ev?.stopPropagation?.()
+  } catch (_) {}
+  const btn = ev?.currentTarget
+  const anchor = btn?.closest?.('.my-wave-settings-anchor')
+  if (!anchor) return
+  const willOpen = !anchor.classList.contains('is-open')
+  document.querySelectorAll('.my-wave-settings-anchor.is-open').forEach((a) => {
+    if (a !== anchor) {
+      a.classList.remove('is-open')
+      a.querySelector('.my-wave-settings-btn')?.setAttribute('aria-expanded', 'false')
+    }
+  })
+  anchor.classList.toggle('is-open', willOpen)
+  btn?.setAttribute('aria-expanded', willOpen ? 'true' : 'false')
+}
+
+function openMyWaveSettingsFromStack(which) {
+  try {
+    closeMyWaveSourceMenus()
+    const key = String(which || 'main').toLowerCase()
+    const slotId = key === 'rooms' ? 'rooms-wave-source-slot' : 'my-wave-source-slot'
+    const anchor = document.querySelector(`#${slotId} .my-wave-settings-anchor`)
+    if (!anchor) return
+    anchor.classList.add('is-open')
+    anchor.querySelector('.my-wave-settings-btn')?.setAttribute('aria-expanded', 'true')
+  } catch (_) {}
+}
+window.openMyWaveSettingsFromStack = openMyWaveSettingsFromStack
+
+function pauseMyWaveInUi() {
+  try {
+    audio.pause()
+  } catch (_) {}
+  syncTransportPlayPauseUi()
+  syncMyWaveOrbPlayUi()
+}
+window.pauseMyWaveInUi = pauseMyWaveInUi
+
+function myWaveSourceFabMarkHtml(source) {
+  const s = source === 'vk' ? 'vk' : 'yandex'
+  const vkSvg =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="30" height="30" aria-hidden="true">' +
+    '<rect width="48" height="48" rx="11" fill="#0077FF"/>' +
+    '<text x="24" y="31" text-anchor="middle" font-family="system-ui,-apple-system,Segoe UI,sans-serif" font-size="17" font-weight="700" fill="#ffffff">vk</text>' +
+    '</svg>'
+  const yaSvg =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="30" height="30" aria-hidden="true" fill="none">' +
+    '<circle cx="24" cy="24" r="23" fill="#050508"/>' +
+    '<path fill="#FFCC00" d="M24 2l1.4 9.2 8.3-5.6-4 9.7 10-.9-7.8 6.5 9 4.4-10 2.4 6.8 7.6-9.6-3.4 1.2 10.4L24 34.6l-6.3 8.5 1.2-10.4-9.6 3.4 6.8-7.6-10-2.4 9-4.4-7.8-6.5 10 .9-4-9.7 8.3 5.6L24 2z"/>' +
+    '</svg>'
+  if (s === 'vk') {
+    return `<span class="my-wave-source-fab-mark my-wave-source-fab-mark--vk" aria-hidden="true">${vkSvg}</span>`
+  }
+  return `<span class="my-wave-source-fab-mark my-wave-source-fab-mark--yandex" aria-hidden="true">${yaSvg}</span>`
+}
+
+function renderMyWaveSourceSlotInto(slotEl) {
+  if (!slotEl) return
+  const source = getMyWaveSource()
+  const mode = getMyWaveMode()
+  const modeButtons = Object.entries(WE?.MY_WAVE_MODES || {}).map(([id, cfg]) => (
+    `<button type="button" class="my-wave-settings-mode-btn ${id === mode ? 'is-active' : ''}" onclick="setMyWaveMode('${escapeHtml(id)}')">${escapeHtml(sanitizeDisplayText(cfg?.label || id))}</button>`
+  )).join('')
+  slotEl.innerHTML = `
+    <div class="my-wave-settings-anchor">
+      <button type="button" class="my-wave-settings-btn" onclick="toggleMyWaveSourceMenu(event)" title="Настройки волны" aria-haspopup="true" aria-expanded="false">
+        <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3.2"></circle>
+          <path d="M19.4 15a1 1 0 0 0 .2 1.1l.1.1a1.9 1.9 0 1 1-2.7 2.7l-.1-.1a1 1 0 0 0-1.1-.2 1 1 0 0 0-.6.9V20a2 2 0 1 1-4 0v-.2a1 1 0 0 0-.6-.9 1 1 0 0 0-1.1.2l-.1.1a1.9 1.9 0 0 1-2.7-2.7l.1-.1a1 1 0 0 0 .2-1.1 1 1 0 0 0-.9-.6H4a2 2 0 1 1 0-4h.2a1 1 0 0 0 .9-.6 1 1 0 0 0-.2-1.1l-.1-.1a1.9 1.9 0 1 1 2.7-2.7l.1.1a1 1 0 0 0 1.1.2h.1a1 1 0 0 0 .6-.9V4a2 2 0 1 1 4 0v.2a1 1 0 0 0 .6.9 1 1 0 0 0 1.1-.2l.1-.1a1.9 1.9 0 1 1 2.7 2.7l-.1.1a1 1 0 0 0-.2 1.1v.1a1 1 0 0 0 .9.6H20a2 2 0 1 1 0 4h-.2a1 1 0 0 0-.9.6z"></path>
+        </svg>
+      </button>
+      <div class="my-wave-settings-dropdown" role="menu">
+        <div class="my-wave-settings-section-label">Источник волны</div>
+        <div class="my-wave-settings-source-row">
+          <button type="button" role="menuitem" class="my-wave-settings-source-btn ${source === 'yandex' ? 'is-active' : ''}" onclick="setMyWaveSource('yandex')">
+            ${myWaveSourceFabMarkHtml('yandex')} Яндекс
+          </button>
+          <button type="button" role="menuitem" class="my-wave-settings-source-btn ${source === 'vk' ? 'is-active' : ''}" onclick="setMyWaveSource('vk')">
+            ${myWaveSourceFabMarkHtml('vk')} VK
+          </button>
+        </div>
+        ${
+          source === 'yandex'
+            ? `<div class="my-wave-settings-section-label">Режим волны</div><div class="my-wave-settings-mode-grid">${modeButtons}</div>`
+            : '<div class="my-wave-settings-vk-note">Для VK доступен только выбор источника.</div>'
+        }
+      </div>
+    </div>
+  `
+}
+
+window.toggleMyWaveSourceMenu = toggleMyWaveSourceMenu
+window.closeMyWaveSourceMenus = closeMyWaveSourceMenus
+
 function setMyWaveSource(source) {
+  closeMyWaveSourceMenus()
   const next = String(source || '').trim().toLowerCase() === 'vk' ? 'vk' : 'yandex'
   try { localStorage.setItem('flow_my_wave_source', next) } catch {}
+  if (next === 'vk') {
+    try { _yandexWaveRotorQueueHint = '' } catch (_) {}
+    _myWaveMode = 'default'
+    try { localStorage.setItem('flow_my_wave_mode', _myWaveMode) } catch {}
+    toggleYandexWaveMoodDockPanel(false)
+  }
   if (next !== 'yandex') toggleYandexWaveModes(false)
   renderYandexWaveModes()
   renderMyWave()
-  renderRoomsMyWave()
   syncYandexWaveSettingsLabel()
 }
 
 function setMyWaveMode(mode) {
+  if (getMyWaveSource() !== 'yandex') return
   _myWaveMode = WE?.MY_WAVE_MODES?.[mode] ? mode : 'default'
   try { localStorage.setItem('flow_my_wave_mode', _myWaveMode) } catch {}
   renderMyWave()
   renderYandexWaveModes()
   syncYandexWaveSettingsLabel()
+  renderYandexWaveMoodDock()
+  syncInlineTrackSourcePill(currentTrack)
 }
 
 function syncYandexWaveSettingsLabel() {
@@ -4674,31 +6546,137 @@ function toggleYandexWaveModes(force) {
 
 let _lastMyWavePreloadCheckAt = 0
 
+function getMyWaveTrackUniqueKey(track) {
+  const safe = sanitizeTrack(track || {})
+  const src = String(safe.source || '').trim().toLowerCase()
+  const id = String(safe.id || safe.ytId || safe.url || '').trim().toLowerCase()
+  if (src && id) return `${src}:${id}`
+  const sig = normalizeTrackSignature(safe)
+  if (sig) return `sig:${sig}`
+  const fallback = `${String(safe.artist || '').trim().toLowerCase()}::${String(safe.title || '').trim().toLowerCase()}`
+  return fallback !== '::' ? `meta:${fallback}` : ''
+}
+
+/** Яндекс-волна: держим в памяти только текущий + один префетч — как цепочка GET /tracks у ротора. */
+function compactYandexMyWaveQueueIfNeeded() {
+  if (queueScope !== 'myWave' || getMyWaveSource() !== 'yandex') return
+  const cur = sanitizeTrack(currentTrack || null)
+  if (!cur?.id) return
+  const curKey = getMyWaveTrackUniqueKey(cur)
+  let next = queue[queueIndex + 1] || null
+  if (next) next = sanitizeTrack(next)
+  const nextKey = next ? getMyWaveTrackUniqueKey(next) : ''
+  if (!nextKey || nextKey === curKey) next = null
+  queue = next ? [cur, next] : [cur]
+  queueIndex = 0
+  try {
+    _myWaveRenderedTracks = queue.slice()
+  } catch (_) {}
+}
+
+function mergeYandexWaveQueueAppend(freshTracks) {
+  const cur = sanitizeTrack(currentTrack || queue[queueIndex] || null)
+  const nxt = sanitizeTrack((freshTracks || [])[0] || null)
+  if (!cur?.id) {
+    queue = nxt?.id ? [nxt] : []
+    queueIndex = 0
+    return
+  }
+  const curKey = getMyWaveTrackUniqueKey(cur)
+  const nxtKey = nxt ? getMyWaveTrackUniqueKey(nxt) : ''
+  if (nxtKey && nxtKey !== curKey) queue = [cur, nxt]
+  else queue = [cur]
+  queueIndex = 0
+}
+
 async function maybePreloadMyWave(force = false) {
   if (queueScope !== 'myWave' || _myWaveBuilding || _myWavePreloading) return
   const remaining = queue.length - queueIndex - 1
-  if (!force && remaining > 3) return
+  if (!force) {
+    if (getMyWaveSource() === 'yandex') {
+      if (remaining >= 1) return
+    } else if (remaining > 3) {
+      return
+    }
+  }
   if (getMyWaveSeedTracks().length < 3) return
-  const startLength = queue.length
+  if (getMyWaveSource() === 'yandex' && currentTrack && String(currentTrack.source || '').toLowerCase() === 'yandex' && currentTrack.id) {
+    try {
+      _yandexWaveRotorQueueHint = String(currentTrack.id).trim()
+    } catch (_) {}
+  }
   _myWavePreloading = true
   renderMyWave()
   try {
-    const additions = await findMyWaveRecommendations(10, getMyWaveMode())
-    const existing = new Set(queue.map((track) => normalizeTrackSignature(track)).filter(Boolean))
-    const fresh = additions.filter((track) => {
-      const sig = normalizeTrackSignature(track)
-      if (!sig || existing.has(sig)) return false
-      existing.add(sig)
-      return true
-    })
+    const dedupeWithExisting = (tracks = []) => {
+      const existing = new Set(
+        queue
+          .map((track) => getMyWaveTrackUniqueKey(track))
+          .filter(Boolean),
+      )
+      _myWaveSeenKeys.forEach((key) => existing.add(key))
+      const fresh = []
+      tracks.forEach((track) => {
+        const key = getMyWaveTrackUniqueKey(track)
+        if (!key || existing.has(key)) return
+        existing.add(key)
+        _myWaveSeenKeys.add(key)
+        fresh.push(track)
+      })
+      return fresh
+    }
+    const waveAsk = getMyWaveSource() === 'yandex' ? 1 : 10
+    const additions = await findMyWaveRecommendations(waveAsk, getMyWaveMode())
+    let fresh = dedupeWithExisting(additions)
+    if (!fresh.length && force && getMyWaveSource() === 'yandex') {
+      try { _yandexWaveRotorQueueHint = '' } catch (_) {}
+      const retry = await findMyWaveRecommendations(waveAsk, getMyWaveMode())
+      fresh = dedupeWithExisting(retry)
+    }
     if (fresh.length) {
-      queue.push(...fresh)
+      if (getMyWaveSource() === 'yandex') {
+        mergeYandexWaveQueueAppend(fresh)
+      } else {
+        queue.push(...fresh)
+      }
       _myWaveRenderedTracks = queue.slice()
       renderQueue()
-      showToast(`Моя волна дозагрузила ${fresh.length} треков`)
-      if (force && queueIndex >= startLength - 1 && queue[queueIndex + 1]) {
-        queueIndex++
+      showToast(getMyWaveSource() === 'yandex' ? 'Моя волна: подгружен следующий трек' : `Моя волна дозагрузила ${fresh.length} треков`)
+      if (force && queue.length > 1 && queue[1]) {
+        queueIndex = 1
         await playTrackObj(queue[queueIndex])
+      }
+    } else if (force) {
+      // Fallback: если строгий dedupe не дал новых треков, берем из последнего ответа
+      // треки, которых нет рядом с текущим хвостом, чтобы волна не останавливалась.
+      const recentKeys = new Set(
+        queue
+          .slice(Math.max(0, queueIndex - 2), queueIndex + 6)
+          .map((t) => getMyWaveTrackUniqueKey(t))
+          .filter(Boolean),
+      )
+      const fallback = (additions || []).filter((track) => {
+        const key = getMyWaveTrackUniqueKey(track)
+        if (!key || recentKeys.has(key)) return false
+        return true
+      })
+      if (fallback.length) {
+        if (getMyWaveSource() === 'yandex') {
+          mergeYandexWaveQueueAppend(fallback)
+        } else {
+          queue.push(...fallback)
+        }
+        fallback.forEach((track) => {
+          const key = getMyWaveTrackUniqueKey(track)
+          if (key) _myWaveSeenKeys.add(key)
+        })
+        _myWaveRenderedTracks = queue.slice()
+        renderQueue()
+        showToast(getMyWaveSource() === 'yandex' ? 'Моя волна: подгружен следующий трек' : `Моя волна продолжила подборку (${fallback.length})`)
+        if (queue.length > 1 && queue[1]) {
+          queueIndex = 1
+          await playTrackObj(queue[queueIndex])
+        }
       }
     }
   } catch (err) {
@@ -4709,21 +6687,55 @@ async function maybePreloadMyWave(force = false) {
   }
 }
 
+/** Тонкие пересекающиеся линии-«волны» в нижней части орба (SVG + CSS-анимация). */
+function myWaveFineLinesLayerHtml() {
+  const d1 = 'M0,50 C160,24 320,76 480,50 S800,24 960,50 S1120,76 1280,50 S1440,24 1440,50'
+  const d2 = 'M0,66 C160,90 320,42 480,66 S800,90 960,66 S1120,42 1280,66 S1440,90 1440,66'
+  const d3 = 'M0,34 C160,10 320,58 480,34 S800,10 960,34 S1120,58 1280,34 S1440,10 1440,34'
+  const path = (d, stroke) =>
+    `<path fill="none" stroke="${stroke}" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" d="${d}"/>`
+  const pair = (d, stroke) => `${path(d, stroke)}<g transform="translate(1440 0)">${path(d, stroke)}</g>`
+  return `
+    <div class="my-wave-fine-lines" aria-hidden="true">
+      <svg class="my-wave-fine-lines__svg" viewBox="0 0 720 92" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+        <g class="my-wave-fine-lines__g my-wave-fine-lines__g--1">${pair(d1, 'rgba(255,255,255,0.4)')}</g>
+        <g class="my-wave-fine-lines__g my-wave-fine-lines__g--2">${pair(d2, 'rgba(255,255,255,0.3)')}</g>
+        <g class="my-wave-fine-lines__g my-wave-fine-lines__g--3">${pair(d3, 'rgba(255,255,255,0.34)')}</g>
+      </svg>
+    </div>`
+}
+
 async function startMyWave() {
   if (_myWaveBuilding) return
   const seedTracks = getMyWaveSeedTracks()
   if (seedTracks.length < 3) return showToast('Послушай или лайкни еще несколько треков, чтобы волна поняла вкус', true)
+  try { _yandexWaveRotorQueueHint = '' } catch (_) {}
+  _yandexRotorTrackStartedForId = null
+  _waveEngineApi = null
   _myWaveBuilding = true
   renderMyWave()
   showToast('Моя волна подбирает новые треки...')
   try {
-    const tracks = await findMyWaveRecommendations(WE?.MY_WAVE_MIN_TRACKS ?? 10, getMyWaveMode())
-    if (!tracks.length) return showToast('Волна пока не нашла новые треки. Попробуй другой режим или послушай еще музыку', true)
-    _myWaveRenderedTracks = tracks.slice()
-    queue = tracks.slice()
+    const waveAsk = getMyWaveSource() === 'yandex' ? 1 : (WE?.MY_WAVE_MIN_TRACKS ?? 10)
+    const tracks = await findMyWaveRecommendations(waveAsk, getMyWaveMode())
+    const unique = []
+    _myWaveSeenKeys = new Set()
+    ;(tracks || []).forEach((track) => {
+      const key = getMyWaveTrackUniqueKey(track)
+      if (!key || _myWaveSeenKeys.has(key)) return
+      _myWaveSeenKeys.add(key)
+      unique.push(track)
+    })
+    if (!unique.length) return showToast('Волна пока не нашла новые треки. Попробуй другой режим или послушай еще музыку', true)
+    _myWaveRenderedTracks = unique.slice()
+    queue = unique.slice()
     queueIndex = 0
     queueScope = 'myWave'
-    showToast(`Моя волна собрала ${tracks.length} новых треков`)
+    showToast(
+      getMyWaveSource() === 'yandex' && unique.length <= 1
+        ? 'Моя волна: трек из Яндекса'
+        : `Моя волна собрала ${unique.length} новых треков`,
+    )
     await playTrackObj(queue[0])
   } catch (err) {
     showToast(`Моя волна не запустилась: ${sanitizeDisplayText(err?.message || err)}`, true)
@@ -4737,43 +6749,58 @@ function renderMyWave() {
   const listEl = document.getElementById('my-wave-list')
   const hintEl = document.getElementById('my-wave-hint')
   const modesEl = document.getElementById('my-wave-modes')
-  if (!listEl || !hintEl) return
+  if (!listEl) return
   const mode = getMyWaveMode()
-  const source = getMyWaveSource()
   const modeCfg = WE?.MY_WAVE_MODES?.[mode] || WE?.MY_WAVE_MODES?.default
-  const seedCount = getMyWaveSeedTracks().length
+  if (hintEl) {
+    hintEl.textContent = ''
+    hintEl.classList.add('hidden')
+    hintEl.style.display = 'none'
+    hintEl.setAttribute('aria-hidden', 'true')
+  }
   if (modesEl) {
-    modesEl.style.display = 'flex'
-    const sourcePicker = `
-      <div class="my-wave-source-switch">
-        <button class="my-wave-mode ${source === 'yandex' ? 'active' : ''}" onclick="setMyWaveSource('yandex')">Яндекс</button>
-        <button class="my-wave-mode ${source === 'vk' ? 'active' : ''}" onclick="setMyWaveSource('vk')">VK</button>
-      </div>
-    `
-    const modeButtons = source === 'yandex'
-      ? Object.entries(WE?.MY_WAVE_MODES || {}).map(([id, cfg]) => (
-      `<button class="my-wave-mode ${id === mode ? 'active' : ''}" data-wave-mode="${id}" onclick="setMyWaveMode('${id}')">${cfg.label}</button>`
-    )).join('')
-      : '<div class="token-msg" style="display:block">Для VK-волны используется авто-режим без ручных пресетов.</div>'
-    modesEl.innerHTML = sourcePicker + modeButtons
+    modesEl.innerHTML = ''
+    modesEl.style.display = 'none'
   }
-  if (seedCount < 3) {
-    hintEl.textContent = `Послушай или лайкни еще ${3 - seedCount} трек(ов), чтобы волна поняла твой вкус`
-  } else if (_myWaveBuilding) {
-    hintEl.textContent = `${modeCfg.label}: ищу новые треки по твоему вкусу...`
-  } else if (_myWavePreloading) {
-    hintEl.textContent = `${modeCfg.label}: дозагружаю новые треки, чтобы волна не кончалась...`
-  } else {
-    const sourceLabel = source === 'vk' ? 'VK' : 'Яндекс'
-    hintEl.textContent = `${sourceLabel} • ${modeCfg.label}: ${modeCfg.hint}. Нажми запуск, и волна сама соберет новую очередь`
-  }
+  const orbPlayInner = (() => {
+    try {
+      const playing = Boolean(audio && !audio.paused && !audio.ended && queueScope === 'myWave')
+      return playing
+        ? `<svg class="my-wave-orb-play-svg" viewBox="0 0 24 24" aria-hidden="true">${PM_PAUSE_INNER}</svg>`
+        : `<svg class="my-wave-orb-play-svg" viewBox="0 0 24 24" aria-hidden="true">${PM_PLAY_INNER}</svg>`
+    } catch (_) {
+      return `<svg class="my-wave-orb-play-svg" viewBox="0 0 24 24" aria-hidden="true">${PM_PLAY_INNER}</svg>`
+    }
+  })()
   listEl.innerHTML = `
-    <div class="my-wave-orb mode-${mode} ${_myWaveBuilding || _myWavePreloading ? 'is-loading' : ''}" aria-label="${modeCfg.label}">
-      <div class="my-wave-orb-ring"></div>
-      <div class="my-wave-orb-core"></div>
+    <div class="my-wave-visual-stack">
+      <div class="my-wave-orb mode-${mode} my-wave-orb--hero ${_myWaveBuilding || _myWavePreloading ? 'is-loading' : ''}" aria-label="${modeCfg.label}">
+        <div class="my-wave-orb-ring"></div>
+        <div class="my-wave-orb-core my-wave-orb-core--hero"></div>
+        ${myWaveFineLinesLayerHtml()}
+        <div class="my-wave-orb-overlay">
+          <div class="my-wave-overlay-top">
+            <button type="button" class="my-wave-glass-btn my-wave-glass-btn--play my-wave-glass-btn--inorb" onclick="toggleMyWaveOrbPlayback()" aria-label="Плей / пауза">${orbPlayInner}</button>
+            <span class="my-wave-inline-title my-wave-inline-title--inorb">Моя волна</span>
+          </div>
+          <div class="my-wave-settings-dock-wrap">
+            <button type="button" class="my-wave-settings-rect" onclick="openMyWaveSettingsFromStack('main')" title="Настройки волны">Настройки</button>
+            <div id="my-wave-source-slot" class="my-wave-source-slot my-wave-source-slot--wave-dock"></div>
+          </div>
+        </div>
+      </div>
     </div>
   `
+  const mainWaveSlot = document.getElementById('my-wave-source-slot')
+  if (mainWaveSlot) renderMyWaveSourceSlotInto(mainWaveSlot)
   renderRoomsMyWave()
+  toggleYandexWaveMoodDockPanel(false)
+  try {
+    if (typeof hydrateFlowLucideIcons === 'function') {
+      const w = document.getElementById('my-wave')
+      if (w) hydrateFlowLucideIcons(w)
+    }
+  } catch (_) {}
   refreshHomeDashboardLayoutAfterContentChange()
 }
 
@@ -4781,40 +6808,55 @@ function renderRoomsMyWave() {
   const hintEl = document.getElementById('rooms-wave-hint')
   const modesEl = document.getElementById('rooms-wave-modes')
   const listEl = document.getElementById('rooms-wave-list')
-  if (!hintEl || !modesEl || !listEl) return
-  const mode = getMyWaveMode()
-  const source = getMyWaveSource()
-  const modeCfg = WE?.MY_WAVE_MODES?.[mode] || WE?.MY_WAVE_MODES?.default
-  const seedCount = getMyWaveSeedTracks().length
-  const sourcePicker = `
-    <div class="my-wave-source-switch">
-      <button class="my-wave-mode ${source === 'yandex' ? 'active' : ''}" onclick="setMyWaveSource('yandex')">Яндекс</button>
-      <button class="my-wave-mode ${source === 'vk' ? 'active' : ''}" onclick="setMyWaveSource('vk')">VK</button>
-    </div>
-  `
-  const modeButtons = source === 'yandex'
-    ? Object.entries(WE?.MY_WAVE_MODES || {}).map(([id, cfg]) => (
-    `<button class="my-wave-mode ${id === mode ? 'active' : ''}" data-wave-mode="${id}" onclick="setMyWaveMode('${id}')">${cfg.label}</button>`
-  )).join('')
-    : '<div class="token-msg" style="display:block">Для VK-волны включен автоматический пресет.</div>'
-  modesEl.innerHTML = sourcePicker + modeButtons
-  modesEl.style.display = 'flex'
-  if (seedCount < 3) {
-    hintEl.textContent = `Послушай или лайкни еще ${3 - seedCount} трек(ов), чтобы волна поняла твой вкус`
-  } else if (_myWaveBuilding) {
-    hintEl.textContent = `${modeCfg.label}: ищу новые треки по твоему вкусу...`
-  } else if (_myWavePreloading) {
-    hintEl.textContent = `${modeCfg.label}: дозагружаю новые треки, чтобы волна не кончалась...`
-  } else {
-    const sourceLabel = source === 'vk' ? 'VK' : 'Яндекс'
-    hintEl.textContent = `${sourceLabel} • ${modeCfg.label}: ${modeCfg.hint}. Нажми запуск, и волна сама соберет новую очередь`
+  if (!modesEl || !listEl) return
+  if (hintEl) {
+    hintEl.textContent = ''
+    hintEl.classList.add('hidden')
+    hintEl.style.display = 'none'
+    hintEl.setAttribute('aria-hidden', 'true')
   }
+  const mode = getMyWaveMode()
+  const modeCfg = WE?.MY_WAVE_MODES?.[mode] || WE?.MY_WAVE_MODES?.default
+  modesEl.innerHTML = ''
+  modesEl.style.display = 'none'
+  const roomsOrbPlayInner = (() => {
+    try {
+      const playing = Boolean(audio && !audio.paused && !audio.ended && queueScope === 'myWave')
+      return playing
+        ? `<svg class="my-wave-orb-play-svg" viewBox="0 0 24 24" aria-hidden="true">${PM_PAUSE_INNER}</svg>`
+        : `<svg class="my-wave-orb-play-svg" viewBox="0 0 24 24" aria-hidden="true">${PM_PLAY_INNER}</svg>`
+    } catch (_) {
+      return `<svg class="my-wave-orb-play-svg" viewBox="0 0 24 24" aria-hidden="true">${PM_PLAY_INNER}</svg>`
+    }
+  })()
   listEl.innerHTML = `
-    <div class="my-wave-orb mode-${mode} ${_myWaveBuilding || _myWavePreloading ? 'is-loading' : ''}" aria-label="${modeCfg.label}">
-      <div class="my-wave-orb-ring"></div>
-      <div class="my-wave-orb-core"></div>
+    <div class="my-wave-visual-stack my-wave-visual-stack--rooms">
+      <div class="my-wave-orb mode-${mode} my-wave-orb--hero my-wave-orb--rooms ${_myWaveBuilding || _myWavePreloading ? 'is-loading' : ''}" aria-label="${modeCfg.label}">
+        <div class="my-wave-orb-ring"></div>
+        <div class="my-wave-orb-core my-wave-orb-core--hero"></div>
+        ${myWaveFineLinesLayerHtml()}
+        <div class="my-wave-orb-overlay">
+          <div class="my-wave-overlay-top">
+            <button type="button" class="my-wave-glass-btn my-wave-glass-btn--play my-wave-glass-btn--inorb" onclick="toggleMyWaveOrbPlayback()" aria-label="Плей / пауза">${roomsOrbPlayInner}</button>
+            <span class="my-wave-inline-title my-wave-inline-title--inorb">Моя волна</span>
+          </div>
+          <div class="my-wave-settings-dock-wrap">
+            <button type="button" class="my-wave-settings-rect" onclick="openMyWaveSettingsFromStack('rooms')" title="Настройки волны">Настройки</button>
+            <div id="rooms-wave-source-slot" class="my-wave-source-slot my-wave-source-slot--wave-dock"></div>
+          </div>
+        </div>
+      </div>
     </div>
   `
+  const roomsWaveSlot = document.getElementById('rooms-wave-source-slot')
+  if (roomsWaveSlot) renderMyWaveSourceSlotInto(roomsWaveSlot)
+  toggleYandexWaveMoodDockPanel(false)
+  try {
+    if (typeof hydrateFlowLucideIcons === 'function') {
+      const box = document.querySelector('.rooms-wave-my-wave')
+      if (box) hydrateFlowLucideIcons(box)
+    }
+  } catch (_) {}
 }
 
 function playTrackFromMyWave(index) {
@@ -4958,7 +7000,7 @@ function trackSourceBadgeKey(source) {
 
 /** Бейдж как на карточках треков: SC / Ya и т.д. (цвета в styles.css). */
 function profileListeningSourcePillHtml(trackHint) {
-  const LABELS = { soundcloud: 'SC', vk: 'VK', youtube: 'YT', spotify: 'SP', yandex: 'Ya' }
+  const LABELS = { soundcloud: 'SC', vk: 'VK', youtube: 'YT', spotify: 'SP', yandex: 'Ян' }
   const raw = trackHint && typeof trackHint.source === 'string' ? trackHint.source : ''
   const src = raw ? trackSourceBadgeKey(raw) : ''
   if (!src || !LABELS[src]) {
@@ -4972,11 +7014,11 @@ function flowProfileListeningBrandHtml(trackHint) {
   const pill = profileListeningSourcePillHtml(trackHint)
   return `<div class="flow-profile-listening-head">
     <span class="flow-profile-listening-brand-slot">${pill}</span>
-    <span class="flow-profile-listening-caption">LISTENING TO FLOW</span>
+    <span class="flow-profile-listening-caption">LISTENING TO NEXORY</span>
   </div>`
 }
 
-/** Карточка «Listening to Flow» (аналог отдельного UI-компонента): обложка, прогресс, индикатор в углу. */
+/** Карточка «Listening to Nexory» (аналог отдельного UI-компонента): обложка, прогресс, индикатор в углу. */
 function buildProfileActivityCardHtml(track, progressPct, coverDomId) {
   const pct = Math.max(0, Math.min(100, Number(progressPct) || 0))
   const corner = '<span class="flow-profile-activity-corner-dot" aria-hidden="true"></span>'
@@ -5035,7 +7077,7 @@ function getFlowProfileBadgeStripHtml() {
   const trophyIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 21h8M12 17v4M6 3h12v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V3z"/><path d="M6 5H4a2 2 0 0 0 0 4h2M18 5h2a2 2 0 0 1 0 4h-2"/></svg>`
   const gemIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3l8 9-8 9-8-9 8-9z"/><path d="M4 12h16"/></svg>`
   const gearIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>`
-  return `<span class="flow-profile-badge-chip" title="Flow">${flowIcon}</span><span class="flow-profile-badge-chip">${trophyIcon}</span><span class="flow-profile-badge-chip">${gemIcon}</span><span class="flow-profile-badge-chip">${gearIcon}</span>`
+  return `<span class="flow-profile-badge-chip" title="Nexory">${flowIcon}</span><span class="flow-profile-badge-chip">${trophyIcon}</span><span class="flow-profile-badge-chip">${gemIcon}</span><span class="flow-profile-badge-chip">${gearIcon}</span>`
 }
 
 function injectFlowProfileBadgeRow(el) {
@@ -5250,7 +7292,8 @@ async function pickProfileAvatar() {
     if (!file) return
     const dataUrl = await readFileAsDataUrl(file).catch(() => '')
     if (!dataUrl) return showToast('Не удалось загрузить аватар', true)
-    saveProfileCustom({ avatarData: dataUrl })
+    const prepared = await prepareProfileImageData(file, dataUrl, 'avatar').catch(() => dataUrl)
+    saveProfileCustom({ avatarData: prepared })
     syncProfileUi()
     renderProfilePage()
   }
@@ -5266,7 +7309,8 @@ async function pickProfileBanner() {
     if (!file) return
     const dataUrl = await readFileAsDataUrl(file).catch(() => '')
     if (!dataUrl) return showToast('Не удалось загрузить баннер', true)
-    saveProfileCustom({ bannerData: dataUrl })
+    const prepared = await prepareProfileImageData(file, dataUrl, 'banner').catch(() => dataUrl)
+    saveProfileCustom({ bannerData: prepared })
     renderProfilePage()
   }
   input.click()
@@ -5604,7 +7648,55 @@ function ensureFriendInteractionUI() {
     `
     document.body.appendChild(modal)
   }
+  if (!document.getElementById('playlist-card-context-menu')) {
+    const menu = document.createElement('div')
+    menu.id = 'playlist-card-context-menu'
+    menu.className = 'friend-context-menu hidden glass-card'
+    menu.innerHTML = `
+      <button type="button" class="friend-context-item" onclick="playlistCardCtxEdit()">Изменить</button>
+      <button type="button" class="friend-context-item danger" onclick="playlistCardCtxDelete()">Удалить</button>
+    `
+    document.body.appendChild(menu)
+    document.addEventListener('click', () => closePlaylistCardContextMenu())
+  }
 }
+
+let _playlistCardCtxIdx = -1
+
+function closePlaylistCardContextMenu() {
+  document.getElementById('playlist-card-context-menu')?.classList.add('hidden')
+  _playlistCardCtxIdx = -1
+}
+
+function openPlaylistCardContextMenu(event, idx) {
+  event?.preventDefault?.()
+  event?.stopPropagation?.()
+  ensureFriendInteractionUI()
+  const menu = document.getElementById('playlist-card-context-menu')
+  if (!menu) return
+  _playlistCardCtxIdx = Number(idx)
+  menu.style.left = `${Math.max(8, Number(event?.clientX || 0))}px`
+  menu.style.top = `${Math.max(8, Number(event?.clientY || 0))}px`
+  menu.classList.remove('hidden')
+}
+
+function playlistCardCtxEdit() {
+  const i = Number(_playlistCardCtxIdx)
+  closePlaylistCardContextMenu()
+  if (!Number.isFinite(i) || i < 0) return
+  editPlaylistMeta(i)
+}
+
+function playlistCardCtxDelete() {
+  const i = Number(_playlistCardCtxIdx)
+  closePlaylistCardContextMenu()
+  if (!Number.isFinite(i) || i < 0) return
+  deletePlaylist(i)
+}
+
+window.playlistCardCtxEdit = playlistCardCtxEdit
+window.playlistCardCtxDelete = playlistCardCtxDelete
+window.openPlaylistCardContextMenu = openPlaylistCardContextMenu
 
 function openRoomMemberContextMenu(event, peerId = '', username = '') {
   event?.preventDefault?.()
@@ -5632,11 +7724,23 @@ async function transferRoomHost(peerId = '', username = '') {
   const targetPeerId = String(peerId || '').trim()
   if (!_roomState?.roomId || !_roomState.host) return showToast('Передавать хоста может только текущий хост', true)
   if (!targetPeerId || targetPeerId === _socialPeer?.peer?.id) return showToast('Выбери другого участника', true)
+  const prevHost = String(_socialPeer?.peer?.id || _roomState.hostPeerId || '')
+  let transferredOnServer = false
+  if (isFlowSocialReady()) {
+    try {
+      const rid = encodeURIComponent(String(_roomState.roomId || '').trim())
+      const resp = await window.FlowSocialBackend.request('POST', `/flow-api/v1/rooms/${rid}/transfer-host`, {
+        to_peer_id: targetPeerId,
+        requested_by_peer_id: prevHost,
+      })
+      transferredOnServer = Boolean(resp?.ok)
+    } catch (_) {}
+  }
   _roomState.host = false
   _roomState.hostPeerId = targetPeerId
   _socialPeer?.sendToPeer?.(targetPeerId, { type: 'room-host-transfer', roomId: _roomState.roomId, hostPeerId: targetPeerId, sharedQueue })
   _socialPeer?.send?.({ type: 'room-host-changed', roomId: _roomState.roomId, hostPeerId: targetPeerId, username })
-  await saveRoomStateToServer({ host_peer_id: targetPeerId, shared_queue: sharedQueue }).catch(() => {})
+  if (!transferredOnServer) await saveRoomStateToServer({ host_peer_id: targetPeerId, shared_queue: sharedQueue }).catch(() => {})
   updateRoomUi()
   showToast(`Хост передан: ${username || targetPeerId.replace(/^flow-/, '')}`)
 }
@@ -5666,6 +7770,11 @@ function closeFriendContextMenu() {
 function friendMenuInviteRoom() {
   closeFriendContextMenu()
   if (!_friendContext?.username) return
+  const un = String(_friendContext.username || '').trim().toLowerCase()
+  if (!_friendPresence.get(un)?.online) {
+    showToast('Пригласить можно только друга в сети', true)
+    return
+  }
   sendRoomInviteToFriend(_friendContext.username, _friendContext.peerId || _friendContext.roomId || '')
 }
 
@@ -5761,11 +7870,15 @@ function sendRoomInviteToFriend(username, peerId = '') {
 function openRoomInvitePicker() {
   if (!_profile?.username || !peerSocial.getFriends) return
   const friends = peerSocial.getFriends(_profile.username) || []
-  if (!friends.length) return showToast('Список друзей пуст', true)
+  const onlineFriends = friends.filter((name) => {
+    const key = String(name || '').trim().toLowerCase()
+    return key && (_friendPresence.get(key)?.online)
+  })
+  if (!onlineFriends.length) return showToast('Нет друзей в сети — пригласить можно только онлайн', true)
   openPlaylistPickerModal({
     mode: 'room-invite-friend',
-    title: 'Пригласить друга в руму',
-    items: friends.map((name) => ({ id: String(name), label: name })),
+    title: 'Пригласить в руму (только онлайн)',
+    items: onlineFriends.map((name) => ({ id: String(name), label: `${name} • в сети` })),
     payload: {}
   })
 }
@@ -5810,14 +7923,14 @@ function showOnboardingIfNeeded() {
   modal.innerHTML = `
     <div class="flow-modal-backdrop" onclick="finishOnboarding()"></div>
     <div class="flow-modal-card glass-card onboarding-card">
-      <div class="onboarding-badge">Flow старт</div>
-      <h3>Добро пожаловать в Flow</h3>
+      <div class="onboarding-badge">Nexory старт</div>
+      <h3>Добро пожаловать в Nexory</h3>
       <p>Пару важных вещей, чтобы у тебя и друзей всё работало без ручной настройки.</p>
       <div class="onboarding-grid">
         <div class="onboarding-item"><strong>Аккаунт</strong><span>Логин и пароль сохраняют профиль на сервере, поэтому очистка кэша больше не убивает аккаунт.</span></div>
         <div class="onboarding-item"><strong>Сервер</strong><span>Адрес уже стоит по умолчанию. Его можно поменять в Настройки → Интеграции.</span></div>
         <div class="onboarding-item"><strong>Комнаты</strong><span>Создавай руму, кидай invite другу и управляй очередью вместе.</span></div>
-        <div class="onboarding-item"><strong>VK-импорт</strong><span>Flow сервер читает плейлист VK, а приложение ищет эти треки в твоих источниках.</span></div>
+        <div class="onboarding-item"><strong>VK-импорт</strong><span>Сервер Nexory читает плейлист VK, а приложение ищет эти треки в твоих источниках.</span></div>
       </div>
       <div class="onboarding-actions">
         <button class="btn-small" onclick="openSettingsFromOnboarding()">Открыть настройки</button>
@@ -5850,7 +7963,7 @@ function ensureSocialUI() {
   box.style.padding = '14px'
   box.innerHTML = `
     <div class="social-head">
-      <strong>Flow Social (P2P)</strong>
+      <strong>Nexory Social (Cloud)</strong>
       <span id="social-status" class="social-status">offline</span>
     </div>
     <div class="social-add-box">
@@ -5905,14 +8018,16 @@ function ensureRoomsUI() {
       <div style="margin-top:8px"><button class="btn-small" onclick="openRoomOwnTracksPicker()">Свои треки</button></div>
       <div class="rooms-wave-embedded">
         <div class="my-wave rooms-wave-my-wave">
-          <div class="my-wave-hero">
-            <div class="my-wave-badge">Моя волна</div>
-            <h3>Волна для комнаты</h3>
-            <p id="rooms-wave-hint">Выбери режим и запусти волну для общей очереди</p>
-            <div class="my-wave-actions">
-              <button class="my-wave-start" onclick="startMyWave()">Запустить волну</button>
-              <div class="my-wave-modes" id="rooms-wave-modes"></div>
+          <div class="my-wave-hero my-wave-hero--compact-title my-wave-hero--no-hint">
+            <div class="my-wave-hero-top">
+              <div class="my-wave-hero-copy">
+                <p id="rooms-wave-hint" class="hidden" aria-hidden="true"></p>
+              </div>
+              <div class="my-wave-hero-trailing">
+                <div id="rooms-yandex-wave-mood-dock" class="yandex-wave-mood-dock hidden" aria-label="Настроение волны Яндекса"></div>
+              </div>
             </div>
+            <div id="rooms-wave-modes" class="my-wave-modes hidden" aria-hidden="true" style="display:none"></div>
           </div>
           <div class="my-wave-list" id="rooms-wave-list"></div>
         </div>
@@ -5968,20 +8083,137 @@ async function renderFriends() {
   }
   el.innerHTML = `
     <div class="social-friends-section-title">В сети</div>
-    <div class="social-friends-grid">${online.length ? online.map((item) => fmtFriendCard(item, true)).join('') : '<div class="flow-empty-state compact"><strong>Никого онлайн</strong><span>Flow покажет друга сразу, как он появится в сети.</span></div>'}</div>
+    <div class="social-friends-grid">${online.length ? online.map((item) => fmtFriendCard(item, true)).join('') : '<div class="flow-empty-state compact"><strong>Никого онлайн</strong><span>Nexory покажет друга сразу, как он появится в сети.</span></div>'}</div>
     <div class="social-friends-section-title">Не в сети</div>
     <div class="social-friends-grid">${offline.length ? offline.map((item) => fmtFriendCard(item, false)).join('') : '<div class="flow-empty-state compact"><strong>Пусто</strong><span>Все друзья сейчас онлайн.</span></div>'}</div>
   `
 }
 
+let _socialLastOnlineAt = 0
+/** Время успешного auth_ok по WS (соц-слой). */
+let _lastWsAuthOkAt = 0
+/** initPeerSocial → ready (профиль поднят). */
+let _peerSocialReadyAt = 0
+
 function setSocialStatus(text) {
   const el = document.getElementById('social-status')
-  if (el) el.textContent = text
+  if (!el) return
+  const raw = String(text || '').trim().toLowerCase()
+  let state = 'degraded'
+  let label = String(text || 'degraded')
+  const now = Date.now()
+  if (raw.startsWith('online')) {
+    state = 'online'
+    label = 'online'
+    _socialLastOnlineAt = now
+  } else if (raw.startsWith('connecting')) {
+    if (_socialLastOnlineAt && (now - _socialLastOnlineAt) < 20000) {
+      state = 'online'
+      label = 'online'
+    } else {
+      state = 'connecting'
+      label = 'connecting'
+    }
+  } else if (raw.startsWith('degraded')) {
+    state = 'degraded'
+    label = 'degraded'
+  } else if (raw.startsWith('error')) {
+    state = 'degraded'
+    label = `degraded (${String(text || '').replace(/^error:\s*/i, '')})`
+  }
+  el.textContent = label
+  el.classList.remove('social-status--online', 'social-status--connecting', 'social-status--degraded')
+  el.classList.add(`social-status--${state}`)
 }
 
 function setRoomStatus(text) {
   const el = document.getElementById('room-status')
   if (el) el.textContent = text
+}
+
+let _appUpdateState = {
+  available: false,
+  latestVersion: '',
+  downloadedPath: '',
+  checking: false,
+  downloading: false,
+}
+
+function setAppUpdateStatus(text, mode = 'neutral') {
+  const el = document.getElementById('app-update-status')
+  if (!el) return
+  el.textContent = String(text || '')
+  el.classList.remove('app-update-status--checking', 'app-update-status--ready', 'app-update-status--error')
+  if (mode === 'checking') el.classList.add('app-update-status--checking')
+  if (mode === 'ready') el.classList.add('app-update-status--ready')
+  if (mode === 'error') el.classList.add('app-update-status--error')
+}
+
+function updateAppUpdaterUiState() {
+  const downloadBtn = document.getElementById('app-update-download-btn')
+  const installBtn = document.getElementById('app-update-install-btn')
+  if (downloadBtn) {
+    downloadBtn.disabled = !_appUpdateState.available || _appUpdateState.downloading
+    downloadBtn.textContent = _appUpdateState.downloading ? 'Скачиваю...' : 'Скачать'
+  }
+  if (installBtn) {
+    installBtn.disabled = !_appUpdateState.downloadedPath
+  }
+}
+
+async function checkAppUpdatesNow() {
+  if (!window.api?.appUpdateCheck || _appUpdateState.checking) return
+  _appUpdateState.checking = true
+  setAppUpdateStatus('Проверяю stable-канал...', 'checking')
+  updateAppUpdaterUiState()
+  try {
+    const result = await window.api.appUpdateCheck()
+    if (!result?.ok) throw new Error(result?.error || 'update check failed')
+    _appUpdateState.available = Boolean(result.available)
+    _appUpdateState.latestVersion = String(result.latestVersion || '')
+    _appUpdateState.downloadedPath = ''
+    if (_appUpdateState.available) {
+      setAppUpdateStatus(`Доступна версия ${_appUpdateState.latestVersion}`, 'ready')
+      showToast(`Доступно обновление ${_appUpdateState.latestVersion}`)
+    } else {
+      setAppUpdateStatus(`У вас актуальная версия (${result.currentVersion || 'unknown'})`)
+    }
+  } catch (e) {
+    setAppUpdateStatus(`Ошибка проверки: ${sanitizeDisplayText(e?.message || String(e))}`, 'error')
+  } finally {
+    _appUpdateState.checking = false
+    updateAppUpdaterUiState()
+  }
+}
+
+async function downloadAppUpdateNow() {
+  if (!window.api?.appUpdateDownload || !_appUpdateState.available || _appUpdateState.downloading) return
+  _appUpdateState.downloading = true
+  setAppUpdateStatus(`Скачиваю ${_appUpdateState.latestVersion || 'обновление'}...`, 'checking')
+  updateAppUpdaterUiState()
+  try {
+    const result = await window.api.appUpdateDownload()
+    if (!result?.ok || !result?.downloadedPath) throw new Error(result?.error || 'download failed')
+    _appUpdateState.downloadedPath = String(result.downloadedPath || '')
+    setAppUpdateStatus(`Готово: ${result.latestVersion || _appUpdateState.latestVersion}`, 'ready')
+    showToast('Обновление скачано. Нажми "Установить и перезапустить"')
+  } catch (e) {
+    setAppUpdateStatus(`Ошибка скачивания: ${sanitizeDisplayText(e?.message || String(e))}`, 'error')
+  } finally {
+    _appUpdateState.downloading = false
+    updateAppUpdaterUiState()
+  }
+}
+
+async function installAppUpdateNow() {
+  if (!window.api?.appUpdateInstall || !_appUpdateState.downloadedPath) return
+  setAppUpdateStatus('Запускаю установщик и перезапуск...', 'checking')
+  try {
+    const result = await window.api.appUpdateInstall(_appUpdateState.downloadedPath)
+    if (!result?.ok) throw new Error(result?.error || 'install failed')
+  } catch (e) {
+    setAppUpdateStatus(`Ошибка установки: ${sanitizeDisplayText(e?.message || String(e))}`, 'error')
+  }
 }
 
 function getLastFmPayload() {
@@ -6007,28 +8239,21 @@ function syncIntegrationsUI() {
   if (k) k.value = s.lastfmApiKey || ''
   if (ss) ss.value = s.lastfmSharedSecret || ''
   if (sk) sk.value = s.lastfmSessionKey || ''
-  if (fsb) fsb.value = String(s.flowSocialApiBase || '').trim().replace(/\/$/, '')
-  if (fss) fss.value = String(s.flowSocialApiSecret || '').trim()
+  if (fsb) {
+    fsb.value = String(window.FlowSocialBackend?.getConfig?.().base || FLOW_SOCIAL_DEFAULT_API_BASE).trim().replace(/\/$/, '')
+    fsb.disabled = true
+    fsb.title = 'В этой сборке значение фиксированное'
+  }
+  if (fss) {
+    fss.value = '********'
+    fss.disabled = true
+    fss.title = 'В этой сборке значение фиксированное'
+  }
+  updateAppUpdaterUiState()
 }
 
 function saveFlowSocialBackendSettings() {
-  const elB = document.getElementById('flow-social-api-base')
-  const elS = document.getElementById('flow-social-api-secret')
-  const base = String(elB?.value || '').trim().replace(/\/$/, '')
-  const secret = String(elS?.value || '').trim()
-  saveSettingsRaw({ flowSocialApiBase: base, flowSocialApiSecret: secret })
-  try {
-    localStorage.setItem('flow_social_api_base', base)
-    localStorage.setItem('flow_social_api_secret', secret)
-  } catch (_) {}
-  try {
-    stopProfilesRealtimeSync()
-    stopRoomServerSync()
-    window.FlowSocialBackend?.invalidate?.()
-    if (_profile?.username) initPeerSocial()
-    if (_roomState?.roomId) startRoomServerSync()
-  } catch (_) {}
-  showToast('Социальный сервер сохранён')
+  showToast('В этой версии социальный backend зафиксирован и не требует ручного ввода')
 }
 
 async function checkFlowSocialBackendStatus() {
@@ -6040,15 +8265,11 @@ async function checkFlowSocialBackendStatus() {
     else if (ok === false) statusEl.style.color = '#ff9b9b'
     else statusEl.style.color = ''
   }
-  const base = String(document.getElementById('flow-social-api-base')?.value || '').trim().replace(/\/$/, '')
-  const secret = String(document.getElementById('flow-social-api-secret')?.value || '').trim()
-  saveSettingsRaw({ flowSocialApiBase: base, flowSocialApiSecret: secret })
-  try {
-    localStorage.setItem('flow_social_api_base', base)
-    localStorage.setItem('flow_social_api_secret', secret)
-  } catch (_) {}
+  const cfg = window.FlowSocialBackend?.getConfig?.() || {}
+  const base = String(cfg.base || FLOW_SOCIAL_DEFAULT_API_BASE || '').trim().replace(/\/$/, '')
+  const secret = String(cfg.secret || FLOW_SOCIAL_DEFAULT_API_SECRET || '').trim()
   if (!base || !secret) {
-    setStatus('Соц-API: укажи URL и секрет', false)
+    setStatus('Соц-API: конфиг отсутствует', false)
     return
   }
   setStatus('Соц-API: проверяю…')
@@ -6074,7 +8295,7 @@ function saveProxySettings() {
   const proxyBaseUrl = normalizeFlowServerUrl(input?.value || FLOW_SERVER_DEFAULT_URL)
   saveSettingsRaw({ proxyBaseUrl })
   if (input) input.value = proxyBaseUrl
-  showToast('Flow сервер сохранён')
+  showToast('Сервер Nexory сохранён')
   checkFlowServerStatus().catch(() => {})
 }
 
@@ -6198,7 +8419,7 @@ async function updateDiscordPresence(track, roomInfo = null) {
     details: `Listening: ${track.title || 'Unknown'}`,
     state: `${track.artist || '—'}${roomInfo?.roomId ? ` • room ${roomInfo.roomId}` : ''}`,
     largeImageKey: 'flow',
-    largeImageText: 'Flow',
+    largeImageText: 'Nexory',
     smallImageKey: 'music',
     smallImageText: track.source || 'audio',
     buttons,
@@ -6235,10 +8456,33 @@ function initPeerSocial() {
   if (!_profile?.username || !peerSocial.FlowPeerSocial) return
   startProfilesRealtimeSync()
   if (_socialPeer) _socialPeer.destroy()
+  _lastWsAuthOkAt = 0
+  _peerSocialReadyAt = 0
   _socialPeer = new peerSocial.FlowPeerSocial(_profile.username, {
     maxPeers: 3,
     onStatus: (evt) => {
-      if (evt.type === 'ready') setSocialStatus(`online: ${evt.id}`)
+      if (evt.type === 'ready') {
+        _peerSocialReadyAt = Date.now()
+        setSocialStatus(`online: ${evt.id}`)
+      }
+      if (evt.type === 'ws-state') {
+        const now = Date.now()
+        if (evt.state === 'online') {
+          _lastWsAuthOkAt = now
+          setSocialStatus('online')
+        } else if (evt.state === 'connecting') {
+          const recentWs = _lastWsAuthOkAt && now - _lastWsAuthOkAt < 45000
+          const bootGrace = _peerSocialReadyAt && !_lastWsAuthOkAt && now - _peerSocialReadyAt < 28000
+          if (recentWs || bootGrace) setSocialStatus('online')
+          else if (!_lastWsAuthOkAt && _peerSocialReadyAt && now - _peerSocialReadyAt > 32000) {
+            setSocialStatus('degraded (нет ws)')
+          } else {
+            setSocialStatus(`connecting${evt.attempt ? ` (#${evt.attempt})` : ''}`)
+          }
+        } else {
+          setSocialStatus(`degraded${evt.reason ? ` (${evt.reason})` : ''}`)
+        }
+      }
       if (evt.type === 'peer-joined') {
         setRoomStatus(`Рума ${_roomState.roomId || '—'}: участников ${_socialPeer.peersCount()}/3`)
         const me = getPublicProfilePayload(_profile?.username)
@@ -6289,6 +8533,7 @@ function initPeerSocial() {
     },
     onMessage: (msg, fromPeerId) => {
       if (!msg || typeof msg !== 'object') return
+      if (fromPeerId || msg._peerId) setSocialStatus('online')
       if (msg.type === 'playback-sync' && msg.roomId === _roomState.roomId && !_roomState.host) {
         const expectedHostId = String(_roomState.hostPeerId || '').trim()
         const senderId = String(msg._peerId || fromPeerId || '').trim()
@@ -6299,6 +8544,14 @@ function initPeerSocial() {
         if (seq) _lastPlaybackSyncSeq = Math.max(_lastPlaybackSyncSeq || 0, seq)
         const ts = Number(msg.playbackTs || msg._ts || 0)
         if (ts) _lastAppliedServerPlaybackTs = Math.max(_lastAppliedServerPlaybackTs || 0, ts)
+        _lastGuestP2pPlaybackAt = Date.now()
+        if (Array.isArray(msg.sharedQueue)) {
+          sharedQueue = msg.sharedQueue.map((t) => sanitizeTrack(t)).filter(Boolean)
+          renderRoomQueue()
+        }
+        if (typeof msg.paused === 'boolean') {
+          if (msg.paused && !audio.paused) audio.pause()
+        }
         if (msg.track) {
           const incomingTrack = sanitizeTrack(msg.track)
           const incomingSig = normalizeTrackSignature(incomingTrack)
@@ -6315,21 +8568,17 @@ function initPeerSocial() {
           }
         }
         if (typeof msg.currentTime === 'number' && Number.isFinite(audio.duration) && audio.duration > 0) {
-          const latencySec = Math.max(0, (Date.now() - Number(msg._ts || Date.now())) / 1000)
+          const sentAt = Number(msg._ts || msg.playbackTs || Date.now())
+          const latencySec = Math.max(0, (Date.now() - sentAt) / 1000)
           const targetTime = Math.max(0, Math.min(msg.currentTime + latencySec, audio.duration))
           if (Math.abs(audio.currentTime - targetTime) > 0.12) audio.currentTime = targetTime
         }
         if (typeof msg.paused === 'boolean') {
-          if (msg.paused && !audio.paused) audio.pause()
-          if (!msg.paused && audio.paused) audio.play().catch(() => {})
+          if (!msg.paused && audio.paused && audio.src) audio.play().catch(() => {})
         }
         try {
           syncTransportPlayPauseUi()
         } catch (_) {}
-        if (Array.isArray(msg.sharedQueue)) {
-          sharedQueue = msg.sharedQueue.map((t) => sanitizeTrack(t)).filter(Boolean)
-          renderRoomQueue()
-        }
       }
       if (msg.type === 'presence-request' && fromPeerId && _socialPeer) {
         const payload = {
@@ -6398,22 +8647,28 @@ function initPeerSocial() {
         _peerProfiles.set(msg._peerId, profileWithPeer)
         cachePeerProfile(profileWithPeer, msg._peerId)
         _roomMembers.set(msg._peerId, profileWithPeer)
-        // Queue must be applied only from authoritative sync channels.
+        // Queue should be synchronized only via authoritative events:
+        // playback-sync / queue-update / room-queue-sync-state / server flow_rooms.
+        // Applying queue from profile packets causes occasional stale "flicker".
         if (_roomState.host) broadcastRoomMembersState()
         resetRoomHeartbeat()
         updateRoomUi()
       }
       if (msg.type === 'room-members-state' && msg.roomId === _roomState.roomId && Array.isArray(msg.members)) {
-        const map = new Map()
         msg.members.forEach((item) => {
           if (!item?.peerId || !item?.profile) return
-          map.set(item.peerId, item.profile)
-          cachePeerProfile(item.profile, item.peerId)
+          const merged = mergeProfileData(
+            _roomMembers.get(item.peerId) || _peerProfiles.get(item.peerId) || getCachedPeerProfile(item.profile.username) || {},
+            Object.assign({}, item.profile, { peerId: item.peerId }),
+            item.peerId
+          )
+          _roomMembers.set(item.peerId, merged)
+          cachePeerProfile(merged, item.peerId)
         })
-        if (_socialPeer?.peer?.id && !map.has(_socialPeer.peer.id) && _profile?.username) {
-          map.set(_socialPeer.peer.id, getPublicProfilePayload(_profile.username))
+        if (_socialPeer?.peer?.id && _profile?.username && !_roomMembers.has(_socialPeer.peer.id)) {
+          _roomMembers.set(_socialPeer.peer.id, getPublicProfilePayload(_profile.username))
         }
-        _roomMembers = map
+        renderRoomMembers()
         resetRoomHeartbeat()
         updateRoomUi()
       }
@@ -6565,40 +8820,45 @@ async function respondFriendRequest(fromUsername, accept) {
   pollFriendsPresence().catch(() => {})
 }
 
-function createRoom() {
+async function createRoom() {
   if (!_socialPeer) return
   const r = _socialPeer.createRoom()
   if (!r?.ok) return showToast(r?.error || 'Ошибка создания', true)
+  stopCurrentPlaybackForRoomMode()
   _roomState = { roomId: r.roomId, host: true, hostPeerId: _socialPeer?.peer?.id || r.roomId }
   _roomMembers.clear()
   sharedQueue = []
   _lastPlaybackSyncSeq = 0
   _hostPlaybackSyncSeq = 0
+  _lastGuestP2pPlaybackAt = 0
   if (_socialPeer?.peer?.id) _roomMembers.set(_socialPeer.peer.id, getPublicProfilePayload(_profile?.username))
   setRoomStatus(`Рума ${r.roomId}: участников 1/3`)
   resetRoomHeartbeat()
+  await saveRoomStateToServer({ shared_queue: [], now_playing: null, playback_ts: Date.now() }).catch(() => {})
   startRoomServerSync()
-  saveRoomStateToServer({ shared_queue: [], now_playing: null, playback_ts: Date.now() }).catch(() => {})
   updateRoomUi()
   showToast('Рума создана')
 }
 
-function joinRoomById(forceRoomId = '') {
+async function joinRoomById(forceRoomId = '') {
   const input = document.getElementById('join-room-input')
   const roomId = resolveInviteToRoomId(forceRoomId || String(input?.value || '').trim())
   if (!_socialPeer || !roomId) return
   const r = _socialPeer.joinRoom(roomId)
   if (!r?.ok) return showToast(r?.error || 'Ошибка входа', true)
   _roomState = { roomId: r.roomId, host: false, hostPeerId: null }
+  // Вход в комнату переводит в отдельный комнатный режим, персональный плеер мгновенно останавливаем.
+  stopCurrentPlaybackForRoomMode()
   _roomMembers.clear()
   sharedQueue = []
   _lastPlaybackSyncSeq = 0
   _hostPlaybackSyncSeq = 0
+  _lastGuestP2pPlaybackAt = 0
   if (_socialPeer?.peer?.id) _roomMembers.set(_socialPeer.peer.id, getPublicProfilePayload(_profile?.username))
   setRoomStatus(`Подключение к руме ${r.roomId}...`)
   resetRoomHeartbeat()
-  startRoomServerSync()
-  loadRoomStateFromServer().catch(() => {})
+  startRoomServerSync({ skipInitialLoad: true })
+  await loadRoomStateFromServer(true).catch(() => {})
   updateRoomUi()
   showToast('Подключение к руме...')
 }
@@ -6611,6 +8871,7 @@ function leaveRoom() {
   const prevRoomId = _roomState?.roomId
   removeRoomMemberPresence(prevRoomId).catch(() => {})
   stopRoomServerSync()
+  stopCurrentPlaybackForRoomMode()
   if (!_socialPeer) return
   if (typeof _socialPeer.leaveRoom === 'function') _socialPeer.leaveRoom()
   _roomState = { roomId: null, host: false, hostPeerId: null }
@@ -6619,11 +8880,23 @@ function leaveRoom() {
   _lastPlaybackSyncSeq = 0
   _hostPlaybackSyncSeq = 0
   _lastAppliedServerPlaybackTs = 0
+  _lastGuestP2pPlaybackAt = 0
   if (_roomHeartbeatTimer) clearInterval(_roomHeartbeatTimer)
   _roomHeartbeatTimer = null
   setRoomStatus('Рума: не активна')
   updateRoomUi()
   showToast('Вы покинули руму')
+}
+
+function stopCurrentPlaybackForRoomMode() {
+  // Invalidate pending async play resolutions from previous (personal) context.
+  _playRequestSeq = Number(_playRequestSeq || 0) + 1
+  try { audio.pause() } catch (_) {}
+  try { audio.removeAttribute('src'); audio.load() } catch (_) {}
+  currentTrack = null
+  try { syncTransportPlayPauseUi() } catch (_) {}
+  try { renderRoomNowPlaying() } catch (_) {}
+  try { refreshNowPlayingTrackHighlight() } catch (_) {}
 }
 
 function copyInviteLink() {
@@ -6795,19 +9068,55 @@ function promptInviteJoin() {
   openInviteModal()
 }
 
+async function fetchServerFriendsPresence(username) {
+  if (!isFlowSocialReady() || !username) return null
+  try {
+    const rid = encodeURIComponent(String(username || '').trim().toLowerCase())
+    const rows = await window.FlowSocialBackend.request('GET', `/flow-api/v1/presence/friends/${rid}`)
+    if (!Array.isArray(rows)) return null
+    const map = new Map()
+    rows.forEach((row) => {
+      const uname = String(row?.username || '').trim().toLowerCase()
+      if (!uname) return
+      const seen = Date.parse(String(row?.last_seen || row?.lastSeen || ''))
+      const seenFresh = !Number.isNaN(seen) && (Date.now() - seen) < FRIEND_ONLINE_STALE_MS
+      const onlineRaw = row?.online === true || row?.online === 1 || String(row?.online || '') === '1'
+      map.set(uname, {
+        online: Boolean(onlineRaw && seenFresh),
+        roomId: row?.room_id ? String(row.room_id) : null,
+        peerId: row?.peer_id ? String(row.peer_id) : `flow-${uname}`,
+        updatedAt: Date.now(),
+      })
+    })
+    return map
+  } catch {
+    return null
+  }
+}
+
 async function pollFriendsPresence(force = false) {
   if (!_socialPeer || !_profile?.username || !peerSocial.getFriends) return
+  const serverPresence = await fetchServerFriendsPresence(_profile.username).catch(() => null)
   const friends = peerSocial.getFriends(_profile.username) || []
   const entries = await Promise.all(friends.map(async (friend) => {
     const uname = String(friend || '').trim().toLowerCase()
     const prev = _friendPresence.get(uname) || {}
+    const cloud = serverPresence?.get(uname) || null
     const freshOnline = !force && prev.online && (Date.now() - Number(prev.updatedAt || 0) < FRIEND_FRESH_ONLINE_MS)
-    const isOnline = freshOnline ? true : await _socialPeer.probeUser(uname, 900).catch(() => false)
+    const isOnline = cloud
+      ? Boolean(cloud.online)
+      : (freshOnline ? true : await _socialPeer.probeUser(uname, 900).catch(() => false))
     if (!isOnline) {
-      return [uname, { online: false, track: null, roomId: null, peerId: prev.peerId || null, updatedAt: Date.now() }]
+      return [uname, { online: false, track: null, roomId: cloud?.roomId || null, peerId: cloud?.peerId || prev.peerId || null, updatedAt: Date.now() }]
     }
-    let state = { online: true, track: prev.track || null, roomId: prev.roomId || `flow-${uname}`, peerId: prev.peerId || `flow-${uname}`, updatedAt: Date.now() }
-    const peerId = `flow-${uname}`
+    let state = {
+      online: true,
+      track: prev.track || null,
+      roomId: cloud?.roomId || prev.roomId || `flow-${uname}`,
+      peerId: cloud?.peerId || prev.peerId || `flow-${uname}`,
+      updatedAt: Date.now(),
+    }
+    const peerId = String(state.peerId || `flow-${uname}`)
     if (typeof _socialPeer.requestPeerData === 'function') {
       const response = await _socialPeer.requestPeerData(peerId, { type: 'presence-request' }, 1100).catch(() => null)
       if (response?.ok && response?.data?.type === 'presence-state') {
@@ -6865,11 +9174,12 @@ function broadcastPlaybackSync(force = false) {
   if (!force && now - _lastRoomSyncAt < 700) return
   _lastRoomSyncAt = now
   _hostPlaybackSyncSeq = Number(_hostPlaybackSyncSeq || 0) + 1
+  const syncTs = Date.now()
   _socialPeer.send({
     type: 'playback-sync',
     roomId: _roomState.roomId,
     track: currentTrack,
-    playbackTs: Date.now(),
+    playbackTs: syncTs,
     syncSeq: _hostPlaybackSyncSeq,
     currentTime: Number(audio.currentTime || 0),
     paused: Boolean(audio.paused),
@@ -6880,7 +9190,7 @@ function broadcastPlaybackSync(force = false) {
     now_playing: currentTrack,
     shared_queue: sharedQueue,
     playback_state: { paused: Boolean(audio.paused), currentTime: Number(audio.currentTime || 0) },
-    playback_ts: Date.now(),
+    playback_ts: syncTs,
   }).catch(() => {})
 }
 
@@ -6916,6 +9226,8 @@ function startApp() {
     switchTab('login')
     syncIntegrationsUI()
   }
+  checkAppUpdatesNow().catch(() => {})
+  try { renderYandexWaveMoodDock() } catch (_) {}
   updateRoomUi()
   if (!localStorage.getItem('flow_first_launch_done')) {
     saveVisual({
@@ -6938,6 +9250,8 @@ function startApp() {
   // Repair previously injected custom covers in collections on each launch.
   restoreSourceCoversInCollections()
   renderLiked(); renderPlaylists(); updateSourceBadge(); syncSearchSourcePills()
+  renderQueue()
+  renderMainHub()
   renderMyWave()
   initVisualSettings()
   syncPlaybackModeUI()
@@ -6953,14 +9267,18 @@ function applyUiTextOverrides() {
     const el = document.querySelector(selector)
     if (el) el.setAttribute(attr, value)
   }
-  const nav = document.querySelectorAll('.nav-item')
-  if (nav[0]?.querySelector('.nav-label')) nav[0].querySelector('.nav-label').textContent = 'Главная'
-  if (nav[1]?.querySelector('.nav-label')) nav[1].querySelector('.nav-label').textContent = 'Поиск'
-  if (nav[2]?.querySelector('.nav-label')) nav[2].querySelector('.nav-label').textContent = 'Библиотека'
-  if (nav[3]?.querySelector('.nav-label')) nav[3].querySelector('.nav-label').textContent = 'Любимые'
-  if (nav[4]?.querySelector('.nav-label')) nav[4].querySelector('.nav-label').textContent = 'Друзья'
-  if (nav[5]?.querySelector('.nav-label')) nav[5].querySelector('.nav-label').textContent = 'Комнаты'
-  if (nav[6]?.querySelector('.nav-label')) nav[6].querySelector('.nav-label').textContent = 'Настройки'
+  const setNavLabel = (pageId, value) => {
+    const el = document.querySelector(`.nav-item[data-nav-page="${pageId}"] .nav-label`)
+    if (el) el.textContent = value
+  }
+  setNavLabel('main', 'Главная')
+  setNavLabel('home', 'Медиа')
+  setNavLabel('search', 'Поиск')
+  setNavLabel('library', 'Библиотека')
+  setNavLabel('liked', 'Любимые')
+  setNavLabel('social', 'Друзья')
+  setNavLabel('rooms', 'Комнаты')
+  setNavLabel('settings', 'Настройки')
   const currentName = _profile?.username || 'слушатель'
   set('#welcome-text', `Привет, ${currentName}`)
   set('#user-name', currentName)
@@ -6976,20 +9294,22 @@ function applyUiTextOverrides() {
   setText('#page-library .content-header h2', 'Библиотека')
   setText('#page-liked .content-header h2', 'Любимые')
   setText('#page-profile .content-header h2', 'Профиль')
-  setText('#page-profile .content-sub', 'Твой Flow профиль')
+  setText('#page-profile .content-sub', 'Твой профиль Nexory')
   setText('#page-rooms .content-header h2', 'Комнаты')
   setText('#page-rooms .content-sub', 'Совместное прослушивание и общая очередь')
   setText('#page-search .content-header h2', 'Поиск')
   setText('#page-search .content-sub', 'Найди трек')
   setText('#page-library .content-sub', 'Твои плейлисты')
   setText('#page-liked .content-sub', 'Треки, которые ты лайкнул')
+  setText('#page-home .content-header h2', 'Медиа')
+  setText('#page-home .content-header .content-sub', 'Управляй текущим треком и очередью')
 
   const labels = Array.from(document.querySelectorAll('#settings-panel-appearance .vs-label, #settings-panel-playback .vs-label'))
   labels.forEach((el) => {
     const t = (el.textContent || '').trim()
     if (t.includes('Blur') && t.includes('фона')) el.innerHTML = 'Blur фона <span class="vs-val" id="vs-blur-val">40px</span>'
     if (t.includes('Яркость') || t.includes('PЏ')) el.innerHTML = 'Яркость фона <span class="vs-val" id="vs-bright-val">50%</span>'
-    if (t.includes('Прозрачн')) el.innerHTML = 'Прозрачность стекла <span class="vs-val" id="vs-glass-val">8%</span>'
+    if (t.includes('Прозрачн')) el.innerHTML = 'Прозрачность стекла <span class="vs-val" id="vs-glass-val">32%</span>'
     if (t.includes('панел')) el.innerHTML = 'Blur панелей <span class="vs-val" id="vs-panel-blur-val">30px</span>'
   })
 }
@@ -7014,7 +9334,8 @@ function setupFloatedMainContentResize() {
   const modeOk = () =>
     document.body.classList.contains('visual-floated') &&
     !document.body.classList.contains('visual-minimal') &&
-    !document.body.classList.contains('layout-top-nav')
+    typeof isSidebarDockedLeft === 'function' &&
+    isSidebarDockedLeft()
 
   /** @typedef {{ l: number, t: number, r: number, b: number }} Slack */
 
@@ -7384,7 +9705,8 @@ function setupFloatedMainPaneDrag() {
   const modeOkDrag = () =>
     document.body.classList.contains('visual-floated') &&
     !document.body.classList.contains('visual-minimal') &&
-    !document.body.classList.contains('layout-top-nav')
+    typeof isSidebarDockedLeft === 'function' &&
+    isSidebarDockedLeft()
 
   /** Высота sticky-shell = видимая область панели, чтобы рамки не «уплывали» при прокрутке контента. */
   function refreshFrameShellGeometry() {
@@ -7696,7 +10018,11 @@ function setupSidebarResize() {
     const usable = Math.max(0, r.width - pl - pr)
     const gap = getSidebarGapPx()
     /* «Минимал»: сдвиг только в пределах окна — не от ширины flex-контейнера (иначе панель «дрожит» при ресайзе). */
-    if (document.body.classList.contains('visual-floated') && !document.body.classList.contains('layout-top-nav')) {
+    if (
+      document.body.classList.contains('visual-floated') &&
+      typeof isSidebarDockedLeft === 'function' &&
+      isSidebarDockedLeft()
+    ) {
       let insetStart = 0
       let insetEnd = 0
       let paneStack = 300
@@ -7746,7 +10072,7 @@ function setupSidebarResize() {
 
   const sidebarWidthEffectivePx = () => {
     try {
-      if (!document.body.classList.contains('layout-top-nav')) {
+      if (typeof isSidebarHorizontalDock === 'function' && !isSidebarHorizontalDock()) {
         const bw = sidebar.getBoundingClientRect().width
         if (Number.isFinite(bw) && bw >= 48) return Math.round(bw)
       }
@@ -7836,7 +10162,7 @@ function setupSidebarResize() {
   let cornerAnchor = null
 
   const winPointerMove = (e) => {
-    if (!dragging || document.body.classList.contains('layout-top-nav')) return
+    if (!dragging || (typeof isSidebarHorizontalDock === 'function' && isSidebarHorizontalDock())) return
     if (dragEdge === 'left') applyLeftDrag(e.clientX)
     else applyRightDrag(e.clientX)
   }
@@ -7926,7 +10252,7 @@ function setupSidebarResize() {
 
   const startSidebarCornerDrag = (corner, e, capEl) => {
     if (!document.body.classList.contains('visual-floated')) return
-    if (document.body.classList.contains('layout-top-nav')) return
+    if (typeof isSidebarHorizontalDock === 'function' && isSidebarHorizontalDock()) return
     if (
       !document.body.classList.contains('flow-edit-enabled') ||
       !document.body.classList.contains('home-layout-edit')
@@ -7988,7 +10314,7 @@ function setupSidebarResize() {
   }
 
   const startEdgeDrag = (edge, e, capEl) => {
-    if (document.body.classList.contains('layout-top-nav')) return
+    if (typeof isSidebarHorizontalDock === 'function' && isSidebarHorizontalDock()) return
     if (!e.isPrimary) return
     e.preventDefault()
     e.stopPropagation()
@@ -8024,7 +10350,10 @@ function setupSidebarResize() {
   applySidebarPanelHeightFromStorage()
 
   const rebalanceSidebarAfterResize = () => {
-    const floated = document.body.classList.contains('visual-floated') && !document.body.classList.contains('layout-top-nav')
+    const floated =
+      document.body.classList.contains('visual-floated') &&
+      typeof isSidebarDockedLeft === 'function' &&
+      isSidebarDockedLeft()
     if (floated) {
       try {
         const raw = getComputedStyle(root).getPropertyValue('--sidebar-panel-height').trim()
@@ -8160,7 +10489,7 @@ function setupSidebarPanelEditDrag() {
     'pointerdown',
     (e) => {
       if (!document.body.classList.contains('visual-floated')) return
-      if (document.body.classList.contains('layout-top-nav')) return
+      if (typeof isSidebarHorizontalDock === 'function' && isSidebarHorizontalDock()) return
       if (!e.isPrimary || e.button !== 0) return
       const t = e.target
       if (!sidebar.contains(t)) return
@@ -8189,7 +10518,7 @@ function setupSidebarPanelEditDrag() {
 function debounceSidebarLayoutSync(fn, ms = 140) {
   let t = 0
   return () => {
-    if (document.body?.classList?.contains('layout-top-nav')) return
+    if (typeof isSidebarHorizontalDock === 'function' && isSidebarHorizontalDock()) return
     clearTimeout(t)
     t = setTimeout(fn, ms)
   }
@@ -8251,9 +10580,9 @@ function setupMainPaneShift() {
       let rawMin = winMin
       let rawMax = winMax
 
-      const topNav = document.body.classList.contains('layout-top-nav')
+      const barDock = typeof isSidebarHorizontalDock === 'function' && isSidebarHorizontalDock()
       /* «Минимал»: колонка контента не привязана к sb.right — лимиты сдвига только от окна. */
-      if (!topNav && !document.body.classList.contains('visual-floated')) {
+      if (!barDock && !document.body.classList.contains('visual-floated') && !document.body.classList.contains('layout-right-nav')) {
         const sidebar = document.getElementById('sidebar')
         let gapPx = 12
         try {
@@ -8327,56 +10656,7 @@ function setupMainPaneShift() {
 }
 
 function setupCardTilt() {
-  const selector = '.track-card, .playlist-card, .social-friend-card, .profile-card, .home-card'
-  let activeCard = null
-  let rafId = 0
-  let pendingEvt = null
-
-  const resetCard = (el) => {
-    if (!el) return
-    el.style.setProperty('--card-tilt-x', '0deg')
-    el.style.setProperty('--card-tilt-y', '0deg')
-    el.style.setProperty('--card-tilt-glow-x', '50%')
-    el.style.setProperty('--card-tilt-glow-y', '50%')
-    el.classList.remove('is-tilting')
-  }
-
-  const updateTilt = () => {
-    rafId = 0
-    const e = pendingEvt
-    const card = activeCard
-    if (!e || !card) return
-    const rect = card.getBoundingClientRect()
-    if (!rect.width || !rect.height) return
-    const px = (e.clientX - rect.left) / rect.width
-    const py = (e.clientY - rect.top) / rect.height
-    const rx = (0.5 - py) * 4.6
-    const ry = (px - 0.5) * 4.6
-    card.style.setProperty('--card-tilt-x', `${rx.toFixed(2)}deg`)
-    card.style.setProperty('--card-tilt-y', `${ry.toFixed(2)}deg`)
-    card.style.setProperty('--card-tilt-glow-x', `${Math.max(0, Math.min(100, px * 100)).toFixed(1)}%`)
-    card.style.setProperty('--card-tilt-glow-y', `${Math.max(0, Math.min(100, py * 100)).toFixed(1)}%`)
-    card.classList.add('is-tilting')
-  }
-
-  document.addEventListener('pointermove', (e) => {
-    const card = e.target?.closest?.(selector) || null
-    if (card !== activeCard) {
-      resetCard(activeCard)
-      activeCard = card
-    }
-    if (!activeCard) return
-    pendingEvt = e
-    if (!rafId) rafId = requestAnimationFrame(updateTilt)
-  }, { passive: true })
-
-  document.addEventListener('pointerleave', () => {
-    pendingEvt = null
-    if (rafId) cancelAnimationFrame(rafId)
-    rafId = 0
-    resetCard(activeCard)
-    activeCard = null
-  }, { passive: true })
+  /* 3D card tilt disabled: perspective + pointermove caused glitches on track rows. */
 }
 
 /** Только время и прогресс на клоне главной — вызывать из timeupdate (без обложки и без карточки профиля). */
@@ -9084,14 +11364,18 @@ function drawHomeVisualizerFrame() {
   }
   if (!ctx) return
   const v = getVisual()
-  const hw = Object.assign({ enabled: true, mode: 'bars' }, v.homeWidget || {})
+  const hw = Object.assign({ enabled: true, mode: 'bars', intensity: 100, smoothing: 72 }, v.homeWidget || {})
   if (!hw.enabled || hw.mode === 'image') return
   const w = canvas.width
   const h = canvas.height
   ctx.clearRect(0, 0, w, h)
   const canAnalyze = ensureAudioAnalyzer() && !audio.paused && !audio.ended
-  if (canAnalyze) _analyser.getByteFrequencyData(_freqData)
+  if (canAnalyze) {
+    try { _analyser.smoothingTimeConstant = Math.max(0.2, Math.min(0.95, Number(hw.smoothing || 72) / 100)) } catch (_) {}
+    _analyser.getByteFrequencyData(_freqData)
+  }
   const data = _freqData || new Uint8Array(128)
+  const intensityScale = Math.max(0.6, Math.min(1.8, Number(hw.intensity || 100) / 100))
   const baseColor = v.accent2 || '#9ca3af'
   ctx.strokeStyle = baseColor
   ctx.fillStyle = baseColor
@@ -9101,7 +11385,7 @@ function drawHomeVisualizerFrame() {
     const step = Math.max(1, Math.floor(data.length / 52))
     for (let i = 0; i < 52; i++) {
       const val = data[i * step] || 0
-      const y = h - (val / 255) * (h - 18) - 9
+      const y = h - (Math.min(255, val * intensityScale) / 255) * (h - 18) - 9
       const x = (i / 51) * w
       if (i === 0) ctx.moveTo(x, y)
       else ctx.lineTo(x, y)
@@ -9115,7 +11399,7 @@ function drawHomeVisualizerFrame() {
     const step = Math.max(1, Math.floor(data.length / cols))
     for (let i = 0; i < cols; i++) {
       const val = data[i * step] || 0
-      const dots = Math.max(2, Math.round((val / 255) * 8))
+      const dots = Math.max(2, Math.round((Math.min(255, val * intensityScale) / 255) * 8))
       const x = 10 + (i / cols) * (w - 20)
       for (let d = 0; d < dots; d++) {
         const y = h - 10 - d * 12
@@ -9131,7 +11415,7 @@ function drawHomeVisualizerFrame() {
   const bw = (w - 20) / bars
   for (let i = 0; i < bars; i++) {
     const val = data[i * step] || 0
-    const bh = 8 + (val / 255) * (h - 24)
+    const bh = 8 + (Math.min(255, val * intensityScale) / 255) * (h - 24)
     const x = 10 + i * bw
     const y = h - bh - 6
     ctx.fillRect(x, y, Math.max(2, bw - 2), bh)
@@ -9158,7 +11442,7 @@ function startHomeVisualizerLoop() {
       let shouldDraw = !skipViz
       if (shouldDraw) {
         const v = getVisual()
-        const hw = Object.assign({ enabled: true, mode: 'bars' }, v.homeWidget || {})
+        const hw = Object.assign({ enabled: true, mode: 'bars', intensity: 100, smoothing: 72 }, v.homeWidget || {})
         if (!hw.enabled || hw.mode === 'image') shouldDraw = false
         else {
           const now = performance.now()
@@ -9196,11 +11480,12 @@ function syncPlayerUIFromTrack() {
 }
 
 // в”Ђв”Ђв”Ђ NAVIGATION в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-let _activePageId = 'home'
+let _activePageId = 'main'
 let _deferredPageRenderRaf = 0
 
 function runDeferredPageRender(id) {
-  if (id === 'home') return renderMyWave()
+  if (id === 'main') return renderMainHub()
+  if (id === 'home') return renderQueue()
   if (id === 'liked') return renderLiked()
   if (id === 'library') return renderPlaylists()
   if (id === 'social') return renderFriends()
@@ -9233,9 +11518,12 @@ function openPage(id, opts = {}) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'))
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'))
   document.getElementById('page-'+id)?.classList.add('active')
-  const pages = ['home','search','library','liked','social','rooms','settings']
-  const idx = pages.indexOf(id)
-  if (idx >= 0) document.querySelectorAll('.nav-item')[idx]?.classList.add('active')
+  const navItem = document.querySelector(`.sidebar-nav .nav-item[data-nav-page="${id}"]`)
+  if (navItem) {
+    navItem.classList.add('active')
+    navItem.classList.add('flow-nav-item--pulse')
+    window.setTimeout(() => navItem.classList.remove('flow-nav-item--pulse'), 460)
+  }
   _activePageId = id
   try { document.body.setAttribute('data-active-page', id) } catch {}
   syncSearchBarCollapsedState()
@@ -9282,8 +11570,14 @@ async function playTrackObj(track, opts = {}) {
     enqueueSharedTrack(track)
     return
   }
+  if (_roomState?.roomId && _roomState?.host && !opts?.remoteSync && !opts?.fromSharedQueue && !opts?.allowRoomDirectPlay) {
+    enqueueSharedTrack(track)
+    showToast('Трек добавлен в очередь комнаты. Для запуска выбери трек в очереди.')
+    return
+  }
   const reqId = ++_playRequestSeq
   const isStale = () => reqId !== _playRequestSeq
+  if (!opts?._recoverPlayback) _flowYandexStreamRetryId = ''
   track = sanitizeTrack(track)
   if (opts?.remoteSync && _roomState?.roomId && !_roomState?.host) {
     track = Object.assign({}, track, { _flowSkipGlobalThemeFromTrack: true })
@@ -9353,10 +11647,12 @@ async function playTrackObj(track, opts = {}) {
 
   currentTrack = track
   const newTrackKey = `${track.source}:${track.id}`
-  const st = getListenStats()
-  if (st.lastTrackKey !== newTrackKey) saveListenStats({ totalTracks: Number(st.totalTracks || 0) + 1, lastTrackKey: newTrackKey })
-  pushListenHistory(track)
-  if (_activePageId === 'home') renderMyWave()
+  if (!opts._recoverPlayback) {
+    const st = getListenStats()
+    if (st.lastTrackKey !== newTrackKey) saveListenStats({ totalTracks: Number(st.totalTracks || 0) + 1, lastTrackKey: newTrackKey })
+    pushListenHistory(track)
+  }
+  if (_activePageId === 'main') renderMyWave()
   let streamUrl = track.url
   let streamEngine = null
   const nameEl = document.getElementById('player-name')
@@ -9598,6 +11894,34 @@ async function playTrackObj(track, opts = {}) {
     if (isStale()) throw new Error('stale playback request')
     setStage('Старт воспроизведения…')
     audio.src = url
+    const guestRoomBuffer =
+      Boolean(opts?.remoteSync) && Boolean(_roomState?.roomId) && !_roomState?.host
+    if (guestRoomBuffer) {
+      await new Promise((resolve) => {
+        let done = false
+        let t = null
+        const finish = () => {
+          if (done) return
+          done = true
+          if (t) clearTimeout(t)
+          try {
+            audio.removeEventListener('canplaythrough', finish)
+            audio.removeEventListener('canplay', onCan)
+          } catch (_) {}
+          resolve()
+        }
+        const onCan = () => {
+          if ((audio.readyState || 0) >= 3) finish()
+        }
+        if ((audio.readyState || 0) >= 4) {
+          finish()
+          return
+        }
+        t = setTimeout(finish, 14000)
+        audio.addEventListener('canplaythrough', finish, { once: true })
+        audio.addEventListener('canplay', onCan, { once: true })
+      })
+    }
     await audio.play()
     try {
       if (_audioCtx?.state === 'suspended') await _audioCtx.resume().catch(() => {})
@@ -9677,6 +12001,28 @@ async function playTrackObj(track, opts = {}) {
 
   if (nameEl) nameEl.textContent = track.title || 'Без названия'
   if (artistEl) artistEl.textContent = track.artist || '—'
+  syncInlineTrackSourcePill(track)
+  updateYandexWaveDislikeButtonsVisible()
+  renderYandexWaveMoodDock()
+  const yr = track?.yandexRotor
+  if (yr?.batchId && queueScope === 'myWave' && getMyWaveSource() === 'yandex' && track?.id) {
+    const tid = String(track.id)
+    if (_yandexRotorTrackStartedForId !== tid) {
+      _yandexRotorTrackStartedForId = tid
+      const tok = String(getSettings()?.yandexToken || '').trim()
+      if (tok && window.api?.yandexRotorFeedback) {
+        void window.api.yandexRotorFeedback({
+          token: tok,
+          station: yr.station || 'user:onyourwave',
+          type: 'trackStarted',
+          trackId: tid,
+          batchId: yr.batchId,
+        })
+      }
+    }
+  } else {
+    _yandexRotorTrackStartedForId = null
+  }
   const cover = document.getElementById('player-cover')
   const effectiveCover = getEffectiveCoverUrl(track)
   if (playBtn) playBtn.innerHTML = ICONS.pause
@@ -9711,8 +12057,27 @@ async function playTrackObj(track, opts = {}) {
   _currentTrackStartedAt = Math.floor(Date.now() / 1000)
   pushLastFmNowPlaying(track)
   updateDiscordPresence(track, _roomState)
-  broadcastPlaybackSync(true)
+  if (_roomState?.roomId && _roomState?.host) {
+    const onceRoomHostSync = () => {
+      try {
+        audio.removeEventListener('playing', onceRoomHostSync)
+        audio.removeEventListener('canplaythrough', onceRoomHostSync)
+      } catch (_) {}
+      broadcastPlaybackSync(true)
+    }
+    if ((audio.readyState || 0) >= 4) broadcastPlaybackSync(true)
+    else {
+      audio.addEventListener('playing', onceRoomHostSync, { once: true })
+      audio.addEventListener('canplaythrough', onceRoomHostSync, { once: true })
+    }
+  } else {
+    broadcastPlaybackSync(true)
+  }
+  try {
+    compactYandexMyWaveQueueIfNeeded()
+  } catch (_) {}
   syncHomeCloneUI()
+  renderQueue()
   try {
     refreshNowPlayingTrackHighlight()
   } catch (_) {}
@@ -9803,12 +12168,59 @@ function prewarmNextQueueTrack() {
   } catch {}
 }
 
+async function toggleMyWaveOrbPlayback() {
+  const isRoomParticipant = Boolean(_roomState?.roomId)
+  const isRoomGuest = isRoomParticipant && !_roomState?.host
+  if (isRoomGuest) {
+    showHostOnlyToast()
+    return
+  }
+  if (queueScope === 'myWave' && currentTrack) {
+    if (!audio.paused) {
+      audio.pause()
+    } else if (audio.src) {
+      audio.play().catch(() => {})
+      if (_audioCtx?.state === 'suspended') _audioCtx.resume().catch(() => {})
+    } else {
+      await startMyWave()
+    }
+    syncTransportPlayPauseUi()
+    return
+  }
+  await startMyWave()
+}
+window.toggleMyWaveOrbPlayback = toggleMyWaveOrbPlayback
+
+function syncMyWaveOrbPlayUi() {
+  const playing = Boolean(audio && !audio.paused && !audio.ended && queueScope === 'myWave')
+  const inner = playing
+    ? `<svg class="my-wave-orb-play-svg" viewBox="0 0 24 24" aria-hidden="true">${PM_PAUSE_INNER}</svg>`
+    : `<svg class="my-wave-orb-play-svg" viewBox="0 0 24 24" aria-hidden="true">${PM_PLAY_INNER}</svg>`
+  document.querySelectorAll('.my-wave-glass-btn--play').forEach((btn) => {
+    btn.innerHTML = inner
+    btn.setAttribute('aria-label', playing ? 'Пауза' : 'Запустить волну')
+  })
+}
+
 function syncTransportPlayPauseUi() {
   const playing = Boolean(audio && !audio.paused && !audio.ended)
+  const iconInner = playing ? ICONS.pause : ICONS.play
   const playBtn = document.getElementById('play-btn')
   const icon = document.getElementById('pm-play-icon')
-  if (playBtn) playBtn.innerHTML = playing ? ICONS.pause : ICONS.play
+  const homePlay = document.getElementById('home-play-btn')
+  if (playBtn) playBtn.innerHTML = iconInner
   if (icon) icon.innerHTML = playing ? PM_PAUSE_INNER : PM_PLAY_INNER
+  if (homePlay) {
+    homePlay.innerHTML = iconInner
+    homePlay.setAttribute('aria-label', playing ? 'Пауза' : 'Воспроизвести')
+  }
+  document.querySelectorAll('.home-clone-controls .play-btn').forEach((btn) => {
+    btn.innerHTML = iconInner
+    btn.setAttribute('aria-label', playing ? 'Пауза' : 'Воспроизвести')
+  })
+  try {
+    syncMyWaveOrbPlayUi()
+  } catch (_) {}
 }
 
 function togglePlay() {
@@ -9881,9 +12293,14 @@ function prevTrack() {
     return
   }
   if (!queue.length) return
+  if (_roomState?.roomId && _roomState?.host) {
+    audio.currentTime = 0
+    broadcastPlaybackSync(true)
+    return
+  }
   const resetThreshold = Math.max(1, Math.min(10, (Number(audio.duration) || 0) / 3 || 10))
   if (audio.currentTime > resetThreshold) { audio.currentTime = 0; return }
-  const allowShuffle = playbackMode.shuffle && queueScope === 'liked'
+  const allowShuffle = playbackMode.shuffle && (queueScope === 'liked' || queueScope === 'playlist')
   if (allowShuffle) {
     queueIndex = pickRandomQueueIndex()
     if (queueIndex >= 0) playTrackObj(queue[queueIndex])
@@ -9905,7 +12322,44 @@ function nextTrack(autoEnded = false) {
     showHostOnlyToast()
     return
   }
+  if (_roomState?.roomId && _roomState?.host) {
+    if (sharedQueue.length) {
+      const nextRoomTrack = sharedQueue.shift()
+      renderRoomQueue()
+      broadcastQueueUpdate()
+      saveRoomStateToServer({ shared_queue: sharedQueue, playback_ts: Date.now() }).catch(() => {})
+      if (nextRoomTrack) {
+        playTrackObj(nextRoomTrack, { fromSharedQueue: true }).catch(() => {})
+      }
+    } else if (!autoEnded) {
+      showToast('Очередь комнаты пуста')
+    }
+    return
+  }
   if (!queue.length) return
+  const ymRotorLeaving =
+    queueScope === 'myWave' &&
+    getMyWaveSource() === 'yandex' &&
+    currentTrack &&
+    String(currentTrack.source || '').toLowerCase() === 'yandex' &&
+    currentTrack.yandexRotor?.batchId
+  if (ymRotorLeaving) {
+    const tok = String(getSettings()?.yandexToken || '').trim()
+    if (tok && window.api?.yandexRotorFeedback) {
+      const typ = autoEnded ? 'trackFinished' : 'skip'
+      const dur = Number(audio?.duration || 0) || 0
+      const ct = Number(audio?.currentTime || 0) || 0
+      const totalPlayedSeconds = typ === 'trackFinished' ? (dur > 1 ? dur : ct) : ct
+      void window.api.yandexRotorFeedback({
+        token: tok,
+        station: currentTrack.yandexRotor.station || 'user:onyourwave',
+        type: typ,
+        trackId: currentTrack.id,
+        batchId: currentTrack.yandexRotor.batchId,
+        totalPlayedSeconds,
+      })
+    }
+  }
   if (
     queueScope === 'myWave' &&
     !autoEnded &&
@@ -9920,7 +12374,7 @@ function nextTrack(autoEnded = false) {
     audio.play().catch(() => {})
     return
   }
-  const allowShuffle = playbackMode.shuffle && queueScope === 'liked'
+  const allowShuffle = playbackMode.shuffle && (queueScope === 'liked' || queueScope === 'playlist')
   if (allowShuffle) {
     queueIndex = pickRandomQueueIndex()
     if (queueIndex >= 0) playTrackObj(queue[queueIndex])
@@ -9944,6 +12398,67 @@ function nextTrack(autoEnded = false) {
   }
   const playBtn = document.getElementById('play-btn')
   if (playBtn) playBtn.innerHTML = ICONS.play
+}
+
+let _flowAudioErrCooldownAt = 0
+let _flowYandexStreamRetryId = ''
+
+function flowAdvanceAfterStreamFailure() {
+  _flowYandexStreamRetryId = ''
+  try {
+    if (queueIndex < queue.length - 1) {
+      queueIndex++
+      playTrackObj(queue[queueIndex]).catch(() => {})
+      return
+    }
+    if (queueScope === 'myWave') {
+      void maybePreloadMyWave(true)
+    }
+    if (playbackMode.repeat === 'all' && queue.length) {
+      queueIndex = 0
+      playTrackObj(queue[0]).catch(() => {})
+    }
+  } catch (_) {}
+}
+
+window.__flowPlayerAudioError = function __flowPlayerAudioError(el) {
+  console.error('AUDIO ERROR', {
+    code: el?.error?.code,
+    message: el?.error?.message || null,
+    src: el?.currentSrc || el?.src || null,
+  })
+  const now = Date.now()
+  if (now - _flowAudioErrCooldownAt < 650) return
+  _flowAudioErrCooldownAt = now
+  try {
+    const code = el?.error?.code ? `код ${el.error.code}` : 'код неизвестен'
+    showToast(`Сбой потока (${code}), пробуем восстановить…`, true)
+  } catch (_) {}
+  const t = sanitizeTrack(currentTrack || null)
+  const src = String(t?.source || '').toLowerCase()
+  const tid = String(t?.id || '').trim()
+  if (src === 'yandex' && tid && window.api?.yandexStream && _flowYandexStreamRetryId !== tid) {
+    _flowYandexStreamRetryId = tid
+    const tok = String(getSettings()?.yandexToken || '').trim()
+    if (tok) {
+      void window.api.yandexStream(tid, tok).then((res) => {
+        if (res?.ok && res?.url) {
+          const nt = Object.assign({}, t, { url: res.url })
+          currentTrack = nt
+          if (queue.length && queueIndex >= 0 && queue[queueIndex]) {
+            const qi = sanitizeTrack(queue[queueIndex])
+            if (String(qi.source || '').toLowerCase() === 'yandex' && String(qi.id || '').trim() === tid) {
+              queue[queueIndex] = nt
+            }
+          }
+          return playTrackObj(nt, { _recoverPlayback: true }).catch(() => flowAdvanceAfterStreamFailure())
+        }
+        flowAdvanceAfterStreamFailure()
+      }).catch(() => flowAdvanceAfterStreamFailure())
+      return
+    }
+  }
+  flowAdvanceAfterStreamFailure()
 }
 
 audio.ontimeupdate = () => {
@@ -9996,13 +12511,34 @@ audio.ontimeupdate = () => {
 audio.onpause = () => {
   flushListenStatsPending(true)
   _listenTickAt = 0
+  if (_roomState?.roomId && _roomState?.host) {
+    _socialPeer?.send?.({
+      type: 'room-control-toggle',
+      roomId: _roomState.roomId,
+      paused: true,
+      currentTime: Number(audio.currentTime || 0),
+    })
+    broadcastPlaybackSync(true)
+  }
+}
+audio.onplay = () => {
+  if (_roomState?.roomId && _roomState?.host) {
+    _socialPeer?.send?.({
+      type: 'room-control-toggle',
+      roomId: _roomState.roomId,
+      paused: false,
+      currentTime: Number(audio.currentTime || 0),
+    })
+    broadcastPlaybackSync(true)
+  }
 }
 audio.onended = () => {
   flushListenStatsPending(true)
   stopLyricsSyncLoop()
   _listenTickAt = 0
-  const playBtn = document.getElementById('play-btn')
-  if (playBtn) playBtn.innerHTML = ICONS.play
+  try {
+    syncTransportPlayPauseUi()
+  } catch (_) {}
   if (currentTrack) scrobbleLastFm(currentTrack)
   if (isRoomClientRestricted()) return
   if (_roomState?.roomId && _roomState?.host && sharedQueue.length) {
@@ -10393,13 +12929,47 @@ function getLiked() { return JSON.parse(localStorage.getItem('flow_liked')) || [
 function isLiked(track) { return getLiked().some(t => t.id===track.id && t.source===track.source) }
 
 function likeTrack(track) {
+  if (!track) return
+  const wasLiked = isLiked(track)
   let liked = getLiked()
-  if (isLiked(track)) {
+  if (wasLiked) {
     liked = liked.filter((t) => !(t.id === track.id && t.source === track.source))
     showToast('РЈР±СЂР°РЅРѕ РёР· Р»СЋР±РёРјС‹С…')
+    try {
+      const tok = String(getSettings()?.yandexToken || '').trim()
+      if (String(track.source || '').toLowerCase() === 'yandex' && tok && window.api?.yandexTrackUnlike) {
+        void window.api.yandexTrackUnlike({ token: tok, trackId: String(track.id || '').trim() }).then((r) => {
+          if (!r?.ok) showToast('Яндекс: не удалось снять лайк', true)
+        })
+      }
+    } catch (_) {}
   } else {
     liked.push(track)
     showToast('Р”РѕР±Р°РІР»РµРЅРѕ РІ Р»СЋР±РёРјС‹Рµ в™Ґ')
+    try {
+      const tok = String(getSettings()?.yandexToken || '').trim()
+      if (String(track.source || '').toLowerCase() === 'yandex' && tok && window.api?.yandexTrackLike) {
+        void window.api.yandexTrackLike({ token: tok, trackId: String(track.id || '').trim() }).then((r) => {
+          if (!r?.ok) showToast('Яндекс: не удалось отправить лайк', true)
+        })
+      }
+      if (
+        queueScope === 'myWave' &&
+        getMyWaveSource() === 'yandex' &&
+        String(track.source || '').toLowerCase() === 'yandex' &&
+        track?.yandexRotor?.batchId &&
+        tok &&
+        window.api?.yandexRotorFeedback
+      ) {
+        void window.api.yandexRotorFeedback({
+          token: tok,
+          station: track.yandexRotor.station || 'user:onyourwave',
+          type: 'like',
+          trackId: String(track.id || '').trim(),
+          batchId: track.yandexRotor.batchId,
+        })
+      }
+    } catch (_) {}
   }
   localStorage.setItem('flow_liked', JSON.stringify(liked))
   syncLikeButtonsInVisibleLists()
@@ -10433,10 +13003,196 @@ function updatePlayerLikeBtn() {
   if (pmCoverBtn) { pmCoverBtn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; pmCoverBtn.classList.toggle('liked', liked) }
 }
 
+/** Склонение для «N трек/трека/треков» (рус.). */
+function ruTrackWordAfterCurrent(n) {
+  const a = Math.abs(Math.floor(Number(n) || 0)) % 100
+  const b = a % 10
+  if (a > 10 && a < 20) return 'треков'
+  if (b === 1) return 'трек'
+  if (b >= 2 && b <= 4) return 'трека'
+  return 'треков'
+}
+
+function renderQueue() {
+  const listEl = document.getElementById('home-up-next-list')
+  const metaEl = document.getElementById('home-up-next-meta')
+  const headlineEl = document.getElementById('home-up-next-headline')
+  if (!listEl) return
+
+  try {
+  const qlen = Array.isArray(queue) ? queue.length : 0
+  const after = Math.max(0, qlen - (Number(queueIndex) + 1))
+  const nextTracks = Array.isArray(queue) ? queue.slice(queueIndex + 1, queueIndex + 11) : []
+  const emptyListHtml = '<div class="empty-state compact"><p>Запусти трек, и тут появятся следующие позиции очереди</p></div>'
+
+  if (!qlen) {
+    if (headlineEl) headlineEl.textContent = 'Очередь пуста'
+    if (metaEl) metaEl.textContent = 'Очередь пока пуста'
+    listEl.innerHTML = emptyListHtml
+    return
+  }
+
+  if (after === 0) {
+    if (headlineEl) headlineEl.textContent = 'Сейчас последний в очереди'
+    if (metaEl) metaEl.textContent = 'Следующих треков: 0'
+    listEl.innerHTML =
+      '<div class="empty-state compact"><p>Дальше в очереди ничего нет — добавь треки или выбери другой плейлист</p></div>'
+    return
+  }
+
+  if (headlineEl) headlineEl.textContent = `${after} ${ruTrackWordAfterCurrent(after)} после текущего`
+  if (metaEl) metaEl.textContent = `Следующих треков: ${after}`
+
+  listEl.innerHTML = ''
+  const frag = document.createDocumentFragment()
+  nextTracks.forEach((track, pos) => {
+    const t = sanitizeTrack(track)
+    const row = document.createElement('button')
+    row.type = 'button'
+    row.className = 'home-up-next-item'
+    const cover = getListCoverUrl(t)
+    const fallbackBg = t.bg || 'linear-gradient(135deg,#7c3aed,#a855f7)'
+    const coverStyle = cover
+      ? `background-image:url('${escapeHtml(cover)}');background-color:#0e0e14;`
+      : `background:${fallbackBg};`
+    row.innerHTML = `
+      <span class="home-up-next-order">${queueIndex + pos + 2}</span>
+      <span class="home-up-next-cover" style="${coverStyle}"></span>
+      <span class="home-up-next-meta-wrap">
+        <strong>${escapeHtml(sanitizeDisplayText(t.title || 'Без названия'))}</strong>
+        <span>${escapeHtml(sanitizeDisplayText(t.artist || '—'))}</span>
+      </span>
+      <span class="home-up-next-src">›</span>
+    `
+    row.addEventListener('click', () => {
+      const idx = queueIndex + pos + 1
+      const nextTrack = queue[idx]
+      if (!nextTrack) return
+      queueIndex = idx
+      playTrackObj(nextTrack).catch(() => {})
+    })
+    frag.appendChild(row)
+  })
+  listEl.appendChild(frag)
+  } finally {
+    try {
+      if (typeof _playerModeActive !== 'undefined' && _playerModeActive && typeof syncPmQueuePreviews === 'function') {
+        syncPmQueuePreviews()
+      }
+    } catch (_) {}
+  }
+}
+
+function bindHorizontalStripDrag(el) {
+  if (!el || el.dataset.hDragReady === '1') return
+  el.dataset.hDragReady = '1'
+  let drag = null
+  const onMove = (ev) => {
+    if (!drag) return
+    const dx = ev.clientX - drag.x
+    if (!drag.moved && Math.abs(dx) > 4) drag.moved = true
+    if (!drag.moved) return
+    ev.preventDefault()
+    el.scrollLeft = drag.left - dx
+  }
+  const onUp = () => {
+    if (!drag) return
+    if (drag.moved) el.dataset.hDragSuppressClickUntil = String(Date.now() + 220)
+    drag = null
+    el.classList.remove('is-dragging')
+    document.removeEventListener('mousemove', onMove)
+    document.removeEventListener('mouseup', onUp)
+  }
+  el.addEventListener('mousedown', (ev) => {
+    if (ev.button !== 0) return
+    drag = { x: ev.clientX, left: el.scrollLeft, moved: false }
+    el.classList.add('is-dragging')
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  })
+  el.addEventListener(
+    'click',
+    (ev) => {
+      const until = Number(el.dataset.hDragSuppressClickUntil || 0)
+      if (until && Date.now() < until) {
+        ev.preventDefault()
+        ev.stopPropagation()
+      }
+    },
+    true,
+  )
+}
+
+function renderMainHub() {
+  renderMyWave()
+  renderMainQuickPlaylists()
+  renderMainQuickLiked()
+  bindHorizontalStripDrag(document.getElementById('main-quick-playlists'))
+  bindHorizontalStripDrag(document.getElementById('main-quick-liked'))
+}
+
+function renderMainQuickPlaylists() {
+  const root = document.getElementById('main-quick-playlists')
+  if (!root) return
+  const playlists = getPlaylists().map(normalizePlaylist)
+  if (!playlists.length) {
+    root.innerHTML = '<div class="empty-state compact"><p>Добавь несколько плейлистов для быстрого доступа</p></div>'
+    return
+  }
+  root.innerHTML = ''
+  const frag = document.createDocumentFragment()
+  playlists.forEach((pl, idx) => {
+    const card = document.createElement('button')
+    card.type = 'button'
+    card.className = 'main-quick-playlist'
+    const cover = sanitizeMediaByGifMode(pl.coverData || '', 'playlist')
+    card.innerHTML = `
+      <span class="main-quick-playlist-cover"${cover ? ` style="background-image:url('${escapeHtml(cover)}')"` : ''}>
+        ${cover ? '' : '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'}
+      </span>
+      <span class="main-quick-playlist-meta">
+        <strong>${escapeHtml(sanitizeDisplayText(pl.name || 'Плейлист'))}</strong>
+        <span>${pl.tracks.length} треков</span>
+      </span>
+    `
+    card.addEventListener('click', () => {
+      openPage('library')
+      openPlaylist(idx)
+    })
+    frag.appendChild(card)
+  })
+  root.appendChild(frag)
+}
+
+function renderMainQuickLiked() {
+  const root = document.getElementById('main-quick-liked')
+  if (!root) return
+  const liked = getLiked()
+  if (!liked.length) {
+    root.innerHTML = '<div class="empty-state compact"><p>Лайкни треки, чтобы они появились здесь</p></div>'
+    return
+  }
+  root.innerHTML = ''
+  liked.forEach((track, idx) => {
+    const row = makeTrackEl(track, false, false)
+    row.classList.add('main-quick-liked-item')
+    row.querySelectorAll('.track-like, .track-play').forEach((btn) => btn.remove())
+    row.addEventListener('click', (ev) => {
+      if (ev.target.closest('button')) return
+      queue = getLiked().slice()
+      queueIndex = idx
+      queueScope = 'liked'
+      playTrackObj(track).catch(() => {})
+    })
+    root.appendChild(row)
+  })
+}
+
 let _likedRenderToken = 0
 function renderLiked() {
   const token = ++_likedRenderToken
   const liked = getLiked()
+  renderMainQuickLiked()
   document.body.classList.toggle('flow-heavy-liked', liked.length >= 220)
   const container = document.getElementById('liked-list'); if (!container) return
   if (!liked.length) { container.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.35-9.5-8A5.5 5.5 0 0 1 12 5.1 5.5 5.5 0 0 1 21.5 13c-2.5 3.65-9.5 8-9.5 8Z"/></svg></div><p>Ты еще не лайкнул ни одного трека</p></div>`; return }
@@ -10943,7 +13699,7 @@ async function importPlaylistFromText(text, name = '') {
     showToast('Не нашёл строк с artist/title', true)
     return
   }
-  showToast(`Нашёл строк: ${tracks.length}. Запускаю поиск Flow...`)
+  showToast(`Нашёл строк: ${tracks.length}. Запускаю поиск Nexory...`)
   const stats = await processPlaylistImport(tracks, {
     name: name || 'VK Artist Title',
     service: 'text',
@@ -11075,6 +13831,7 @@ let _openPlaylistTrackRenderToken = 0
 function renderPlaylists() {
   const token = ++_playlistRenderToken
   const pls = getPlaylists().map(normalizePlaylist)
+  renderMainQuickPlaylists()
   const container = document.getElementById('playlists-list'); if (!container) return
   if (!pls.length) { container.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg></div><p>Нет плейлистов — создай первый!</p></div>`; return }
   container.innerHTML=''
@@ -11091,19 +13848,16 @@ function renderPlaylists() {
       const coverStyle = ''
       el.innerHTML=`
         <div class="playlist-icon" style="${coverStyle}" title="Плейлист">${playlistCover ? '' : '<svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'}</div>
-        <div class="playlist-info" onclick="openPlaylist(${currentIdx})" style="cursor:pointer">
+        <div class="playlist-info" style="cursor:pointer">
           <span class="playlist-name">${pl.name}</span>
           <span class="playlist-count">${pl.tracks.length} треков${pl.description ? ` • ${pl.description}` : ''}</span>
-        </div>
-        <div class="playlist-card-actions">
-          <button class="playlist-del" onclick="event.stopPropagation();editPlaylistMeta(${currentIdx})" title="Редактировать">✎</button>
-          <button class="playlist-del" onclick="event.stopPropagation();deletePlaylist(${currentIdx})">${ICONS.close}</button>
         </div>`
       if (playlistCover) {
         const icon = el.querySelector('.playlist-icon')
         observeLazyCoverBackground(icon, playlistCover, '', `playlist:${currentIdx}`)
       }
       el.addEventListener('click', () => openPlaylist(currentIdx))
+      el.addEventListener('contextmenu', (ev) => openPlaylistCardContextMenu(ev, currentIdx))
       fragment.appendChild(el)
     }
     container.appendChild(fragment)
@@ -11262,7 +14016,7 @@ function editPlaylistMeta(idx) {
 }
 
 // в”Ђв”Ђв”Ђ TRACK CARD в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-const SRC_LABELS = { soundcloud: 'SC', vk: 'VK', youtube: 'YT', spotify: 'SP', yandex: 'Ya' }
+const SRC_LABELS = { soundcloud: 'SC', vk: 'VK', youtube: 'YT', spotify: 'SP', yandex: 'Ян' }
 
 function makeTrackEl(track, showPlaylist=false, bindDefaultPlay=true) {
   track = sanitizeTrack(track)
@@ -11662,6 +14416,11 @@ async function loadLyrics(track) {
         div.onclick = () => {
           if (isRoomClientRestricted()) return showToast('Только хост управляет плеером', true)
           audio.currentTime = line.time
+          requestAnimationFrame(() => {
+            try {
+              div.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+            } catch (_) {}
+          })
         }
         target.appendChild(div)
       })
@@ -11779,7 +14538,13 @@ function syncLyrics(currentTime) {
     if (el && idxChanged) {
       const scrollBeh =
         cfg.playbackMode === 'karaoke' ? 'auto' : cfg.scrollMode === 'smooth' ? 'smooth' : 'auto'
-      el.scrollIntoView({ behavior: scrollBeh, block: 'center', inline: 'nearest' })
+      try {
+        el.scrollIntoView({ behavior: scrollBeh, block: 'center', inline: 'nearest' })
+      } catch (_) {
+        try {
+          el.scrollIntoView(true)
+        } catch (_) {}
+      }
     }
   }
 }
@@ -11850,8 +14615,11 @@ window.addEventListener('DOMContentLoaded', () => {
   )
   enableMojibakeAutoFix()
   startApp()
-  try { document.body.setAttribute('data-active-page', _activePageId || 'home') } catch {}
+  try { document.body.setAttribute('data-active-page', _activePageId || 'main') } catch {}
   applyUiTextOverrides()
+  syncTrayClosePreferenceToMain()
+  refreshLaunchAtLoginFromMain().catch(() => {})
+  syncPlaybackSystemToggles()
   refreshHomeDashboardLayoutAfterContentChange()
   setupHomeDashboardDragAndDrop()
   document.addEventListener('keydown', (e) => {
@@ -11955,8 +14723,8 @@ window.addEventListener('DOMContentLoaded', () => {
   if (window.api?.appVersion) {
     window.api.appVersion().then((r) => {
       if (!r?.ok || !r?.version) return
-      const logo = document.getElementById('titlebar-logo')
-      if (logo) logo.textContent = `Flow v${r.version}`
+      const verEl = document.getElementById('titlebar-version')
+      if (verEl) verEl.textContent = `\u00A0v${r.version}`
       const welcomeSub = document.querySelector('#page-home .content-sub')
       if (welcomeSub) welcomeSub.textContent = `Выбери источник и начни слушать • билд ${r.version}`
       showToast(`Запущен билд v${r.version}`)
@@ -11983,6 +14751,30 @@ window.addEventListener('DOMContentLoaded', () => {
   }
   syncIntegrationsUI()
   setupAppDragAndDrop()
+  ;(function setupFlowChromeMicroPulse() {
+    const pulse = (ev) => {
+      const el = ev.target?.closest?.(
+        'button, .player-like-btn, .ctrl-btn, .pm-btn, .pm-btn-side, .pm-cover-action-btn',
+      )
+      if (!el || el.disabled || el.getAttribute('aria-disabled') === 'true') return
+      el.classList.remove('flow-ui-pulse')
+      void el.offsetWidth
+      el.classList.add('flow-ui-pulse')
+      window.setTimeout(() => el.classList.remove('flow-ui-pulse'), 480)
+    }
+    document.getElementById('player-bar')?.addEventListener('click', pulse, true)
+    document.getElementById('player-mode')?.addEventListener('click', pulse, true)
+  })()
+  document.addEventListener(
+    'pointerdown',
+    (ev) => {
+      try {
+        if (ev?.target?.closest?.('.my-wave-settings-anchor')) return
+        closeMyWaveSourceMenus()
+      } catch (_) {}
+    },
+    true,
+  )
   if (window.api?.onDiscordJoinSecret) {
     window.api.onDiscordJoinSecret((secret) => {
       const roomId = resolveInviteToRoomId(secret)
@@ -11994,13 +14786,22 @@ window.addEventListener('DOMContentLoaded', () => {
 
   audio.addEventListener('play', () => {
     if (_lyricsOpen) startLyricsSyncLoop()
+    try {
+      syncTransportPlayPauseUi()
+    } catch (_) {}
   })
   audio.addEventListener('pause', () => {
     stopLyricsSyncLoop()
+    try {
+      syncTransportPlayPauseUi()
+    } catch (_) {}
   })
 
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
+      try {
+        closeMyWaveSourceMenus()
+      } catch (_) {}
       const modal = document.getElementById('invite-modal')
       if (modal && !modal.classList.contains('hidden')) {
         e.preventDefault()
@@ -12053,5 +14854,59 @@ window.addEventListener('DOMContentLoaded', () => {
     // Источник фиксирован: Spotify -> YouTube
   })
 })
+
+;(function setupFlowBootSplash() {
+  let done = false
+  let loadTs = 0
+  let pendingTimer = null
+  const MIN_VISIBLE_MS = 3600
+  const doDismiss = () => {
+    if (done) return
+    if (pendingTimer != null) {
+      clearTimeout(pendingTimer)
+      pendingTimer = null
+    }
+    done = true
+    document.body.classList.add('flow-boot-ready')
+    const el = document.getElementById('flow-boot-splash')
+    if (!el) return
+    el.classList.add('flow-boot-splash--out')
+    const removeEl = () => {
+      try {
+        el.remove()
+      } catch (_) {}
+    }
+    window.setTimeout(removeEl, 720)
+    el.addEventListener(
+      'transitionend',
+      (e) => {
+        if (e.propertyName === 'opacity') removeEl()
+      },
+      { once: true },
+    )
+  }
+  const queueDismissAfterMinHold = () => {
+    if (done) return
+    if (pendingTimer != null) clearTimeout(pendingTimer)
+    const elapsed = loadTs ? Date.now() - loadTs : 0
+    const wait = Math.max(0, MIN_VISIBLE_MS - elapsed)
+    pendingTimer = window.setTimeout(() => {
+      pendingTimer = null
+      doDismiss()
+    }, wait)
+  }
+  const onLoaded = () => {
+    loadTs = Date.now()
+    window.setTimeout(queueDismissAfterMinHold, 80)
+  }
+  if (document.readyState === 'complete') onLoaded()
+  else window.addEventListener('load', onLoaded, { once: true })
+  window.setTimeout(() => {
+    if (!done) {
+      if (!loadTs) loadTs = Date.now()
+      queueDismissAfterMinHold()
+    }
+  }, 15000)
+})()
 
 

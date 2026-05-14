@@ -1,10 +1,18 @@
-# Flow Social backend deploy
+# Nexory Social backend deploy
 
 ## 0) Важно: файл на сервере
 
 Сервис стартует только если существует **`server/flow-social-server.js`**. Если на VPS после `git pull` его нет — значит ветка на GitHub без этих коммитов: сделай `git push` с машины разработчика или скопируй файл вручную (`scp`).
 
-Репозиторий из `package.json`: `https://github.com/ioqeeqo-create/FlowPleerLoww.git`
+Репозиторий из `package.json`: `https://github.com/ioqeeqo-create/NexoryND.git`
+
+Если перед Node стоит **nginx** и при сохранении профиля клиент получает **413 Request Entity Too Large**, подними лимит тела запроса (по умолчанию у nginx часто **1m**):
+
+```nginx
+client_max_body_size 32m;
+```
+
+(в `server` / `location` прокси на порт `FLOW_SOCIAL_PORT`.)
 
 ## 1) Environment
 
@@ -95,7 +103,7 @@ flow-social.example.com {
 
 ```ini
 [Unit]
-Description=Flow Social Server
+Description=Nexory Social Server
 After=network.target
 
 [Service]
@@ -145,3 +153,35 @@ Accepted per-table files in `--input`:
 - `flow_friend_requests.(json|csv|ndjson)`
 - `flow_rooms.(json|csv|ndjson)`
 - `flow_room_members.(json|csv|ndjson)`
+
+## 8) Stable app updates (latest.yml + exe)
+
+Nexory `2.6.0+` has built-in updater using feed:
+
+- `http://85.239.34.229/flow-updates/stable/latest.yml`
+
+After each Windows build, publish artifacts from `dist/` with one command:
+
+```bash
+npm run publish:update:stable -- --host 85.239.34.229 --user <SSH_USER> --port 22 --dir /var/www/flow-updates/stable
+```
+
+Environment variables alternative:
+
+```bash
+FLOW_UPDATE_HOST=85.239.34.229
+FLOW_UPDATE_USER=<SSH_USER>
+FLOW_UPDATE_PORT=22
+FLOW_UPDATE_DIR=/var/www/flow-updates/stable
+npm run publish:update:stable
+```
+
+What is uploaded:
+
+- `dist/latest.yml`
+- installer from `latest.yml` (`Nexory Setup x.y.z.exe`)
+- optional blockmap (`Nexory Setup x.y.z.exe.blockmap`) if present
+
+Server requirement:
+
+- static HTTP access to `/flow-updates/stable/` (nginx/caddy/public dir).

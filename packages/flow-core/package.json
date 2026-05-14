@@ -1,0 +1,11 @@
+{
+  "name": "@flow/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Общие провайдеры VK / Яндекс для Electron main и flow-mobile-gateway",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.15.0"
+  }
+}

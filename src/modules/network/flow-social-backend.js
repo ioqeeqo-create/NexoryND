@@ -3,6 +3,8 @@
   const DEFAULT_BASE = 'http://85.239.34.229/social'
   /** Должен совпадать с FLOW_SOCIAL_SECRET на VPS (у тебя flowflow). */
   const DEFAULT_SECRET = 'flowflow'
+  /** Для релизной сборки: всегда используем встроенный backend без ручного ввода. */
+  const FORCE_DEFAULT_CONFIG = true
   const listeners = new Set()
   let ws = null
   let reconnectTimer = null
@@ -10,19 +12,53 @@
   let boundPeerId = ''
   let boundUsername = ''
   let lastTopics = []
+  let wsAuthTimeout = null
+  let wsConnectingHang = null
+  /** Сообщения relay, отправленные пока сокет был закрыт — дольются после auth_ok */
+  const relayBacklog = []
+  const RELAY_BACKLOG_CAP = 64
+
+  function normalizeApiBase(rawBase) {
+    const input = String(rawBase || '').trim()
+    if (!input) return DEFAULT_BASE
+    // UI console URL is not an API endpoint.
+    if (/timeweb\.cloud\/my\/servers\/\d+\/console/i.test(input)) return DEFAULT_BASE
+    let parsed = null
+    try {
+      parsed = new URL(input)
+    } catch (_) {
+      return DEFAULT_BASE
+    }
+    const host = String(parsed.hostname || '').toLowerCase()
+    if (!host || host === 'localhost' || host === '127.0.0.1') return DEFAULT_BASE
+    parsed.hash = ''
+    parsed.search = ''
+    const cleanPath = String(parsed.pathname || '').replace(/\/+$/, '')
+    if (!cleanPath || cleanPath === '/') {
+      // Keep root for direct backend port (e.g. http://IP:3847),
+      // use /social for reverse-proxy setups on :80/:443.
+      parsed.pathname = parsed.port ? '/' : '/social'
+    } else {
+      parsed.pathname = cleanPath
+    }
+    return parsed.toString().replace(/\/$/, '')
+  }
 
   function getConfig() {
+    if (FORCE_DEFAULT_CONFIG) {
+      return { base: DEFAULT_BASE, secret: DEFAULT_SECRET }
+    }
     let base = DEFAULT_BASE
     let secret = DEFAULT_SECRET
     try {
-      const lsBase = String(localStorage.getItem('flow_social_api_base') || '').trim().replace(/\/$/, '')
+      const lsBase = normalizeApiBase(localStorage.getItem('flow_social_api_base') || '')
       const lsSecret = String(localStorage.getItem('flow_social_api_secret') || '').trim()
       if (lsBase) base = lsBase
       if (lsSecret) secret = lsSecret
       if (typeof window.getSettings === 'function') {
         const s = window.getSettings()
         if (s?.flowSocialApiBase) {
-          const sBase = String(s.flowSocialApiBase).trim().replace(/\/$/, '')
+          const sBase = normalizeApiBase(s.flowSocialApiBase)
           if (sBase) base = sBase
         }
         if (s?.flowSocialApiSecret) {
@@ -31,7 +67,7 @@
         }
       }
     } catch (_) {}
-    return { base, secret }
+    return { base: normalizeApiBase(base), secret }
   }
 
   function isConfigured() {
@@ -45,6 +81,28 @@
         fn(msg)
       } catch (_) {}
     })
+  }
+
+  function emitWsState(state, details = {}) {
+    emit(Object.assign({ t: 'ws_state', state: String(state || 'degraded') }, details || {}))
+  }
+
+  function flushRelayBacklog() {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return
+    while (relayBacklog.length) {
+      const line = relayBacklog.shift()
+      try {
+        ws.send(line)
+      } catch (_) {
+        relayBacklog.unshift(line)
+        break
+      }
+    }
+  }
+
+  function pushRelayLine(line) {
+    if (relayBacklog.length >= RELAY_BACKLOG_CAP) relayBacklog.shift()
+    relayBacklog.push(line)
   }
 
   function authHeaders() {
@@ -86,8 +144,12 @@
     const { base } = getConfig()
     const u = new URL(base.startsWith('http') ? base : `https://${base}`)
     u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:'
-    u.pathname = '/flow-api/ws'
+    // REST ходит на `${base}/flow-api/v1/...`; WS должен быть под тем же префиксом (например /social/... за nginx).
+    let p = String(u.pathname || '').replace(/\/+$/, '')
+    if (!p || p === '/') p = ''
+    u.pathname = p ? `${p}/flow-api/ws` : '/flow-api/ws'
     u.search = ''
+    u.hash = ''
     return u.toString()
   }
 
@@ -95,6 +157,17 @@
     if (reconnectTimer) {
       clearTimeout(reconnectTimer)
       reconnectTimer = null
+    }
+  }
+
+  function clearWsLifecycleTimers() {
+    if (wsAuthTimeout) {
+      clearTimeout(wsAuthTimeout)
+      wsAuthTimeout = null
+    }
+    if (wsConnectingHang) {
+      clearTimeout(wsConnectingHang)
+      wsConnectingHang = null
     }
   }
 
@@ -114,18 +187,33 @@
     clearReconnect()
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return
     connectAttempt += 1
+    emitWsState('connecting', { attempt: connectAttempt })
     try {
       ws = new WebSocket(wsUrl())
     } catch (_) {
+      emitWsState('degraded', { reason: 'constructor_failed' })
       scheduleReconnect()
       return
     }
 
+    const sock = ws
     ws.onopen = () => {
-      connectAttempt = 0
       try {
         ws.send(JSON.stringify({ op: 'auth', token: secret }))
       } catch (_) {}
+      clearWsLifecycleTimers()
+      wsAuthTimeout = setTimeout(() => {
+        wsAuthTimeout = null
+        try {
+          if (sock && (sock.readyState === WebSocket.OPEN || sock.readyState === WebSocket.CONNECTING)) sock.close()
+        } catch (_) {}
+      }, 12000)
+      wsConnectingHang = setTimeout(() => {
+        wsConnectingHang = null
+        try {
+          if (sock && sock.readyState === WebSocket.CONNECTING) sock.close()
+        } catch (_) {}
+      }, 15000)
     }
 
     ws.onmessage = (ev) => {
@@ -136,6 +224,9 @@
         return
       }
       if (msg.op === 'auth_ok') {
+        clearWsLifecycleTimers()
+        connectAttempt = 0
+        emitWsState('online', { attempt: connectAttempt })
         try {
           if (boundPeerId) {
             ws.send(JSON.stringify({ op: 'bind', peer_id: boundPeerId, username: boundUsername || undefined }))
@@ -144,9 +235,12 @@
             ws.send(JSON.stringify({ op: 'sub', topics: lastTopics }))
           }
         } catch (_) {}
+        flushRelayBacklog()
         return
       }
       if (msg.op === 'auth_err') {
+        clearWsLifecycleTimers()
+        emitWsState('degraded', { reason: 'auth_err' })
         try {
           ws.close()
         } catch (_) {}
@@ -156,10 +250,14 @@
     }
 
     ws.onclose = () => {
+      clearWsLifecycleTimers()
       ws = null
+      // Не «degraded» на каждом reconnect — иначе UI мигает красным при нормальной сети.
+      emitWsState('connecting', { reason: 'socket_closed', reconnecting: true })
       scheduleReconnect()
     }
     ws.onerror = () => {
+      emitWsState('degraded', { reason: 'socket_error' })
       try {
         ws.close()
       } catch (_) {}
@@ -199,18 +297,30 @@
 
   function relayDirect(payload) {
     ensureWs()
-    if (!ws || ws.readyState !== WebSocket.OPEN) return
+    const line = JSON.stringify({ op: 'relay_direct', payload: payload || {} })
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      pushRelayLine(line)
+      return
+    }
     try {
-      ws.send(JSON.stringify({ op: 'relay_direct', payload: payload || {} }))
-    } catch (_) {}
+      ws.send(line)
+    } catch (_) {
+      pushRelayLine(line)
+    }
   }
 
   function relayRoom(payload) {
     ensureWs()
-    if (!ws || ws.readyState !== WebSocket.OPEN) return
+    const line = JSON.stringify({ op: 'relay_room', payload: payload || {} })
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      pushRelayLine(line)
+      return
+    }
     try {
-      ws.send(JSON.stringify({ op: 'relay_room', payload: payload || {} }))
-    } catch (_) {}
+      ws.send(line)
+    } catch (_) {
+      pushRelayLine(line)
+    }
   }
 
   function roomPing(roomId) {
@@ -225,12 +335,15 @@
     boundPeerId = ''
     boundUsername = ''
     lastTopics = []
+    relayBacklog.length = 0
+    clearWsLifecycleTimers()
     clearReconnect()
     try {
       if (ws) ws.close()
     } catch (_) {}
     ws = null
     connectAttempt = 0
+    emitWsState('degraded', { reason: 'invalidated' })
   }
 
   window.FlowSocialBackend = {

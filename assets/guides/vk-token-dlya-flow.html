@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Как подключить ВКонтакте во Flow — токен</title>
+  <title>Как подключить ВКонтакте в Nexory — токен</title>
   <style>
     :root { color-scheme: light dark; }
     body {
@@ -43,10 +43,10 @@
 </head>
 <body>
   <article class="wrap">
-    <h1>Как подключить ВКонтакте во Flow — токен</h1>
-    <p class="meta">Гайд для десктопного Flow · поиск и импорт VK</p>
+    <h1>Как подключить ВКонтакте в Nexory — токен</h1>
+    <p class="meta">Гайд для десктопного Nexory · поиск и импорт VK</p>
 
-    <p>Чтобы во <strong>Flow</strong> работали поиск по аудио ВКонтакте и импорт плейлистов, приложению нужен <strong>access token</strong> с доступом к аудио. Ниже — самый распространённый путь через сервис <strong>vkhost</strong> и приложение <strong>Kate Mobile</strong>.</p>
+    <p>Чтобы в <strong>Nexory</strong> работали поиск по аудио ВКонтакте и импорт плейлистов, приложению нужен <strong>access token</strong> с доступом к аудио. Ниже — самый распространённый путь через сервис <strong>vkhost</strong> и приложение <strong>Kate Mobile</strong>.</p>
 
     <h2>Шаг 1. Открой страницу получения токена</h2>
     <p>Перейди на <a href="https://vkhost.github.io/" target="_blank" rel="noopener">https://vkhost.github.io/</a>.</p>
@@ -66,8 +66,8 @@
     <p><code>...#access_token=СЮДА_ДЛИННЫЙ_ТОКЕН&amp;expires_in=...</code></p>
     <p>Скопируй значение от <code>access_token=</code> до следующего <code>&amp;</code> (до <code>expires_in</code> и т.п.). Это и есть токен.</p>
 
-    <h2>Шаг 6. Вставь токен во Flow</h2>
-    <p>Открой Flow → <strong>Настройки</strong> → раздел <strong>Аккаунты</strong> → блок <strong>Источники</strong> или секция <strong>«Авторизация VK»</strong>.</p>
+    <h2>Шаг 6. Вставь токен в Nexory</h2>
+    <p>Открой Nexory → <strong>Настройки</strong> → раздел <strong>Аккаунты</strong> → блок <strong>Источники</strong> или секция <strong>«Авторизация VK»</strong>.</p>
     <p>Вставь токен в поле, нажми <strong>сохранить</strong> (галочка), затем при необходимости — <strong>«Проверить токен»</strong>.</p>
 
     <h2>Если проверка ругается на audio.* или коды VK</h2>
@@ -75,11 +75,11 @@
       <li><strong>Код 5</strong> — токен недействителен, получи новый.</li>
       <li><strong>Код 6</strong> — слишком много запросов: подожди 30–60 секунд и проверь снова.</li>
       <li><strong>Код 15</strong> — часто связано с типом токена: для аудио нужен подходящий токен (Kate и корректные права).</li>
-      <li>Если VK «режет» официальные методы <code>audio.*</code> для части аккаунтов, во Flow есть опция <strong>обхода через Chrome (Selenium)</strong> в настройках VK — только если реально нужно; по умолчанию браузер сам не открывается.</li>
+      <li>Если VK «режет» официальные методы <code>audio.*</code> для части аккаунтов, в Nexory есть опция <strong>обхода через Chrome (Selenium)</strong> в настройках VK — только если реально нужно; по умолчанию браузер сам не открывается.</li>
     </ul>
 
     <div class="note">
-      <strong>Яндекс Музыка.</strong> Отдельный Telegraph-гайд по Яндексу: <a href="https://telegra.ph/Kak-podklyuchit-YAndeks-Muzyku-vo-Flow-05-03" target="_blank" rel="noopener">Как подключить Яндекс Музыку во Flow</a>.
+      <strong>Яндекс Музыка.</strong> Отдельный Telegraph-гайд по Яндексу: <a href="https://telegra.ph/Kak-podklyuchit-YAndeks-Muzyku-vo-Flow-05-03" target="_blank" rel="noopener">Как подключить Яндекс Музыку</a> (статья на Telegraph может упоминать старое имя приложения).
     </div>
   </article>
 </body>

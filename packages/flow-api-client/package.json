@@ -1,0 +1,9 @@
+{
+  "name": "@flow/api-client",
+  "version": "0.1.0",
+  "private": true,
+  "description": "HTTP-клиент Flow Mobile Gateway: поиск, resolve, валидация. Без UI, только fetch.",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "license": "MIT"
+}

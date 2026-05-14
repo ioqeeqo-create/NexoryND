@@ -81,7 +81,7 @@
     const password = String(rawPassword || '')
     if (password.length < 4) return { ok: false, error: 'Пароль: минимум 4 символа' }
     const be = getBackend()
-    if (!be) return { ok: false, error: 'Сервер недоступен (задай свой Flow Social API URL в настройках)' }
+    if (!be) return { ok: false, error: 'Сервер недоступен (задай URL социального сервера Nexory в настройках)' }
     try {
       const exists = await profileExistsOnServer(username)
       if (exists) return { ok: false, error: 'Такой Username уже занят' }
@@ -112,7 +112,7 @@
     if (!username) return { ok: false, error: 'Введите Username' }
     if (!password) return { ok: false, error: 'Введите пароль' }
     const be = getBackend()
-    if (!be) return { ok: false, error: 'Сервер недоступен (задай свой Flow Social API URL в настройках)' }
+    if (!be) return { ok: false, error: 'Сервер недоступен (задай URL социального сервера Nexory в настройках)' }
     let row = null
     try {
       row = await be.request('GET', `/flow-api/v1/profile-auth/${encodeURIComponent(username)}`)
@@ -387,6 +387,16 @@
     _onBackendMessage(raw) {
       if (!this.peer || !window.FlowSocialBackend) return
 
+      if (raw?.t === 'ws_state') {
+        this.onStatus({
+          type: 'ws-state',
+          state: String(raw.state || 'degraded'),
+          attempt: Number(raw.attempt || 0),
+          reason: raw.reason ? String(raw.reason) : '',
+        })
+        return
+      }
+
       if (raw?.t === 'relay_direct') {
         if (String(raw.to_peer_id || '') !== this.peer?.id) return
         const from = String(raw.from_peer_id || '').trim()
@@ -507,16 +517,19 @@
         const be = getBackend()
         const safe = normalizeUsername(username)
         if (!be || !safe) return resolve(false)
+        const probeTimeoutMs = Math.max(2500, Number(timeoutMs || 0))
+        const freshWindowMs = 3 * 60 * 1000
         Promise.race([
           be.request('GET', `/flow-api/v1/profile-public/${encodeURIComponent(safe)}`),
-          new Promise((r) => setTimeout(() => r(null), Math.max(1000, Number(timeoutMs || 0)))),
+          new Promise((r) => setTimeout(() => r(null), probeTimeoutMs)),
         ])
           .then((row) => {
             if (!row) return resolve(false)
-            const seen = Date.parse(String(row.last_seen || ''))
-            const seenFresh = !Number.isNaN(seen) && Date.now() - seen < 75000
-            if (row.online === true && seenFresh) return resolve(true)
-            if (seenFresh) return resolve(true)
+            const onlineFlag = row.online === true || row.online === 1 || String(row.online || '') === '1'
+            const seen = Date.parse(String(row.last_seen || row.lastSeen || ''))
+            const seenFresh = !Number.isNaN(seen) && Date.now() - seen < freshWindowMs
+            if (onlineFlag && !Number.isNaN(seen)) return resolve(seenFresh)
+            if (onlineFlag) return resolve(true)
             resolve(false)
           })
           .catch(() => resolve(false))

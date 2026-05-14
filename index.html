@@ -2,13 +2,24 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>Flow</title>
+  <title>Nexory</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
   <!-- bump ?v= when profile/CSS/JS layout changes so Electron reloads assets -->
-  <link rel="stylesheet" href="styles.css?v=20260504-flat-bg-transitions">
+  <link rel="stylesheet" href="styles.css?v=20260514-customization-gallery-ui">
 </head>
 <body>
+
+<div id="flow-boot-splash" class="flow-boot-splash" role="status" aria-live="polite" aria-label="Загрузка Nexory">
+  <div class="flow-boot-splash-inner">
+    <div class="flow-boot-logo" aria-hidden="true"></div>
+    <div class="flow-boot-progress" aria-hidden="true">
+      <div class="flow-boot-progress-track">
+        <div class="flow-boot-progress-fill"></div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- DYNAMIC BACKGROUND -->
 <div id="bg-layer" class="bg-layer"></div>
@@ -23,17 +34,17 @@
 
 <!-- TITLEBAR -->
 <div class="titlebar">
-  <span class="titlebar-logo" id="titlebar-logo">Flow</span>
+  <span class="titlebar-logo" id="titlebar-logo"><span class="titlebar-name">Nexory</span><span class="titlebar-ver" id="titlebar-version"></span></span>
   <div class="titlebar-center" id="titlebar-track-info"></div>
   <div class="titlebar-btns">
-    <button type="button" onclick="window.api.minimize()" title="Свернуть" aria-label="Свернуть"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+    <button type="button" onclick="window.api.minimize()" title="Свернуть" aria-label="Свернуть"><svg class="ui-icon" data-lucide="minus" viewBox="0 0 24 24"></svg></button>
     <button type="button" onclick="toggleWindowMaximize()" title="Развернуть" aria-label="Развернуть">
       <span class="tb-max-slot">
-      <svg id="titlebar-ico-expand" class="ui-icon tb-ico-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"><rect x="5.75" y="5.75" width="12.5" height="12.5" rx="2.25"/></svg>
-      <svg id="titlebar-ico-restore" class="ui-icon tb-ico-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linejoin="round" style="display:none"><path d="M11 16.5v-9h11v11h-9v2"/><path d="M3 17.5v-13h13v13h-13z"/></svg>
+      <svg id="titlebar-ico-expand" class="ui-icon tb-ico-expand" data-lucide="square" viewBox="0 0 24 24"></svg>
+      <svg id="titlebar-ico-restore" class="ui-icon tb-ico-expand" data-lucide="copy" viewBox="0 0 24 24" style="display:none"></svg>
       </span>
     </button>
-    <button type="button" onclick="window.api.close()" title="Закрыть" aria-label="Закрыть"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+    <button type="button" onclick="flowHandleTitlebarClose()" title="Закрыть" aria-label="Закрыть"><svg class="ui-icon" data-lucide="x" viewBox="0 0 24 24"></svg></button>
   </div>
 </div>
 
@@ -42,11 +53,10 @@
   <div class="auth-box glass">
     <div class="auth-header">
       <div class="auth-logo-wrap">
-        <span class="auth-logo-hex" aria-label="Flow"></span>
-        <div class="auth-logo-glow"></div>
+        <span class="auth-logo-hex" aria-label="Nexory"></span>
       </div>
-      <h1>Flow</h1>
-      <p>Музыка вокруг тебя</p>
+      <h1>Nexory</h1>
+      <p class="auth-tagline">Музыка вокруг тебя</p>
     </div>
     <div class="auth-tabs">
       <button class="tab active" id="tab-login" onclick="switchTab('login')">Войти</button>
@@ -74,7 +84,7 @@
     <div class="sidebar-resize-gutter sidebar-resize-gutter--left" id="sidebar-resize-gutter-left" role="separator" aria-orientation="vertical" aria-label="Левый край: изменить ширину панели" title="Потяни для изменения ширины (левый край)"></div>
     <div class="sidebar-resize-gutter sidebar-resize-gutter--right" id="sidebar-resize-gutter" role="separator" aria-orientation="vertical" aria-label="Правый край: изменить ширину панели" title="Потяни для изменения ширины (правый край)"></div>
     <div class="sidebar-head-row">
-      <div class="sidebar-logo"><span>Flow</span></div>
+      <div class="sidebar-logo"><span>Nexory</span></div>
       <div
         class="sidebar-head-drag-hit"
         id="sidebar-head-drag-hit"
@@ -86,32 +96,35 @@
     <div class="sidebar-nav-shell">
     <nav class="sidebar-nav">
       <div class="nav-group nav-group-split">
-      <a class="nav-item active" onclick="openPage('home')" href="#" title="Главная" aria-label="Главная">
-        <svg class="nav-icon flow-ref-nav" viewBox="0 0 24 24" fill="none"><path d="M4 10.2L12 4l8 6.2V19.25a1.25 1.25 0 01-1.25 1.25h-13.5A1.25 1.25 0 014 19.25V10.2z" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"/><path d="M12 17.2v-2.9" stroke="var(--accent2)" stroke-linecap="round" stroke-width="2"/></svg><span class="nav-label">Главная</span>
+      <a class="nav-item active" data-nav-page="main" onclick="openPage('main')" href="#" title="Главная" aria-label="Главная">
+        <svg class="nav-icon flow-ref-nav" data-lucide="house" viewBox="0 0 24 24"></svg><span class="nav-label">Главная</span>
       </a>
       </div>
       <div class="nav-group">
-      <a class="nav-item search-liquid" onclick="openPage('search')" href="#" title="Поиск" aria-label="Поиск">
-        <svg class="nav-icon flow-ref-nav" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.75"/><path d="M20 20l-4.55-4.55" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/><path d="M18.95 17.98L21 20.1" stroke="var(--accent2)" stroke-width="2" stroke-linecap="round"/></svg><span class="nav-label">Поиск</span>
+      <a class="nav-item" data-nav-page="home" onclick="openPage('home')" href="#" title="Медиа" aria-label="Медиа">
+        <svg class="nav-icon flow-ref-nav" data-lucide="disc-3" viewBox="0 0 24 24"></svg><span class="nav-label">Медиа</span>
       </a>
-      <a class="nav-item" onclick="openPage('library')" href="#" title="Библиотека" aria-label="Библиотека">
-        <svg class="nav-icon flow-ref-nav" viewBox="0 0 24 24" fill="none"><rect x="5.5" y="5.5" width="13" height="13" rx="3.5" stroke="currentColor" stroke-width="1.75"/><path d="M9 16.85h6" stroke="var(--accent2)" stroke-width="2" stroke-linecap="round"/></svg><span class="nav-label">Библиотека</span>
+      <a class="nav-item search-liquid" data-nav-page="search" onclick="openPage('search')" href="#" title="Поиск" aria-label="Поиск">
+        <svg class="nav-icon flow-ref-nav" data-lucide="search" viewBox="0 0 24 24"></svg><span class="nav-label">Поиск</span>
+      </a>
+      <a class="nav-item" data-nav-page="library" onclick="openPage('library')" href="#" title="Библиотека" aria-label="Библиотека">
+        <svg class="nav-icon flow-ref-nav" data-lucide="library" viewBox="0 0 24 24"></svg><span class="nav-label">Библиотека</span>
       </a>
       </div>
       <div class="nav-group">
-      <a class="nav-item" onclick="openPage('liked')" href="#" title="Любимые" aria-label="Любимые">
-        <svg class="nav-icon flow-ref-nav" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M12 20.4s6.5-4.35 8.82-7.74A5.05 5.05 0 0012 6.42a5.05 5.05 0 00-8.82 6.24C5.47 15.93 12 20.35 12 20.42z"/></svg><span class="nav-label">Любимые</span>
+      <a class="nav-item" data-nav-page="liked" onclick="openPage('liked')" href="#" title="Любимые" aria-label="Любимые">
+        <svg class="nav-icon flow-ref-nav" data-lucide="heart" viewBox="0 0 24 24"></svg><span class="nav-label">Любимые</span>
       </a>
-      <a class="nav-item" onclick="openPage('social')" href="#" title="Друзья" aria-label="Друзья">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6"/><path d="M23 11h-6"/></svg><span class="nav-label">Друзья</span>
+      <a class="nav-item" data-nav-page="social" onclick="openPage('social')" href="#" title="Друзья" aria-label="Друзья">
+        <svg class="nav-icon" data-lucide="users" viewBox="0 0 24 24"></svg><span class="nav-label">Друзья</span>
       </a>
       </div>
       <div class="nav-group nav-group-tail">
-      <a class="nav-item" onclick="openPage('rooms')" href="#" title="Комнаты" aria-label="Комнаты">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8l-5 3V7z"/><path d="M8 11h8"/><path d="M8 15h5"/></svg><span class="nav-label">Комнаты</span>
+      <a class="nav-item" data-nav-page="rooms" onclick="openPage('rooms')" href="#" title="Комнаты" aria-label="Комнаты">
+        <svg class="nav-icon" data-lucide="messages-square" viewBox="0 0 24 24"></svg><span class="nav-label">Комнаты</span>
       </a>
-      <a class="nav-item" onclick="openPage('settings')" href="#" title="Настройки" aria-label="Настройки">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span class="nav-label">Настройки</span>
+      <a class="nav-item" data-nav-page="settings" onclick="openPage('settings')" href="#" title="Настройки" aria-label="Настройки">
+        <svg class="nav-icon" data-lucide="settings" viewBox="0 0 24 24"></svg><span class="nav-label">Настройки</span>
       </a>
       </div>
     </nav>
@@ -135,11 +148,11 @@
       <div class="sidebar-layout-constructor" id="sidebar-layout-constructor">
         <div class="sidebar-layout-constructor-row">
           <button type="button" id="btn-home-layout-edit" class="sidebar-layout-edit-btn sidebar-layout-edit-btn--primary" title="Изменить расположение блоков главной" aria-label="Редактировать макет главной" aria-pressed="false" onclick="event.preventDefault(); event.stopPropagation(); toggleHomeLayoutEdit();">
-            <svg class="nav-icon flow-ref-layout-move" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M12 6V2M12 22v-4M6 12H2M22 12h-4"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg class="nav-icon flow-ref-layout-move" data-lucide="move" viewBox="0 0 24 24" aria-hidden="true"></svg>
             <span class="nav-label sidebar-layout-edit-label" id="btn-home-layout-edit-label">Изменить</span>
           </button>
           <button type="button" id="btn-home-layout-reset" class="sidebar-layout-reset-btn" title="Сбросить раскладку главной" aria-label="Сбросить раскладку главной" onclick="event.preventDefault(); event.stopPropagation(); resetHomeDashboardLayoutPressed();">
-            <svg class="nav-icon flow-ref-layout-reset" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 1 3 7.94"/><path d="M3 3v8h8"/></svg>
+            <svg class="nav-icon flow-ref-layout-reset" data-lucide="rotate-ccw" viewBox="0 0 24 24" aria-hidden="true"></svg>
             <span class="nav-label">Сброс</span>
           </button>
         </div>
@@ -147,7 +160,7 @@
       <div class="sidebar-user" onclick="openPage('profile')">
         <div class="user-avatar" id="user-avatar">?</div>
         <div class="user-info"><span id="user-name">—</span><span class="user-sub">слушатель</span></div>
-        <button class="logout-btn" onclick="event.stopPropagation();logout()" title="Выйти"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M15 17l5-5-5-5"/><path d="M20 12H9"/><path d="M9 19H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4"/></svg></button>
+        <button class="logout-btn" onclick="event.stopPropagation();logout()" title="Выйти"><svg class="ui-icon" data-lucide="log-out" viewBox="0 0 24 24"></svg></button>
       </div>
     </div>
   </div>
@@ -165,129 +178,101 @@
     <button type="button" class="content-corner-resize content-corner-resize--bl" data-main-pane-corner="bl" tabindex="-1" aria-label="Размер окна контента, левый низ" title="Размер окна контента"><span class="flow-resize-glyph" aria-hidden="true"></span></button>
     <button type="button" class="content-corner-resize content-corner-resize--br" data-main-pane-corner="br" tabindex="-1" aria-label="Размер окна контента, правый низ" title="Размер окна контента"><span class="flow-resize-glyph" aria-hidden="true"></span></button>
 
-    <div id="page-home" class="page active">
-      <div class="liquid-home-shell" aria-label="Flow в стиле Liquid Glass">
-        <section class="liquid-hero glass" onclick="startMyWave()" role="button" tabindex="0" aria-label="Запустить Flow Mix">
-          <div class="liquid-hero-orb liquid-hero-orb--a" aria-hidden="true"></div>
-          <div class="liquid-hero-orb liquid-hero-orb--b" aria-hidden="true"></div>
-          <div class="liquid-hero-copy">
-            <h2>Flow Mix</h2>
-            <p>Жидкое стекло. Быстрый старт. Никакого Яндекс-шаблона.</p>
-          </div>
-          <button type="button" class="liquid-hero-action" onclick="event.stopPropagation(); startMyWave()">▶</button>
-        </section>
-
-        <div class="liquid-quick-row">
-          <button type="button" class="liquid-quick-btn glass" onclick="openPage('search')" title="Поиск">
-            <span aria-hidden="true">⌕</span>
-          </button>
-          <button type="button" class="liquid-quick-btn glass" onclick="openPage('liked')" title="Любимое">
-            <span aria-hidden="true">♥</span>
-          </button>
-          <button type="button" class="liquid-quick-btn glass" onclick="openPage('social')" title="Соц">
-            <span aria-hidden="true">◉</span>
-          </button>
-          <button type="button" class="liquid-quick-btn glass" onclick="enterPlayerMode()" title="Плеер">
-            <span aria-hidden="true">♪</span>
-          </button>
+    <div id="page-main" class="page active">
+      <div class="main-hub-shell">
+        <div class="content-header">
+          <h2>Главная</h2>
+          <p class="content-sub">Быстрый доступ к твоей волне, плейлистам и любимым трекам</p>
         </div>
-
-        <div class="liquid-main-grid">
-          <button type="button" class="liquid-main-card glass" onclick="openPage('liked')">
-            <span class="liquid-main-icon" aria-hidden="true">♥</span>
-            <span class="liquid-main-text"><strong>Мне нравится</strong><small>твоя коллекция</small></span>
-          </button>
-          <button type="button" class="liquid-main-card glass" onclick="startMyWave()">
-            <span class="liquid-main-icon" aria-hidden="true">≈</span>
-            <span class="liquid-main-text"><strong>Flow Mix</strong><small>персональная волна</small></span>
-          </button>
+        <div class="main-hub-glass-board">
+        <div class="main-hub-grid">
+          <section class="main-hub-panel main-hub-panel--wave">
+            <div class="my-wave glass-card" id="my-wave">
+              <div class="my-wave-hero my-wave-hero--compact-title my-wave-hero--no-hint">
+                <div class="my-wave-hero-top">
+                  <div class="my-wave-hero-copy">
+                    <p id="my-wave-hint" class="hidden" aria-hidden="true"></p>
+                  </div>
+                  <div class="my-wave-hero-trailing">
+                    <div id="yandex-wave-mood-dock" class="yandex-wave-mood-dock hidden" aria-label="Настроение волны Яндекса"></div>
+                  </div>
+                </div>
+                <div id="my-wave-modes" class="my-wave-modes hidden" aria-hidden="true" style="display:none"></div>
+              </div>
+              <div class="my-wave-list" id="my-wave-list"></div>
+            </div>
+          </section>
+          <div class="main-hub-actions">
+            <button type="button" class="btn-small" onclick="openPage('rooms')">Создать комнату</button>
+            <button type="button" class="btn-small" onclick="openPage('settings')">Настроить</button>
+          </div>
+          <section class="main-hub-panel main-hub-panel--liked glass-card">
+            <div class="main-hub-panel-head">
+              <h3>Любимые треки</h3>
+              <button type="button" class="btn-small" onclick="openPage('liked')">Открыть все</button>
+            </div>
+            <div id="main-quick-liked" class="tracks main-quick-liked"></div>
+          </section>
+          <section class="main-hub-panel main-hub-panel--playlists glass-card">
+            <div class="main-hub-panel-head">
+              <h3>Плейлисты</h3>
+              <button type="button" class="btn-small" onclick="openPage('library')">Открыть все</button>
+            </div>
+            <div id="main-quick-playlists" class="main-quick-playlists"></div>
+          </section>
+        </div>
         </div>
       </div>
-      <div id="home-dashboard-stack" class="home-dashboard-stack">
-      <section class="home-dash-block" data-home-block="welcome">
-        <button type="button" class="home-dash-drag home-dash-handle" tabindex="-1" aria-label="Переместить блок" title="Зона захвата — перетаскивание"></button>
-        <div class="home-dash-fill">
+    </div>
+
+    <div id="page-home" class="page">
       <div class="content-header">
-        <h2 id="welcome-text">Добро пожаловать</h2>
-        <p class="content-sub">Выбери источник и начни слушать</p>
+        <h2>Медиа</h2>
+        <p class="content-sub">Управляй текущим треком и очередью</p>
       </div>
-        </div>
-        <button type="button" class="home-dash-resize resizer-corner" tabindex="-1" aria-label="Изменить размер блока" title="Угол — размер"></button>
-      </section>
-      <section class="home-dash-block" data-home-block="clone">
-        <button type="button" class="home-dash-drag home-dash-handle" tabindex="-1" aria-label="Переместить блок" title="Зона захвата — перетаскивание"></button>
-        <div class="home-dash-fill">
-      <div class="home-clone glass-card">
-        <div class="home-clone-cover" id="home-clone-cover"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>
-        <div class="home-clone-main">
-          <div class="home-clone-head">
-            <div class="home-clone-title" id="home-clone-title">Ничего не играет</div>
-            <div class="home-clone-artist" id="home-clone-artist">—</div>
-          </div>
-          <div class="home-clone-progress-wrap">
-            <span id="home-clone-time-cur">0:00</span>
-            <input type="range" id="home-clone-progress" min="0" max="1" step="0.001" value="0" oninput="seekTo(this.value)">
-            <span id="home-clone-time-total">0:00</span>
-          </div>
-          <div class="home-clone-controls">
-            <span id="host-lock-indicator-home" style="display:none;align-items:center;gap:4px;font-size:11px;opacity:.75;padding:0 4px">🔒 Host only</span>
-            <button class="ctrl-btn" id="home-repeat-btn" onclick="toggleRepeatMode()" title="Повтор"><svg class="ui-icon flow-ref-ctrl" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M17 2.3l4 4.2-4 4"/><path stroke="currentColor" stroke-width="1.75" d="M3 16v-7A4.5 4.5 0 017.5 4.5h12"/><path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M7 22l-4-4.2 4-4"/><path stroke="currentColor" stroke-width="1.75" d="M21 10.5v6A4.5 4.5 0 0116.5 21h-12"/><circle fill="var(--accent2)" cx="15.95" cy="18.95" r="1.65"/></svg></button>
-            <button class="ctrl-btn" onclick="prevTrack()"><svg class="ui-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2v14H6zM9 12l9 7V5z"/></svg></button>
-            <button class="ctrl-btn play-btn" id="home-play-btn" onclick="togglePlay()"><svg class="ui-icon ctrl-play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M9 8 L17 12 L9 16 Z"/></svg></button>
-            <button class="ctrl-btn" onclick="nextTrack()"><svg class="ui-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M16 5h2v14h-2zM6 5v14l9-7z"/></svg></button>
-            <button class="ctrl-btn" id="home-shuffle-btn" onclick="toggleShuffleMode()" title="Перемешка"><svg class="ui-icon flow-ref-ctrl" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M16 4h5v5"/><path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M4 21L21 4"/><path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M21 17v5h-5"/><path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M14.5 16l6.5 6"/><path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M4 6l6 7"/><path stroke="var(--accent2)" stroke-width="2.25" stroke-linecap="round" d="M4 4l7 9"/></svg></button>
-          </div>
-          <div class="home-visualizer-wrap" id="home-visualizer-wrap">
-            <canvas class="home-visualizer-canvas" id="home-visualizer-canvas" width="640" height="130"></canvas>
-            <div class="home-visualizer-image hidden" id="home-visualizer-image"></div>
+      <div class="playback-page-shell">
+        <div class="home-clone glass-card">
+          <div class="home-clone-cover" id="home-clone-cover"><svg class="ui-icon lg" data-lucide="music-2" viewBox="0 0 24 24"></svg></div>
+          <div class="home-clone-main">
+            <div class="home-clone-head">
+              <div class="home-clone-title" id="home-clone-title">Ничего не играет</div>
+              <div class="home-clone-artist" id="home-clone-artist">—</div>
+            </div>
+            <div class="home-clone-progress-wrap">
+              <span id="home-clone-time-cur">0:00</span>
+              <input type="range" id="home-clone-progress" min="0" max="1" step="0.001" value="0" oninput="seekTo(this.value)">
+              <span id="home-clone-time-total">0:00</span>
+            </div>
+            <div class="home-clone-controls">
+              <span id="host-lock-indicator-home" style="display:none;align-items:center;gap:4px;font-size:11px;opacity:.75;padding:0 4px">🔒 Host only</span>
+              <button class="ctrl-btn" id="home-repeat-btn" onclick="toggleRepeatMode()" title="Повтор"><svg class="ui-icon flow-ref-ctrl" data-lucide="repeat" viewBox="0 0 24 24"></svg></button>
+              <button class="ctrl-btn" onclick="prevTrack()"><svg class="ui-icon" data-lucide="skip-back" viewBox="0 0 24 24"></svg></button>
+              <button class="ctrl-btn play-btn" id="home-play-btn" onclick="togglePlay()"><svg class="ui-icon ctrl-play-icon" data-lucide="play" viewBox="0 0 24 24"></svg></button>
+              <button class="ctrl-btn" onclick="nextTrack()"><svg class="ui-icon" data-lucide="skip-forward" viewBox="0 0 24 24"></svg></button>
+              <button class="ctrl-btn" id="home-shuffle-btn" onclick="toggleShuffleMode()" title="Перемешка"><svg class="ui-icon flow-ref-ctrl" data-lucide="shuffle" viewBox="0 0 24 24"></svg></button>
+            </div>
+            <div class="home-visualizer-wrap" id="home-visualizer-wrap">
+              <canvas class="home-visualizer-canvas" id="home-visualizer-canvas" width="640" height="130"></canvas>
+              <div class="home-visualizer-image hidden" id="home-visualizer-image"></div>
+            </div>
           </div>
         </div>
-      </div>
-        </div>
-        <button type="button" class="home-dash-resize resizer-corner" tabindex="-1" aria-label="Изменить размер блока" title="Угол — размер"></button>
-      </section>
-      <section class="home-dash-block" data-home-block="cards">
-        <button type="button" class="home-dash-drag home-dash-handle" tabindex="-1" aria-label="Переместить блок" title="Зона захвата — перетаскивание"></button>
-        <div class="home-dash-fill">
-      <div class="home-cards">
-        <div class="home-card glass" onclick="openPage('search')">
-          <div class="home-card-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg></div>
-          <div class="home-card-title">Найти музыку</div>
-          <div class="home-card-sub">Источник: <span id="source-badge" class="source-badge">Spotify → SoundCloud → Audius</span></div>
-        </div>
-        <div class="home-card glass" onclick="enterPlayerMode()">
-          <div class="home-card-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14a9 9 0 0 1 18 0"/><path d="M21 14v4a2 2 0 0 1-2 2h-1v-8h1a2 2 0 0 1 2 2Z"/><path d="M3 14v4a2 2 0 0 0 2 2h1v-8H5a2 2 0 0 0-2 2Z"/></svg></div>
-          <div class="home-card-title">Режим плеера</div>
-          <div class="home-card-sub">Fullscreen с обложкой</div>
-        </div>
-        <div class="home-card glass" onclick="openPage('settings')">
-          <div class="home-card-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.04 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.96 19.35a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87A1.7 1.7 0 0 0 3 13.96H2.9a2 2 0 1 1 0-4H3A1.7 1.7 0 0 0 4.64 8.4a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1-1.56V2.9a2 2 0 1 1 4 0V3a1.7 1.7 0 0 0 1.04 1.56h.09a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9c0 .69.41 1.31 1.04 1.56H21.1a2 2 0 1 1 0 4H21a1.7 1.7 0 0 0-1.6 1.04V15Z"/></svg></div>
-          <div class="home-card-title">Настройки</div>
-          <div class="home-card-sub">Фон, blur, источники</div>
+        <div class="home-up-next glass-card" id="home-up-next">
+          <div class="home-up-next-head">
+            <div>
+              <div class="home-up-next-badge">Дальше в очереди</div>
+              <h3 id="home-up-next-headline">Очередь</h3>
+              <p id="home-up-next-meta">Очередь пока пуста</p>
+            </div>
+            <button type="button" class="btn-small" onclick="openPage('liked')">Из любимых</button>
+          </div>
+          <div class="home-up-next-list" id="home-up-next-list">
+            <div class="empty-state compact">
+              <p>Запусти трек, и тут появятся следующие позиции очереди</p>
+            </div>
+          </div>
         </div>
       </div>
-        </div>
-        <button type="button" class="home-dash-resize resizer-corner" tabindex="-1" aria-label="Изменить размер блока" title="Угол — размер"></button>
-      </section>
-      <section class="home-dash-block" data-home-block="wave">
-        <button type="button" class="home-dash-drag home-dash-handle" tabindex="-1" aria-label="Переместить блок" title="Зона захвата — перетаскивание"></button>
-        <div class="home-dash-fill">
-      <div class="my-wave glass-card" id="my-wave">
-        <div class="my-wave-hero">
-          <div class="my-wave-badge">Моя волна</div>
-          <h3>Персональная лента по твоим прослушиваниям</h3>
-          <p id="my-wave-hint">Прослушай минимум 10 треков, чтобы собрать Мою волну</p>
-          <div class="my-wave-actions">
-            <button class="my-wave-start" onclick="startMyWave()">Запустить волну</button>
-            <div class="my-wave-modes" id="my-wave-modes"></div>
-          </div>
-        </div>
-        <div class="my-wave-list" id="my-wave-list"></div>
-      </div>
-        </div>
-        <button type="button" class="home-dash-resize resizer-corner" tabindex="-1" aria-label="Изменить размер блока" title="Угол — размер"></button>
-      </section>
-      </div><!-- /home-dashboard-stack -->
     </div>
 
     <div id="page-search" class="page">
@@ -296,13 +281,13 @@
         <p class="content-sub">Найди трек</p>
       </div>
       <div class="search-bar glass" id="search-bar" title="Поиск">
-        <svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <svg class="ui-icon lg" data-lucide="search" viewBox="0 0 24 24" aria-hidden="true"></svg>
         <input id="search-input" type="search" enterkeyhint="search" placeholder="Исполнитель, название трека..." oninput="searchTracks()" autocomplete="off">
       </div>
       <div class="search-source-row">
         <span style="font-size:11px;color:var(--muted);margin-right:2px">Источник:</span>
         <div class="source-mode-grid source-mode-grid--compact">
-          <button class="source-mode-card active" data-src="hybrid" onclick="switchSearchSource('hybrid')" title="Flow classic">
+          <button class="source-mode-card active" data-src="hybrid" onclick="switchSearchSource('hybrid')" title="Nexory classic">
             <span class="source-mode-icon">F</span>
             <span class="source-mode-label">classic</span>
           </button>
@@ -371,7 +356,7 @@
     </div>
 
     <div id="page-profile" class="page">
-      <div class="content-header"><h2>Профиль</h2><p class="content-sub">Твой Flow профиль</p></div>
+      <div class="content-header"><h2>Профиль</h2><p class="content-sub">Твой профиль Nexory</p></div>
       <div class="profile-shell profile-unified flow-profile-card">
         <div class="profile-hero flow-profile-hero">
           <div class="profile-banner-shell">
@@ -427,13 +412,17 @@
 
       <div class="settings-shell">
         <nav class="settings-category-rail" aria-label="Разделы настроек">
+          <button type="button" class="settings-cat" data-settings-cat="customization" onclick="switchSettingsCategory('customization')">
+            <span class="settings-cat-title">Кастомизация</span>
+            <span class="settings-cat-hint">Фон, обложка, галерея</span>
+          </button>
           <button type="button" class="settings-cat active" data-settings-cat="appearance" onclick="switchSettingsCategory('appearance')">
             <span class="settings-cat-title">Оформление</span>
             <span class="settings-cat-hint">Тема, фон, цвета, шрифт</span>
           </button>
           <button type="button" class="settings-cat" data-settings-cat="playback" onclick="switchSettingsCategory('playback')">
             <span class="settings-cat-title">Плеер</span>
-            <span class="settings-cat-hint">Режимы и пресеты Flow</span>
+            <span class="settings-cat-hint">Режимы и пресеты Nexory</span>
           </button>
           <button type="button" class="settings-cat" data-settings-cat="optimization" onclick="switchSettingsCategory('optimization')">
             <span class="settings-cat-title">Оптимизация</span>
@@ -466,9 +455,9 @@
                   <span class="vsb-theme-icon">F</span>
                   <span class="vsb-theme-label">clasic</span>
                 </button>
-                <button class="vsb vsb-theme" id="vm-floated" onclick="setVisualMode('floated')" title="Flow Custum">
+                <button class="vsb vsb-theme" id="vm-floated" onclick="setVisualMode('floated')" title="Nexory Custom">
                   <span class="vsb-theme-icon">F⚙</span>
-                  <span class="vsb-theme-label">flow custum</span>
+                  <span class="vsb-theme-label">nexory custom</span>
                 </button>
                 <button class="vsb vsb-theme" id="vm-liquid" onclick="setVisualMode('liquid')" title="Liquid Glass">
                   <span class="vsb-theme-icon">◈</span>
@@ -477,14 +466,22 @@
             </div>
             <div class="vs-row">
               <label class="vs-label">Расположение меню</label>
-              <div class="vs-btn-group vs-layout-grid">
-                <button class="vsb vs-layout-card" id="layout-left" onclick="setSidebarPosition('left')" title="Меню слева">
+              <div class="vs-btn-group vs-layout-grid vs-layout-grid--row" role="group" aria-label="Расположение меню">
+                <button type="button" class="vsb vs-layout-card" id="layout-left" data-flow-sidebar-layout="left" title="Меню слева">
                   <span class="vs-layout-mini vs-layout-mini-left"><i></i><b></b></span>
                   <span class="vs-layout-label">Слева</span>
                 </button>
-                <button class="vsb vs-layout-card" id="layout-top" onclick="setSidebarPosition('top')" title="Меню сверху">
+                <button type="button" class="vsb vs-layout-card" id="layout-top" data-flow-sidebar-layout="top" title="Меню сверху">
                   <span class="vs-layout-mini vs-layout-mini-top"><i></i><b></b></span>
                   <span class="vs-layout-label">Сверху</span>
+                </button>
+                <button type="button" class="vsb vs-layout-card" id="layout-bottom" data-flow-sidebar-layout="bottom" title="Меню снизу">
+                  <span class="vs-layout-mini vs-layout-mini-bottom"><i></i><b></b></span>
+                  <span class="vs-layout-label">Снизу</span>
+                </button>
+                <button type="button" class="vsb vs-layout-card" id="layout-right" data-flow-sidebar-layout="right" title="Меню справа">
+                  <span class="vs-layout-mini vs-layout-mini-right"><i></i><b></b></span>
+                  <span class="vs-layout-label">Справа</span>
                 </button>
               </div>
             </div>
@@ -570,8 +567,8 @@
               <input type="range" min="10" max="100" value="50" class="vs-slider" id="vs-bright" oninput="applyVisualSettings()">
             </div>
             <div class="vs-row">
-              <label class="vs-label">Прозрачность стекла <span class="vs-val" id="vs-glass-val">8%</span></label>
-              <input type="range" min="0" max="40" value="8" class="vs-slider" id="vs-glass" oninput="applyVisualSettings()">
+              <label class="vs-label">Прозрачность стекла <span class="vs-val" id="vs-glass-val">32%</span></label>
+              <input type="range" min="0" max="40" value="32" step="0.25" class="vs-slider" id="vs-glass" oninput="applyVisualSettings()" title="0 — минимум прозрачности (плотнее), выше — прозрачнее">
             </div>
             <div class="vs-row">
               <label class="vs-label">Blur панелей <span class="vs-val" id="vs-panel-blur-val">30px</span></label>
@@ -682,8 +679,12 @@
             </button>
             <div class="vs-section-body">
             <div class="vs-row">
-              <label class="vs-label">UI Scale <span class="vs-val" id="vs-scale-val">100%</span></label>
-              <input type="range" min="75" max="125" value="100" class="vs-slider" id="vs-scale" oninput="applyVisualSettings()">
+              <label class="vs-label">Оконный режим <span class="vs-val" id="vs-scale-window-val">100%</span></label>
+              <input type="range" min="75" max="130" value="100" class="vs-slider" id="vs-scale-window" oninput="applyVisualSettings()">
+            </div>
+            <div class="vs-row">
+              <label class="vs-label">Полноэкранный режим <span class="vs-val" id="vs-scale-fullscreen-val">100%</span></label>
+              <input type="range" min="75" max="140" value="100" class="vs-slider" id="vs-scale-fullscreen" oninput="applyVisualSettings()">
             </div>
             </div>
           </div>
@@ -744,6 +745,63 @@
         </div>
       </div>
 
+      <div id="settings-panel-customization" class="settings-category-panel">
+        <div class="cust-shell glass-card">
+          <p class="cust-lead">Здесь видно, откуда берутся обложка, фон и картинка виджета. В галерее наведи на плитку — сверху появятся кнопки: обложка, фон, виджет.</p>
+          <div class="cust-preview-row">
+            <div class="cust-preview-block">
+              <div class="cust-preview-label">Обложка плеера</div>
+              <div id="cust-prev-cover" class="cust-preview-sq" title="Текущая обложка в плеере"></div>
+              <div id="cust-prev-cover-meta" class="cust-preview-meta">—</div>
+            </div>
+            <div class="cust-preview-block cust-preview-block--center">
+              <div class="cust-preview-label">Фон</div>
+              <div id="cust-prev-bg" class="cust-preview-rect" title="Текущий фон"></div>
+              <div id="cust-prev-bg-meta" class="cust-preview-meta">—</div>
+            </div>
+            <div class="cust-preview-block">
+              <div class="cust-preview-label">Визуализатор</div>
+              <div id="cust-prev-viz" class="cust-preview-sq" title="Виджет на главной"></div>
+              <div id="cust-prev-viz-meta" class="cust-preview-meta">—</div>
+            </div>
+          </div>
+          <div class="cust-row-head">
+            <span>Недавние загрузки</span>
+            <span class="cust-row-head-actions">
+              <button type="button" class="btn-small" onclick="clearCustomizationGalleryRecent()">Очистить</button>
+              <button type="button" class="btn-small" onclick="openCustomizationGallery()">Открыть галерею</button>
+            </span>
+          </div>
+          <div id="cust-recent-strip" class="cust-recent-strip"></div>
+          <div class="cust-row-head cust-row-head--presets">
+            <span>Сохранённые виды</span>
+            <button type="button" class="btn-small" onclick="saveCustomizationPresetSnapshot()">Запомнить текущий вид</button>
+          </div>
+          <p class="cust-hint">Карточка: левый клик — применить, ПКМ — удалить.</p>
+          <div id="cust-preset-strip" class="cust-preset-strip"></div>
+          <div class="cust-io-grid">
+            <div class="cust-io-card">
+              <div class="cust-io-title">Пресет Nexory</div>
+              <p class="cust-io-desc">Полный бэкап внешнего вида и настроек из localStorage с префиксом <code>flow_</code>.</p>
+              <div class="cust-io-actions">
+                <button type="button" class="vsb cust-io-btn" onclick="exportFlowConfig()">Экспортировать</button>
+                <input type="file" id="flow-config-input" accept=".flowpreset,.dotifypreset,.json,application/json" onchange="importFlowConfigFile(this)" style="display:none" aria-hidden="true">
+                <button type="button" class="vsb cust-io-btn" onclick="pickFlowConfigFile()">Импортировать</button>
+              </div>
+            </div>
+            <div class="cust-io-card">
+              <div class="cust-io-title">Только сохранённые виды</div>
+              <p class="cust-io-desc">JSON со списком карточек «Запомнить текущий вид» — удобно перенести между ПК.</p>
+              <div class="cust-io-actions">
+                <button type="button" class="vsb cust-io-btn" onclick="exportSavedViewPresetsJson()">Экспорт списка</button>
+                <input type="file" id="cust-views-import-input" accept="application/json,.json" style="display:none" onchange="importSavedViewPresetsFromFile(this)">
+                <button type="button" class="vsb cust-io-btn" onclick="pickSavedViewPresetsFile()">Импорт списка</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div id="settings-panel-playback" class="settings-category-panel">
         <div class="visual-settings">
           <div class="vs-section glass-card">
@@ -757,16 +815,25 @@
               <button class="vsb" id="toggle-repeat-btn" onclick="toggleRepeatMode()">Выкл</button>
             </div>
             <div class="vs-row">
+              <label class="vs-label">Закрытие в трей</label>
+              <div class="vs-toggle active" id="toggle-minimize-to-tray" onclick="toggleMinimizeToTrayOnClose()" title="Если включено, крестик прячет окно — музыка играет; выход из меню в трее"><div class="vs-toggle-thumb"></div></div>
+            </div>
+            <div class="vs-row">
+              <label class="vs-label">Автозапуск с Windows</label>
+              <div class="vs-toggle" id="toggle-launch-at-login" onclick="toggleLaunchAtLogin()" title="Запуск Nexory при входе в систему"><div class="vs-toggle-thumb"></div></div>
+            </div>
+            <div class="vs-row">
               <label class="vs-label">Показывать блок визуализации</label>
               <div class="vs-toggle active" id="toggle-home-widget" onclick="toggleHomeWidgetEnabled()"><div class="vs-toggle-thumb"></div></div>
             </div>
             <div class="vs-row">
               <label class="vs-label">Стиль визуализации</label>
-              <div class="vs-btn-group">
-                <button class="vsb" id="hw-mode-bars" onclick="setHomeWidgetMode('bars')">Bars</button>
-                <button class="vsb" id="hw-mode-wave" onclick="setHomeWidgetMode('wave')">Wave</button>
-                <button class="vsb" id="hw-mode-dots" onclick="setHomeWidgetMode('dots')">Dots</button>
-                <button class="vsb" id="hw-mode-image" onclick="setHomeWidgetMode('image')">Image</button>
+              <div class="vs-btn-group vs-widget-grid">
+                <button class="vsb vs-widget-card" id="hw-mode-bars" onclick="setHomeWidgetMode('bars')"><span class="vs-widget-preview vs-widget-preview-bars"></span><span class="vs-widget-name">Bars</span></button>
+                <button class="vsb vs-widget-card" id="hw-mode-wave" onclick="setHomeWidgetMode('wave')"><span class="vs-widget-preview vs-widget-preview-wave"></span><span class="vs-widget-name">Wave</span></button>
+                <button class="vsb vs-widget-card" id="hw-mode-dots" onclick="setHomeWidgetMode('dots')"><span class="vs-widget-preview vs-widget-preview-dots"></span><span class="vs-widget-name">Dots</span></button>
+                <button class="vsb vs-widget-card" id="hw-mode-image" onclick="setHomeWidgetMode('image')"><span class="vs-widget-preview vs-widget-preview-image"></span><span class="vs-widget-name">Image</span></button>
+                <button class="vsb vs-widget-card" id="hw-mode-web" onclick="setHomeWidgetMode('web')"><span class="vs-widget-preview vs-widget-preview-web"></span><span class="vs-widget-name">Web</span></button>
               </div>
             </div>
             <div class="vs-row">
@@ -776,6 +843,18 @@
             <div class="vs-row">
               <label class="vs-label">Плавность визуализации <span class="vs-val" id="home-widget-smoothing-val">72%</span></label>
               <input type="range" id="home-widget-smoothing" min="20" max="95" step="1" value="72" onchange="setHomeWidgetSmoothing(this.value)" oninput="setHomeWidgetSmoothing(this.value)">
+            </div>
+            <div class="vs-row">
+              <label class="vs-label">Плотность визуализации <span class="vs-val" id="home-widget-density-val">100%</span></label>
+              <input type="range" id="home-widget-density" min="60" max="170" step="1" value="100" onchange="setHomeWidgetDensity(this.value)" oninput="setHomeWidgetDensity(this.value)">
+            </div>
+            <div class="vs-row">
+              <label class="vs-label">Толщина линий/точек <span class="vs-val" id="home-widget-thickness-val">100%</span></label>
+              <input type="range" id="home-widget-thickness" min="60" max="180" step="1" value="100" onchange="setHomeWidgetThickness(this.value)" oninput="setHomeWidgetThickness(this.value)">
+            </div>
+            <div class="vs-row">
+              <label class="vs-label">Высота амплитуды <span class="vs-val" id="home-widget-height-val">100%</span></label>
+              <input type="range" id="home-widget-height" min="60" max="180" step="1" value="100" onchange="setHomeWidgetHeight(this.value)" oninput="setHomeWidgetHeight(this.value)">
             </div>
             <div class="vs-row" id="home-widget-image-row" style="display:none;align-items:flex-start;flex-direction:column;gap:8px">
               <label class="vs-label">Фото для визуализации</label>
@@ -802,18 +881,13 @@
                 <button class="vsb" id="sound-profile-bright" onclick="setSoundEnhancerProfile('bright')">Яркий</button>
               </div>
             </div>
-          </div>
-
-          <div class="vs-section glass-card">
-            <div class="vs-section-title">Конфиг Flow</div>
-            <div class="vs-row" style="align-items:flex-start;flex-direction:column;gap:8px">
-              <label class="vs-label">Экспорт/импорт настроек для друзей</label>
-              <div class="vs-btn-group">
-                <button class="vsb" onclick="exportFlowConfig()">Экспортировать Flow preset</button>
-                <input type="file" id="flow-config-input" accept=".flowpreset,.dotifypreset,.json,application/json" onchange="importFlowConfigFile(this)" style="display:none">
-                <button class="vsb" onclick="pickFlowConfigFile()">Импортировать preset</button>
-              </div>
-              <div class="token-msg" id="flow-config-status" style="display:block">Экспорт создаёт .flowpreset. Импорт принимает .flowpreset, старые .dotifypreset и JSON.</div>
+            <div class="vs-row">
+              <label class="vs-label">Плеер в fullscreen ниже/выше <span class="vs-val" id="pm-stage-offset-val">0px</span></label>
+              <input type="range" id="pm-stage-offset" min="-120" max="120" step="1" value="0" onchange="setPlayerModeOffsets()" oninput="setPlayerModeOffsets()">
+            </div>
+            <div class="vs-row">
+              <label class="vs-label">Текст в fullscreen ниже/выше <span class="vs-val" id="pm-lyrics-offset-val">-60px</span></label>
+              <input type="range" id="pm-lyrics-offset" min="-140" max="120" step="1" value="-60" onchange="setPlayerModeOffsets()" oninput="setPlayerModeOffsets()">
             </div>
           </div>
 
@@ -825,7 +899,7 @@
           <p class="opt-section-lead">Настройки производительности для слабых ПК.</p>
           <div class="glass-card opt-settings-card">
             <div class="opt-setting-row">
-              <span class="opt-setting-icon opt-ico-spin" aria-hidden="true"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path stroke-linecap="round" d="M12 3v3M12 18v3M3 12h3M18 12h3M5.64 5.64l2.12 2.12M16.24 16.24l2.12 2.12M5.64 18.36l2.12-2.12M16.24 7.76l2.12-2.12"/></svg></span>
+              <span class="opt-setting-icon opt-ico-spin" aria-hidden="true"><svg class="ui-icon lg" data-lucide="sun" viewBox="0 0 24 24"></svg></span>
               <div class="opt-setting-text">
                 <div class="opt-setting-title">Отключить анимации</div>
                 <p class="opt-setting-desc">Отключает плавные переходы и эффекты для ускорения работы.</p>
@@ -833,7 +907,7 @@
               <div class="vs-toggle" id="toggle-opt-animations" onclick="toggleOptimizationSetting('optDisableAnimations')"><div class="vs-toggle-thumb"></div></div>
             </div>
             <div class="opt-setting-row">
-              <span class="opt-setting-icon opt-ico-chip" aria-hidden="true"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 13h4v4h-4z"/><path stroke-linecap="round" d="M6 17H4v-4h2M14 21h4v-4h-2M14 9h6V7h-2M10 9V7H6v2"/><path stroke-linecap="round" d="M10 21v-4M6 3v4M22 17h-4M18 3v4"/></svg></span>
+              <span class="opt-setting-icon opt-ico-chip" aria-hidden="true"><svg class="ui-icon lg" data-lucide="cpu" viewBox="0 0 24 24"></svg></span>
               <div class="opt-setting-text">
                 <div class="opt-setting-title">Упрощённая графика</div>
                 <p class="opt-setting-desc">Отключает сложные эффекты вроде размытия для стабильной работы на старых видеокартах.</p>
@@ -841,7 +915,7 @@
               <div class="vs-toggle" id="toggle-opt-simple-gfx" onclick="toggleOptimizationSetting('optSimpleGraphics')"><div class="vs-toggle-thumb"></div></div>
             </div>
             <div class="opt-setting-row">
-              <span class="opt-setting-icon opt-ico-snow" aria-hidden="true"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/><circle cx="12" cy="12" r="2.5"/></svg></span>
+              <span class="opt-setting-icon opt-ico-snow" aria-hidden="true"><svg class="ui-icon lg" data-lucide="snowflake" viewBox="0 0 24 24"></svg></span>
               <div class="opt-setting-text">
                 <div class="opt-setting-title">Заморозка интерфейса</div>
                 <p class="opt-setting-desc">Останавливает тяжёлую отрисовку нижней панели при свёрнутом окне. Музыка продолжает играть.</p>
@@ -849,7 +923,7 @@
               <div class="vs-toggle" id="toggle-opt-freeze-player" onclick="toggleOptimizationSetting('optFreezePlayerWhenMinimized')"><div class="vs-toggle-thumb"></div></div>
             </div>
             <div class="opt-setting-row">
-              <span class="opt-setting-icon opt-ico-moon" aria-hidden="true"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 14.8A9 9 0 1111.3 3a7 7 0 009.7 11.8z"/></svg></span>
+              <span class="opt-setting-icon opt-ico-moon" aria-hidden="true"><svg class="ui-icon lg" data-lucide="moon" viewBox="0 0 24 24"></svg></span>
               <div class="opt-setting-text">
                 <div class="opt-setting-title">Отключать видео-фоны в фоне</div>
                 <p class="opt-setting-desc">Выключает тяжёлые фоны и визуализатор, пока окно скрыто или свернуто.</p>
@@ -857,10 +931,10 @@
               <div class="vs-toggle" id="toggle-opt-bg-when-away" onclick="toggleOptimizationSetting('optPauseHeavyBgWhenBackgrounded')"><div class="vs-toggle-thumb"></div></div>
             </div>
             <div class="opt-setting-row">
-              <span class="opt-setting-icon" aria-hidden="true"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 11h2a1 1 0 001-1V9a1 1 0 011-1h1a1 1 0 011 1v1a1 1 0 001 1h2"/><path d="M9.5 15v.01M14.5 15v.01"/><rect x="4" y="7" width="16" height="10" rx="3"/></svg></span>
+              <span class="opt-setting-icon" aria-hidden="true"><svg class="ui-icon lg" data-lucide="headphones" viewBox="0 0 24 24"></svg></span>
               <div class="opt-setting-text">
                 <div class="opt-setting-title">Игровой режим</div>
-                <p class="opt-setting-desc">Пока окно не на экране (свернуто или ты в другой программе) — «sleep»: без текста и тяжёлой отрисовки, только звук. Вернёшься в Flow — всё как обычно.</p>
+                <p class="opt-setting-desc">Пока окно не на экране (свернуто или ты в другой программе) — «sleep»: без текста и тяжёлой отрисовки, только звук. Вернёшься в Nexory — всё как обычно.</p>
               </div>
               <div class="vs-toggle" id="toggle-opt-game-sleep" onclick="toggleOptimizationSetting('optGameSleepMode')"><div class="vs-toggle-thumb"></div></div>
             </div>
@@ -871,17 +945,17 @@
       <div id="settings-panel-accounts" class="settings-category-panel">
         <div class="glass-card" style="padding:18px;border-radius:18px;margin-top:8px;max-width:760px;">
           <div class="vs-section-title" style="margin-bottom:8px;">Источники</div>
-          <div style="color:var(--muted);font-size:14px;line-height:1.55;margin-bottom:14px;">Откуда брать результаты поиска: классический Flow (сервер), Яндекс Музыка или ВКонтакте (нужен токен с аудио).</div>
+          <div style="color:var(--muted);font-size:14px;line-height:1.55;margin-bottom:14px;">Откуда брать результаты поиска: классический Nexory (сервер), Яндекс Музыка или ВКонтакте (нужен токен с аудио).</div>
           <div class="auth-token-guide-row">
             <button type="button" class="btn-small auth-token-guide-btn auth-token-guide-btn--half" onclick="openFlowYandexTelegraphGuide()" title="Открыть в браузере">Яндекс · Telegraph</button>
-            <button type="button" class="btn-small auth-token-guide-btn auth-token-guide-btn--half" onclick="openFlowVkTelegraphGuide()" title="Telegraph: как подключить ВКонтакте во Flow">VK · Telegraph</button>
+            <button type="button" class="btn-small auth-token-guide-btn auth-token-guide-btn--half" onclick="openFlowVkTelegraphGuide()" title="Telegraph: как подключить ВКонтакте в Nexory">VK · Telegraph</button>
           </div>
 
           <div class="auth-source-stack" id="auth-source-stack">
             <div class="auth-source-row" data-auth-row="hybrid">
-              <button type="button" class="auth-source-tile auth-source-tile--flow source-mode-card" data-src="hybrid" onclick="onAuthSourceTileClick(event, 'hybrid')" title="Классический Flow">
-                <span class="auth-source-tile-img-wrap"><img class="auth-source-tile-img" src="assets/auth/flow.png" alt="Flow" /></span>
-                <span class="source-mode-label">Flow</span>
+              <button type="button" class="auth-source-tile auth-source-tile--flow source-mode-card" data-src="hybrid" onclick="onAuthSourceTileClick(event, 'hybrid')" title="Классический Nexory">
+                <span class="auth-source-tile-img-wrap"><img class="auth-source-tile-img" src="assets/auth/nexory.png" alt="Nexory" /></span>
+                <span class="source-mode-label">Nexory</span>
               </button>
               <div class="auth-source-drawer" data-auth-drawer="hybrid" aria-hidden="true">
                 <div class="auth-source-drawer-inner">
@@ -933,7 +1007,7 @@
                   </div>
                   <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 0;">
                     <button class="btn-small" type="button" onclick="checkVkTokenFromCompact()">Проверить токен</button>
-                    <button class="btn-small" type="button" onclick="openFlowVkTelegraphGuide()" title="Telegraph: как подключить ВКонтакте во Flow">VK · Telegraph</button>
+                    <button class="btn-small" type="button" onclick="openFlowVkTelegraphGuide()" title="Telegraph: как подключить ВКонтакте в Nexory">VK · Telegraph</button>
                   </div>
                   <div id="vk-msg-compact" class="token-msg" style="display:block;margin-top:8px;" role="status" aria-live="polite"></div>
                 </div>
@@ -1030,7 +1104,7 @@
               <button class="btn-small" id="vk-get-btn" onclick="getVkToken()">Войти в VK и получить токен</button>
               <button class="btn-small" id="vk-browser-auth-btn" onclick="startVkBrowserAuth()">Открыть вход VK в браузере</button>
               <button class="btn-small" onclick="openVkHostTokenPage()">Открыть vkhost.github.io</button>
-              <button class="btn-small" type="button" onclick="openFlowVkTelegraphGuide()" title="Telegraph: как подключить ВКонтакте во Flow">VK · Telegraph</button>
+              <button class="btn-small" type="button" onclick="openFlowVkTelegraphGuide()" title="Telegraph: как подключить ВКонтакте в Nexory">VK · Telegraph</button>
             </div>
 
             <div style="font-size:12px;color:var(--muted);margin:12px 0 6px;">Токен VK (можно вставить вручную)</div>
@@ -1051,7 +1125,7 @@
             <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);">
               <div style="font-size:12px;line-height:1.4;color:rgba(255,255,255,0.88);">
                 <div style="font-weight:600;margin-bottom:2px;">Обход через Chrome (Selenium)</div>
-                <div style="color:var(--muted);">Только если VK режет audio.*: отдельное окно Chrome, вход в VK, профиль в %LOCALAPPDATA%\Flow\vk_chrome_profile. По умолчанию выключено — поиск и импорт не запускают браузер сами.</div>
+                <div style="color:var(--muted);">Только если VK режет audio.*: отдельное окно Chrome, вход в VK, профиль в %LOCALAPPDATA%\Nexory\vk_chrome_profile. Если раньше использовался каталог Flow, переименуй его в Nexory. По умолчанию выключено — поиск и импорт не запускают браузер сами.</div>
               </div>
               <div class="vs-toggle" id="toggle-vk-selenium-bridge" onclick="toggleVkSeleniumBridgeSetting()" title="Разрешить обход через Chrome"><div class="vs-toggle-thumb"></div></div>
             </div>
@@ -1075,7 +1149,7 @@
               <strong>Актуально: OAuth Device Flow</strong>
               <span>1. Установи Python-библиотеку: <code>pip install -U yandex-music</code></span>
               <span>2. Запусти короткий скрипт из документации, открой ссылку и введи код.</span>
-              <span>3. Скопируй <code>access_token</code> сюда. Flow берет из Яндекса только названия и артистов, потом ищет треки обычным поиском.</span>
+              <span>3. Скопируй <code>access_token</code> сюда. Nexory берёт из Яндекса только названия и артистов, потом ищет треки обычным поиском.</span>
               <span>Запасной вариант: браузерная OAuth-ссылка ниже. После входа скопируй <code>access_token</code> из URL.</span>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0;">
@@ -1112,9 +1186,9 @@
           </div>
         </div>
         <div class="glass-card" style="padding:18px;border-radius:18px;margin-top:12px;max-width:760px;">
-          <div class="vs-section-title" style="margin-bottom:8px;">Flow сервер</div>
+          <div class="vs-section-title" style="margin-bottom:8px;">Сервер Nexory</div>
           <input id="proxy-base-url" class="token-field flow-input" placeholder="http://127.0.0.1:порт (опционально)" />
-          <div class="integration-hint">Используется для VK-импорта, статуса сервера и серверных функций Flow. По умолчанию: http://85.239.34.229:8787</div>
+          <div class="integration-hint">Используется для VK-импорта, статуса сервера и серверных функций Nexory. По умолчанию: http://85.239.34.229:8787</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
             <button class="btn-small" onclick="saveProxySettings()">Сохранить сервер</button>
             <button class="btn-small" onclick="checkFlowServerStatus()">Проверить сервер</button>
@@ -1125,14 +1199,24 @@
         </div>
         <div class="glass-card" style="padding:18px;border-radius:18px;margin-top:12px;max-width:760px;">
           <div class="vs-section-title" style="margin-bottom:8px;">Социальный слой (свой сервер вместо Supabase)</div>
-          <div class="integration-hint" style="margin-bottom:8px">На VPS запусти <code style="font-size:11px;opacity:.85">node server/flow-social-server.js</code> с переменной <code style="font-size:11px;opacity:.85">FLOW_SOCIAL_SECRET</code>. Здесь укажи тот же секрет и базовый URL (https://твой-домен без слэша).</div>
-          <input id="flow-social-api-base" class="token-field flow-input" placeholder="https://social.example.com" />
-          <input id="flow-social-api-secret" class="token-field flow-input" type="password" placeholder="Секрет (Bearer), как FLOW_SOCIAL_SECRET" style="margin-top:8px" />
+          <div class="integration-hint" style="margin-bottom:8px">В этой сборке social backend уже зафиксирован на сервер Nexory (stable) и работает без ручного ввода.</div>
+          <input id="flow-social-api-base" class="token-field flow-input" placeholder="Nexory Social API Base (fixed)" />
+          <input id="flow-social-api-secret" class="token-field flow-input" type="password" placeholder="Nexory Social Secret (fixed)" style="margin-top:8px" />
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
             <button class="btn-small" onclick="saveFlowSocialBackendSettings()">Сохранить социальный сервер</button>
             <button class="btn-small" onclick="checkFlowSocialBackendStatus()">Проверить API</button>
           </div>
           <div id="flow-social-api-status" class="integration-hint" style="margin-top:8px">Статус соц-API не проверен</div>
+        </div>
+        <div class="glass-card" style="padding:18px;border-radius:18px;margin-top:12px;max-width:760px;">
+          <div class="vs-section-title" style="margin-bottom:8px;">Обновления приложения (stable)</div>
+          <div class="integration-hint" style="margin-bottom:8px">Nexory проверяет stable-канал и может скачать обновление без ручной раздачи .exe.</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+            <button class="btn-small" onclick="checkAppUpdatesNow()">Проверить обновления</button>
+            <button class="btn-small" id="app-update-download-btn" onclick="downloadAppUpdateNow()">Скачать</button>
+            <button class="btn-small" id="app-update-install-btn" onclick="installAppUpdateNow()">Установить и перезапустить</button>
+          </div>
+          <div id="app-update-status" class="integration-hint app-update-status" style="margin-top:8px">Проверка не запускалась</div>
         </div>
         <div class="glass-card" style="padding:18px;border-radius:18px;margin-top:12px;max-width:760px;">
           <div class="vs-section-title" style="margin-bottom:8px;">Last.fm интеграция</div>
@@ -1147,13 +1231,24 @@
       </div><!-- .settings-shell -->
     </div><!-- #page-settings -->
 
+    <div id="cust-gallery-overlay" class="cust-gallery-overlay hidden" aria-hidden="true">
+      <div class="cust-gallery-backdrop" onclick="closeCustomizationGallery()"></div>
+      <div class="cust-gallery-sheet glass-card" role="dialog" aria-modal="true" aria-label="Галерея медиа">
+        <div class="cust-gallery-head">
+          <span class="cust-gallery-title">Загруженные изображения</span>
+          <button type="button" class="btn-small" onclick="closeCustomizationGallery()">Закрыть</button>
+        </div>
+        <div id="cust-gallery-grid" class="cust-gallery-grid"></div>
+      </div>
+    </div>
+
   </div><!-- /content -->
 
   <!-- LYRICS PANEL -->
   <div id="lyrics-panel" class="lyrics-panel hidden">
     <div class="lyrics-header">
       <span class="lyrics-title" id="lyrics-track-name">—</span>
-      <button class="lyrics-close" onclick="toggleLyrics()"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+      <button class="lyrics-close" onclick="toggleLyrics()"><svg class="ui-icon" data-lucide="x" viewBox="0 0 24 24"></svg></button>
     </div>
     <div class="lyrics-content" id="lyrics-content">
       <div class="lyrics-empty">Нажми на трек, чтобы загрузить текст</div>
@@ -1162,31 +1257,40 @@
 
   <!-- PLAYER BAR: слева трек · центр shuffle + транспорт + repeat / под ними время по бокам прогресса · справа только громкость -->
   <div class="player-bar glass-bar player-bar--nover" id="player-bar">
+    <div class="player-bar-layout-dock" id="player-bar-layout-dock" role="group" aria-label="Расположение меню">
+      <span class="player-bar-layout-dock-label">Меню</span>
+      <div class="player-bar-layout-dock-btns">
+        <button type="button" class="pbl-dock-btn" data-flow-sidebar-layout="left" title="Меню слева" aria-label="Меню слева"><span class="pbl-dock-btn-stack"><span class="vs-layout-mini vs-layout-mini-left"><i></i><b></b></span><span class="pbl-dock-cap">Слева</span></span></button>
+        <button type="button" class="pbl-dock-btn" data-flow-sidebar-layout="top" title="Меню сверху" aria-label="Меню сверху"><span class="pbl-dock-btn-stack"><span class="vs-layout-mini vs-layout-mini-top"><i></i><b></b></span><span class="pbl-dock-cap">Сверху</span></span></button>
+        <button type="button" class="pbl-dock-btn" data-flow-sidebar-layout="bottom" title="Меню снизу" aria-label="Меню снизу"><span class="pbl-dock-btn-stack"><span class="vs-layout-mini vs-layout-mini-bottom"><i></i><b></b></span><span class="pbl-dock-cap">Снизу</span></span></button>
+        <button type="button" class="pbl-dock-btn" data-flow-sidebar-layout="right" title="Меню справа" aria-label="Меню справа"><span class="pbl-dock-btn-stack"><span class="vs-layout-mini vs-layout-mini-right"><i></i><b></b></span><span class="pbl-dock-cap">Справа</span></span></button>
+      </div>
+    </div>
     <div class="nover-bar-grid">
       <div class="nover-bar-left">
         <span class="nover-bar-accent" aria-hidden="true"></span>
         <div class="player-track player-track--nover" id="player-track-panel">
-          <div class="player-cover" id="player-cover" onclick="enterPlayerMode()" title="Открыть режим плеера"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>
+          <div class="player-cover" id="player-cover" onclick="enterPlayerMode()" title="Открыть режим плеера"><svg class="ui-icon lg" data-lucide="music-2" viewBox="0 0 24 24"></svg></div>
           <div class="player-meta">
             <span id="player-name">Ничего не играет</span>
-            <span id="player-artist" class="player-artist">—</span>
+            <span class="player-meta-row"><span id="player-artist" class="player-artist">—</span><span id="player-track-source-inline" class="player-track-source-inline hidden" aria-hidden="true"></span></span>
           </div>
           <div class="player-track-btns">
-            <button class="player-like-btn" id="player-like-btn" onclick="likeCurrentTrack()" title="Лайк"><svg class="ui-icon flow-ref-heart-player" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="1.62" stroke-linecap="round" stroke-linejoin="round" d="M12 20.4s6.5-4.35 8.82-7.74A5.05 5.05 0 0012 6.42a5.05 5.05 0 00-8.82 6.24C5.47 15.93 12 20.35 12 20.42z"/></svg></button>
-            <button class="player-like-btn" onclick="findSimilarTracks()" title="Найти похожие"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.62" stroke-linecap="round" stroke-linejoin="round"><path d="M14.83 14.83a4 4 0 0 1-6.63 1.1 4 4 0 0 1 1.53-6.73 4 4 0 0 1 5 .37l5.74 5.32"/><path d="M9.17 9.17a4 4 0 0 0 6.63-1.1 4 4 0 0 0-1.53 6.73 4 4 0 0 0-5-.37l-5.74-5.32"/></svg></button>
-            <button class="player-like-btn" id="lyrics-btn" onclick="toggleLyrics()" title="Текст"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.62" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg></button>
-            <button class="player-like-btn" onclick="enterPlayerMode()" title="Режим плеера"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.62" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M21 21h-5v-5"/></svg></button>
+            <button type="button" class="player-like-btn" onclick="findSimilarTracks()" title="Найти похожие"><svg class="ui-icon" data-lucide="audio-lines" viewBox="0 0 24 24"></svg></button>
+            <button type="button" class="player-like-btn" onclick="enterPlayerMode()" title="Режим плеера"><svg class="ui-icon" data-lucide="maximize-2" viewBox="0 0 24 24"></svg></button>
           </div>
         </div>
       </div>
       <div class="nover-bar-center player-center">
         <div class="nover-transport-strip player-controls">
           <span id="host-lock-indicator-main" style="display:none;align-items:center;gap:4px;font-size:11px;opacity:.75;padding:0 4px">🔒 Host only</span>
-          <button type="button" class="ctrl-btn nover-strip-btn" id="shuffle-btn" onclick="toggleShuffleMode()" title="Перемешка"><svg class="ui-icon flow-ref-ctrl" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="1.72" stroke-linecap="round" d="M16 4h5v5"/><path stroke="currentColor" stroke-width="1.72" stroke-linecap="round" d="M4 21L21 4"/><path stroke="currentColor" stroke-width="1.72" stroke-linecap="round" d="M21 17v5h-5"/><path stroke="currentColor" stroke-width="1.72" stroke-linecap="round" d="M14.5 16l6.5 6"/><path stroke="currentColor" stroke-width="1.72" stroke-linecap="round" d="M4 6l6 7"/><path stroke="var(--accent2)" stroke-width="2" stroke-linecap="round" d="M4 4l7 9"/></svg></button>
-          <button type="button" class="ctrl-btn nover-strip-btn" onclick="prevTrack()" title="Предыдущий"><svg class="ui-icon ctrl-side-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 17V7"/><path d="m9 17 7-6-7-6"/></svg></button>
-          <button type="button" class="ctrl-btn play-btn play-btn--nover-wire" id="play-btn" onclick="togglePlay()"><svg class="ui-icon ctrl-play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M9 8 L17 12 L9 16 Z"/></svg></button>
-          <button type="button" class="ctrl-btn nover-strip-btn" onclick="nextTrack()" title="Следующий"><svg class="ui-icon ctrl-side-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 17V7"/><path d="m15 17-7-6 7-6"/></svg></button>
-          <button type="button" class="ctrl-btn nover-strip-btn" id="repeat-btn" onclick="toggleRepeatMode()" title="Повтор"><svg class="ui-icon flow-ref-ctrl" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="1.72" stroke-linecap="round" stroke-linejoin="round" d="M17 2.3l4 4.2-4 4"/><path stroke="currentColor" stroke-width="1.72" d="M3 16v-7A4.5 4.5 0 017.5 4.5h12"/><path stroke="currentColor" stroke-width="1.72" stroke-linecap="round" stroke-linejoin="round" d="M7 22l-4-4.2 4-4"/><path stroke="currentColor" stroke-width="1.72" d="M21 10.5v6A4.5 4.5 0 0116.5 21h-12"/><circle fill="var(--accent2)" cx="15.95" cy="18.95" r="1.65"/></svg></button>
+          <button type="button" class="ctrl-btn nover-strip-btn player-transport-dislike hidden" id="player-wave-dislike-btn" onclick="dislikeCurrentYandexWaveTrack()" title="Не нравится (синхрон с Яндексом)"><svg class="ui-icon" data-lucide="thumbs-down" viewBox="0 0 24 24"></svg></button>
+          <button type="button" class="ctrl-btn nover-strip-btn" id="shuffle-btn" onclick="toggleShuffleMode()" title="Перемешка"><svg class="ui-icon flow-ref-ctrl" data-lucide="shuffle" viewBox="0 0 24 24"></svg></button>
+          <button type="button" class="ctrl-btn nover-strip-btn" onclick="prevTrack()" title="Предыдущий"><svg class="ui-icon ctrl-side-icon" data-lucide="skip-back" viewBox="0 0 24 24"></svg></button>
+          <button type="button" class="ctrl-btn play-btn play-btn--nover-wire" id="play-btn" onclick="togglePlay()"><svg class="ui-icon ctrl-play-icon" data-lucide="play" viewBox="0 0 24 24"></svg></button>
+          <button type="button" class="ctrl-btn nover-strip-btn" onclick="nextTrack()" title="Следующий"><svg class="ui-icon ctrl-side-icon" data-lucide="skip-forward" viewBox="0 0 24 24"></svg></button>
+          <button type="button" class="ctrl-btn nover-strip-btn" id="repeat-btn" onclick="toggleRepeatMode()" title="Повтор"><svg class="ui-icon flow-ref-ctrl" data-lucide="repeat" viewBox="0 0 24 24"></svg></button>
+          <button type="button" class="ctrl-btn nover-strip-btn player-transport-like" id="player-like-btn" onclick="likeCurrentTrack()" title="Лайк"><svg class="ui-icon flow-ref-heart-player" data-lucide="heart" viewBox="0 0 24 24"></svg></button>
         </div>
         <div class="progress-wrap progress-wrap--nover nover-progress-classic">
           <span id="time-current" class="time-label time-label--elapsed">0:00</span>
@@ -1195,7 +1299,7 @@
         </div>
       </div>
       <div class="player-right player-right--nover-volume">
-        <svg class="flow-vol-icon ui-icon md" viewBox="0 0 24 24" fill="none"><polygon fill="none" points="11 5 6 9 3 9 3 15 6 15 11 19 11 5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M15.62 10.55a6 6 0 010 9.1" stroke="var(--accent2)" stroke-width="1.6" stroke-linecap="round"/><path d="M18.5 8.55a11 11 0 010 13.6" stroke="var(--accent2)" stroke-width="1.6" stroke-linecap="round" opacity="0.9"/></svg>
+        <svg class="flow-vol-icon ui-icon md" data-lucide="volume-2" viewBox="0 0 24 24"></svg>
         <input type="range" id="volume" class="volume-bar volume-bar--nover" min="0" max="1" step="0.01" value="0.8" oninput="setVolume(this.value)">
       </div>
     </div>
@@ -1213,28 +1317,33 @@
 <div id="player-mode" class="player-mode hidden">
   <div class="pm-bg" id="pm-bg"></div>
   <button class="pm-close" onclick="exitPlayerMode()">
-    <svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    <svg class="ui-icon lg" data-lucide="arrow-left" viewBox="0 0 24 24"></svg>
   </button>
 
+  <div class="pm-layout" id="pm-layout">
+  <div class="pm-stage-column">
+  <div class="pm-desk-stage">
+  <div class="pm-desk-wall" aria-hidden="true"></div>
+  <div class="pm-desk-grid">
+  <div class="pm-glass-window pm-win-player">
   <div class="pm-main-stack" id="pm-main-stack">
+  <div class="pm-player-row">
+  <div class="pm-cover-zone">
   <div class="pm-cover-wrap">
-    <div class="pm-cover" id="pm-cover"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>
+    <div class="pm-cover" id="pm-cover"><svg class="ui-icon lg" data-lucide="music-2" viewBox="0 0 24 24"></svg></div>
     <div class="pm-cover-actions" id="pm-cover-actions">
-      <button class="pm-cover-action-btn" id="pm-cover-like-btn" onclick="likeCurrentTrack()" title="В избранное"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.35-9.5-8A5.5 5.5 0 0 1 12 5.1 5.5 5.5 0 0 1 21.5 13c-2.5 3.65-9.5 8-9.5 8Z"/></svg></button>
-      <button class="pm-cover-action-btn" id="pm-cover-lyrics-btn" onclick="togglePmLyricsFromCover()" title="Текст"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg></button>
-      <button class="pm-cover-action-btn" id="pm-cover-volume-btn" onclick="togglePmVolumePopover(event)" title="Громкость"><svg class="ui-icon" viewBox="0 0 24 24" fill="none"><polygon fill="none" points="11 5 6 9 3 9 3 15 6 15 11 19 11 5" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"/><path d="M15.62 10.55a6 6 0 010 9.1" stroke="var(--accent2)" stroke-width="1.82" stroke-linecap="round"/><path d="M18.5 8.55a11 11 0 010 13.6" stroke="var(--accent2)" stroke-width="1.82" stroke-linecap="round" opacity="0.9"/></svg></button>
-      <div class="pm-cover-volume-pop hidden" id="pm-cover-volume-pop">
-        <input type="range" class="pm-cover-volume" min="0" max="1" step="0.01" value="0.8" oninput="setVolume(this.value)" id="pm-cover-volume">
-      </div>
+      <button type="button" class="pm-cover-action-btn pm-cover-lyrics-t" id="pm-cover-lyrics-btn" onclick="togglePmLyricsFromCover()" title="Текст трека">T</button>
     </div>
     <div class="pm-cover-glow" id="pm-cover-glow"></div>
   </div>
+  </div>
 
+  <div class="pm-meta-zone">
   <div class="pm-info">
     <h1 class="pm-title" id="pm-title">Ничего не играет</h1>
     <p class="pm-artist" id="pm-artist">—</p>
     <div class="pm-source-row">
-      <span id="pm-source-badge" class="track-source hidden">—</span>
+      <span id="pm-source-badge" class="pm-source-badge-slot hidden" aria-hidden="true"></span>
     </div>
   </div>
 
@@ -1244,36 +1353,49 @@
     <span class="pm-time" id="pm-time-total">0:00</span>
   </div>
 
-  <div class="pm-controls">
-    <span id="host-lock-indicator-pm" style="display:none;align-items:center;gap:4px;font-size:12px;opacity:.75;padding:0 4px">🔒 Host only</span>
-    <button class="pm-btn-side" onclick="likeCurrentTrack()" id="pm-like-btn"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.35-9.5-8A5.5 5.5 0 0 1 12 5.1 5.5 5.5 0 0 1 21.5 13c-2.5 3.65-9.5 8-9.5 8Z"/></svg></button>
-    <button class="pm-btn" onclick="prevTrack()">
-      <svg class="ui-icon lg" viewBox="0 0 24 24" fill="currentColor"><path d="M19 20L9 12l10-8v16zM5 4h2v16H5z"/></svg>
+  <div class="pm-controls pm-controls--rail">
+    <span id="host-lock-indicator-pm" class="pm-host-lock-pm" style="display:none">🔒 Host only</span>
+    <div class="pm-controls-rail-bar">
+    <button type="button" class="pm-btn-side hidden" onclick="dislikeCurrentYandexWaveTrack()" id="pm-wave-dislike-btn" title="Не нравится (Яндекс)"><svg class="ui-icon" data-lucide="thumbs-down" viewBox="0 0 24 24"></svg></button>
+    <button class="pm-btn-side" id="pm-shuffle-btn" onclick="toggleShuffleMode()" title="Перемешка"><svg class="ui-icon" data-lucide="shuffle" viewBox="0 0 24 24"></svg></button>
+    <button class="pm-btn" onclick="prevTrack()" title="Предыдущий">
+      <svg class="ui-icon lg" data-lucide="skip-back" viewBox="0 0 24 24"></svg>
     </button>
-    <button class="pm-btn pm-play" id="pm-play-btn" onclick="togglePlay()">
-      <svg id="pm-play-icon" class="ctrl-play-icon" viewBox="0 0 24 24" fill="currentColor"><path fill="currentColor" d="M9 8 L17 12 L9 16 Z"/></svg>
+    <button class="pm-btn pm-play" id="pm-play-btn" onclick="togglePlay()" title="Пауза / воспроизведение">
+      <svg id="pm-play-icon" class="ui-icon ctrl-play-icon" data-lucide="play" viewBox="0 0 24 24"></svg>
     </button>
-    <button class="pm-btn" onclick="nextTrack()">
-      <svg class="ui-icon lg" viewBox="0 0 24 24" fill="currentColor"><path d="M5 4l10 8-10 8V4zm14 0h-2v16h2z"/></svg>
+    <button class="pm-btn" onclick="nextTrack()" title="Следующий">
+      <svg class="ui-icon lg" data-lucide="skip-forward" viewBox="0 0 24 24"></svg>
     </button>
-    <button class="pm-btn-side" onclick="toggleLyrics()"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg></button>
+    <button class="pm-btn-side" id="pm-repeat-pm-btn" onclick="toggleRepeatMode()" title="Повтор"><svg class="ui-icon" data-lucide="repeat" viewBox="0 0 24 24"></svg></button>
+    <button type="button" class="pm-btn-side" id="pm-like-btn" onclick="likeCurrentTrack()" title="Лайк"><svg class="ui-icon flow-ref-heart-player" data-lucide="heart" viewBox="0 0 24 24"></svg></button>
+    </div>
   </div>
 
   <div class="pm-volume-wrap">
-    <svg class="flow-vol-icon ui-icon md" viewBox="0 0 24 24" fill="none" style="opacity:0.75;flex-shrink:0"><polygon fill="none" points="11 5 6 9 3 9 3 15 6 15 11 19 11 5" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"/><path d="M15.62 10.55a6 6 0 010 9.1" stroke="var(--accent2)" stroke-width="1.82" stroke-linecap="round"/><path d="M18.5 8.55a11 11 0 010 13.6" stroke="var(--accent2)" stroke-width="1.82" stroke-linecap="round" opacity="0.9"/></svg>
+    <svg class="flow-vol-icon ui-icon md" data-lucide="volume-2" viewBox="0 0 24 24" style="opacity:0.75;flex-shrink:0"></svg>
     <input type="range" class="pm-volume" min="0" max="1" step="0.01" value="0.8" oninput="setVolume(this.value)" id="pm-volume">
-    <svg class="flow-vol-icon ui-icon md" viewBox="0 0 24 24" fill="none" style="opacity:0.75;flex-shrink:0"><polygon fill="none" points="11 5 6 9 3 9 3 15 6 15 11 19 11 5" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"/><path d="M15.62 10.55a6 6 0 010 9.1" stroke="var(--accent2)" stroke-width="1.82" stroke-linecap="round"/><path d="M18.5 8.55a11 11 0 010 13.6" stroke="var(--accent2)" stroke-width="1.82" stroke-linecap="round" opacity="0.9"/></svg>
+    <svg class="flow-vol-icon ui-icon md" data-lucide="volume-2" viewBox="0 0 24 24" style="opacity:0.75;flex-shrink:0"></svg>
+  </div>
+  </div>
+  </div>
+  </div>
+  </div>
+  <aside class="pm-glass-window pm-win-next hidden" aria-hidden="true" aria-label="Дальше в очереди">
+    <div class="pm-next-head">
+      <span class="pm-next-title">Дальше в очереди</span>
+      <span class="pm-next-count" id="pm-queue-count"></span>
+    </div>
+    <div class="pm-queue-strip" id="pm-queue-strip" role="list"></div>
+  </aside>
+  </div>
   </div>
   </div>
 
   <div class="pm-lyrics-shell hidden" id="pm-lyrics-shell">
-    <div class="pm-lyrics-head">
-      <div class="pm-lyrics-track" id="pm-lyrics-track-name">—</div>
-      <div class="pm-lyrics-settings-wrap">
+    <div class="pm-lyrics-settings-wrap">
       <button class="pm-lyrics-mini-btn" id="pm-lyrics-settings-btn" type="button" onclick="toggleLyricsSettingsPanel()" title="Оформление текста">
-        <svg class="ui-icon pm-lyrics-settings-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="2" x2="6" y1="14" y2="14"/><line x1="10" x2="14" y1="8" y2="8"/><line x1="18" x2="22" y1="16" y2="16"/>
-        </svg>
+        <svg class="ui-icon pm-lyrics-settings-icon" data-lucide="cog" viewBox="0 0 24 24" aria-hidden="true"></svg>
       </button>
       <div class="pm-lyrics-controls pm-lyrics-popover hidden" id="pm-lyrics-controls-panel" role="dialog" aria-label="Оформление текста">
         <div class="pm-lyrics-popover-inner">
@@ -1310,12 +1432,17 @@
           </div>
         </div>
       </div>
-      </div>
+    </div>
+    <div class="pm-lyrics-stack-shift">
+    <div class="pm-lyrics-head">
+      <div class="pm-lyrics-track" id="pm-lyrics-track-name">—</div>
     </div>
     <div class="pm-lyrics-content" id="pm-lyrics-content">
       <div class="lyrics-empty">Нажми на трек, чтобы загрузить текст</div>
     </div>
+    </div>
   </div>
+  </div><!-- /pm-layout -->
 </div>
 
 <div id="toast" class="toast hidden"></div>
@@ -1430,7 +1557,7 @@
   <div class="flow-modal-backdrop" onclick="closeTextPlaylistImportModal()"></div>
   <div class="flow-modal-card glass-card">
     <h3>Импорт треков текстом</h3>
-    <p style="font-size:12px;opacity:.8;margin-top:6px">Вставь строки вида artist - title. Можно вставить JSON-ответ VK reload_audios, Flow сам достанет названия.</p>
+    <p style="font-size:12px;opacity:.8;margin-top:6px">Вставь строки вида artist - title. Можно вставить JSON-ответ VK reload_audios, Nexory сам достанет названия.</p>
     <textarea id="text-import-input" class="token-field flow-input flow-textarea" placeholder="Элджей, Feduk - Розовое вино&#10;SEREBRO - Между нами любовь&#10;ssshhhiiittt! - Танцы" style="margin-top:10px;min-height:180px;resize:vertical;width:100%"></textarea>
     <input id="text-import-name" class="token-field flow-input" placeholder="Название плейлиста (необязательно)" style="margin-top:10px" />
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
@@ -1478,17 +1605,18 @@
   </div>
 </div>
 <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-<script src="src/modules/network/flow-social-backend.js"></script>
-<script src="src/modules/utils/smart-cleaning.js"></script>
-<script src="src/modules/audio/player-core.js"></script>
-<script src="src/modules/network/peer-social.js"></script>
+  <script src="src/modules/network/flow-social-backend.js"></script>
+  <script src="src/modules/utils/smart-cleaning.js"></script>
+  <script src="src/modules/audio/player-core.js"></script>
+  <script src="src/modules/network/peer-social.js"></script>
   <script src="src/modules/ui/drag-drop.js"></script>
+  <script src="src/modules/lucide-icons.js"></script>
   <script src="src/modules/wave-engine.js"></script>
   <div id="flow-game-sleep-overlay" class="flow-game-sleep-overlay" aria-hidden="true">
     <div class="flow-game-sleep-title">Sleep mode</div>
-    <div class="flow-game-sleep-sub">Только воспроизведение · верни Flow на экран</div>
+    <div class="flow-game-sleep-sub">Только воспроизведение · верни Nexory на экран</div>
   </div>
-  <script src="renderer.js?v=20260503-room-guest-visual"></script>
+  <script src="renderer.js?v=41f14e2c19b5-mp5qb4kg"></script>
 </body>
 </html>
 

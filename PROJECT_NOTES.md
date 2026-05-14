@@ -1,7 +1,7 @@
-# Flow — Project Notes (2.6.6)
+# Nexory — Project Notes (2.6.6)
 
 ## Scope
-Flow is an Electron desktop player with:
+Nexory is an Electron desktop player with:
 - multi-source search/playback
 - cloud social layer (friends, presence, rooms)
 - shared room queue and host-controlled synchronized playback

@@ -1,8 +1,8 @@
-# Как подключить ВКонтакте во Flow — токен
+# Как подключить ВКонтакте в Nexory — токен
 
 *Скопируй блоки ниже в [@Telegraph](https://t.me/telegraph) — получится страница как у гайда по Яндексу.*
 
-Чтобы во **Flow** работали поиск по аудио ВКонтакте и импорт плейлистов, приложению нужен **access token** с доступом к аудио.
+Чтобы в **Nexory** работали поиск по аудио ВКонтакте и импорт плейлистов, приложению нужен **access token** с доступом к аудио.
 
 ### Шаг 1. Открой страницу получения токена
 
@@ -30,7 +30,7 @@
 
 Скопируй значение от `access_token=` до `&expires_in`.
 
-### Шаг 6. Вставь токен во Flow
+### Шаг 6. Вставь токен в Nexory
 
 Настройки → Аккаунты → Источники или «Авторизация VK» → вставь токен → сохрани → «Проверить токен».
 
@@ -47,6 +47,6 @@
 https://telegra.ph/Kak-podklyuchit-VKontakte-vo-Flow-05-04  
 
 **Резерв (HTML в репо):**  
-https://github.com/ioqeeqo-create/FlowPleerLoww/blob/cursor/liquid-glass-room-widget-0756/assets/guides/vk-token-dlya-flow.html  
+https://github.com/ioqeeqo-create/NexoryND/blob/cursor/liquid-glass-room-widget-0756/assets/guides/vk-token-dlya-flow.html  
 
 В коде: `FLOW_VK_TELEGRAPH_GUIDE_URL` (Telegraph) → иначе `FLOW_VK_GUIDE_GITHUB_BLOB` → иначе локальный `assets/guides/...`.

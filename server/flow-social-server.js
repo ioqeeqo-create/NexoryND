@@ -1,5 +1,5 @@
 /**
- * Flow Social — свой бэкенд вместо Supabase (SQLite + REST + WebSocket).
+ * Nexory Social — свой бэкенд вместо Supabase (SQLite + REST + WebSocket).
  *
  * Локально:
  *   FLOW_SOCIAL_SECRET=... npm run social-server
@@ -193,7 +193,7 @@ function electRoomHost(roomId, opts = {}) {
 /** --- WebSocket hubs --- */
 const app = express()
 app.use(cors({ origin: true }))
-app.use(express.json({ limit: '32mb' }))
+app.use(express.json({ limit: '64mb' }))
 
 function bearerAuth(req, res, next) {
   const h = req.headers.authorization || ''

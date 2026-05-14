@@ -2,7 +2,17 @@ const { audioPlayer = {}, smartCleaning = {}, dragDrop = {}, peerSocial = {}, wa
 const audio = (audioPlayer.createPlayerAudio || ((onErr) => {
   const el = new Audio()
   el.volume = 0.8
-  el.onerror = () => onErr(el)
+  el.onerror = () => {
+    if (typeof window.__flowPlayerAudioError === 'function') {
+      try {
+        window.__flowPlayerAudioError(el)
+        return
+      } catch (e) {
+        console.warn('__flowPlayerAudioError failed', e)
+      }
+    }
+    onErr(el)
+  }
   return el
 }))(() => {
   console.error('AUDIO ERROR', {
@@ -80,7 +90,16 @@ let playbackMode = (() => {
   catch { return { ...defaultPlayback } }
 })()
 
-const COVER_ICON = '<svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'
+function flowLucideSvg(name, extraClass = '') {
+  const L = typeof FLOW_LUCIDE_INNER !== 'undefined' ? FLOW_LUCIDE_INNER : {}
+  const paths = L[name] || ''
+  const cls = ('ui-icon ' + String(extraClass || '').trim()).trim()
+  if (!paths) return `<svg class="${cls}" viewBox="0 0 24 24"></svg>`
+  if (name === 'play') return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" aria-hidden="true">${paths}</svg>`
+  if (name === 'pause') return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" aria-hidden="true">${paths}</svg>`
+  return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`
+}
+const COVER_ICON = flowLucideSvg('music-2', 'lg')
 let _audioCtx = null
 let _analyser = null
 let _freqData = null
@@ -99,6 +118,7 @@ let _lastAppliedServerPlaybackTs = 0
 /** Монотонный номер sync от хоста — гость отбрасывает только устаревшие пакеты, не «равные по ts» с pause. */
 let _lastPlaybackSyncSeq = 0
 let _hostPlaybackSyncSeq = 0
+let _lastGuestP2pPlaybackAt = 0
 let _lastRoomServerLoadAt = 0
 let _friendPresence = new Map()
 let _friendsPollTimer = null
@@ -125,6 +145,7 @@ let _pendingRoomInvite = null
 let _myWaveRenderedTracks = []
 let _myWaveBuilding = false
 let _myWavePreloading = false
+let _myWaveSeenKeys = new Set()
 let _myWaveMode = (() => {
   try { return localStorage.getItem('flow_my_wave_mode') || 'default' } catch { return 'default' }
 })()
@@ -135,13 +156,15 @@ let _lastServerStatusCheckAt = 0
 const FRIEND_POLL_INTERVAL_MS = 2500
 const FRIEND_FRESH_ONLINE_MS = 9000
 const FRIEND_PROFILE_REFRESH_MS = 7000
+const FRIEND_ONLINE_STALE_MS = 65000
 const FLOW_SERVER_DEFAULT_URL = 'http://85.239.34.229:8787'
 const FLOW_SOCIAL_DEFAULT_API_BASE = 'http://85.239.34.229/social'
 const FLOW_SOCIAL_DEFAULT_API_SECRET = 'flowflow'
 const FRIEND_NOTIFY_COOLDOWN_MS = 90 * 1000
-const PROFILE_CACHE_TTL_MS = 60 * 1000
 /** Ленивый API «Моя волна» (реализация в src/modules/wave-engine.js). */
 let _waveEngineApi = null
+/** Яндекс «Моя волна» (rotor): queue в GET /tracks — id первого трека предыдущей выдачи. */
+let _yandexWaveRotorQueueHint = ''
 function waveEngine() {
   if (!_waveEngineApi && WE?.createWaveEngine) {
     _waveEngineApi = WE.createWaveEngine({
@@ -158,6 +181,19 @@ function waveEngine() {
       normalizeTrackSignature,
       getQueue: () => queue,
       getCurrentTrack: () => currentTrack,
+      getYandexWaveQueueHint: () => _yandexWaveRotorQueueHint,
+      setYandexWaveQueueHint: (id) => {
+        _yandexWaveRotorQueueHint = String(id || '').trim()
+      },
+      fetchYandexRotorMyWave: async ({ mode, queueTrackId }) => {
+        const tok = String(getSettings()?.yandexToken || '').trim()
+        if (!tok || !window.api?.yandexMyWaveFetch) return null
+        return window.api.yandexMyWaveFetch({
+          token: tok,
+          mode: String(mode || 'default'),
+          queueTrackId: String(queueTrackId || '').trim(),
+        })
+      },
     })
   }
   return _waveEngineApi
@@ -409,10 +445,19 @@ async function saveCustomMediaFile(file, purpose = 'media') {
       purpose,
       bytes,
     })
-    if (saved?.ok && saved.url) return String(saved.url)
+    if (saved?.ok && saved.url) {
+      try {
+        bumpCustomizationGalleryRecent(String(saved.url))
+      } catch (_) {}
+      return String(saved.url)
+    }
     throw new Error(saved?.error || 'media save failed')
   }
-  return readFileAsDataUrl(file)
+  const dataUrl = await readFileAsDataUrl(file)
+  try {
+    bumpCustomizationGalleryRecent(dataUrl)
+  } catch (_) {}
+  return dataUrl
 }
 
 function prepareProfileImageData(file, dataUrl, kind = 'avatar') {
@@ -441,17 +486,57 @@ function prepareProfileImageData(file, dataUrl, kind = 'avatar') {
   })
 }
 
-const ICONS = {
-  play: '<svg class="ui-icon ctrl-play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M9 8 L17 12 L9 16 Z"/></svg>',
-  pause: '<svg class="ui-icon ctrl-play-icon" viewBox="0 0 24 24" fill="currentColor"><rect x="7.25" y="5.75" width="4" height="12.5" rx="1.15"/><rect x="12.75" y="5.75" width="4" height="12.5" rx="1.15"/></svg>',
-  plus: '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>',
-  close: '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>'
+/** Сжатие data URL перед PUT (nginx / прокси часто режут тело ~1 МБ → 413). */
+function shrinkProfileDataUrlForApi(dataUrl, kind = 'avatar') {
+  return new Promise((resolve) => {
+    const raw = String(dataUrl || '')
+    if (!raw || typeof Image === 'undefined') return resolve(raw)
+    if (raw.length < 65_000) return resolve(raw)
+    const maxSide = kind === 'banner' ? 720 : 280
+    const quality = kind === 'banner' ? 0.68 : 0.78
+    const img = new Image()
+    img.onload = () => {
+      try {
+        const ratio = Math.min(1, maxSide / Math.max(img.width || 1, img.height || 1))
+        const w = Math.max(1, Math.round((img.width || 1) * ratio))
+        const h = Math.max(1, Math.round((img.height || 1) * ratio))
+        const canvas = document.createElement('canvas')
+        canvas.width = w
+        canvas.height = h
+        canvas.getContext('2d')?.drawImage(img, 0, 0, w, h)
+        const out = canvas.toDataURL('image/jpeg', quality)
+        resolve(out.length < raw.length ? out : raw)
+      } catch {
+        resolve(raw)
+      }
+    }
+    img.onerror = () => resolve(raw)
+    img.src = raw
+  })
 }
-const HEART_OUTLINE = '<svg class="ui-icon flow-ref-heart" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M12 20.4s6.5-4.35 8.82-7.74A5.05 5.05 0 0012 6.42a5.05 5.05 0 00-8.82 6.24C5.47 15.93 12 20.35 12 20.42z"/></svg>'
-const HEART_FILLED = '<svg class="ui-icon flow-ref-heart" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M12 20.4s6.5-4.35 8.82-7.74A5.05 5.05 0 0012 6.42a5.05 5.05 0 00-8.82 6.24C5.47 15.93 12 20.35 12 20.42z"/><path fill="#e11d48" d="M12 16c-.72-.62-2.65-2.35-2.65-4a1.75 1.75 0 013.38-.72A1.75 1.75 0 0114.65 12c0 1.65-1.93 3.38-2.65 4z"/></svg>'
-const PM_PLAY_INNER = '<path fill="currentColor" d="M9 8 L17 12 L9 16 Z"/>'
-const PM_PAUSE_INNER = '<rect fill="currentColor" x="7.25" y="5.75" width="4" height="12.5" rx="1.15"/><rect fill="currentColor" x="12.75" y="5.75" width="4" height="12.5" rx="1.15"/>'
-const ICON_SIMILAR = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M14.83 14.83a4 4 0 0 1-6.63 1.1 4 4 0 0 1 1.53-6.73 4 4 0 0 1 5 .37l5.74 5.32"/><path d="M9.17 9.17a4 4 0 0 0 6.63-1.1 4 4 0 0 0-1.53 6.73 4 4 0 0 0-5-.37l-5.74-5.32"/></svg>'
+
+const ICONS = {
+  play: flowLucideSvg('play', 'ctrl-play-icon'),
+  pause: (() => {
+    const L = typeof FLOW_LUCIDE_INNER !== 'undefined' ? FLOW_LUCIDE_INNER : {}
+    const p = L.pause || ''
+    return `<svg class="ui-icon ctrl-play-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`
+  })(),
+  plus: flowLucideSvg('plus'),
+  close: flowLucideSvg('x'),
+}
+const HEART_OUTLINE = flowLucideSvg('heart', 'flow-ref-heart')
+/** Полная заливка цветом «любимых», без обводки-«точки». */
+const HEART_FILLED =
+  '<svg class="ui-icon flow-ref-heart flow-ref-heart--filled" viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+  '<path fill="#f472b6" stroke="none" d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>' +
+  '</svg>'
+const PM_PLAY_INNER = (typeof FLOW_LUCIDE_INNER !== 'undefined' && FLOW_LUCIDE_INNER.play) ? FLOW_LUCIDE_INNER.play : '<path fill="currentColor" d="M9 8 L17 12 L9 16 Z"/>'
+const PM_PAUSE_INNER =
+  (typeof FLOW_LUCIDE_INNER !== 'undefined' && FLOW_LUCIDE_INNER.pause)
+    ? FLOW_LUCIDE_INNER.pause
+    : '<rect fill="currentColor" x="14" y="4" width="4" height="16" rx="1" stroke="none"/><rect fill="currentColor" x="6" y="4" width="4" height="16" rx="1" stroke="none"/>'
+const ICON_SIMILAR = flowLucideSvg('audio-lines')
 
 // в”Ђв”Ђв”Ђ VISUAL SETTINGS в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 const defaultVisual = {
@@ -478,6 +563,44 @@ const defaultVisual = {
   lyrics: { scrollMode: 'smooth', align: 'left', size: 16, blur: 4 }
 }
 
+/** Нормализация сохранённого положения меню (устраняет «перепутанные» значения из импорта/старых ключей). */
+function normalizeSidebarDockPosition(value) {
+  const raw = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+  const map = {
+    l: 'left',
+    r: 'right',
+    t: 'top',
+    b: 'bottom',
+    tabs_top: 'top',
+    tabs_bottom: 'bottom',
+    tabs_right: 'right',
+    tabs_left: 'left',
+    start: 'left',
+    end: 'right',
+  }
+  const step = map[raw] != null ? map[raw] : raw
+  const allowed = new Set(['left', 'top', 'bottom', 'right'])
+  return allowed.has(step) ? step : 'left'
+}
+
+const VS_GLASS_SLIDER_MAX = 40
+
+/** Ползунок «прозрачность стекла»: 0 — минимум прозрачности (плотнее), дальше — прозрачнее. В `flow_visual.glass` хранится сила белой подложки (0 — почти невидима, 40 — плотнее). */
+function glassTransparencyFromStored(glassStored) {
+  const g = Number(glassStored)
+  const gs = Number.isFinite(g) ? Math.max(0, Math.min(VS_GLASS_SLIDER_MAX, g)) : 8
+  return VS_GLASS_SLIDER_MAX - gs
+}
+
+function glassStoredFromSliderTransparency(t) {
+  const x = parseFloat(String(t))
+  const tr = Number.isFinite(x) ? Math.max(0, Math.min(VS_GLASS_SLIDER_MAX, x)) : glassTransparencyFromStored(8)
+  return VS_GLASS_SLIDER_MAX - tr
+}
+
 /** Кэш parse localStorage — getVisual() вызывается очень часто (в т.ч. каждый кадр домашнего визуализатора). */
 let _flowVisualMemo = null
 
@@ -498,6 +621,7 @@ function getVisual() {
       try { raw = JSON.parse(rawStr) } catch (_) { raw = {} }
     }
     const out = Object.assign({}, defaultVisual, raw)
+    out.sidebarPosition = normalizeSidebarDockPosition(out.sidebarPosition)
     _flowVisualMemo = { s: rawStr, out }
     return Object.assign({}, out)
   } catch {
@@ -523,6 +647,9 @@ function applyToastPosition(position = getVisual().toastPosition) {
   document.body.setAttribute('data-toast-position', safe)
   document.querySelectorAll('[data-toast-position-option]').forEach((btn) => {
     btn.classList.toggle('active', btn.getAttribute('data-toast-position-option') === safe)
+  })
+  document.querySelectorAll('[data-toast-pos]').forEach((btn) => {
+    btn.classList.toggle('active', btn.getAttribute('data-toast-pos') === safe)
   })
 }
 
@@ -662,6 +789,7 @@ function applyVisualMode(mode) {
   } else {
     document.body.classList.add('visual-minimal')
   }
+  syncNexoryDeskClass()
   const minimalBtn = document.getElementById('vm-minimal')
   const floatedBtn = document.getElementById('vm-floated')
   const liquidBtn = document.getElementById('vm-liquid')
@@ -1267,15 +1395,45 @@ function applyVisualBackdropFilters(blurPx, brightPercent) {
 function applyVisualSettings() {
   const blur   = document.getElementById('vs-blur')?.value ?? 40
   const bright = document.getElementById('vs-bright')?.value ?? 50
-  const glass  = document.getElementById('vs-glass')?.value ?? 8
+  const glassEl = document.getElementById('vs-glass')
+  const glass = glassEl
+    ? glassStoredFromSliderTransparency(glassEl.value)
+    : (getVisual().glass ?? 8)
   const pb     = document.getElementById('vs-panel-blur')?.value ?? 30
-  const scale  = document.getElementById('vs-scale')?.value ?? 100
+  const scaleLegacyEl = document.getElementById('vs-scale')
+  const scaleWindowEl = document.getElementById('vs-scale-window')
+  const scaleFullscreenEl = document.getElementById('vs-scale-fullscreen')
+  const clampScale = (n, lo = 75, hi = 140) => {
+    const x = Number(n)
+    return Number.isFinite(x) ? Math.max(lo, Math.min(hi, x)) : 100
+  }
+  const v0 = getVisual()
+  const activeScaleId = document.activeElement?.id || ''
+  const legacyScale = clampScale(scaleLegacyEl?.value ?? v0.uiScale ?? 100, 75, 140)
+  const windowScale = clampScale(scaleWindowEl?.value ?? legacyScale, 75, 130)
+  const fullscreenScale = clampScale(scaleFullscreenEl?.value ?? legacyScale, 75, 140)
+  let scale = windowScale
+  if (activeScaleId === 'vs-scale-fullscreen') scale = fullscreenScale
+  else if (activeScaleId === 'vs-scale-window') scale = windowScale
+  else if (activeScaleId === 'vs-scale') scale = legacyScale
+  else if (scaleWindowEl) scale = windowScale
+  else if (scaleFullscreenEl) scale = fullscreenScale
+  else scale = legacyScale
+
+  // Keep all scale sliders in sync so blur/brightness changes never reset UI scale.
+  if (scaleLegacyEl && Number(scaleLegacyEl.value) !== scale) scaleLegacyEl.value = String(scale)
+  if (scaleWindowEl && Number(scaleWindowEl.value) !== scale) scaleWindowEl.value = String(Math.max(75, Math.min(130, scale)))
+  if (scaleFullscreenEl && Number(scaleFullscreenEl.value) !== scale) scaleFullscreenEl.value = String(scale)
 
   document.getElementById('vs-blur-val').textContent   = blur + 'px'
   document.getElementById('vs-bright-val').textContent = bright + '%'
-  document.getElementById('vs-glass-val').textContent  = glass + '%'
+  const glassTr = glassTransparencyFromStored(glass)
+  const glassTrLabel = Number.isInteger(glassTr) ? `${glassTr}%` : `${glassTr.toFixed(1)}%`
+  if (document.getElementById('vs-glass-val')) document.getElementById('vs-glass-val').textContent = glassTrLabel
   document.getElementById('vs-panel-blur-val').textContent = pb + 'px'
   if (document.getElementById('vs-scale-val')) document.getElementById('vs-scale-val').textContent = scale + '%'
+  if (document.getElementById('vs-scale-window-val')) document.getElementById('vs-scale-window-val').textContent = scale + '%'
+  if (document.getElementById('vs-scale-fullscreen-val')) document.getElementById('vs-scale-fullscreen-val').textContent = scale + '%'
 
   const v = getVisual()
   saveVisual({ blur:+blur, bright:+bright, glass:+glass, panelBlur:+pb, uiScale:+scale })
@@ -1642,8 +1800,22 @@ function updateOrbsFromCover(coverUrl) {
         document.getElementById('gorb2').style.background = `color-mix(in srgb, ${c2} 24%, transparent)`
       }
       if (effects.accentFromCover) {
-        document.documentElement.style.setProperty('--accent', c1)
-        document.documentElement.style.setProperty('--accent2', c2)
+        const relLum = (rr, gg, bb) => {
+          const srgb = (x) => {
+            const v = x / 255
+            return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
+          }
+          const R = srgb(rr)
+          const G = srgb(gg)
+          const B = srgb(bb)
+          return 0.2126 * R + 0.7152 * G + 0.0722 * B
+        }
+        const L = relLum(r, g, b)
+        const nearWhite = L > 0.9 || (r > 236 && g > 236 && b > 236)
+        const a1 = nearWhite ? (v.accent || defaultVisual.accent) : c1
+        const a2 = nearWhite ? (v.accent2 || defaultVisual.accent2) : c2
+        document.documentElement.style.setProperty('--accent', a1)
+        document.documentElement.style.setProperty('--accent2', a2)
       }
       if (document.getElementById('pm-cover-glow')) {
         document.getElementById('pm-cover-glow').style.background = `color-mix(in srgb, ${c1} 28%, transparent)`
@@ -1711,18 +1883,28 @@ function updateYandexPlayerTheme(track = currentTrack) {
 function initVisualSettings() {
   const v = getVisual()
   // Apply sliders
-  const setSlider = (id, val) => { const el = document.getElementById(id); if (el) el.value = val }
+  const setSlider = (id, val) => {
+    const el = document.getElementById(id)
+    if (el) el.value = val == null ? '' : String(val)
+  }
   setSlider('vs-blur', v.blur)
   setSlider('vs-bright', v.bright)
-  setSlider('vs-glass', v.glass)
+  setSlider('vs-glass', glassTransparencyFromStored(v.glass))
   setSlider('vs-panel-blur', v.panelBlur)
   setSlider('vs-scale', v.uiScale || 100)
+  setSlider('vs-scale-window', v.uiScale || 100)
+  setSlider('vs-scale-fullscreen', v.uiScale || 100)
   // Labels
   if (document.getElementById('vs-blur-val')) document.getElementById('vs-blur-val').textContent = v.blur + 'px'
   if (document.getElementById('vs-bright-val')) document.getElementById('vs-bright-val').textContent = v.bright + '%'
-  if (document.getElementById('vs-glass-val')) document.getElementById('vs-glass-val').textContent = v.glass + '%'
+  const gTr = glassTransparencyFromStored(v.glass)
+  if (document.getElementById('vs-glass-val')) {
+    document.getElementById('vs-glass-val').textContent = Number.isInteger(gTr) ? `${gTr}%` : `${gTr.toFixed(1)}%`
+  }
   if (document.getElementById('vs-panel-blur-val')) document.getElementById('vs-panel-blur-val').textContent = v.panelBlur + 'px'
   if (document.getElementById('vs-scale-val')) document.getElementById('vs-scale-val').textContent = (v.uiScale || 100) + '%'
+  if (document.getElementById('vs-scale-window-val')) document.getElementById('vs-scale-window-val').textContent = (v.uiScale || 100) + '%'
+  if (document.getElementById('vs-scale-fullscreen-val')) document.getElementById('vs-scale-fullscreen-val').textContent = (v.uiScale || 100) + '%'
   // CSS vars
   document.documentElement.style.setProperty('--accent', v.accent)
   document.documentElement.style.setProperty('--accent2', v.accent2)
@@ -1790,6 +1972,28 @@ function initVisualSettings() {
     setupFlowOptimizationChannel()
   } catch (_) {}
   applyOptimizationSettings()
+  installFlowLayoutPickerDelegatedClicks()
+  try {
+    refreshCustomizationPanel()
+  } catch (_) {}
+}
+
+let _flowSidebarLayoutClickInstalled = false
+function installFlowLayoutPickerDelegatedClicks() {
+  if (_flowSidebarLayoutClickInstalled) return
+  _flowSidebarLayoutClickInstalled = true
+  document.addEventListener(
+    'click',
+    (e) => {
+      const btn = e.target && e.target.closest && e.target.closest('[data-flow-sidebar-layout]')
+      if (!btn) return
+      e.preventDefault()
+      const raw = btn.getAttribute('data-flow-sidebar-layout')
+      const pos = normalizeSidebarDockPosition(raw)
+      if (pos) setSidebarPosition(pos)
+    },
+    false,
+  )
 }
 
 function reorderVisualSettingsSections() {
@@ -1802,12 +2006,60 @@ function toggleNavActiveHighlight() {
   applyVisualSettings()
 }
 
+/** Вертикальная колонка меню слева (классический док). */
+function isSidebarDockedLeft() {
+  return (
+    !document.body.classList.contains('layout-top-nav') &&
+    !document.body.classList.contains('layout-bottom-nav') &&
+    !document.body.classList.contains('layout-right-nav')
+  )
+}
+
+/** Горизонтальная полоса меню сверху или снизу. */
+function isSidebarHorizontalDock() {
+  return (
+    document.body.classList.contains('layout-top-nav') ||
+    document.body.classList.contains('layout-bottom-nav')
+  )
+}
+
+/** Nexory «рабочий стол»: заметнее и при меню справа. */
+function syncNexoryDeskClass() {
+  try {
+    const v = getVisual()
+    const floated = normalizeVisualThemeMode(v.visualMode) === 'floated'
+    const pos = normalizeSidebarDockPosition(v.sidebarPosition)
+    const horizontal = pos === 'top' || pos === 'bottom'
+    const dockRight = pos === 'right'
+    document.body.classList.toggle('nexory-desk', Boolean(floated || horizontal || dockRight))
+  } catch (_) {}
+}
+
+/** Меню снизу: переключатель расположения — отдельной полосой над плеером (не внутри #player-bar). */
+function syncLayoutDockMount() {
+  try {
+    const dock = document.getElementById('player-bar-layout-dock')
+    const playerBar = document.getElementById('player-bar')
+    const screenMain = document.getElementById('screen-main')
+    if (!dock || !playerBar || !screenMain) return
+    const safe = normalizeSidebarDockPosition(getVisual()?.sidebarPosition || 'left')
+    if (safe === 'bottom') {
+      if (dock.parentElement !== screenMain) screenMain.insertBefore(dock, playerBar)
+      else if (dock.nextElementSibling !== playerBar) screenMain.insertBefore(dock, playerBar)
+    } else if (dock.parentElement !== playerBar || playerBar.firstElementChild !== dock) {
+      playerBar.insertBefore(dock, playerBar.firstChild)
+    }
+  } catch (_) {}
+}
+
 function applySidebarPosition(position) {
-  const safe = position === 'top' ? 'top' : 'left'
+  const safe = normalizeSidebarDockPosition(position)
   document.body.classList.toggle('layout-top-nav', safe === 'top')
+  document.body.classList.toggle('layout-bottom-nav', safe === 'bottom')
+  document.body.classList.toggle('layout-right-nav', safe === 'right')
   const sidebar = document.getElementById('sidebar')
-  if (sidebar && safe === 'top') sidebar.classList.remove('collapsed')
-  if (safe === 'top') {
+  if (sidebar && (safe === 'top' || safe === 'bottom')) sidebar.classList.remove('collapsed')
+  if (safe === 'top' || safe === 'bottom') {
     document.documentElement.style.setProperty('--sidebar-shift', '0px')
   } else {
     try {
@@ -1819,37 +2071,31 @@ function applySidebarPosition(position) {
       try { window.dispatchEvent(new Event('resize')) } catch (_) {}
     })
   }
-  const leftBtn = document.getElementById('layout-left')
-  const topBtn = document.getElementById('layout-top')
-  if (leftBtn) leftBtn.classList.toggle('active', safe === 'left')
-  if (topBtn) topBtn.classList.toggle('active', safe === 'top')
+  ;['left', 'top', 'bottom', 'right'].forEach((id) => {
+    const el = document.getElementById(`layout-${id}`)
+    if (el) el.classList.toggle('active', safe === id)
+  })
+  document.querySelectorAll('.pbl-dock-btn[data-flow-sidebar-layout]').forEach((el) => {
+    const p = normalizeSidebarDockPosition(el.getAttribute('data-flow-sidebar-layout'))
+    el.classList.toggle('active', p === safe)
+  })
+  syncLayoutDockMount()
+  syncNexoryDeskClass()
 }
 
 function setSidebarPosition(position) {
-  const safe = position === 'top' ? 'top' : 'left'
+  const safe = normalizeSidebarDockPosition(position)
   saveVisual({ sidebarPosition: safe })
   applySidebarPosition(safe)
-  showToast(safe === 'top' ? 'Меню перемещено наверх' : 'Меню возвращено влево')
-}
-
-function getSafeToastPosition(position) {
-  const allowed = new Set(['default', 'top-left', 'top-right', 'bottom-left', 'bottom-right'])
-  return allowed.has(position) ? position : 'default'
-}
-
-function applyToastPosition(position = getVisual().toastPosition) {
-  const safe = getSafeToastPosition(position)
-  document.body.setAttribute('data-toast-position', safe)
-  document.querySelectorAll('[data-toast-pos]').forEach((btn) => {
-    btn.classList.toggle('active', btn.getAttribute('data-toast-pos') === safe)
-  })
-}
-
-function setToastPosition(position) {
-  const safe = getSafeToastPosition(position)
-  saveVisual({ toastPosition: safe })
-  applyToastPosition(safe)
-  showToast('Позиция уведомлений сохранена')
+  const msg =
+    safe === 'top'
+      ? 'Меню сверху'
+      : safe === 'bottom'
+        ? 'Меню снизу'
+        : safe === 'right'
+          ? 'Меню справа'
+          : 'Меню слева'
+  showToast(msg)
 }
 
 /** true = секция свёрнута (как в блоках аккаунтов). Всегда храним полный объект ключей. */
@@ -1931,7 +2177,7 @@ const SETTINGS_TAB_TO_CATEGORY = {
 }
 
 function switchSettingsCategory(cat) {
-  const allowed = new Set(['appearance', 'playback', 'optimization', 'accounts', 'services'])
+  const allowed = new Set(['appearance', 'customization', 'playback', 'optimization', 'accounts', 'services'])
   const c = allowed.has(cat) ? cat : 'appearance'
   _settingsCategory = c
   document.querySelectorAll('.settings-cat').forEach((btn) => {
@@ -1942,6 +2188,11 @@ function switchSettingsCategory(cat) {
     panel.classList.toggle('active', on)
   })
   applyUiTextOverrides()
+  if (c === 'customization') {
+    try {
+      refreshCustomizationPanel()
+    } catch (_) {}
+  }
 }
 
 /** Совместимость со старыми вызовами switchSettingsTab('visual'|'sources'|'integrations'). */
@@ -1950,6 +2201,950 @@ function switchSettingsTab(tab) {
   switchSettingsCategory(mapped)
 }
 window.switchSettingsCategory = switchSettingsCategory
+
+// ——— Settings: «Кастомизация» (галерея, недавние, пресеты вида) ———
+const FLOW_CUSTOM_GALLERY_RECENT_V1 = 'flow_custom_gallery_recent_v1'
+const FLOW_CUST_PRESETS_V1 = 'flow_cust_presets_v1'
+const CUST_BG_COVER_SENT = '__cover__'
+const CUST_BG_GRADIENT_SENT = '__gradient__'
+const CUST_GALLERY_RECENT_CAP = 24
+const CUST_PRESETS_CAP = 28
+
+function bumpCustomizationGalleryRecent(url) {
+  const u = String(url || '').trim()
+  if (!u) return
+  let list = []
+  try {
+    list = JSON.parse(localStorage.getItem(FLOW_CUSTOM_GALLERY_RECENT_V1) || '[]')
+  } catch (_) {
+    list = []
+  }
+  if (!Array.isArray(list)) list = []
+  list = [u, ...list.filter((x) => x !== u)].slice(0, CUST_GALLERY_RECENT_CAP)
+  try {
+    localStorage.setItem(FLOW_CUSTOM_GALLERY_RECENT_V1, JSON.stringify(list))
+  } catch (_) {}
+  try {
+    if (isCustomizationSettingsCategoryActive()) renderCustRecentStrip()
+  } catch (_) {}
+}
+
+function getCustomizationGalleryRecentList() {
+  try {
+    const list = JSON.parse(localStorage.getItem(FLOW_CUSTOM_GALLERY_RECENT_V1) || '[]')
+    return Array.isArray(list) ? list.filter(Boolean) : []
+  } catch (_) {
+    return []
+  }
+}
+
+function clearCustomizationGalleryRecent() {
+  try {
+    localStorage.removeItem(FLOW_CUSTOM_GALLERY_RECENT_V1)
+  } catch (_) {}
+  try {
+    if (isCustomizationSettingsCategoryActive()) renderCustRecentStrip()
+  } catch (_) {}
+  showToast('Недавние загрузки очищены')
+}
+
+/** Квадрат / широкий / высокий по размерам из main-процесса; иначе unknown. */
+function classifyCustomMediaAspectKind(f) {
+  const w = Number(f?.width)
+  const h = Number(f?.height)
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w < 2 || h < 2) return 'unknown'
+  const r = w / h
+  if (r >= 0.9 && r <= 1.11) return 'square'
+  if (r > 1.11) return 'wide'
+  return 'tall'
+}
+
+function bindHorizontalDragScroll(el, opts) {
+  if (!el || el.dataset.hscrollBound === '1') return
+  el.dataset.hscrollBound = '1'
+  const faceTap = Boolean(opts && opts.faceTap)
+  let session = null
+
+  const endWindow = () => {
+    if (!session) return
+    window.removeEventListener('pointermove', onWinMove, true)
+    window.removeEventListener('pointerup', onWinUp, true)
+    window.removeEventListener('pointercancel', onWinUp, true)
+    session.el.classList.remove('cust-hscroll--dragging')
+    session = null
+  }
+
+  const onWinMove = (e) => {
+    if (!session || e.pointerId !== session.pid) return
+    const dx = e.clientX - session.sx
+    const dy = e.clientY - session.sy
+    if (!session.drag) {
+      if (Math.hypot(dx, dy) < 6) return
+      const canH = el.scrollWidth > el.clientWidth + 2
+      if (canH && Math.abs(dx) >= Math.abs(dy)) {
+        session.drag = true
+        session.moved = true
+        el.classList.add('cust-hscroll--dragging')
+      } else {
+        endWindow()
+        return
+      }
+    }
+    if (session && session.drag) {
+      el.scrollLeft = session.sl - dx
+      try {
+        e.preventDefault()
+      } catch (_) {}
+    }
+  }
+
+  const onWinUp = (e) => {
+    if (!session || (e.pointerId != null && e.pointerId !== session.pid)) return
+    const s = session
+    const { downTarget: dt, drag, moved } = s
+    endWindow()
+    if (drag) return
+    if (faceTap && !moved && dt && dt.closest && dt.closest('.cust-gal-face')) {
+      const tile = dt.closest('.cust-gal-tile')
+      if (tile) {
+        const willOpen = !tile.classList.contains('cust-gal-tile--actions-open')
+        el.querySelectorAll('.cust-gal-tile--actions-open').forEach((t) => t.classList.remove('cust-gal-tile--actions-open'))
+        if (willOpen) tile.classList.add('cust-gal-tile--actions-open')
+      }
+    }
+  }
+
+  el.addEventListener(
+    'pointerdown',
+    (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return
+      if (e.target.closest && e.target.closest('button')) return
+      if (session) endWindow()
+      session = {
+        el,
+        sx: e.clientX,
+        sy: e.clientY,
+        sl: el.scrollLeft,
+        pid: e.pointerId,
+        moved: false,
+        drag: false,
+        downTarget: e.target,
+      }
+      window.addEventListener('pointermove', onWinMove, true)
+      window.addEventListener('pointerup', onWinUp, true)
+      window.addEventListener('pointercancel', onWinUp, true)
+    },
+    true,
+  )
+
+  el.addEventListener(
+    'wheel',
+    (e) => {
+      if (el.scrollWidth <= el.clientWidth + 2) return
+      const ax = Math.abs(e.deltaX)
+      const ay = Math.abs(e.deltaY)
+      if (ax > ay && ax > 0.5) {
+        el.scrollLeft += e.deltaX
+        e.preventDefault()
+      } else if (e.shiftKey && ay > ax && ay > 0.5) {
+        el.scrollLeft += e.deltaY
+        e.preventDefault()
+      }
+    },
+    { passive: false },
+  )
+}
+
+function getCustomizationPresets() {
+  try {
+    const list = JSON.parse(localStorage.getItem(FLOW_CUST_PRESETS_V1) || '[]')
+    return Array.isArray(list) ? list : []
+  } catch (_) {
+    return []
+  }
+}
+
+function saveCustomizationPresetsList(arr) {
+  const list = Array.isArray(arr) ? arr.slice(0, CUST_PRESETS_CAP) : []
+  try {
+    localStorage.setItem(FLOW_CUST_PRESETS_V1, JSON.stringify(list))
+  } catch (_) {}
+}
+
+function newCustomizationPresetId() {
+  return `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+}
+
+function custUrlCssBackground(u) {
+  const s = String(u || '').trim()
+  if (!s) return ''
+  return `url(${JSON.stringify(s)})`
+}
+
+function normalizeMediaUrlKey(url) {
+  try {
+    const s = String(url || '').trim()
+    if (!s) return ''
+    const u = new URL(s)
+    const path = String(u.pathname || '').replace(/\\/g, '/')
+    return `${String(u.protocol || '').toLowerCase()}//${String(u.hostname || '').toLowerCase()}${path.toLowerCase()}`
+  } catch (_) {
+    return String(url || '').trim().toLowerCase()
+  }
+}
+
+/** Имя вида `purpose-<ts>-<sha1-16>.ext` из save-custom-media — одинаковое содержимое → один тайл. */
+function contentHashFromCustomMediaFilename(name) {
+  const m = String(name || '').toLowerCase().match(/-([a-f0-9]{16})(\.[a-z0-9]+)$/)
+  return m ? m[1] : ''
+}
+
+function dedupeCustomMediaFiles(files) {
+  const sorted = [...(files || [])].sort((a, b) => (Number(b.mtime) || 0) - (Number(a.mtime) || 0))
+  const seenUrl = new Set()
+  const seenContent = new Set()
+  const out = []
+  for (let i = 0; i < sorted.length; i++) {
+    const f = sorted[i]
+    const urlKey = normalizeMediaUrlKey(f?.url)
+    if (!urlKey || seenUrl.has(urlKey)) continue
+    const ch = contentHashFromCustomMediaFilename(f?.name || '')
+    if (ch) {
+      if (seenContent.has(ch)) continue
+      seenContent.add(ch)
+    }
+    seenUrl.add(urlKey)
+    out.push(f)
+  }
+  return out
+}
+
+function custPreviewEffectiveCoverUrl() {
+  if (!currentTrack) return ''
+  const u = String(getEffectiveCoverUrl(currentTrack) || '').trim()
+  let disp = sanitizeMediaByGifMode(u, 'track')
+  if (disp) return disp
+  const raw = String(currentTrack.cover || '').trim()
+  return raw || ''
+}
+
+function customizationCoverMetaText() {
+  if (!currentTrack) return 'Включи трек — здесь появится обложка из источника или своя.'
+  const map = getCustomCoverMap()
+  if (getGlobalCustomCover(map)) return 'Источник: своя картинка для плеера (глобально).'
+  const keys = getTrackCoverKeys(currentTrack)
+  const per = keys.map((k) => map[k]).find(Boolean)
+  if (per) return 'Источник: своя обложка, привязанная к этому треку.'
+  return 'Источник: обложка из сервиса / локального файла.'
+}
+
+function customizationBgMetaText() {
+  const v = getVisual()
+  if (v.bgType === 'custom' && v.customBg) return 'Источник: свой фон (файл из галереи или загрузки).'
+  if (v.bgType === 'cover') return 'Источник: размытая обложка текущего трека.'
+  return 'Источник: градиент и орбы (без своего файла).'
+}
+
+function customizationVizMetaText() {
+  const hw = Object.assign({ enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }, getVisual().homeWidget || {})
+  const names = { bars: 'столбцы', wave: 'волна', dots: 'точки', image: 'своё фото', web: 'Web' }
+  if (hw.mode === 'image' && hw.image) return 'Источник: своё изображение в виджете на главной.'
+  return `Источник: анимация «${names[hw.mode] || hw.mode}».`
+}
+
+function galleryRoleMatchesUrl(role, fileUrl) {
+  const key = normalizeMediaUrlKey(fileUrl)
+  if (!key) return false
+  if (role === 'cover') {
+    const map = getCustomCoverMap()
+    const g = getGlobalCustomCover(map)
+    if (g && normalizeMediaUrlKey(g) === key) return true
+    if (currentTrack) {
+      const c = getTrackCoverKeys(currentTrack).map((k) => map[k]).find(Boolean)
+      if (c && normalizeMediaUrlKey(String(c)) === key) return true
+    }
+    return false
+  }
+  if (role === 'bg') {
+    const v = getVisual()
+    return v.bgType === 'custom' && v.customBg && normalizeMediaUrlKey(String(v.customBg)) === key
+  }
+  if (role === 'viz') {
+    const hw = Object.assign({ enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }, getVisual().homeWidget || {})
+    return hw.mode === 'image' && hw.image && normalizeMediaUrlKey(String(hw.image)) === key
+  }
+  return false
+}
+
+function collectCurrentCustomizationSnapshot() {
+  const v = getVisual()
+  const map = getCustomCoverMap()
+  let cover = String(getGlobalCustomCover(map) || '').trim()
+  if (!cover && currentTrack) {
+    const ks = getTrackCoverKeys(currentTrack)
+    cover = String(ks.map((k) => map[k]).find(Boolean) || '').trim()
+  }
+  let bg = CUST_BG_GRADIENT_SENT
+  if (v.bgType === 'custom' && v.customBg) bg = String(v.customBg).trim()
+  else if (v.bgType === 'cover') bg = CUST_BG_COVER_SENT
+  const hw = Object.assign({ enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }, v.homeWidget || {})
+  const viz = hw.mode === 'image' && hw.image ? String(hw.image).trim() : ''
+  return { cover, bg, viz }
+}
+
+function savedViewPresetMatchesCurrentScreen(p) {
+  if (!p || typeof p !== 'object') return false
+  const cur = collectCurrentCustomizationSnapshot()
+  const sameStr = (a, b) => String(a ?? '') === String(b ?? '')
+  const sameMedia = (a, b) => {
+    if (sameStr(a, b)) return true
+    const sa = String(a || '').trim()
+    const sb = String(b || '').trim()
+    if (!sa || !sb) return sa === sb
+    if (/^(file:|https?:|data:)/i.test(sa) && /^(file:|https?:|data:)/i.test(sb))
+      return normalizeMediaUrlKey(sa) === normalizeMediaUrlKey(sb)
+    return false
+  }
+  return sameMedia(p.cover, cur.cover) && sameMedia(p.bg, cur.bg) && sameMedia(p.viz, cur.viz)
+}
+
+function applyCustomizationMediaFromGallery(url, role) {
+  const u = String(url || '').trim()
+  if (!u) return
+  if (role === 'bg') {
+    saveVisual({ bgType: 'custom', customBg: u })
+    refreshCustomBgPreview()
+    updateBackground()
+    showToast('Фон обновлён')
+  } else if (role === 'viz') {
+    const v = getVisual()
+    const homeWidget = Object.assign({ enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }, v.homeWidget || {})
+    homeWidget.image = u
+    homeWidget.mode = 'image'
+    saveVisual({ homeWidget })
+    syncHomeWidgetUI()
+    showToast('Визуализатор обновлён')
+  } else {
+    const map = getCustomCoverMap()
+    map.__global__ = u
+    if (currentTrack) getTrackCoverKeys(currentTrack).forEach((k) => { map[k] = u })
+    saveCustomCoverMap(map)
+    _coverLoadState.clear()
+    syncPlayerUIFromTrack()
+    try {
+      renderQueue()
+    } catch (_) {}
+    try {
+      renderPlaylists()
+    } catch (_) {}
+    try {
+      renderLiked()
+    } catch (_) {}
+    try {
+      renderRoomQueue()
+    } catch (_) {}
+    try {
+      syncTrackCoverStatus()
+    } catch (_) {}
+    try {
+      refreshTrackCoverPreview()
+    } catch (_) {}
+    showToast('Обложка обновлена')
+  }
+  try {
+    refreshCustomizationPanel()
+  } catch (_) {}
+  try {
+    const go = document.getElementById('cust-gallery-overlay')
+    if (go && !go.classList.contains('hidden')) void renderCustGalleryContent()
+  } catch (_) {}
+}
+
+function syncCustPreviewMedia(container, imageUrl, emptyBackgroundCss) {
+  if (!container) return
+  container.querySelectorAll(':scope > img.cust-prev-thumb').forEach((n) => n.remove())
+  container.style.backgroundImage = ''
+  container.style.backgroundSize = ''
+  container.style.backgroundPosition = ''
+  const u = String(imageUrl || '').trim()
+  if (u) {
+    container.style.background = '#13151d'
+    const img = document.createElement('img')
+    img.className = 'cust-prev-thumb'
+    img.alt = ''
+    img.decoding = 'async'
+    img.loading = 'eager'
+    img.draggable = false
+    if (/^https?:\/\//i.test(u)) img.referrerPolicy = 'no-referrer'
+    img.src = u
+    img.onerror = () => {
+      img.remove()
+      try {
+        container.style.backgroundImage = custUrlCssBackground(u)
+        container.style.backgroundSize = 'cover'
+        container.style.backgroundPosition = 'center'
+        container.style.backgroundColor = '#13151d'
+      } catch (_) {
+        container.style.backgroundImage = ''
+        container.style.background = emptyBackgroundCss
+      }
+    }
+    container.appendChild(img)
+  } else {
+    container.style.background = emptyBackgroundCss
+  }
+}
+
+function mountPresetStripThumb(el, url, fallbackCss) {
+  if (!el) return
+  el.textContent = ''
+  el.style.backgroundImage = ''
+  const u = String(url || '').trim()
+  if (!u) {
+    el.style.background = fallbackCss || 'rgba(12,14,20,.9)'
+    return
+  }
+  el.style.background = '#12141c'
+  const img = document.createElement('img')
+  img.className = 'cust-preset-thumb-img'
+  img.alt = ''
+  img.decoding = 'async'
+  img.loading = 'lazy'
+  img.draggable = false
+  if (/^https?:\/\//i.test(u)) img.referrerPolicy = 'no-referrer'
+  img.src = u
+  img.onerror = () => {
+    img.remove()
+    try {
+      el.style.backgroundImage = custUrlCssBackground(u)
+      el.style.backgroundSize = 'cover'
+      el.style.backgroundPosition = 'center'
+    } catch (_) {
+      el.style.background = fallbackCss || 'rgba(12,14,20,.9)'
+    }
+  }
+  el.appendChild(img)
+}
+
+function renderPresetCardBgLayer(bgEl, p) {
+  if (!bgEl) return
+  const v = getVisual()
+  if (p.bg && p.bg !== CUST_BG_COVER_SENT && p.bg !== CUST_BG_GRADIENT_SENT) {
+    mountPresetStripThumb(bgEl, p.bg, 'rgba(20,22,30,.95)')
+    return
+  }
+  if (p.bg === CUST_BG_COVER_SENT) {
+    const u = currentTrack ? sanitizeMediaByGifMode(custPreviewEffectiveCoverUrl(), 'bg') : ''
+    mountPresetStripThumb(bgEl, u, 'rgba(20,22,30,.95)')
+    return
+  }
+  const o1 = v.orb1Color || v.accent || '#7c3aed'
+  const o2 = v.orb2Color || v.accent2 || '#3b82f6'
+  bgEl.textContent = ''
+  bgEl.style.background = `linear-gradient(125deg, ${o1}44, ${o2}55, #0c0e14)`
+}
+
+function isCustomizationSettingsCategoryActive() {
+  return _settingsCategory === 'customization'
+}
+
+function refreshCustomizationPanel() {
+  const elCover = document.getElementById('cust-prev-cover')
+  const elBg = document.getElementById('cust-prev-bg')
+  const elViz = document.getElementById('cust-prev-viz')
+  const mCov = document.getElementById('cust-prev-cover-meta')
+  const mBg = document.getElementById('cust-prev-bg-meta')
+  const mViz = document.getElementById('cust-prev-viz-meta')
+  const v = getVisual()
+
+  const coverUrl = custPreviewEffectiveCoverUrl()
+  syncCustPreviewMedia(elCover, coverUrl, 'linear-gradient(145deg,#2d2238,#151a24)')
+  if (mCov) mCov.textContent = customizationCoverMetaText()
+
+  if (elBg) {
+    if (v.bgType === 'custom' && v.customBg) {
+      const raw = String(v.customBg).trim()
+      const u = sanitizeMediaByGifMode(raw, 'bg') || raw
+      syncCustPreviewMedia(elBg, u, 'linear-gradient(125deg,#2a1f32,#12141c)')
+    } else if (v.bgType === 'cover' && currentTrack) {
+      const u0 = custPreviewEffectiveCoverUrl()
+      const bgU = sanitizeMediaByGifMode(u0, 'bg') || u0
+      syncCustPreviewMedia(elBg, bgU, 'linear-gradient(125deg,#2a1f32,#12141c)')
+    } else {
+      const o1 = v.orb1Color || v.accent || '#7c3aed'
+      const o2 = v.orb2Color || v.accent2 || '#3b82f6'
+      syncCustPreviewMedia(elBg, '', `linear-gradient(125deg, ${o1}38, ${o2}42, #0d1018)`)
+    }
+  }
+  if (mBg) mBg.textContent = customizationBgMetaText()
+
+  if (elViz) {
+    const hw = Object.assign({ enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }, v.homeWidget || {})
+    if (hw.mode === 'image' && hw.image) {
+      syncCustPreviewMedia(elViz, String(hw.image).trim(), 'linear-gradient(180deg,rgba(124,58,237,.35),rgba(59,130,246,.2)),repeating-linear-gradient(90deg,rgba(255,255,255,.08) 0 2px,transparent 2px 6px)')
+    } else {
+      syncCustPreviewMedia(elViz, '', 'linear-gradient(180deg,rgba(124,58,237,.35),rgba(59,130,246,.2)),repeating-linear-gradient(90deg,rgba(255,255,255,.08) 0 2px,transparent 2px 6px)')
+    }
+  }
+  if (mViz) mViz.textContent = customizationVizMetaText()
+
+  if (!isCustomizationSettingsCategoryActive()) return
+  try {
+    renderCustRecentStrip()
+  } catch (_) {}
+  try {
+    renderCustPresetStrip()
+  } catch (_) {}
+}
+
+function renderCustRecentStrip() {
+  const wrap = document.getElementById('cust-recent-strip')
+  if (!wrap) return
+  const list = getCustomizationGalleryRecentList()
+  wrap.textContent = ''
+  if (!list.length) {
+    wrap.innerHTML =
+      '<span class="cust-hint" style="margin:0;padding:4px 0">Пока нет — загрузи баннер, обложку или картинку виджета в разделе «Оформление».</span>'
+    return
+  }
+  list.forEach((u) => {
+    const t = document.createElement('button')
+    t.type = 'button'
+    t.className = 'cust-recent-tile'
+    t.title = 'Применить как фон'
+    const url = String(u || '').trim()
+    if (url) {
+      const img = document.createElement('img')
+      img.className = 'cust-recent-thumb'
+      img.alt = ''
+      img.decoding = 'async'
+      img.loading = 'lazy'
+      img.draggable = false
+      img.src = url
+      img.onerror = () => {
+        img.remove()
+        t.style.background = 'linear-gradient(145deg,#2a2230,#151a24)'
+      }
+      t.appendChild(img)
+    } else {
+      t.style.background = 'linear-gradient(145deg,#2a2230,#151a24)'
+    }
+    t.addEventListener('click', () => {
+      applyCustomizationMediaFromGallery(u, 'bg')
+    })
+    wrap.appendChild(t)
+  })
+  bindHorizontalDragScroll(wrap)
+}
+
+function renderCustPresetStrip() {
+  const wrap = document.getElementById('cust-preset-strip')
+  if (!wrap) return
+  const list = getCustomizationPresets()
+  wrap.textContent = ''
+  if (!list.length) {
+    wrap.innerHTML = '<span class="cust-hint" style="margin:0;padding:4px 0">Нет сохранённых видов.</span>'
+    return
+  }
+  list.forEach((p) => {
+    if (!p || !p.id) return
+    const card = document.createElement('div')
+    card.className = 'cust-preset-card'
+    if (savedViewPresetMatchesCurrentScreen(p)) card.classList.add('cust-preset-card--matches-current')
+    card.dataset.presetId = p.id
+    const bg = document.createElement('div')
+    bg.className = 'cust-preset-bg'
+    renderPresetCardBgLayer(bg, p)
+    const cover = document.createElement('div')
+    cover.className = 'cust-preset-cover'
+    mountPresetStripThumb(cover, p.cover, 'rgba(12,14,20,.55)')
+    const viz = document.createElement('div')
+    viz.className = 'cust-preset-viz'
+    if (p.viz) mountPresetStripThumb(viz, p.viz, 'rgba(0,0,0,.35)')
+    else {
+      viz.textContent = ''
+      viz.style.background =
+        'repeating-linear-gradient(90deg,rgba(255,255,255,.12) 0 2px,transparent 2px 5px)'
+    }
+    card.appendChild(bg)
+    card.appendChild(cover)
+    card.appendChild(viz)
+    card.addEventListener('click', (e) => {
+      if (e.button !== 0) return
+      applyCustomizationPresetById(p.id)
+    })
+    card.addEventListener('contextmenu', (e) => {
+      e.preventDefault()
+      deleteCustomizationPresetById(p.id)
+    })
+    wrap.appendChild(card)
+  })
+  bindHorizontalDragScroll(wrap)
+}
+
+function applyCustomizationPresetById(id, opts) {
+  const list = getCustomizationPresets()
+  const p = list.find((x) => x && x.id === id)
+  if (!p) return
+  const skipToast = opts && opts.skipToast
+  const map = getCustomCoverMap()
+  if (p.cover) {
+    map.__global__ = p.cover
+    if (currentTrack) getTrackCoverKeys(currentTrack).forEach((k) => { map[k] = p.cover })
+  } else {
+    delete map.__global__
+    if (currentTrack) getTrackCoverKeys(currentTrack).forEach((k) => { delete map[k] })
+  }
+  saveCustomCoverMap(map)
+  _coverLoadState.clear()
+  syncPlayerUIFromTrack()
+  try {
+    renderQueue()
+  } catch (_) {}
+  try {
+    renderPlaylists()
+  } catch (_) {}
+  try {
+    renderLiked()
+  } catch (_) {}
+  try {
+    renderRoomQueue()
+  } catch (_) {}
+  try {
+    syncTrackCoverStatus()
+  } catch (_) {}
+  try {
+    refreshTrackCoverPreview()
+  } catch (_) {}
+
+  const v0 = getVisual()
+  const hwBase = { enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }
+  const merged = Object.assign(hwBase, v0.homeWidget || {})
+  if (p.viz) {
+    merged.mode = 'image'
+    merged.image = p.viz
+  } else {
+    merged.image = null
+    if (merged.mode === 'image') merged.mode = 'bars'
+  }
+  if (p.bg === CUST_BG_COVER_SENT) saveVisual({ bgType: 'cover', customBg: null, homeWidget: merged })
+  else if (p.bg === CUST_BG_GRADIENT_SENT) saveVisual({ bgType: 'gradient', customBg: null, homeWidget: merged })
+  else if (p.bg) saveVisual({ bgType: 'custom', customBg: p.bg, homeWidget: merged })
+  else saveVisual({ homeWidget: merged })
+
+  try {
+    initVisualSettings()
+  } catch (_) {}
+  try {
+    updateBackground()
+  } catch (_) {}
+  try {
+    refreshCustomizationPanel()
+  } catch (_) {}
+  if (!skipToast) showToast('Вид применён')
+}
+
+function deleteCustomizationPresetById(id) {
+  const prev = getCustomizationPresets()
+  const next = prev.filter((x) => x && x.id !== id)
+  if (next.length === prev.length) return
+  saveCustomizationPresetsList(next)
+  try {
+    if (isCustomizationSettingsCategoryActive()) renderCustPresetStrip()
+  } catch (_) {}
+  showToast('Пресет удалён')
+}
+
+function saveCustomizationPresetSnapshot() {
+  const snap = collectCurrentCustomizationSnapshot()
+  const next = [{ id: newCustomizationPresetId(), ts: Date.now(), ...snap }, ...getCustomizationPresets()].slice(0, CUST_PRESETS_CAP)
+  saveCustomizationPresetsList(next)
+  try {
+    if (isCustomizationSettingsCategoryActive()) renderCustPresetStrip()
+  } catch (_) {}
+  showToast('Текущий вид сохранён')
+}
+
+let _custGalGridBound = false
+let _custGalEscBound = false
+
+function ensureCustGalleryGridDelegate() {
+  if (_custGalGridBound) return
+  const grid = document.getElementById('cust-gallery-grid')
+  if (!grid) return
+  _custGalGridBound = true
+  grid.addEventListener('click', (e) => {
+    const btn = e.target && e.target.closest && e.target.closest('[data-cust-gal]')
+    if (!btn) return
+    e.preventDefault()
+    const role = btn.getAttribute('data-cust-gal')
+    const url = btn.getAttribute('data-url')
+    if (!role || !url) return
+    applyCustomizationMediaFromGallery(url, role)
+  })
+}
+
+function ensureCustGalleryEscClose() {
+  if (_custGalEscBound) return
+  _custGalEscBound = true
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return
+    const ov = document.getElementById('cust-gallery-overlay')
+    if (!ov || ov.classList.contains('hidden')) return
+    closeCustomizationGallery()
+  })
+}
+
+let _custGalSheetClickBound = false
+function ensureCustGallerySheetClickCollapse() {
+  if (_custGalSheetClickBound) return
+  _custGalSheetClickBound = true
+  document.addEventListener(
+    'click',
+    (e) => {
+      const sheet = document.querySelector('.cust-gallery-sheet')
+      if (!sheet || !sheet.contains(e.target)) return
+      if (e.target.closest && e.target.closest('.cust-gal-tile')) return
+      document.querySelectorAll('.cust-gal-tile--actions-open').forEach((t) => t.classList.remove('cust-gal-tile--actions-open'))
+    },
+    true,
+  )
+}
+
+async function renderCustGalleryContent() {
+  const grid = document.getElementById('cust-gallery-grid')
+  if (!grid) return
+  grid.innerHTML = '<span class="cust-hint">Загрузка…</span>'
+  try {
+    if (!window.api?.listCustomMedia) {
+      grid.innerHTML = '<span class="cust-hint">Галерея недоступна в этом режиме.</span>'
+      return
+    }
+    const res = await window.api.listCustomMedia()
+    const raw = res && res.ok && Array.isArray(res.files) ? res.files : []
+    const files = dedupeCustomMediaFiles(raw)
+    if (!files.length) {
+      grid.innerHTML = '<span class="cust-hint">В папке пока нет файлов.</span>'
+      return
+    }
+    const byKind = { square: [], wide: [], tall: [], unknown: [] }
+    files.forEach((f) => {
+      const u = String(f.url || '').trim()
+      if (!u) return
+      const k = classifyCustomMediaAspectKind(f)
+      byKind[k].push(f)
+    })
+    const sections = [
+      ['square', 'Квадратные (≈ 1∶1)'],
+      ['wide', 'Широкие'],
+      ['tall', 'Высокие'],
+      ['unknown', 'Размер неизвестен'],
+    ]
+    grid.textContent = ''
+    let any = false
+    for (let si = 0; si < sections.length; si++) {
+      const key = sections[si][0]
+      const title = sections[si][1]
+      const list = byKind[key]
+      if (!list.length) continue
+      any = true
+      const sec = document.createElement('div')
+      sec.className = 'cust-gal-section'
+      const h = document.createElement('div')
+      h.className = 'cust-gal-section-title'
+      h.textContent = title
+      sec.appendChild(h)
+      const row = document.createElement('div')
+      row.className = 'cust-gal-scroll-row'
+      list.forEach((f) => {
+        const u = String(f.url || '').trim()
+        if (!u) return
+        const tile = document.createElement('div')
+        tile.className = 'cust-gal-tile'
+        tile.classList.add(`cust-gal-tile--shape-${key}`)
+        if (['cover', 'bg', 'viz'].some((r) => galleryRoleMatchesUrl(r, u))) tile.classList.add('cust-gal-tile--on')
+        const w = Number(f.width)
+        const h0 = Number(f.height)
+        if (Number.isFinite(w) && Number.isFinite(h0) && w > 0 && h0 > 0) {
+          tile.style.setProperty('--cust-ar', String(w / h0))
+        } else {
+          tile.style.setProperty('--cust-ar', '1')
+        }
+
+        const face = document.createElement('div')
+        face.className = 'cust-gal-face'
+        const img = document.createElement('img')
+        img.className = 'cust-gal-thumb'
+        img.alt = ''
+        img.loading = 'lazy'
+        img.decoding = 'async'
+        img.draggable = false
+        if (/^https?:\/\//i.test(u)) img.referrerPolicy = 'no-referrer'
+        img.src = u
+        img.onerror = () => {
+          img.remove()
+          try {
+            face.style.backgroundImage = custUrlCssBackground(u)
+            face.style.backgroundSize = 'contain'
+            face.style.backgroundPosition = 'center'
+            face.style.backgroundRepeat = 'no-repeat'
+          } catch (_) {
+            face.classList.add('cust-gal-face--broken')
+          }
+        }
+        img.addEventListener('load', () => {
+          try {
+            const nw = img.naturalWidth
+            const nh = img.naturalHeight
+            if (nw > 1 && nh > 1) tile.style.setProperty('--cust-ar', String(nw / nh))
+          } catch (_) {}
+        })
+        face.appendChild(img)
+        tile.appendChild(face)
+
+        const actions = document.createElement('div')
+        actions.className = 'cust-gal-actions'
+        ;[
+          ['cover', 'Обложка'],
+          ['bg', 'Фон'],
+          ['viz', 'Виджет'],
+        ].forEach(([role, label]) => {
+          const b = document.createElement('button')
+          b.type = 'button'
+          b.className = 'vsb cust-gal-btn'
+          if (galleryRoleMatchesUrl(role, u)) b.classList.add('active')
+          b.dataset.custGal = role
+          b.dataset.url = u
+          b.textContent = label
+          actions.appendChild(b)
+        })
+        tile.appendChild(actions)
+        row.appendChild(tile)
+      })
+      sec.appendChild(row)
+      grid.appendChild(sec)
+      bindHorizontalDragScroll(row, { faceTap: true })
+    }
+    if (!any) {
+      grid.innerHTML = '<span class="cust-hint">В папке пока нет файлов.</span>'
+    }
+  } catch (err) {
+    grid.innerHTML = `<span class="cust-hint">Ошибка: ${escapeHtml(String(err?.message || err))}</span>`
+  }
+}
+
+function exportSavedViewPresetsJson() {
+  try {
+    const presets = getCustomizationPresets()
+    const payload = {
+      format: 'nexory-saved-views-v1',
+      app: 'Nexory',
+      exportedAt: new Date().toISOString(),
+      presets,
+    }
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+    const stamp = new Date().toISOString().slice(0, 10)
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `nexory-saved-views-${stamp}.json`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(link.href)
+    showToast('Список сохранённых видов экспортирован')
+  } catch (err) {
+    showToast(`Экспорт не удался: ${sanitizeDisplayText(err?.message || err)}`, true)
+  }
+}
+
+function pickSavedViewPresetsFile() {
+  document.getElementById('cust-views-import-input')?.click()
+}
+
+function importSavedViewPresetsFromFile(input) {
+  const file = input?.files?.[0]
+  const reset = () => {
+    try {
+      input.value = ''
+    } catch (_) {}
+  }
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = () => {
+    try {
+      const parsed = JSON.parse(String(reader.result || '{}'))
+      let incoming = []
+      if (Array.isArray(parsed)) incoming = parsed
+      else if (parsed && Array.isArray(parsed.presets)) incoming = parsed.presets
+      if (!incoming.length) throw new Error('В файле нет пресетов')
+      const cleaned = []
+      for (let i = 0; i < incoming.length; i++) {
+        const p = incoming[i]
+        if (!p || typeof p !== 'object') continue
+        const id = typeof p.id === 'string' && p.id ? p.id : newCustomizationPresetId()
+        const bgRaw = p.bg != null ? String(p.bg).trim() : ''
+        let bg = CUST_BG_GRADIENT_SENT
+        if (bgRaw === CUST_BG_COVER_SENT || bgRaw === CUST_BG_GRADIENT_SENT) bg = bgRaw
+        else if (bgRaw) bg = bgRaw
+        cleaned.push({
+          id,
+          ts: Number.isFinite(Number(p.ts)) ? Number(p.ts) : Date.now(),
+          cover: p.cover != null ? String(p.cover) : '',
+          bg,
+          viz: p.viz != null ? String(p.viz) : '',
+        })
+      }
+      if (!cleaned.length) throw new Error('Не удалось разобрать пресеты')
+      const impIds = new Set(cleaned.map((p) => p.id))
+      const rest = getCustomizationPresets().filter((p) => p && !impIds.has(p.id))
+      saveCustomizationPresetsList([...cleaned, ...rest].slice(0, CUST_PRESETS_CAP))
+      if (cleaned[0]?.id) {
+        try {
+          applyCustomizationPresetById(cleaned[0].id, { skipToast: true })
+        } catch (_) {}
+      } else {
+        try {
+          refreshCustomizationPanel()
+        } catch (_) {}
+      }
+      showToast(`Импортировано видов: ${cleaned.length}. Первый из списка применён к экрану.`)
+    } catch (err) {
+      showToast(`Импорт: ${sanitizeDisplayText(err?.message || err)}`, true)
+    } finally {
+      reset()
+    }
+  }
+  reader.onerror = () => {
+    showToast('Не удалось прочитать файл', true)
+    reset()
+  }
+  reader.readAsText(file)
+}
+
+function openCustomizationGallery() {
+  ensureCustGalleryGridDelegate()
+  ensureCustGalleryEscClose()
+  ensureCustGallerySheetClickCollapse()
+  const ov = document.getElementById('cust-gallery-overlay')
+  if (ov) {
+    ov.classList.remove('hidden')
+    ov.setAttribute('aria-hidden', 'false')
+  }
+  void renderCustGalleryContent()
+}
+
+function closeCustomizationGallery() {
+  const ov = document.getElementById('cust-gallery-overlay')
+  if (ov) {
+    ov.classList.add('hidden')
+    ov.setAttribute('aria-hidden', 'true')
+  }
+}
+
+window.openCustomizationGallery = openCustomizationGallery
+window.closeCustomizationGallery = closeCustomizationGallery
+window.saveCustomizationPresetSnapshot = saveCustomizationPresetSnapshot
+window.clearCustomizationGalleryRecent = clearCustomizationGalleryRecent
 
 // в”Ђв”Ђв”Ђ FULLSCREEN PLAYER MODE в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 function enterPlayerMode() {
@@ -1983,6 +3178,14 @@ function refreshLyricsPanelsVisibility() {
     if (sidePanel) sidePanel.classList.add('hidden')
     if (pmPanel) pmPanel.classList.toggle('hidden', !_lyricsOpen)
     pmRoot?.classList.toggle('lyrics-mode', _lyricsOpen)
+    try {
+      if (pmRoot && _lyricsOpen) {
+        pmRoot.classList.remove('pm-lyrics-opening')
+        void pmRoot.offsetWidth
+        pmRoot.classList.add('pm-lyrics-opening')
+        window.setTimeout(() => pmRoot.classList.remove('pm-lyrics-opening'), 640)
+      }
+    } catch (_) {}
   } else {
     if (pmPanel) pmPanel.classList.add('hidden')
     if (sidePanel) sidePanel.classList.toggle('hidden', !_lyricsOpen)
@@ -1994,6 +3197,50 @@ function refreshLyricsPanelsVisibility() {
       queueMicrotask(() => syncLyrics(getLyricsSmoothedTime()))
     }
   } catch (_) {}
+}
+
+function cssQuoteForUrl(value) {
+  if (value == null || typeof value !== 'string') return ''
+  return String(value).trim().replace(/\\/g, '/').replace(/'/g, '%27')
+}
+
+function syncPmQueuePreviews() {
+  const strip = document.getElementById('pm-queue-strip')
+  const countEl = document.getElementById('pm-queue-count')
+  if (!strip || !_playerModeActive) return
+  strip.innerHTML = ''
+  const qlen = Array.isArray(queue) ? queue.length : 0
+  const qIdx = Number(queueIndex) || 0
+  const upcoming = Math.max(0, qlen - qIdx - 1)
+  if (countEl) countEl.textContent = upcoming > 0 ? String(upcoming) : ''
+  if (!qlen || upcoming <= 0) {
+    const empty = document.createElement('span')
+    empty.className = 'pm-queue-empty'
+    empty.textContent = qlen && qIdx >= qlen - 1 ? 'Конец очереди' : 'Нет треков впереди'
+    strip.appendChild(empty)
+    return
+  }
+  const start = qIdx + 1
+  const slice = queue.slice(start, start + 10)
+  slice.forEach((tr, i) => {
+    const targetIdx = start + i
+    const url = getEffectiveCoverUrl(tr)
+    const btn = document.createElement('button')
+    btn.type = 'button'
+    btn.className = 'pm-queue-thumb'
+    btn.setAttribute('role', 'listitem')
+    btn.title = `${tr.title || 'Трек'}${tr.artist ? ' — ' + tr.artist : ''}`
+    const safe = cssQuoteForUrl(url)
+    if (safe) btn.style.backgroundImage = `url('${safe}')`
+    else btn.classList.add('pm-queue-thumb--empty')
+    btn.addEventListener('click', () => {
+      if (typeof playTrackObj !== 'function') return
+      if (targetIdx < 0 || targetIdx >= queue.length) return
+      queueIndex = targetIdx
+      playTrackObj(queue[queueIndex]).catch(() => {})
+    })
+    strip.appendChild(btn)
+  })
 }
 
 function syncPlayerModeUI() {
@@ -2014,6 +3261,17 @@ function syncPlayerModeUI() {
   if (t) {
     pmTitle.textContent  = t.title || 'РќРµРёР·РІРµСЃС‚РЅРѕ'
     pmArtist.textContent = t.artist || 'вЂ”'
+    const pmSrc = document.getElementById('pm-source-badge')
+    if (pmSrc && typeof window.flowTrackSourceBadgeHtml === 'function') {
+      const html = window.flowTrackSourceBadgeHtml(t)
+      if (html) {
+        pmSrc.innerHTML = html
+        pmSrc.classList.remove('hidden')
+      } else {
+        pmSrc.innerHTML = ''
+        pmSrc.classList.add('hidden')
+      }
+    }
     const effectiveCover = getEffectiveCoverUrl(t)
     if (effectiveCover) {
       applyCoverArt(pmCover, effectiveCover, t.bg || 'linear-gradient(135deg,#7c3aed,#a855f7)')
@@ -2047,6 +3305,7 @@ function syncPlayerModeUI() {
   const pmCoverVol = document.getElementById('pm-cover-volume')
   if (pmCoverVol) pmCoverVol.value = audio.volume
   if (pmCoverLyrics) pmCoverLyrics.classList.toggle('active', _lyricsOpen)
+  syncPmQueuePreviews()
 }
 
 // в”Ђв”Ђв”Ђ TIME FORMATTING в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
@@ -2353,6 +3612,8 @@ function getSettings() {
     discordClientId: '', discordRpcEnabled: false, lastfmApiKey: '', lastfmSharedSecret: '', lastfmSessionKey: '',
     proxyBaseUrl: FLOW_SERVER_DEFAULT_URL,
     compactUi: false,
+    minimizeToTrayOnClose: true,
+    launchAtLogin: false,
     flowSocialApiBase: FLOW_SOCIAL_DEFAULT_API_BASE,
     flowSocialApiSecret: FLOW_SOCIAL_DEFAULT_API_SECRET,
   }
@@ -2367,6 +3628,8 @@ function getSettings() {
   if (typeof raw.optFreezePlayerWhenMinimized !== 'boolean') raw.optFreezePlayerWhenMinimized = true
   if (typeof raw.optPauseHeavyBgWhenBackgrounded !== 'boolean') raw.optPauseHeavyBgWhenBackgrounded = true
   if (typeof raw.optGameSleepMode !== 'boolean') raw.optGameSleepMode = false
+  if (typeof raw.minimizeToTrayOnClose !== 'boolean') raw.minimizeToTrayOnClose = true
+  if (typeof raw.launchAtLogin !== 'boolean') raw.launchAtLogin = false
   if (typeof raw.vkSeleniumBridge !== 'boolean') raw.vkSeleniumBridge = false
   const prevActive = raw.activeSource
   raw.activeSource = normalizeStoredActiveSource(raw.activeSource)
@@ -2516,8 +3779,71 @@ function applyOptimizationSettings() {
   document.body.classList.toggle('flow-opt-no-animations', Boolean(s.optDisableAnimations))
   document.body.classList.toggle('flow-performance', Boolean(s.optSimpleGraphics))
   syncOptimizationPanelToggles()
+  syncPlaybackSystemToggles()
   refreshOptimizationAmbientClasses()
 }
+
+function syncPlaybackSystemToggles() {
+  const s = getSettings()
+  const tray = document.getElementById('toggle-minimize-to-tray')
+  if (tray) tray.classList.toggle('active', Boolean(s.minimizeToTrayOnClose))
+  const login = document.getElementById('toggle-launch-at-login')
+  if (login) login.classList.toggle('active', Boolean(s.launchAtLogin))
+}
+
+function syncTrayClosePreferenceToMain() {
+  try {
+    if (!window.api?.setTrayOnClose) return
+    const s = getSettings()
+    window.api.setTrayOnClose(Boolean(s.minimizeToTrayOnClose))
+  } catch (_) {}
+}
+
+function toggleMinimizeToTrayOnClose() {
+  const cur = getSettings()
+  saveSettingsRaw({ minimizeToTrayOnClose: !Boolean(cur.minimizeToTrayOnClose) })
+  syncPlaybackSystemToggles()
+  syncTrayClosePreferenceToMain()
+  showToast(getSettings().minimizeToTrayOnClose ? 'Закрытие: в трей (музыка играет)' : 'Закрытие: выход из приложения')
+}
+window.toggleMinimizeToTrayOnClose = toggleMinimizeToTrayOnClose
+
+async function toggleLaunchAtLogin() {
+  if (!window.api?.setLaunchAtLogin || !window.api?.getLaunchAtLogin) return
+  const cur = getSettings()
+  const next = !Boolean(cur.launchAtLogin)
+  try {
+    const r = await window.api.setLaunchAtLogin(next)
+    if (!r?.ok) {
+      showToast(String(r?.error || 'Не удалось изменить автозапуск'), true)
+      return
+    }
+    saveSettingsRaw({ launchAtLogin: Boolean(r.enabled) })
+    syncPlaybackSystemToggles()
+    showToast(r.enabled ? 'Автозапуск включён' : 'Автозапуск выключен')
+  } catch (err) {
+    showToast(String(err?.message || err), true)
+  }
+}
+window.toggleLaunchAtLogin = toggleLaunchAtLogin
+
+async function refreshLaunchAtLoginFromMain() {
+  if (!window.api?.getLaunchAtLogin) return
+  try {
+    const r = await window.api.getLaunchAtLogin()
+    if (r?.ok && typeof r.enabled === 'boolean') saveSettingsRaw({ launchAtLogin: r.enabled })
+    syncPlaybackSystemToggles()
+  } catch (_) {}
+}
+
+function flowHandleTitlebarClose() {
+  try {
+    if (!window.api?.close) return
+    const s = getSettings()
+    window.api.close({ toTray: Boolean(s.minimizeToTrayOnClose) })
+  } catch (_) {}
+}
+window.flowHandleTitlebarClose = flowHandleTitlebarClose
 
 function toggleOptimizationSetting(key) {
   const allowed = new Set(['optDisableAnimations', 'optSimpleGraphics', 'optFreezePlayerWhenMinimized', 'optPauseHeavyBgWhenBackgrounded', 'optGameSleepMode'])
@@ -2626,7 +3952,7 @@ const FLOW_YANDEX_TELEGRAPH_GUIDE_URL = 'https://telegra.ph/Kak-podklyuchit-YAnd
 const FLOW_VK_TELEGRAPH_GUIDE_URL = 'https://telegra.ph/Kak-podklyuchit-VKontakte-vo-Flow-05-04'
 /** Публичный гайд по токену VK (HTML в репозитории). */
 const FLOW_VK_GUIDE_GITHUB_BLOB =
-  'https://github.com/ioqeeqo-create/FlowPleerLoww/blob/cursor/liquid-glass-room-widget-0756/assets/guides/vk-token-dlya-flow.html'
+  'https://github.com/ioqeeqo-create/NexoryND/blob/main/assets/guides/vk-token-dlya-flow.html'
 
 function openFlowYandexTelegraphGuide() {
   openUrl(FLOW_YANDEX_TELEGRAPH_GUIDE_URL)
@@ -2927,7 +4253,7 @@ async function checkVkToken() {
             ? `Профиль подтверждён (${who}). Официальные методы audio.* недоступны${ac}${detail}.${maskHint}`
             : `Официальные методы audio.* недоступны${ac}${detail}.${maskHint}`
           line += ' И новый токен Kate, и токен из веба при этом часто ведут себя одинаково — это ограничение VK, а не «испорченная вставка».'
-          line += ' По умолчанию Flow не открывает Chrome сам: если нужен обход через Chrome+Selenium (Python, selenium, webdriver-manager; профиль %LOCALAPPDATA%\\Flow\\vk_chrome_profile), включи ниже «Обход через Chrome (Selenium)».'
+          line += ' По умолчанию Nexory не открывает Chrome сам: если нужен обход через Chrome+Selenium (Python, selenium, webdriver-manager; профиль %LOCALAPPDATA%\\Nexory\\vk_chrome_profile), включи ниже «Обход через Chrome (Selenium)».'
           if (msg) {
             msg.textContent = line
             msg.className = 'token-msg token-msg-warn'
@@ -2937,7 +4263,7 @@ async function checkVkToken() {
         }
 
         let line = who
-          ? `Профиль подтверждён (${who}), но аудио в Flow недоступно${ac}${detail}. На vkhost выбери Kate Mobile и право «Аудио».`
+          ? `Профиль подтверждён (${who}), но аудио в Nexory недоступно${ac}${detail}. На vkhost выбери Kate Mobile и право «Аудио».`
           : `Аудио API недоступно${ac}${detail}. На vkhost — Kate Mobile и право «Аудио».`
         if (Number(r.audioCode) === 6) {
           line += ' Код 6 — слишком много запросов к VK: подожди 30–60 секунд и нажми проверку снова; не кликай «Проверить токен» много раз подряд.'
@@ -3235,7 +4561,6 @@ function loadSettingsPage() {
   requestAnimationFrame(() => {
     syncPlaybackModeUI()
     syncTrackCoverStatus()
-    setFlowConfigStatus('Экспорт создаёт JSON с визуалом, профилем, плейлистами и настройками.', false)
     syncFontControls()
     syncHomeWidgetUI()
     applyHomeSliderStyle()
@@ -3256,6 +4581,8 @@ function syncPlaybackModeUI() {
   const shSettings = document.getElementById('toggle-shuffle-btn')
   const rpSettings = document.getElementById('toggle-repeat-btn')
   if (shBtn) shBtn.classList.toggle('active', Boolean(playbackMode.shuffle))
+  const pmSh = document.getElementById('pm-shuffle-btn')
+  if (pmSh) pmSh.classList.toggle('active', Boolean(playbackMode.shuffle))
   if (homeShBtn) homeShBtn.classList.toggle('active', Boolean(playbackMode.shuffle))
   if (shSettings) {
     shSettings.textContent = playbackMode.shuffle ? 'Включена' : 'Выключена'
@@ -3266,6 +4593,11 @@ function syncPlaybackModeUI() {
     rpBtn.classList.toggle('active', playbackMode.repeat !== 'off')
     rpBtn.title = `Повтор: ${repeatLabel}`
   }
+  const pmRp = document.getElementById('pm-repeat-pm-btn')
+  if (pmRp) {
+    pmRp.classList.toggle('active', playbackMode.repeat !== 'off')
+    pmRp.title = `Повтор: ${repeatLabel}`
+  }
   if (homeRpBtn) {
     homeRpBtn.classList.toggle('active', playbackMode.repeat !== 'off')
     homeRpBtn.title = `Повтор: ${repeatLabel}`
@@ -3274,6 +4606,15 @@ function syncPlaybackModeUI() {
     rpSettings.textContent = repeatLabel
     rpSettings.classList.toggle('active', playbackMode.repeat !== 'off')
   }
+  const repeatLucide = playbackMode.repeat === 'one' ? 'repeat-1' : 'repeat'
+  ;['repeat-btn', 'home-repeat-btn', 'pm-repeat-pm-btn'].forEach((id) => {
+    const btn = document.getElementById(id)
+    const svg = btn?.querySelector?.('svg[data-lucide]')
+    if (svg) {
+      svg.setAttribute('data-lucide', repeatLucide)
+      if (typeof hydrateFlowLucideIcons === 'function') hydrateFlowLucideIcons(btn)
+    }
+  })
 }
 
 function toggleShuffleMode() {
@@ -3394,12 +4735,86 @@ function refreshTrackCoverPreview(fileName = '') {
   setMediaPreviewBox('track-cover', custom, label, true)
 }
 
-function setFlowConfigStatus(text, isError = false) {
-  const el = document.getElementById('flow-config-status')
-  if (!el) return
-  el.textContent = text
-  el.classList.toggle('token-msg-err', Boolean(isError))
-  el.classList.toggle('token-msg-ok', !isError)
+function guessExtFromMime(m) {
+  const t = String(m || '').toLowerCase()
+  if (t.includes('png')) return '.png'
+  if (t.includes('webp')) return '.webp'
+  if (t.includes('gif')) return '.gif'
+  if (t.includes('jpeg') || t.includes('jpg')) return '.jpg'
+  return '.bin'
+}
+
+async function mirrorRemoteUrlToCustomGallery(url, purpose) {
+  const u = String(url || '').trim()
+  if (!u) return ''
+  if (/^file:\/\//i.test(u)) return u
+  if (!/^https?:|^data:/i.test(u)) return u
+  try {
+    const res = await fetch(u, { mode: 'cors', credentials: 'omit', referrerPolicy: 'no-referrer' })
+    if (!res.ok) return u
+    const blob = await res.blob()
+    if (!blob || !blob.size) return u
+    const ext = guessExtFromMime(blob.type)
+    const file = new File([blob], `preset-${purpose}-${Date.now()}${ext}`, {
+      type: blob.type || 'application/octet-stream',
+    })
+    return await saveCustomMediaFile(file, purpose)
+  } catch (_) {
+    return u
+  }
+}
+
+/** После импорта пресета: http(s)/data URL фона и виджета копируются в папку галереи и переписываются на file://. */
+async function mirrorPresetVisualUrlsToGallery() {
+  const v0 = getVisual()
+  const patch = {}
+  if (v0.bgType === 'custom' && v0.customBg && /^https?:|^data:/i.test(String(v0.customBg))) {
+    const nu = await mirrorRemoteUrlToCustomGallery(v0.customBg, 'background')
+    if (nu && nu !== v0.customBg) patch.customBg = nu
+  }
+  const hw = Object.assign({ enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }, v0.homeWidget || {})
+  if (hw.image && /^https?:|^data:/i.test(String(hw.image))) {
+    const nu = await mirrorRemoteUrlToCustomGallery(hw.image, 'home-widget')
+    if (nu && nu !== hw.image) {
+      patch.homeWidget = Object.assign({}, hw, { image: nu })
+      if (hw.mode === 'image' || patch.homeWidget.mode === 'image') patch.homeWidget.mode = 'image'
+    }
+  }
+  if (Object.keys(patch).length) {
+    saveVisual(patch)
+    _flowVisualMemo = null
+  }
+}
+
+async function mirrorHttpUrlsInCustomCoverMap() {
+  const map = getCustomCoverMap()
+  const next = { ...map }
+  let changed = false
+  const keys = Object.keys(next)
+  for (let i = 0; i < keys.length; i++) {
+    const k = keys[i]
+    const v = next[k]
+    if (v == null || typeof v !== 'string') continue
+    const t = v.trim()
+    if (!/^https?:|^data:/i.test(t)) continue
+    try {
+      const nu = await mirrorRemoteUrlToCustomGallery(t, 'track-cover')
+      if (nu && nu !== t) {
+        next[k] = nu
+        changed = true
+      }
+    } catch (_) {}
+  }
+  if (changed) {
+    saveCustomCoverMap(next)
+    try {
+      _coverLoadState.clear()
+    } catch (_) {}
+  }
+}
+
+function setFlowConfigStatus(_text, _isError = false) {
+  /* Статус под карточкой пресета убран из UI — оставлена заглушка для совместимости. */
 }
 
 function collectFlowConfigPayload() {
@@ -3411,7 +4826,7 @@ function collectFlowConfigPayload() {
   }
   return {
     format: 'flow-preset-v1',
-    app: 'Flow',
+    app: 'Nexory',
     exportedAt: new Date().toISOString(),
     storage,
   }
@@ -3515,8 +4930,7 @@ async function exportFlowConfig() {
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(link.href)
-    setFlowConfigStatus('Flow preset экспортирован. Можно отправлять .flowpreset другу.', false)
-    showToast('Flow preset экспортирован')
+    showToast('Nexory preset экспортирован')
     if (failedEmbed && failedEmbed.length) {
       showToast(
         `Не удалось встроить ${failedEmbed.length} файл(ов) с диска — на другом ПК их не будет.`,
@@ -3524,8 +4938,7 @@ async function exportFlowConfig() {
       )
     }
   } catch (err) {
-    setFlowConfigStatus(`Ошибка экспорта: ${err?.message || err}`, true)
-    showToast('Не удалось экспортировать preset', true)
+    showToast(`Не удалось экспортировать preset: ${err?.message || err}`, true)
   }
 }
 
@@ -3533,6 +4946,97 @@ function pickFlowConfigFile() {
   const input = document.getElementById('flow-config-input')
   if (!input) return
   input.click()
+}
+
+/**
+ * Импорт .flowpreset / dotify: только внешний вид — подмешиваем в текущий `flow_visual` поля
+ * bgType, customBg, gifMode, glass, panelBlur, homeWidget и при наличии `flow_track_covers`.
+ * Размытие, яркость и прозрачность стекла (blur, bright, glass) из файла не применяются — остаются текущие значения пользователя.
+ * Остальные ключи localStorage не меняем (сессия, источники, тема UI и т.д.).
+ */
+function applyPresetAppearanceOnly(storage) {
+  if (!storage || typeof storage !== 'object') return { appliedVisual: false, appliedCovers: false }
+
+  const incomingStr = storage.flow_visual
+  let incoming = {}
+  if (incomingStr != null && String(incomingStr).trim()) {
+    try {
+      incoming = JSON.parse(String(incomingStr))
+    } catch {
+      incoming = {}
+    }
+    if (!incoming || typeof incoming !== 'object') incoming = {}
+  }
+
+  const cur = getVisual()
+  const patch = {}
+
+  if (Object.prototype.hasOwnProperty.call(incoming, 'panelBlur')) {
+    const n = Number(incoming.panelBlur)
+    if (Number.isFinite(n)) patch.panelBlur = Math.max(0, Math.min(60, n))
+  }
+  if (Object.prototype.hasOwnProperty.call(incoming, 'bgType')) {
+    const t = String(incoming.bgType || '')
+    if (t === 'gradient' || t === 'cover' || t === 'custom') patch.bgType = t
+  }
+  if (Object.prototype.hasOwnProperty.call(incoming, 'customBg')) {
+    patch.customBg =
+      incoming.customBg == null || incoming.customBg === '' ? null : String(incoming.customBg)
+    if (patch.customBg && !patch.bgType) patch.bgType = 'custom'
+  }
+  if (Object.prototype.hasOwnProperty.call(incoming, 'gifMode') && incoming.gifMode && typeof incoming.gifMode === 'object') {
+    const g = incoming.gifMode
+    const base = Object.assign({ bg: true, track: true, playlist: true }, cur.gifMode || {})
+    patch.gifMode = Object.assign({}, base, {
+      bg: typeof g.bg === 'boolean' ? g.bg : base.bg,
+      track: typeof g.track === 'boolean' ? g.track : base.track,
+      playlist: typeof g.playlist === 'boolean' ? g.playlist : base.playlist,
+    })
+  }
+  if (Object.prototype.hasOwnProperty.call(incoming, 'homeWidget') && incoming.homeWidget && typeof incoming.homeWidget === 'object') {
+    const hw = incoming.homeWidget
+    const base = Object.assign(
+      { enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 },
+      cur.homeWidget || {},
+    )
+    patch.homeWidget = Object.assign({}, base)
+    if (typeof hw.enabled === 'boolean') patch.homeWidget.enabled = hw.enabled
+    const mode = String(hw.mode || '')
+    if (mode === 'image' || mode === 'bars' || mode === 'wave') patch.homeWidget.mode = mode
+    if (hw.image != null && String(hw.image).trim() !== '') patch.homeWidget.image = String(hw.image)
+    const inten = Number(hw.intensity)
+    if (Number.isFinite(inten)) patch.homeWidget.intensity = Math.max(60, Math.min(180, inten))
+    const sm = Number(hw.smoothing)
+    if (Number.isFinite(sm)) patch.homeWidget.smoothing = Math.max(20, Math.min(95, sm))
+  }
+
+  const hasCoversKey =
+    Object.prototype.hasOwnProperty.call(storage, 'flow_track_covers') && storage.flow_track_covers != null
+
+  let appliedVisual = false
+  if (Object.keys(patch).length) {
+    _flowVisualMemo = null
+    localStorage.setItem('flow_visual', JSON.stringify(Object.assign({}, cur, patch)))
+    appliedVisual = true
+  }
+
+  let appliedCovers = false
+  if (hasCoversKey) {
+    localStorage.setItem('flow_track_covers', String(storage.flow_track_covers))
+    appliedCovers = true
+  }
+
+  return { appliedVisual, appliedCovers }
+}
+
+/** После импорта .flowpreset — карточка «сохранённый вид» с текущим экраном, чтобы сразу было видно заполненный превью-ряд. */
+function pushCustomizationSnapshotAfterFlowpresetImport() {
+  try {
+    const snap = collectCurrentCustomizationSnapshot()
+    const list = getCustomizationPresets()
+    const entry = { id: newCustomizationPresetId(), ts: Date.now(), ...snap }
+    saveCustomizationPresetsList([entry, ...list].slice(0, CUST_PRESETS_CAP))
+  } catch (_) {}
 }
 
 /** После записи ключей пресета в localStorage подтянуть in-memory состояние и не затирать flow_visual ползунками формы. */
@@ -3567,78 +5071,39 @@ function importFlowConfigFile(input) {
   const file = input?.files?.[0]
   if (!file) return
   const reader = new FileReader()
-  reader.onload = () => {
+  reader.onload = async () => {
     try {
-      const sessionBackup = {
-        flow_profiles: localStorage.getItem('flow_profiles'),
-        flow_current_user: localStorage.getItem('flow_current_user'),
-        flow_auth_last_user: localStorage.getItem('flow_auth_last_user'),
-      }
       const parsed = JSON.parse(String(reader.result || '{}'))
       const preset = normalizeImportedFlowPreset(parsed)
       const storage = preset?.storage
       if (!storage || typeof storage !== 'object') {
         throw new Error('Неверный формат файла')
       }
-      if (preset.replaceAll) {
-        const protectedKeys = new Set([
-          'flow_profile',
-          'flow_profile_accounts',
-          'flow_profile_active',
-          'flow_profile_presence',
-          'flow_profile_pending_messages',
-          'flow_profile_presence_room_id',
-          'flow_profile_password',
-          'flow_profile_password_hash',
-          'flow_profile_password_salt',
-          'flow_social_accounts',
-          'flow_social_session',
-          'flow_social_profile',
-          'flow_social_pending',
-          'flow_friends_cache',
-          'flow_auth_last_user',
-          'flow_profiles',
-          'flow_current_user',
-        ])
-        const toDelete = []
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i)
-          if (key && key.startsWith('flow_') && !protectedKeys.has(key) && !key.startsWith('flow_friends_')) toDelete.push(key)
-        }
-        toDelete.forEach((key) => localStorage.removeItem(key))
+      const { appliedVisual, appliedCovers } = applyPresetAppearanceOnly(storage)
+      if (!appliedVisual && !appliedCovers) {
+        throw new Error('В файле нет данных о фоне, обложках или виджете')
       }
-      Object.entries(storage).forEach(([key, value]) => {
-        if (!key.startsWith('flow_')) return
-        if (
-          key === 'flow_profile'
-          || key === 'flow_profile_accounts'
-          || key === 'flow_profile_active'
-          || key === 'flow_profile_presence'
-          || key === 'flow_profile_pending_messages'
-          || key === 'flow_profile_password'
-          || key === 'flow_profile_password_hash'
-          || key === 'flow_profile_password_salt'
-          || key === 'flow_social_accounts'
-          || key === 'flow_social_session'
-          || key === 'flow_social_profile'
-          || key === 'flow_social_pending'
-          || key === 'flow_auth_last_user'
-          || key === 'flow_profiles'
-          || key === 'flow_current_user'
-          || key.startsWith('flow_friends_')
-        ) return
-        localStorage.setItem(key, String(value ?? ''))
-      })
-      // Force-restore auth session keys regardless of preset payload content.
-      Object.entries(sessionBackup).forEach(([key, value]) => {
-        if (typeof value === 'string' && value.trim()) localStorage.setItem(key, value)
-      })
       syncRuntimeCachesAfterPresetImport()
-      setFlowConfigStatus('Flow preset импортирован. Сессия аккаунта сохранена, перезагрузка не требуется.', false)
-      showToast('Flow preset импортирован')
+      try {
+        await mirrorPresetVisualUrlsToGallery()
+      } catch (_) {}
+      try {
+        await mirrorHttpUrlsInCustomCoverMap()
+      } catch (_) {}
+      try {
+        pushCustomizationSnapshotAfterFlowpresetImport()
+      } catch (_) {}
+      showToast('Внешний вид применён; в «Сохранённые виды» добавлена карточка текущего экрана')
+      try {
+        switchSettingsCategory('customization')
+      } catch (_) {}
+      try {
+        refreshCustomizationPanel()
+      } catch (_) {}
       try { applySettingsSectionsState() } catch {}
       // Важно: не вызывать applyVisualSettings() — она берёт значения из DOM и перезаписывает только что импортированный flow_visual.
       try { initVisualSettings() } catch {}
+      try { updateBackground() } catch {}
       try { syncIntegrationsUI() } catch {}
       try { applyUiTextOverrides() } catch {}
       requestAnimationFrame(() => {
@@ -3651,8 +5116,7 @@ function importFlowConfigFile(input) {
       try { renderFriends().catch(() => {}) } catch {}
       try { pollFriendsPresence(true).catch(() => {}) } catch {}
     } catch (err) {
-      setFlowConfigStatus(`Ошибка импорта: ${err?.message || err}`, true)
-      showToast('Не удалось импортировать preset', true)
+      showToast(`Ошибка импорта: ${err?.message || err}`, true)
     } finally {
       input.value = ''
     }
@@ -3672,38 +5136,100 @@ function normalizeImportedFlowPreset(parsed) {
 
 function convertDotifyPresetToFlowStorage(preset) {
   const data = preset?.data || {}
-  const ui = data.ui || {}
+  const ui = data.uiSettings || data.ui || {}
   const gifs = data.gifs || {}
-  const visual = Object.assign({}, getVisual())
-  if (gifs.background) {
+  const visual = Object.assign({}, defaultVisual)
+
+  /** Dotify ≥ новый формат: gifSettings — объект с ключами "0","1",… или массив; у каждого usage: background | cover | visualizer | … */
+  const gifList = []
+  const rawGifSettings = data.gifSettings
+  if (rawGifSettings && typeof rawGifSettings === 'object') {
+    if (Array.isArray(rawGifSettings)) {
+      for (let i = 0; i < rawGifSettings.length; i++) if (rawGifSettings[i]) gifList.push(rawGifSettings[i])
+    } else {
+      Object.keys(rawGifSettings)
+        .filter((k) => /^\d+$/.test(k))
+        .sort((a, b) => Number(a) - Number(b))
+        .forEach((k) => {
+          const it = rawGifSettings[k]
+          if (it && typeof it === 'object') gifList.push(it)
+        })
+    }
+  }
+
+  let coverUrl = ''
+  for (let i = 0; i < gifList.length; i++) {
+    const item = gifList[i]
+    const usage = String(item.usage || '').toLowerCase()
+    const url = item.url != null ? String(item.url).trim() : ''
+    if (!url) continue
+    if (usage === 'background') {
+      visual.bgType = 'custom'
+      visual.customBg = url
+    } else if (usage === 'cover') {
+      coverUrl = url
+    } else if (usage === 'visualizer') {
+      visual.homeWidget = Object.assign(
+        { enabled: true, mode: 'image', image: null, intensity: 100, smoothing: 72 },
+        visual.homeWidget || {},
+        { enabled: true, mode: 'image', image: url },
+      )
+    }
+  }
+
+  if (!visual.customBg && gifs.background) {
     visual.bgType = 'custom'
     visual.customBg = String(gifs.background)
   }
-  if (gifs.visualizer) {
-    visual.homeWidget = Object.assign({ enabled: true, mode: 'image', image: null }, visual.homeWidget || {}, {
-      enabled: true,
-      mode: 'image',
-      image: String(gifs.visualizer),
-    })
-  } else if (ui.visualization?.style === 'wave') {
-    visual.homeWidget = Object.assign({ enabled: true, mode: 'bars', image: null }, visual.homeWidget || {}, {
-      enabled: true,
-      mode: 'wave',
-    })
+  if (!(visual.homeWidget && visual.homeWidget.image) && gifs.visualizer) {
+    visual.homeWidget = Object.assign(
+      { enabled: true, mode: 'image', image: null, intensity: 100, smoothing: 72 },
+      visual.homeWidget || {},
+      { enabled: true, mode: 'image', image: String(gifs.visualizer) },
+    )
+  } else if (!gifList.length && ui.visualization?.style === 'wave') {
+    visual.homeWidget = Object.assign(
+      { enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 },
+      visual.homeWidget || {},
+      { enabled: true, mode: 'wave' },
+    )
   }
+  if (!coverUrl && gifs.cover) coverUrl = String(gifs.cover)
+
   const transparency = ui.transparency || {}
   if (transparency.glass && typeof transparency.glass === 'object') {
-    const blur = Number(transparency.glass.blur)
+    const gBlur = Number(transparency.glass.blur)
     const strength = Number(transparency.glass.strength)
-    if (Number.isFinite(blur)) visual.panelBlur = Math.max(0, Math.min(40, blur))
-    if (Number.isFinite(strength)) visual.glass = Math.max(0, Math.min(40, strength))
+    if (Number.isFinite(gBlur)) {
+      visual.panelBlur = Math.max(0, Math.min(60, gBlur))
+      visual.blur = Math.max(0, Math.min(80, Math.round(gBlur * 6)))
+    }
+    if (Number.isFinite(strength)) {
+      visual.glass =
+        strength > 0 && strength <= 1
+          ? Math.max(0, Math.min(40, Math.round(strength * 40)))
+          : Math.max(0, Math.min(40, strength))
+    }
   }
-  const scale = Array.isArray(ui.scale?.default) ? Number(ui.scale.default[0]) : Number(ui.scale?.default)
+  const op = Number(transparency.opacity)
+  if (Number.isFinite(op)) {
+    visual.bright = Math.max(10, Math.min(100, Math.round(25 + (op / 100) * 70)))
+  }
+
+  const scaleRaw = ui.scale
+  let scale = NaN
+  if (typeof scaleRaw === 'number') scale = scaleRaw
+  else if (Array.isArray(scaleRaw?.default)) scale = Number(scaleRaw.default[0])
+  else scale = Number(scaleRaw?.default)
   if (Number.isFinite(scale)) visual.uiScale = Math.max(80, Math.min(130, scale))
-  if (ui.tabs?.position === 'top') visual.sidebarPosition = 'top'
+
+  if (ui.tabs === 'top' || ui.tabs?.position === 'top') visual.sidebarPosition = 'top'
+  else if (ui.tabs === 'bottom' || ui.tabs?.position === 'bottom') visual.sidebarPosition = 'bottom'
+  else if (ui.tabs === 'right' || ui.tabs?.position === 'right') visual.sidebarPosition = 'right'
   if (ui.customfont?.family) visual.customFontName = String(ui.customfont.family)
+
   const storage = { flow_visual: JSON.stringify(visual) }
-  if (gifs.cover) storage.flow_track_covers = JSON.stringify({ __global__: String(gifs.cover) })
+  if (coverUrl) storage.flow_track_covers = JSON.stringify({ __global__: coverUrl })
   return storage
 }
 
@@ -3934,9 +5460,9 @@ async function refreshFriendProfileFromCloud(username, force = false) {
   const safe = String(username || '').trim().toLowerCase()
   if (!safe) return null
   const now = Date.now()
-  const cached = getCachedPeerProfile(safe)
-  if (!force && cached?.updatedAt && (now - Number(cached.updatedAt || 0)) < PROFILE_CACHE_TTL_MS) return cached
   const lastPullAt = Number(_friendProfileRefreshAt.get(safe) || 0)
+  // Только интервал между запросами: старый PROFILE_CACHE_TTL по updatedAt блокировал
+  // подтягивание новых аватаров/баннеров до ~60 с, пока не придёт WS-пуш (при degraded — никогда).
   if (!force && (now - lastPullAt) < FRIEND_PROFILE_REFRESH_MS) return null
   _friendProfileRefreshAt.set(safe, now)
   const cloud = await fetchCloudPublicProfile(safe).catch(() => null)
@@ -3960,38 +5486,42 @@ async function syncProfileCloudNow() {
   const stats = getListenStats()
   const totalTracks = toDbSafeBigint(stats.totalTracks, 0)
   const totalSeconds = toDbSafeBigint(stats.totalSeconds, 0)
-  const payload = {
+
+  let av = custom.avatarData || null
+  let bn = custom.bannerData || null
+  if (av) av = await shrinkProfileDataUrlForApi(av, 'avatar')
+  if (bn) bn = await shrinkProfileDataUrlForApi(bn, 'banner')
+
+  const core = {
     username: me.username,
     online: true,
     last_seen: new Date().toISOString(),
-    avatar_data: custom.avatarData || null,
-    banner_data: custom.bannerData || null,
-    profile_color: custom.profileColor || null,
     bio: custom.bio || '',
     pinned_tracks: Array.isArray(custom.pinnedTracks) ? custom.pinnedTracks.slice(0, 5) : [],
     pinned_playlists: Array.isArray(custom.pinnedPlaylists) ? custom.pinnedPlaylists.slice(0, 5) : [],
     total_tracks: totalTracks,
     total_seconds: totalSeconds,
   }
-  try {
-    await flowSocialPut('/flow-api/v1/profile', payload)
-  } catch (e1) {
+
+  const pc = custom.profileColor || null
+  const variants = [
+    { ...core, avatar_data: av, banner_data: bn, ...(pc ? { profile_color: pc } : {}) },
+    { ...core, avatar_data: av, banner_data: bn },
+    { ...core, avatar_data: null, banner_data: null, ...(pc ? { profile_color: pc } : {}) },
+    { ...core, avatar_data: null, banner_data: null },
+    { ...core, avatar_data: null, banner_data: null, total_tracks: 0, total_seconds: 0 },
+  ]
+
+  let lastErr = ''
+  for (const body of variants) {
     try {
-      const fallbackPayload = Object.assign({}, payload)
-      delete fallbackPayload.profile_color
-      await flowSocialPut('/flow-api/v1/profile', fallbackPayload)
-    } catch (e2) {
-      try {
-        await flowSocialPut(
-          '/flow-api/v1/profile',
-          Object.assign({}, payload, { total_tracks: 0, total_seconds: 0 })
-        )
-      } catch (e3) {
-        return { ok: false, error: e3?.message || e2?.message || e1?.message || String(e1) }
-      }
+      await flowSocialPut('/flow-api/v1/profile', body)
+      return { ok: true }
+    } catch (e) {
+      lastErr = e?.message || String(e)
     }
   }
-  return { ok: true }
+  return { ok: false, error: lastErr }
 }
 
 function scheduleProfileCloudSync() {
@@ -4104,15 +5634,26 @@ async function removeRoomMemberPresence(roomId = _roomState?.roomId) {
 async function saveRoomStateToServer(patch = {}) {
   try {
     if (!_roomState?.roomId || !_profile?.username || !isFlowSocialReady()) return
+    const isHost = Boolean(_roomState.host)
+    const payloadPatch = Object.assign({}, patch || {})
+    if (!isHost) {
+      delete payloadPatch.shared_queue
+      delete payloadPatch.now_playing
+      delete payloadPatch.playback_state
+      delete payloadPatch.playback_ts
+    }
     const hostPeerId = _roomState.host
       ? String(_socialPeer?.peer?.id || _roomState.roomId)
       : ((_roomState.hostPeerId && _roomState.hostPeerId !== _roomState.roomId) ? String(_roomState.hostPeerId) : null)
-    const payload = Object.assign({
-      room_id: _roomState.roomId,
-      shared_queue: sharedQueue,
-      updated_by_peer_id: String(_socialPeer?.peer?.id || hostPeerId || _roomState.roomId),
-      updated_at: new Date().toISOString(),
-    }, patch || {})
+    const payload = Object.assign(
+      {
+        room_id: _roomState.roomId,
+        updated_by_peer_id: String(_socialPeer?.peer?.id || hostPeerId || _roomState.roomId),
+        updated_at: new Date().toISOString(),
+      },
+      isHost ? { shared_queue: sharedQueue } : {},
+      payloadPatch
+    )
     if (hostPeerId) payload.host_peer_id = hostPeerId
     await flowSocialPut('/flow-api/v1/rooms', payload)
   } catch {}
@@ -4127,6 +5668,31 @@ function scheduleRoomStateSave(patch = {}, delay = 450) {
   }, Math.max(120, Number(delay || 450)))
 }
 
+function applyRoomMembersRowsFromServer(rows) {
+  if (!Array.isArray(rows)) return
+  const merged = new Map(_roomMembers)
+  rows.forEach((m) => {
+    const pid = String(m?.peer_id || '').trim()
+    if (!pid) return
+    const base =
+      merged.get(pid) ||
+      _peerProfiles.get(pid) ||
+      getCachedPeerProfile(m?.username || pid.replace(/^flow-/, '')) || { username: m?.username || pid.replace(/^flow-/, '') }
+    const profile = mergeProfileData(
+      base,
+      Object.assign({ username: m?.username || pid.replace(/^flow-/, '') }, m?.profile || {}, { peerId: pid }),
+      pid
+    )
+    merged.set(pid, profile)
+    cachePeerProfile(profile, pid)
+  })
+  if (_socialPeer?.peer?.id && _profile?.username) {
+    merged.set(_socialPeer.peer.id, getPublicProfilePayload(_profile.username))
+  }
+  _roomMembers = merged
+  renderRoomMembers()
+}
+
 async function loadRoomStateFromServer(force = false) {
   try {
     if (!_roomState?.roomId) return
@@ -4135,54 +5701,62 @@ async function loadRoomStateFromServer(force = false) {
     _lastRoomServerLoadAt = now
     if (!isFlowSocialReady()) return
     const rid = encodeURIComponent(_roomState.roomId)
-    const nowIso = new Date(Date.now() - 20000).toISOString()
-    const membersPath = force
-      ? `/flow-api/v1/room-members/${rid}`
-      : `/flow-api/v1/room-members/${rid}?since=${encodeURIComponent(nowIso)}`
     const [room, members] = await Promise.all([
       flowSocialGet(`/flow-api/v1/rooms/${rid}`),
-      flowSocialGet(membersPath),
+      flowSocialGet(`/flow-api/v1/room-members/${rid}`),
     ])
-    if (room?.host_peer_id) _roomState.hostPeerId = String(room.host_peer_id)
-    if (Array.isArray(room?.shared_queue)) {
+    const myPeerId = String(_socialPeer?.peer?.id || '')
+    const roomIdStr = String(_roomState.roomId || '').trim()
+    const iOwnRoomNamespace = Boolean(myPeerId && roomIdStr === myPeerId)
+    let serverHost = room?.host_peer_id != null && String(room.host_peer_id).trim() !== '' ? String(room.host_peer_id).trim() : ''
+    if (iOwnRoomNamespace && serverHost && serverHost !== myPeerId) {
+      _roomState.hostPeerId = myPeerId
+      _roomState.host = true
+      saveRoomStateToServer({ host_peer_id: myPeerId, shared_queue: sharedQueue }).catch(() => {})
+    } else if (serverHost) {
+      _roomState.hostPeerId = serverHost
+      if (myPeerId) _roomState.host = _roomState.hostPeerId === myPeerId
+    } else if (roomIdStr.startsWith('flow-')) {
+      _roomState.hostPeerId = roomIdStr
+      if (myPeerId) _roomState.host = myPeerId === roomIdStr
+    }
+    // Хост не подменяет очередь снимком с сервера: иначе гонка с saveRoomStateToServer
+    // затирает локальную очередь (пропадают треки, «залипает» один старый).
+    if (Array.isArray(room?.shared_queue) && !_roomState.host) {
       sharedQueue = room.shared_queue.map((t) => sanitizeTrack(t)).filter(Boolean)
       renderRoomQueue()
     }
-    if (Array.isArray(members)) {
-      const next = new Map()
-      members.forEach((m) => {
-        const pid = String(m?.peer_id || '').trim()
-        if (!pid) return
-    const profile = mergeProfileData(
-      getCachedPeerProfile(m?.username || pid.replace(/^flow-/, '')) || _peerProfiles.get(pid) || { username: m?.username || pid.replace(/^flow-/, '') },
-      Object.assign({ username: m?.username || pid.replace(/^flow-/, '') }, m?.profile || {}, { peerId: pid }),
-      pid
-    )
-        next.set(pid, profile)
-        cachePeerProfile(profile, pid)
-      })
-      if (_socialPeer?.peer?.id && _profile?.username) next.set(_socialPeer.peer.id, getPublicProfilePayload(_profile.username))
-      _roomMembers = next
-      renderRoomMembers()
-    }
+    applyRoomMembersRowsFromServer(members)
     if (!_roomState.host && room?.now_playing && Number(room?.playback_ts || 0) > _lastAppliedServerPlaybackTs) {
       _lastAppliedServerPlaybackTs = Number(room.playback_ts || 0)
       const serverTrack = sanitizeTrack(room.now_playing)
       const state = room?.playback_state || {}
-      if (serverTrack && serverTrack.id !== currentTrack?.id) {
-        playTrackObj(serverTrack, { remoteSync: true }).catch(() => {})
-      }
+      const serverSig = normalizeTrackSignature(serverTrack || {})
+      const currentSig = normalizeTrackSignature(currentTrack || {})
+      const noActiveAudio = !audio?.src || audio?.ended || audio?.error
+      const shouldReloadFromServer =
+        Boolean(serverTrack) &&
+        (noActiveAudio || !currentTrack || !serverSig || !currentSig || serverSig !== currentSig)
+      if (shouldReloadFromServer) playTrackObj(serverTrack, { remoteSync: true }).catch(() => {})
+      const p2pFresh = Date.now() - (_lastGuestP2pPlaybackAt || 0) < 1200
       const targetTime = Number(state?.currentTime || 0)
-      if (Number.isFinite(targetTime) && Math.abs(Number(audio.currentTime || 0) - targetTime) > 0.6) {
-        audio.currentTime = Math.max(0, targetTime)
+      const dur = Number(audio?.duration || 0)
+      const canSeek = Number.isFinite(targetTime) && Number.isFinite(dur) && dur > 0
+      const drift = canSeek ? Math.abs(Number(audio.currentTime || 0) - targetTime) : 0
+      if (shouldReloadFromServer) {
+        if (canSeek && drift > 0.45) audio.currentTime = Math.max(0, Math.min(targetTime, dur))
+        if (state?.paused === true && !audio.paused) audio.pause()
+        if (state?.paused === false && audio.paused) audio.play().catch(() => {})
+      } else if (!p2pFresh) {
+        if (canSeek && drift > 2.0) audio.currentTime = Math.max(0, Math.min(targetTime, dur))
+        if (state?.paused === true && !audio.paused) audio.pause()
+        if (state?.paused === false && audio.paused) audio.play().catch(() => {})
       }
-      if (state?.paused === true && !audio.paused) audio.pause()
-      if (state?.paused === false && audio.paused) audio.play().catch(() => {})
     }
   } catch {}
 }
 
-function startRoomServerSync() {
+function startRoomServerSync(opts = {}) {
   stopRoomServerSync()
   if (!_roomState?.roomId || !window.FlowSocialBackend?.isConfigured?.()) return
   window.FlowSocialBackend.ensureWs()
@@ -4194,13 +5768,13 @@ function startRoomServerSync() {
     loadRoomStateFromServer(false).catch(() => {})
   })
   upsertRoomMemberPresence().catch(() => {})
-  loadRoomStateFromServer(true).catch(() => {})
+  if (!opts.skipInitialLoad) loadRoomStateFromServer(true).catch(() => {})
   _roomServerHeartbeatTimer = setInterval(() => {
     upsertRoomMemberPresence().catch(() => {})
-  }, 2500)
+  }, 1800)
   _roomServerFullSyncTimer = setInterval(() => {
     loadRoomStateFromServer(true).catch(() => {})
-  }, 12000)
+  }, 5200)
 }
 
 function renderRoomMembers() {
@@ -4210,15 +5784,25 @@ function renderRoomMembers() {
     el.innerHTML = '<div class="flow-empty-state compact"><strong>Рума не активна</strong><span>Создай комнату или вставь invite друга.</span></div>'
     return
   }
-  const members = Array.from(_roomMembers.values()).map((m) => {
-    if (!m?.username) return m
-    const cached = getCachedPeerProfile(m.username)
-    return cached ? mergeProfileData(cached, m, m?.peerId || cached?.peerId || '') : m
+  const hostPeerId = String(_roomState?.hostPeerId || '').trim()
+  const seen = new Set()
+  const members = []
+  Array.from(_roomMembers.values()).forEach((raw) => {
+    if (!raw?.peerId) return
+    const pid = String(raw.peerId)
+    if (seen.has(pid)) return
+    seen.add(pid)
+    let m = raw
+    if (m?.username) {
+      const cached = getCachedPeerProfile(m.username)
+      if (cached) m = mergeProfileData(cached, m, m?.peerId || cached?.peerId || '')
+    }
+    members.push(m)
   })
-  // Safety fallback: if profile packets are delayed, still show connected peers.
-  const connectedPeerIds = Array.from(_socialPeer?.connections?.keys?.() || [])
+  const connectedPeerIds = Array.from(_socialPeer?.connections?.keys?.() || []).map(String).sort()
   connectedPeerIds.forEach((peerId) => {
-    if (!peerId || _roomMembers.has(peerId)) return
+    if (!peerId || seen.has(peerId)) return
+    seen.add(peerId)
     const guessedName = String(peerId).replace(/^flow-/, '') || 'user'
     members.push({
       username: guessedName,
@@ -4232,14 +5816,20 @@ function renderRoomMembers() {
     })
   })
   if (!members.length && _profile?.username) members.push(getPublicProfilePayload(_profile.username))
+  members.sort((a, b) => {
+    const ah = hostPeerId && a.peerId === hostPeerId ? 0 : 1
+    const bh = hostPeerId && b.peerId === hostPeerId ? 0 : 1
+    if (ah !== bh) return ah - bh
+    return String(a.username || '').localeCompare(String(b.username || ''), 'ru')
+  })
   el.innerHTML = members.map((m) => {
     if (!m) return ''
-    const isHost = m.peerId && m.peerId === _roomState?.hostPeerId
-    const isSelfHost = !isHost && _roomState?.host && m.username === _profile?.username
+    const isHost = Boolean(hostPeerId && m.peerId && m.peerId === hostPeerId)
     const avatar = m.avatarData
       ? `<div class="social-friend-avatar social-friend-avatar-active" style="background-image:url(${m.avatarData})"></div>`
       : `<div class="social-friend-avatar social-friend-avatar-active">${String(m.username || '?').slice(0,1).toUpperCase()}</div>`
-    return `<div class="social-friend-card online" oncontextmenu="openRoomMemberContextMenu(event, '${m.peerId || ''}', '${m.username || ''}')">${avatar}<div class="social-friend-meta"><strong>${m.username || 'user'} ${(isHost || isSelfHost) ? 'HOST' : ''}</strong><span>${m.username === _profile?.username ? 'это вы' : 'в комнате'}</span></div></div>`
+    const hostTag = isHost ? '<span class="room-host-pill">хост</span>' : ''
+    return `<div class="social-friend-card online" oncontextmenu="openRoomMemberContextMenu(event, '${m.peerId || ''}', '${m.username || ''}')">${avatar}<div class="social-friend-meta"><strong>${m.username || 'user'} ${hostTag}</strong><span>${m.username === _profile?.username ? 'это вы' : 'в комнате'}</span></div></div>`
   }).join('') || '<div class="flow-empty-state compact"><strong>Нет участников</strong><span>Подключение появится здесь.</span></div>'
 }
 
@@ -4431,7 +6021,7 @@ async function searchRoomQueueTracks() {
     list.innerHTML = '<div class="flow-empty-state compact"><strong>Начни поиск</strong><span>Введи название трека, чтобы добавить его в очередь.</span></div>'
     return
   }
-  list.innerHTML = '<div class="flow-empty-state compact"><strong>Ищу треки...</strong><span>Проверяю доступные источники Flow.</span></div>'
+  list.innerHTML = '<div class="flow-empty-state compact"><strong>Ищу треки...</strong><span>Проверяю доступные источники Nexory.</span></div>'
   clearTimeout(_roomSearchDebounceTimer)
   _roomSearchDebounceTimer = setTimeout(async () => {
     try {
