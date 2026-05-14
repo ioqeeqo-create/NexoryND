@@ -568,7 +568,7 @@
             </div>
             <div class="vs-row">
               <label class="vs-label">Прозрачность стекла <span class="vs-val" id="vs-glass-val">32%</span></label>
-              <input type="range" min="0" max="40" value="32" class="vs-slider" id="vs-glass" oninput="applyVisualSettings()" title="0 — минимум прозрачности (плотнее), выше — прозрачнее">
+              <input type="range" min="0" max="40" value="32" step="0.25" class="vs-slider" id="vs-glass" oninput="applyVisualSettings()" title="0 — минимум прозрачности (плотнее), выше — прозрачнее">
             </div>
             <div class="vs-row">
               <label class="vs-label">Blur панелей <span class="vs-val" id="vs-panel-blur-val">30px</span></label>
@@ -747,7 +747,7 @@
 
       <div id="settings-panel-customization" class="settings-category-panel">
         <div class="cust-shell glass-card">
-          <p class="cust-lead">Здесь видно, откуда сейчас берутся обложка, баннер (фон) и картинка виджета. В галерее наведи на плитку — появятся кнопки: обложка, баннер, виджет.</p>
+          <p class="cust-lead">Здесь видно, откуда берутся обложка, фон и картинка виджета. В галерее наведи на плитку — сверху появятся кнопки: обложка, фон, виджет.</p>
           <div class="cust-preview-row">
             <div class="cust-preview-block">
               <div class="cust-preview-label">Обложка плеера</div>
@@ -755,7 +755,7 @@
               <div id="cust-prev-cover-meta" class="cust-preview-meta">—</div>
             </div>
             <div class="cust-preview-block cust-preview-block--center">
-              <div class="cust-preview-label">Баннер (фон)</div>
+              <div class="cust-preview-label">Фон</div>
               <div id="cust-prev-bg" class="cust-preview-rect" title="Текущий фон"></div>
               <div id="cust-prev-bg-meta" class="cust-preview-meta">—</div>
             </div>
@@ -767,7 +767,10 @@
           </div>
           <div class="cust-row-head">
             <span>Недавние загрузки</span>
-            <button type="button" class="btn-small" onclick="openCustomizationGallery()">Открыть галерею</button>
+            <span class="cust-row-head-actions">
+              <button type="button" class="btn-small" onclick="clearCustomizationGalleryRecent()">Очистить</button>
+              <button type="button" class="btn-small" onclick="openCustomizationGallery()">Открыть галерею</button>
+            </span>
           </div>
           <div id="cust-recent-strip" class="cust-recent-strip"></div>
           <div class="cust-row-head cust-row-head--presets">
@@ -778,14 +781,13 @@
           <div id="cust-preset-strip" class="cust-preset-strip"></div>
           <div class="cust-io-grid">
             <div class="cust-io-card">
-              <div class="cust-io-title">Пресет Nexory (.flowpreset)</div>
+              <div class="cust-io-title">Пресет Nexory</div>
               <p class="cust-io-desc">Полный бэкап внешнего вида и настроек из localStorage с префиксом <code>flow_</code>.</p>
               <div class="cust-io-actions">
                 <button type="button" class="vsb cust-io-btn" onclick="exportFlowConfig()">Экспортировать</button>
                 <input type="file" id="flow-config-input" accept=".flowpreset,.dotifypreset,.json,application/json" onchange="importFlowConfigFile(this)" style="display:none" aria-hidden="true">
                 <button type="button" class="vsb cust-io-btn" onclick="pickFlowConfigFile()">Импортировать</button>
               </div>
-              <div class="token-msg cust-io-status" id="flow-config-status">Экспорт — полный .flowpreset. Импорт: фон, обложки, виджет, стекло; размытие и яркость фона не меняются. После импорта в «Сохранённые виды» добавляется карточка текущего экрана.</div>
             </div>
             <div class="cust-io-card">
               <div class="cust-io-title">Только сохранённые виды</div>
@@ -1330,12 +1332,7 @@
   <div class="pm-cover-wrap">
     <div class="pm-cover" id="pm-cover"><svg class="ui-icon lg" data-lucide="music-2" viewBox="0 0 24 24"></svg></div>
     <div class="pm-cover-actions" id="pm-cover-actions">
-      <button class="pm-cover-action-btn" id="pm-cover-like-btn" onclick="likeCurrentTrack()" title="В избранное"><svg class="ui-icon" data-lucide="heart" viewBox="0 0 24 24"></svg></button>
-      <button class="pm-cover-action-btn" id="pm-cover-lyrics-btn" onclick="togglePmLyricsFromCover()" title="Текст"><svg class="ui-icon" data-lucide="list" viewBox="0 0 24 24"></svg></button>
-      <button class="pm-cover-action-btn" id="pm-cover-volume-btn" onclick="togglePmVolumePopover(event)" title="Громкость"><svg class="ui-icon" data-lucide="volume-2" viewBox="0 0 24 24"></svg></button>
-      <div class="pm-cover-volume-pop hidden" id="pm-cover-volume-pop">
-        <input type="range" class="pm-cover-volume" min="0" max="1" step="0.01" value="0.8" oninput="setVolume(this.value)" id="pm-cover-volume">
-      </div>
+      <button type="button" class="pm-cover-action-btn pm-cover-lyrics-t" id="pm-cover-lyrics-btn" onclick="togglePmLyricsFromCover()" title="Текст трека">T</button>
     </div>
     <div class="pm-cover-glow" id="pm-cover-glow"></div>
   </div>
@@ -1356,25 +1353,22 @@
     <span class="pm-time" id="pm-time-total">0:00</span>
   </div>
 
-  <div class="pm-controls">
-    <div class="pm-controls-leading">
-      <span id="host-lock-indicator-pm" style="display:none;align-items:center;gap:4px;font-size:12px;opacity:.75;padding:0 4px">🔒 Host only</span>
-      <button class="pm-btn-side" onclick="likeCurrentTrack()" id="pm-like-btn"><svg class="ui-icon" data-lucide="heart" viewBox="0 0 24 24"></svg></button>
-    </div>
-    <div class="pm-controls-core">
-      <button class="pm-btn" onclick="prevTrack()">
-        <svg class="ui-icon lg" data-lucide="skip-back" viewBox="0 0 24 24"></svg>
-      </button>
-      <button class="pm-btn pm-play" id="pm-play-btn" onclick="togglePlay()">
-        <svg id="pm-play-icon" class="ui-icon ctrl-play-icon" data-lucide="play" viewBox="0 0 24 24"></svg>
-      </button>
-      <button class="pm-btn" onclick="nextTrack()">
-        <svg class="ui-icon lg" data-lucide="skip-forward" viewBox="0 0 24 24"></svg>
-      </button>
-    </div>
-    <div class="pm-controls-trailing">
-      <button type="button" class="pm-btn-side hidden" onclick="dislikeCurrentYandexWaveTrack()" id="pm-wave-dislike-btn" title="Не нравится (Яндекс)"><svg class="ui-icon" data-lucide="thumbs-down" viewBox="0 0 24 24"></svg></button>
-      <button class="pm-btn-side" id="pm-shuffle-btn" onclick="toggleShuffleMode()" title="Перемешка"><svg class="ui-icon" data-lucide="shuffle" viewBox="0 0 24 24"></svg></button>
+  <div class="pm-controls pm-controls--rail">
+    <span id="host-lock-indicator-pm" class="pm-host-lock-pm" style="display:none">🔒 Host only</span>
+    <div class="pm-controls-rail-bar">
+    <button type="button" class="pm-btn-side hidden" onclick="dislikeCurrentYandexWaveTrack()" id="pm-wave-dislike-btn" title="Не нравится (Яндекс)"><svg class="ui-icon" data-lucide="thumbs-down" viewBox="0 0 24 24"></svg></button>
+    <button class="pm-btn-side" id="pm-shuffle-btn" onclick="toggleShuffleMode()" title="Перемешка"><svg class="ui-icon" data-lucide="shuffle" viewBox="0 0 24 24"></svg></button>
+    <button class="pm-btn" onclick="prevTrack()" title="Предыдущий">
+      <svg class="ui-icon lg" data-lucide="skip-back" viewBox="0 0 24 24"></svg>
+    </button>
+    <button class="pm-btn pm-play" id="pm-play-btn" onclick="togglePlay()" title="Пауза / воспроизведение">
+      <svg id="pm-play-icon" class="ui-icon ctrl-play-icon" data-lucide="play" viewBox="0 0 24 24"></svg>
+    </button>
+    <button class="pm-btn" onclick="nextTrack()" title="Следующий">
+      <svg class="ui-icon lg" data-lucide="skip-forward" viewBox="0 0 24 24"></svg>
+    </button>
+    <button class="pm-btn-side" id="pm-repeat-pm-btn" onclick="toggleRepeatMode()" title="Повтор"><svg class="ui-icon" data-lucide="repeat" viewBox="0 0 24 24"></svg></button>
+    <button type="button" class="pm-btn-side" id="pm-like-btn" onclick="likeCurrentTrack()" title="Лайк"><svg class="ui-icon flow-ref-heart-player" data-lucide="heart" viewBox="0 0 24 24"></svg></button>
     </div>
   </div>
 
@@ -1387,7 +1381,7 @@
   </div>
   </div>
   </div>
-  <aside class="pm-glass-window pm-win-next" aria-label="Дальше в очереди">
+  <aside class="pm-glass-window pm-win-next hidden" aria-hidden="true" aria-label="Дальше в очереди">
     <div class="pm-next-head">
       <span class="pm-next-title">Дальше в очереди</span>
       <span class="pm-next-count" id="pm-queue-count"></span>
@@ -1620,7 +1614,7 @@
     <div class="flow-game-sleep-title">Sleep mode</div>
     <div class="flow-game-sleep-sub">Только воспроизведение · верни Nexory на экран</div>
   </div>
-  <script src="renderer.js?v=b8b7f87aa697-mp5l9zfh"></script>
+  <script src="renderer.js?v=41f14e2c19b5-mp5pdgqb"></script>
 </body>
 </html>
 

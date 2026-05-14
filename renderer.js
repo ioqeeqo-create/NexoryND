@@ -596,7 +596,7 @@ function glassTransparencyFromStored(glassStored) {
 }
 
 function glassStoredFromSliderTransparency(t) {
-  const x = Number(t)
+  const x = parseFloat(String(t))
   const tr = Number.isFinite(x) ? Math.max(0, Math.min(VS_GLASS_SLIDER_MAX, x)) : glassTransparencyFromStored(8)
   return VS_GLASS_SLIDER_MAX - tr
 }
@@ -1428,7 +1428,8 @@ function applyVisualSettings() {
   document.getElementById('vs-blur-val').textContent   = blur + 'px'
   document.getElementById('vs-bright-val').textContent = bright + '%'
   const glassTr = glassTransparencyFromStored(glass)
-  if (document.getElementById('vs-glass-val')) document.getElementById('vs-glass-val').textContent = glassTr + '%'
+  const glassTrLabel = Number.isInteger(glassTr) ? `${glassTr}%` : `${glassTr.toFixed(1)}%`
+  if (document.getElementById('vs-glass-val')) document.getElementById('vs-glass-val').textContent = glassTrLabel
   document.getElementById('vs-panel-blur-val').textContent = pb + 'px'
   if (document.getElementById('vs-scale-val')) document.getElementById('vs-scale-val').textContent = scale + '%'
   if (document.getElementById('vs-scale-window-val')) document.getElementById('vs-scale-window-val').textContent = scale + '%'
@@ -1882,7 +1883,10 @@ function updateYandexPlayerTheme(track = currentTrack) {
 function initVisualSettings() {
   const v = getVisual()
   // Apply sliders
-  const setSlider = (id, val) => { const el = document.getElementById(id); if (el) el.value = val }
+  const setSlider = (id, val) => {
+    const el = document.getElementById(id)
+    if (el) el.value = val == null ? '' : String(val)
+  }
   setSlider('vs-blur', v.blur)
   setSlider('vs-bright', v.bright)
   setSlider('vs-glass', glassTransparencyFromStored(v.glass))
@@ -1893,7 +1897,10 @@ function initVisualSettings() {
   // Labels
   if (document.getElementById('vs-blur-val')) document.getElementById('vs-blur-val').textContent = v.blur + 'px'
   if (document.getElementById('vs-bright-val')) document.getElementById('vs-bright-val').textContent = v.bright + '%'
-  if (document.getElementById('vs-glass-val')) document.getElementById('vs-glass-val').textContent = glassTransparencyFromStored(v.glass) + '%'
+  const gTr = glassTransparencyFromStored(v.glass)
+  if (document.getElementById('vs-glass-val')) {
+    document.getElementById('vs-glass-val').textContent = Number.isInteger(gTr) ? `${gTr}%` : `${gTr.toFixed(1)}%`
+  }
   if (document.getElementById('vs-panel-blur-val')) document.getElementById('vs-panel-blur-val').textContent = v.panelBlur + 'px'
   if (document.getElementById('vs-scale-val')) document.getElementById('vs-scale-val').textContent = (v.uiScale || 100) + '%'
   if (document.getElementById('vs-scale-window-val')) document.getElementById('vs-scale-window-val').textContent = (v.uiScale || 100) + '%'
@@ -2231,6 +2238,123 @@ function getCustomizationGalleryRecentList() {
   }
 }
 
+function clearCustomizationGalleryRecent() {
+  try {
+    localStorage.removeItem(FLOW_CUSTOM_GALLERY_RECENT_V1)
+  } catch (_) {}
+  try {
+    renderCustRecentStrip()
+  } catch (_) {}
+  showToast('Недавние загрузки очищены')
+}
+
+/** Квадрат / широкий / высокий по размерам из main-процесса; иначе unknown. */
+function classifyCustomMediaAspectKind(f) {
+  const w = Number(f?.width)
+  const h = Number(f?.height)
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w < 2 || h < 2) return 'unknown'
+  const r = w / h
+  if (r >= 0.9 && r <= 1.11) return 'square'
+  if (r > 1.11) return 'wide'
+  return 'tall'
+}
+
+function bindHorizontalDragScroll(el, opts) {
+  if (!el || el.dataset.hscrollBound === '1') return
+  el.dataset.hscrollBound = '1'
+  const faceTap = Boolean(opts && opts.faceTap)
+  let session = null
+
+  const endWindow = () => {
+    if (!session) return
+    window.removeEventListener('pointermove', onWinMove, true)
+    window.removeEventListener('pointerup', onWinUp, true)
+    window.removeEventListener('pointercancel', onWinUp, true)
+    session.el.classList.remove('cust-hscroll--dragging')
+    session = null
+  }
+
+  const onWinMove = (e) => {
+    if (!session || e.pointerId !== session.pid) return
+    const dx = e.clientX - session.sx
+    const dy = e.clientY - session.sy
+    if (!session.drag) {
+      if (Math.hypot(dx, dy) < 6) return
+      const canH = el.scrollWidth > el.clientWidth + 2
+      if (canH && Math.abs(dx) >= Math.abs(dy)) {
+        session.drag = true
+        session.moved = true
+        el.classList.add('cust-hscroll--dragging')
+      } else {
+        endWindow()
+        return
+      }
+    }
+    if (session && session.drag) {
+      el.scrollLeft = session.sl - dx
+      try {
+        e.preventDefault()
+      } catch (_) {}
+    }
+  }
+
+  const onWinUp = (e) => {
+    if (!session || (e.pointerId != null && e.pointerId !== session.pid)) return
+    const s = session
+    const { downTarget: dt, drag, moved } = s
+    endWindow()
+    if (drag) return
+    if (faceTap && !moved && dt && dt.closest && dt.closest('.cust-gal-face')) {
+      const tile = dt.closest('.cust-gal-tile')
+      if (tile) {
+        const willOpen = !tile.classList.contains('cust-gal-tile--actions-open')
+        el.querySelectorAll('.cust-gal-tile--actions-open').forEach((t) => t.classList.remove('cust-gal-tile--actions-open'))
+        if (willOpen) tile.classList.add('cust-gal-tile--actions-open')
+      }
+    }
+  }
+
+  el.addEventListener(
+    'pointerdown',
+    (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return
+      if (e.target.closest && e.target.closest('button')) return
+      if (session) endWindow()
+      session = {
+        el,
+        sx: e.clientX,
+        sy: e.clientY,
+        sl: el.scrollLeft,
+        pid: e.pointerId,
+        moved: false,
+        drag: false,
+        downTarget: e.target,
+      }
+      window.addEventListener('pointermove', onWinMove, true)
+      window.addEventListener('pointerup', onWinUp, true)
+      window.addEventListener('pointercancel', onWinUp, true)
+    },
+    true,
+  )
+
+  el.addEventListener(
+    'wheel',
+    (e) => {
+      if (el.scrollWidth <= el.clientWidth + 2) return
+      const ax = Math.abs(e.deltaX)
+      const ay = Math.abs(e.deltaY)
+      if (ax > ay && ax > 0.5) {
+        el.scrollLeft += e.deltaX
+        e.preventDefault()
+      } else if (e.shiftKey && ay > ax && ay > 0.5) {
+        el.scrollLeft += e.deltaY
+        e.preventDefault()
+      }
+    },
+    { passive: false },
+  )
+}
+
 function getCustomizationPresets() {
   try {
     const list = JSON.parse(localStorage.getItem(FLOW_CUST_PRESETS_V1) || '[]')
@@ -2316,7 +2440,7 @@ function customizationCoverMetaText() {
 
 function customizationBgMetaText() {
   const v = getVisual()
-  if (v.bgType === 'custom' && v.customBg) return 'Источник: свой баннер (файл из галереи или загрузки).'
+  if (v.bgType === 'custom' && v.customBg) return 'Источник: свой фон (файл из галереи или загрузки).'
   if (v.bgType === 'cover') return 'Источник: размытая обложка текущего трека.'
   return 'Источник: градиент и орбы (без своего файла).'
 }
@@ -2391,7 +2515,7 @@ function applyCustomizationMediaFromGallery(url, role) {
     saveVisual({ bgType: 'custom', customBg: u })
     refreshCustomBgPreview()
     updateBackground()
-    showToast('Баннер обновлён')
+    showToast('Фон обновлён')
   } else if (role === 'viz') {
     const v = getVisual()
     const homeWidget = Object.assign({ enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }, v.homeWidget || {})
@@ -2440,6 +2564,8 @@ function syncCustPreviewMedia(container, imageUrl, emptyBackgroundCss) {
   if (!container) return
   container.querySelectorAll(':scope > img.cust-prev-thumb').forEach((n) => n.remove())
   container.style.backgroundImage = ''
+  container.style.backgroundSize = ''
+  container.style.backgroundPosition = ''
   const u = String(imageUrl || '').trim()
   if (u) {
     container.style.background = '#13151d'
@@ -2449,10 +2575,19 @@ function syncCustPreviewMedia(container, imageUrl, emptyBackgroundCss) {
     img.decoding = 'async'
     img.loading = 'eager'
     img.draggable = false
+    if (/^https?:\/\//i.test(u)) img.referrerPolicy = 'no-referrer'
     img.src = u
     img.onerror = () => {
       img.remove()
-      container.style.background = emptyBackgroundCss
+      try {
+        container.style.backgroundImage = custUrlCssBackground(u)
+        container.style.backgroundSize = 'cover'
+        container.style.backgroundPosition = 'center'
+        container.style.backgroundColor = '#13151d'
+      } catch (_) {
+        container.style.backgroundImage = ''
+        container.style.background = emptyBackgroundCss
+      }
     }
     container.appendChild(img)
   } else {
@@ -2476,10 +2611,17 @@ function mountPresetStripThumb(el, url, fallbackCss) {
   img.decoding = 'async'
   img.loading = 'lazy'
   img.draggable = false
+  if (/^https?:\/\//i.test(u)) img.referrerPolicy = 'no-referrer'
   img.src = u
   img.onerror = () => {
     img.remove()
-    el.style.background = fallbackCss || 'rgba(12,14,20,.9)'
+    try {
+      el.style.backgroundImage = custUrlCssBackground(u)
+      el.style.backgroundSize = 'cover'
+      el.style.backgroundPosition = 'center'
+    } catch (_) {
+      el.style.background = fallbackCss || 'rgba(12,14,20,.9)'
+    }
   }
   el.appendChild(img)
 }
@@ -2587,6 +2729,7 @@ function renderCustRecentStrip() {
     })
     wrap.appendChild(t)
   })
+  bindHorizontalDragScroll(wrap)
 }
 
 function renderCustPresetStrip() {
@@ -2631,6 +2774,7 @@ function renderCustPresetStrip() {
     })
     wrap.appendChild(card)
   })
+  bindHorizontalDragScroll(wrap)
 }
 
 function applyCustomizationPresetById(id, opts) {
@@ -2746,6 +2890,22 @@ function ensureCustGalleryEscClose() {
   })
 }
 
+let _custGalSheetClickBound = false
+function ensureCustGallerySheetClickCollapse() {
+  if (_custGalSheetClickBound) return
+  _custGalSheetClickBound = true
+  document.addEventListener(
+    'click',
+    (e) => {
+      const sheet = document.querySelector('.cust-gallery-sheet')
+      if (!sheet || !sheet.contains(e.target)) return
+      if (e.target.closest && e.target.closest('.cust-gal-tile')) return
+      document.querySelectorAll('.cust-gal-tile--actions-open').forEach((t) => t.classList.remove('cust-gal-tile--actions-open'))
+    },
+    true,
+  )
+}
+
 async function renderCustGalleryContent() {
   const grid = document.getElementById('cust-gallery-grid')
   if (!grid) return
@@ -2762,49 +2922,107 @@ async function renderCustGalleryContent() {
       grid.innerHTML = '<span class="cust-hint">В папке пока нет файлов.</span>'
       return
     }
-    grid.textContent = ''
+    const byKind = { square: [], wide: [], tall: [], unknown: [] }
     files.forEach((f) => {
       const u = String(f.url || '').trim()
       if (!u) return
-      const tile = document.createElement('div')
-      tile.className = 'cust-gal-tile'
-      if (['cover', 'bg', 'viz'].some((r) => galleryRoleMatchesUrl(r, u))) tile.classList.add('cust-gal-tile--on')
-
-      const face = document.createElement('div')
-      face.className = 'cust-gal-face'
-      const img = document.createElement('img')
-      img.className = 'cust-gal-thumb'
-      img.alt = ''
-      img.loading = 'lazy'
-      img.decoding = 'async'
-      img.draggable = false
-      img.src = u
-      img.onerror = () => {
-        img.remove()
-        face.classList.add('cust-gal-face--broken')
-      }
-      face.appendChild(img)
-      tile.appendChild(face)
-
-      const actions = document.createElement('div')
-      actions.className = 'cust-gal-actions'
-      ;[
-        ['cover', 'Обложка'],
-        ['bg', 'Баннер'],
-        ['viz', 'Виджет'],
-      ].forEach(([role, label]) => {
-        const b = document.createElement('button')
-        b.type = 'button'
-        b.className = 'vsb cust-gal-btn'
-        if (galleryRoleMatchesUrl(role, u)) b.classList.add('active')
-        b.dataset.custGal = role
-        b.dataset.url = u
-        b.textContent = label
-        actions.appendChild(b)
-      })
-      tile.appendChild(actions)
-      grid.appendChild(tile)
+      const k = classifyCustomMediaAspectKind(f)
+      byKind[k].push(f)
     })
+    const sections = [
+      ['square', 'Квадратные (≈ 1∶1)'],
+      ['wide', 'Широкие'],
+      ['tall', 'Высокие'],
+      ['unknown', 'Размер неизвестен'],
+    ]
+    grid.textContent = ''
+    let any = false
+    for (let si = 0; si < sections.length; si++) {
+      const key = sections[si][0]
+      const title = sections[si][1]
+      const list = byKind[key]
+      if (!list.length) continue
+      any = true
+      const sec = document.createElement('div')
+      sec.className = 'cust-gal-section'
+      const h = document.createElement('div')
+      h.className = 'cust-gal-section-title'
+      h.textContent = title
+      sec.appendChild(h)
+      const row = document.createElement('div')
+      row.className = 'cust-gal-scroll-row'
+      list.forEach((f) => {
+        const u = String(f.url || '').trim()
+        if (!u) return
+        const tile = document.createElement('div')
+        tile.className = 'cust-gal-tile'
+        tile.classList.add(`cust-gal-tile--shape-${key}`)
+        if (['cover', 'bg', 'viz'].some((r) => galleryRoleMatchesUrl(r, u))) tile.classList.add('cust-gal-tile--on')
+        const w = Number(f.width)
+        const h0 = Number(f.height)
+        if (Number.isFinite(w) && Number.isFinite(h0) && w > 0 && h0 > 0) {
+          tile.style.setProperty('--cust-ar', String(w / h0))
+        } else {
+          tile.style.setProperty('--cust-ar', '1')
+        }
+
+        const face = document.createElement('div')
+        face.className = 'cust-gal-face'
+        const img = document.createElement('img')
+        img.className = 'cust-gal-thumb'
+        img.alt = ''
+        img.loading = 'lazy'
+        img.decoding = 'async'
+        img.draggable = false
+        if (/^https?:\/\//i.test(u)) img.referrerPolicy = 'no-referrer'
+        img.src = u
+        img.onerror = () => {
+          img.remove()
+          try {
+            face.style.backgroundImage = custUrlCssBackground(u)
+            face.style.backgroundSize = 'contain'
+            face.style.backgroundPosition = 'center'
+            face.style.backgroundRepeat = 'no-repeat'
+          } catch (_) {
+            face.classList.add('cust-gal-face--broken')
+          }
+        }
+        img.addEventListener('load', () => {
+          try {
+            const nw = img.naturalWidth
+            const nh = img.naturalHeight
+            if (nw > 1 && nh > 1) tile.style.setProperty('--cust-ar', String(nw / nh))
+          } catch (_) {}
+        })
+        face.appendChild(img)
+        tile.appendChild(face)
+
+        const actions = document.createElement('div')
+        actions.className = 'cust-gal-actions'
+        ;[
+          ['cover', 'Обложка'],
+          ['bg', 'Фон'],
+          ['viz', 'Виджет'],
+        ].forEach(([role, label]) => {
+          const b = document.createElement('button')
+          b.type = 'button'
+          b.className = 'vsb cust-gal-btn'
+          if (galleryRoleMatchesUrl(role, u)) b.classList.add('active')
+          b.dataset.custGal = role
+          b.dataset.url = u
+          b.textContent = label
+          actions.appendChild(b)
+        })
+        tile.appendChild(actions)
+        row.appendChild(tile)
+      })
+      sec.appendChild(row)
+      grid.appendChild(sec)
+      bindHorizontalDragScroll(row, { faceTap: true })
+    }
+    if (!any) {
+      grid.innerHTML = '<span class="cust-hint">В папке пока нет файлов.</span>'
+    }
   } catch (err) {
     grid.innerHTML = `<span class="cust-hint">Ошибка: ${escapeHtml(String(err?.message || err))}</span>`
   }
@@ -2901,6 +3119,7 @@ function importSavedViewPresetsFromFile(input) {
 function openCustomizationGallery() {
   ensureCustGalleryGridDelegate()
   ensureCustGalleryEscClose()
+  ensureCustGallerySheetClickCollapse()
   const ov = document.getElementById('cust-gallery-overlay')
   if (ov) {
     ov.classList.remove('hidden')
@@ -2920,6 +3139,7 @@ function closeCustomizationGallery() {
 window.openCustomizationGallery = openCustomizationGallery
 window.closeCustomizationGallery = closeCustomizationGallery
 window.saveCustomizationPresetSnapshot = saveCustomizationPresetSnapshot
+window.clearCustomizationGalleryRecent = clearCustomizationGalleryRecent
 
 // в”Ђв”Ђв”Ђ FULLSCREEN PLAYER MODE в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 function enterPlayerMode() {
@@ -2958,7 +3178,7 @@ function refreshLyricsPanelsVisibility() {
         pmRoot.classList.remove('pm-lyrics-opening')
         void pmRoot.offsetWidth
         pmRoot.classList.add('pm-lyrics-opening')
-        window.setTimeout(() => pmRoot.classList.remove('pm-lyrics-opening'), 520)
+        window.setTimeout(() => pmRoot.classList.remove('pm-lyrics-opening'), 640)
       }
     } catch (_) {}
   } else {
@@ -4336,7 +4556,6 @@ function loadSettingsPage() {
   requestAnimationFrame(() => {
     syncPlaybackModeUI()
     syncTrackCoverStatus()
-    setFlowConfigStatus('Экспорт создаёт JSON с визуалом, профилем, плейлистами и настройками.', false)
     syncFontControls()
     syncHomeWidgetUI()
     applyHomeSliderStyle()
@@ -4357,6 +4576,8 @@ function syncPlaybackModeUI() {
   const shSettings = document.getElementById('toggle-shuffle-btn')
   const rpSettings = document.getElementById('toggle-repeat-btn')
   if (shBtn) shBtn.classList.toggle('active', Boolean(playbackMode.shuffle))
+  const pmSh = document.getElementById('pm-shuffle-btn')
+  if (pmSh) pmSh.classList.toggle('active', Boolean(playbackMode.shuffle))
   if (homeShBtn) homeShBtn.classList.toggle('active', Boolean(playbackMode.shuffle))
   if (shSettings) {
     shSettings.textContent = playbackMode.shuffle ? 'Включена' : 'Выключена'
@@ -4367,6 +4588,11 @@ function syncPlaybackModeUI() {
     rpBtn.classList.toggle('active', playbackMode.repeat !== 'off')
     rpBtn.title = `Повтор: ${repeatLabel}`
   }
+  const pmRp = document.getElementById('pm-repeat-pm-btn')
+  if (pmRp) {
+    pmRp.classList.toggle('active', playbackMode.repeat !== 'off')
+    pmRp.title = `Повтор: ${repeatLabel}`
+  }
   if (homeRpBtn) {
     homeRpBtn.classList.toggle('active', playbackMode.repeat !== 'off')
     homeRpBtn.title = `Повтор: ${repeatLabel}`
@@ -4376,7 +4602,7 @@ function syncPlaybackModeUI() {
     rpSettings.classList.toggle('active', playbackMode.repeat !== 'off')
   }
   const repeatLucide = playbackMode.repeat === 'one' ? 'repeat-1' : 'repeat'
-  ;['repeat-btn', 'home-repeat-btn'].forEach((id) => {
+  ;['repeat-btn', 'home-repeat-btn', 'pm-repeat-pm-btn'].forEach((id) => {
     const btn = document.getElementById(id)
     const svg = btn?.querySelector?.('svg[data-lucide]')
     if (svg) {
@@ -4504,12 +4730,86 @@ function refreshTrackCoverPreview(fileName = '') {
   setMediaPreviewBox('track-cover', custom, label, true)
 }
 
-function setFlowConfigStatus(text, isError = false) {
-  const el = document.getElementById('flow-config-status')
-  if (!el) return
-  el.textContent = text
-  el.classList.toggle('token-msg-err', Boolean(isError))
-  el.classList.toggle('token-msg-ok', !isError)
+function guessExtFromMime(m) {
+  const t = String(m || '').toLowerCase()
+  if (t.includes('png')) return '.png'
+  if (t.includes('webp')) return '.webp'
+  if (t.includes('gif')) return '.gif'
+  if (t.includes('jpeg') || t.includes('jpg')) return '.jpg'
+  return '.bin'
+}
+
+async function mirrorRemoteUrlToCustomGallery(url, purpose) {
+  const u = String(url || '').trim()
+  if (!u) return ''
+  if (/^file:\/\//i.test(u)) return u
+  if (!/^https?:|^data:/i.test(u)) return u
+  try {
+    const res = await fetch(u, { mode: 'cors', credentials: 'omit', referrerPolicy: 'no-referrer' })
+    if (!res.ok) return u
+    const blob = await res.blob()
+    if (!blob || !blob.size) return u
+    const ext = guessExtFromMime(blob.type)
+    const file = new File([blob], `preset-${purpose}-${Date.now()}${ext}`, {
+      type: blob.type || 'application/octet-stream',
+    })
+    return await saveCustomMediaFile(file, purpose)
+  } catch (_) {
+    return u
+  }
+}
+
+/** После импорта пресета: http(s)/data URL фона и виджета копируются в папку галереи и переписываются на file://. */
+async function mirrorPresetVisualUrlsToGallery() {
+  const v0 = getVisual()
+  const patch = {}
+  if (v0.bgType === 'custom' && v0.customBg && /^https?:|^data:/i.test(String(v0.customBg))) {
+    const nu = await mirrorRemoteUrlToCustomGallery(v0.customBg, 'background')
+    if (nu && nu !== v0.customBg) patch.customBg = nu
+  }
+  const hw = Object.assign({ enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }, v0.homeWidget || {})
+  if (hw.image && /^https?:|^data:/i.test(String(hw.image))) {
+    const nu = await mirrorRemoteUrlToCustomGallery(hw.image, 'home-widget')
+    if (nu && nu !== hw.image) {
+      patch.homeWidget = Object.assign({}, hw, { image: nu })
+      if (hw.mode === 'image' || patch.homeWidget.mode === 'image') patch.homeWidget.mode = 'image'
+    }
+  }
+  if (Object.keys(patch).length) {
+    saveVisual(patch)
+    _flowVisualMemo = null
+  }
+}
+
+async function mirrorHttpUrlsInCustomCoverMap() {
+  const map = getCustomCoverMap()
+  const next = { ...map }
+  let changed = false
+  const keys = Object.keys(next)
+  for (let i = 0; i < keys.length; i++) {
+    const k = keys[i]
+    const v = next[k]
+    if (v == null || typeof v !== 'string') continue
+    const t = v.trim()
+    if (!/^https?:|^data:/i.test(t)) continue
+    try {
+      const nu = await mirrorRemoteUrlToCustomGallery(t, 'track-cover')
+      if (nu && nu !== t) {
+        next[k] = nu
+        changed = true
+      }
+    } catch (_) {}
+  }
+  if (changed) {
+    saveCustomCoverMap(next)
+    try {
+      _coverLoadState.clear()
+    } catch (_) {}
+  }
+}
+
+function setFlowConfigStatus(_text, _isError = false) {
+  /* Статус под карточкой пресета убран из UI — оставлена заглушка для совместимости. */
 }
 
 function collectFlowConfigPayload() {
@@ -4625,7 +4925,6 @@ async function exportFlowConfig() {
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(link.href)
-    setFlowConfigStatus('Nexory preset экспортирован. Можно отправлять .flowpreset другу.', false)
     showToast('Nexory preset экспортирован')
     if (failedEmbed && failedEmbed.length) {
       showToast(
@@ -4634,8 +4933,7 @@ async function exportFlowConfig() {
       )
     }
   } catch (err) {
-    setFlowConfigStatus(`Ошибка экспорта: ${err?.message || err}`, true)
-    showToast('Не удалось экспортировать preset', true)
+    showToast(`Не удалось экспортировать preset: ${err?.message || err}`, true)
   }
 }
 
@@ -4648,7 +4946,7 @@ function pickFlowConfigFile() {
 /**
  * Импорт .flowpreset / dotify: только внешний вид — подмешиваем в текущий `flow_visual` поля
  * bgType, customBg, gifMode, glass, panelBlur, homeWidget и при наличии `flow_track_covers`.
- * Размытие и яркость фона (blur, bright) из файла не применяются — остаются текущие значения пользователя.
+ * Размытие, яркость и прозрачность стекла (blur, bright, glass) из файла не применяются — остаются текущие значения пользователя.
  * Остальные ключи localStorage не меняем (сессия, источники, тема UI и т.д.).
  */
 function applyPresetAppearanceOnly(storage) {
@@ -4668,10 +4966,6 @@ function applyPresetAppearanceOnly(storage) {
   const cur = getVisual()
   const patch = {}
 
-  if (Object.prototype.hasOwnProperty.call(incoming, 'glass')) {
-    const n = Number(incoming.glass)
-    if (Number.isFinite(n)) patch.glass = Math.max(0, Math.min(40, n))
-  }
   if (Object.prototype.hasOwnProperty.call(incoming, 'panelBlur')) {
     const n = Number(incoming.panelBlur)
     if (Number.isFinite(n)) patch.panelBlur = Math.max(0, Math.min(60, n))
@@ -4772,7 +5066,7 @@ function importFlowConfigFile(input) {
   const file = input?.files?.[0]
   if (!file) return
   const reader = new FileReader()
-  reader.onload = () => {
+  reader.onload = async () => {
     try {
       const parsed = JSON.parse(String(reader.result || '{}'))
       const preset = normalizeImportedFlowPreset(parsed)
@@ -4786,12 +5080,14 @@ function importFlowConfigFile(input) {
       }
       syncRuntimeCachesAfterPresetImport()
       try {
+        await mirrorPresetVisualUrlsToGallery()
+      } catch (_) {}
+      try {
+        await mirrorHttpUrlsInCustomCoverMap()
+      } catch (_) {}
+      try {
         pushCustomizationSnapshotAfterFlowpresetImport()
       } catch (_) {}
-      const parts = []
-      if (appliedVisual) parts.push('фон, GIF-обложки, стекло и виджет (размытие/яркость фона не менялись)')
-      if (appliedCovers) parts.push('кастомные обложки треков')
-      setFlowConfigStatus(`Импортировано: ${parts.join('; ')}. Остальные настройки не менялись.`, false)
       showToast('Внешний вид применён; в «Сохранённые виды» добавлена карточка текущего экрана')
       try {
         switchSettingsCategory('customization')
@@ -4802,6 +5098,7 @@ function importFlowConfigFile(input) {
       try { applySettingsSectionsState() } catch {}
       // Важно: не вызывать applyVisualSettings() — она берёт значения из DOM и перезаписывает только что импортированный flow_visual.
       try { initVisualSettings() } catch {}
+      try { updateBackground() } catch {}
       try { syncIntegrationsUI() } catch {}
       try { applyUiTextOverrides() } catch {}
       requestAnimationFrame(() => {
@@ -4814,8 +5111,7 @@ function importFlowConfigFile(input) {
       try { renderFriends().catch(() => {}) } catch {}
       try { pollFriendsPresence(true).catch(() => {}) } catch {}
     } catch (err) {
-      setFlowConfigStatus(`Ошибка импорта: ${err?.message || err}`, true)
-      showToast('Не удалось импортировать preset', true)
+      showToast(`Ошибка импорта: ${err?.message || err}`, true)
     } finally {
       input.value = ''
     }
