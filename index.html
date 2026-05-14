@@ -6,7 +6,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
   <!-- bump ?v= when profile/CSS/JS layout changes so Electron reloads assets -->
-  <link rel="stylesheet" href="styles.css?v=20260512-queue-cover-flat">
+  <link rel="stylesheet" href="styles.css?v=20260514-topbottom-nav-dock">
 </head>
 <body>
 
@@ -44,7 +44,7 @@
       <svg id="titlebar-ico-restore" class="ui-icon tb-ico-expand" data-lucide="copy" viewBox="0 0 24 24" style="display:none"></svg>
       </span>
     </button>
-    <button type="button" onclick="window.api.close()" title="Закрыть" aria-label="Закрыть"><svg class="ui-icon" data-lucide="x" viewBox="0 0 24 24"></svg></button>
+    <button type="button" onclick="flowHandleTitlebarClose()" title="Закрыть" aria-label="Закрыть"><svg class="ui-icon" data-lucide="x" viewBox="0 0 24 24"></svg></button>
   </div>
 </div>
 
@@ -184,6 +184,7 @@
           <h2>Главная</h2>
           <p class="content-sub">Быстрый доступ к твоей волне, плейлистам и любимым трекам</p>
         </div>
+        <div class="main-hub-glass-board">
         <div class="main-hub-grid">
           <section class="main-hub-panel main-hub-panel--wave">
             <div class="my-wave glass-card" id="my-wave">
@@ -219,6 +220,7 @@
             </div>
             <div id="main-quick-playlists" class="main-quick-playlists"></div>
           </section>
+        </div>
         </div>
       </div>
     </div>
@@ -460,14 +462,22 @@
             </div>
             <div class="vs-row">
               <label class="vs-label">Расположение меню</label>
-              <div class="vs-btn-group vs-layout-grid">
-                <button class="vsb vs-layout-card" id="layout-left" onclick="setSidebarPosition('left')" title="Меню слева">
+              <div class="vs-btn-group vs-layout-grid vs-layout-grid--row" role="group" aria-label="Расположение меню">
+                <button type="button" class="vsb vs-layout-card" id="layout-left" data-flow-sidebar-layout="left" title="Меню слева">
                   <span class="vs-layout-mini vs-layout-mini-left"><i></i><b></b></span>
                   <span class="vs-layout-label">Слева</span>
                 </button>
-                <button class="vsb vs-layout-card" id="layout-top" onclick="setSidebarPosition('top')" title="Меню сверху">
+                <button type="button" class="vsb vs-layout-card" id="layout-top" data-flow-sidebar-layout="top" title="Меню сверху">
                   <span class="vs-layout-mini vs-layout-mini-top"><i></i><b></b></span>
                   <span class="vs-layout-label">Сверху</span>
+                </button>
+                <button type="button" class="vsb vs-layout-card" id="layout-bottom" data-flow-sidebar-layout="bottom" title="Меню снизу">
+                  <span class="vs-layout-mini vs-layout-mini-bottom"><i></i><b></b></span>
+                  <span class="vs-layout-label">Снизу</span>
+                </button>
+                <button type="button" class="vsb vs-layout-card" id="layout-right" data-flow-sidebar-layout="right" title="Меню справа">
+                  <span class="vs-layout-mini vs-layout-mini-right"><i></i><b></b></span>
+                  <span class="vs-layout-label">Справа</span>
                 </button>
               </div>
             </div>
@@ -553,8 +563,8 @@
               <input type="range" min="10" max="100" value="50" class="vs-slider" id="vs-bright" oninput="applyVisualSettings()">
             </div>
             <div class="vs-row">
-              <label class="vs-label">Прозрачность стекла <span class="vs-val" id="vs-glass-val">8%</span></label>
-              <input type="range" min="0" max="40" value="8" class="vs-slider" id="vs-glass" oninput="applyVisualSettings()">
+              <label class="vs-label">Прозрачность стекла <span class="vs-val" id="vs-glass-val">32%</span></label>
+              <input type="range" min="0" max="40" value="32" class="vs-slider" id="vs-glass" oninput="applyVisualSettings()" title="0 — минимум прозрачности (плотнее), выше — прозрачнее">
             </div>
             <div class="vs-row">
               <label class="vs-label">Blur панелей <span class="vs-val" id="vs-panel-blur-val">30px</span></label>
@@ -742,6 +752,14 @@
             <div class="vs-row">
               <label class="vs-label">Повтор</label>
               <button class="vsb" id="toggle-repeat-btn" onclick="toggleRepeatMode()">Выкл</button>
+            </div>
+            <div class="vs-row">
+              <label class="vs-label">Закрытие в трей</label>
+              <div class="vs-toggle active" id="toggle-minimize-to-tray" onclick="toggleMinimizeToTrayOnClose()" title="Если включено, крестик прячет окно — музыка играет; выход из меню в трее"><div class="vs-toggle-thumb"></div></div>
+            </div>
+            <div class="vs-row">
+              <label class="vs-label">Автозапуск с Windows</label>
+              <div class="vs-toggle" id="toggle-launch-at-login" onclick="toggleLaunchAtLogin()" title="Запуск Nexory при входе в систему"><div class="vs-toggle-thumb"></div></div>
             </div>
             <div class="vs-row">
               <label class="vs-label">Показывать блок визуализации</label>
@@ -1180,6 +1198,15 @@
 
   <!-- PLAYER BAR: слева трек · центр shuffle + транспорт + repeat / под ними время по бокам прогресса · справа только громкость -->
   <div class="player-bar glass-bar player-bar--nover" id="player-bar">
+    <div class="player-bar-layout-dock" id="player-bar-layout-dock" role="group" aria-label="Расположение меню">
+      <span class="player-bar-layout-dock-label">Меню</span>
+      <div class="player-bar-layout-dock-btns">
+        <button type="button" class="pbl-dock-btn" data-flow-sidebar-layout="left" title="Меню слева" aria-label="Меню слева"><span class="pbl-dock-btn-stack"><span class="vs-layout-mini vs-layout-mini-left"><i></i><b></b></span><span class="pbl-dock-cap">Слева</span></span></button>
+        <button type="button" class="pbl-dock-btn" data-flow-sidebar-layout="top" title="Меню сверху" aria-label="Меню сверху"><span class="pbl-dock-btn-stack"><span class="vs-layout-mini vs-layout-mini-top"><i></i><b></b></span><span class="pbl-dock-cap">Сверху</span></span></button>
+        <button type="button" class="pbl-dock-btn" data-flow-sidebar-layout="bottom" title="Меню снизу" aria-label="Меню снизу"><span class="pbl-dock-btn-stack"><span class="vs-layout-mini vs-layout-mini-bottom"><i></i><b></b></span><span class="pbl-dock-cap">Снизу</span></span></button>
+        <button type="button" class="pbl-dock-btn" data-flow-sidebar-layout="right" title="Меню справа" aria-label="Меню справа"><span class="pbl-dock-btn-stack"><span class="vs-layout-mini vs-layout-mini-right"><i></i><b></b></span><span class="pbl-dock-cap">Справа</span></span></button>
+      </div>
+    </div>
     <div class="nover-bar-grid">
       <div class="nover-bar-left">
         <span class="nover-bar-accent" aria-hidden="true"></span>
@@ -1190,21 +1217,21 @@
             <span class="player-meta-row"><span id="player-artist" class="player-artist">—</span><span id="player-track-source-inline" class="player-track-source-inline hidden" aria-hidden="true"></span></span>
           </div>
           <div class="player-track-btns">
-            <button type="button" class="player-like-btn hidden" id="player-wave-dislike-btn" onclick="dislikeCurrentYandexWaveTrack()" title="Не нравится (синхрон с Яндексом)"><svg class="ui-icon" data-lucide="thumbs-down" viewBox="0 0 24 24"></svg></button>
-            <button class="player-like-btn" id="player-like-btn" onclick="likeCurrentTrack()" title="Лайк"><svg class="ui-icon flow-ref-heart-player" data-lucide="heart" viewBox="0 0 24 24"></svg></button>
-            <button class="player-like-btn" onclick="findSimilarTracks()" title="Найти похожие"><svg class="ui-icon" data-lucide="audio-lines" viewBox="0 0 24 24"></svg></button>
-            <button class="player-like-btn" onclick="enterPlayerMode()" title="Режим плеера"><svg class="ui-icon" data-lucide="maximize-2" viewBox="0 0 24 24"></svg></button>
+            <button type="button" class="player-like-btn" onclick="findSimilarTracks()" title="Найти похожие"><svg class="ui-icon" data-lucide="audio-lines" viewBox="0 0 24 24"></svg></button>
+            <button type="button" class="player-like-btn" onclick="enterPlayerMode()" title="Режим плеера"><svg class="ui-icon" data-lucide="maximize-2" viewBox="0 0 24 24"></svg></button>
           </div>
         </div>
       </div>
       <div class="nover-bar-center player-center">
         <div class="nover-transport-strip player-controls">
           <span id="host-lock-indicator-main" style="display:none;align-items:center;gap:4px;font-size:11px;opacity:.75;padding:0 4px">🔒 Host only</span>
+          <button type="button" class="ctrl-btn nover-strip-btn player-transport-dislike hidden" id="player-wave-dislike-btn" onclick="dislikeCurrentYandexWaveTrack()" title="Не нравится (синхрон с Яндексом)"><svg class="ui-icon" data-lucide="thumbs-down" viewBox="0 0 24 24"></svg></button>
           <button type="button" class="ctrl-btn nover-strip-btn" id="shuffle-btn" onclick="toggleShuffleMode()" title="Перемешка"><svg class="ui-icon flow-ref-ctrl" data-lucide="shuffle" viewBox="0 0 24 24"></svg></button>
           <button type="button" class="ctrl-btn nover-strip-btn" onclick="prevTrack()" title="Предыдущий"><svg class="ui-icon ctrl-side-icon" data-lucide="skip-back" viewBox="0 0 24 24"></svg></button>
           <button type="button" class="ctrl-btn play-btn play-btn--nover-wire" id="play-btn" onclick="togglePlay()"><svg class="ui-icon ctrl-play-icon" data-lucide="play" viewBox="0 0 24 24"></svg></button>
           <button type="button" class="ctrl-btn nover-strip-btn" onclick="nextTrack()" title="Следующий"><svg class="ui-icon ctrl-side-icon" data-lucide="skip-forward" viewBox="0 0 24 24"></svg></button>
           <button type="button" class="ctrl-btn nover-strip-btn" id="repeat-btn" onclick="toggleRepeatMode()" title="Повтор"><svg class="ui-icon flow-ref-ctrl" data-lucide="repeat" viewBox="0 0 24 24"></svg></button>
+          <button type="button" class="ctrl-btn nover-strip-btn player-transport-like" id="player-like-btn" onclick="likeCurrentTrack()" title="Лайк"><svg class="ui-icon flow-ref-heart-player" data-lucide="heart" viewBox="0 0 24 24"></svg></button>
         </div>
         <div class="progress-wrap progress-wrap--nover nover-progress-classic">
           <span id="time-current" class="time-label time-label--elapsed">0:00</span>
@@ -1236,7 +1263,13 @@
 
   <div class="pm-layout" id="pm-layout">
   <div class="pm-stage-column">
+  <div class="pm-desk-stage">
+  <div class="pm-desk-wall" aria-hidden="true"></div>
+  <div class="pm-desk-grid">
+  <div class="pm-glass-window pm-win-player">
   <div class="pm-main-stack" id="pm-main-stack">
+  <div class="pm-player-row">
+  <div class="pm-cover-zone">
   <div class="pm-cover-wrap">
     <div class="pm-cover" id="pm-cover"><svg class="ui-icon lg" data-lucide="music-2" viewBox="0 0 24 24"></svg></div>
     <div class="pm-cover-actions" id="pm-cover-actions">
@@ -1249,7 +1282,9 @@
     </div>
     <div class="pm-cover-glow" id="pm-cover-glow"></div>
   </div>
+  </div>
 
+  <div class="pm-meta-zone">
   <div class="pm-info">
     <h1 class="pm-title" id="pm-title">Ничего не играет</h1>
     <p class="pm-artist" id="pm-artist">—</p>
@@ -1267,7 +1302,6 @@
   <div class="pm-controls">
     <div class="pm-controls-leading">
       <span id="host-lock-indicator-pm" style="display:none;align-items:center;gap:4px;font-size:12px;opacity:.75;padding:0 4px">🔒 Host only</span>
-      <button type="button" class="pm-btn-side hidden" onclick="dislikeCurrentYandexWaveTrack()" id="pm-wave-dislike-btn" title="Не нравится (Яндекс)"><svg class="ui-icon" data-lucide="thumbs-down" viewBox="0 0 24 24"></svg></button>
       <button class="pm-btn-side" onclick="likeCurrentTrack()" id="pm-like-btn"><svg class="ui-icon" data-lucide="heart" viewBox="0 0 24 24"></svg></button>
     </div>
     <div class="pm-controls-core">
@@ -1282,6 +1316,7 @@
       </button>
     </div>
     <div class="pm-controls-trailing">
+      <button type="button" class="pm-btn-side hidden" onclick="dislikeCurrentYandexWaveTrack()" id="pm-wave-dislike-btn" title="Не нравится (Яндекс)"><svg class="ui-icon" data-lucide="thumbs-down" viewBox="0 0 24 24"></svg></button>
       <button class="pm-btn-side" id="pm-shuffle-btn" onclick="toggleShuffleMode()" title="Перемешка"><svg class="ui-icon" data-lucide="shuffle" viewBox="0 0 24 24"></svg></button>
     </div>
   </div>
@@ -1290,6 +1325,18 @@
     <svg class="flow-vol-icon ui-icon md" data-lucide="volume-2" viewBox="0 0 24 24" style="opacity:0.75;flex-shrink:0"></svg>
     <input type="range" class="pm-volume" min="0" max="1" step="0.01" value="0.8" oninput="setVolume(this.value)" id="pm-volume">
     <svg class="flow-vol-icon ui-icon md" data-lucide="volume-2" viewBox="0 0 24 24" style="opacity:0.75;flex-shrink:0"></svg>
+  </div>
+  </div>
+  </div>
+  </div>
+  </div>
+  <aside class="pm-glass-window pm-win-next" aria-label="Дальше в очереди">
+    <div class="pm-next-head">
+      <span class="pm-next-title">Дальше в очереди</span>
+      <span class="pm-next-count" id="pm-queue-count"></span>
+    </div>
+    <div class="pm-queue-strip" id="pm-queue-strip" role="list"></div>
+  </aside>
   </div>
   </div>
   </div>
@@ -1516,7 +1563,7 @@
     <div class="flow-game-sleep-title">Sleep mode</div>
     <div class="flow-game-sleep-sub">Только воспроизведение · верни Nexory на экран</div>
   </div>
-  <script src="renderer.js?v=20260503-room-guest-visual"></script>
+  <script src="renderer.js?v=6433cafdbae4-mp5i0x22"></script>
 </body>
 </html>
 

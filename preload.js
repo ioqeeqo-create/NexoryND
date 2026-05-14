@@ -2,7 +2,10 @@ const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('api', {
   minimize: () => ipcRenderer.send('window-minimize'),
-  close: () => ipcRenderer.send('window-close'),
+  close: (opts) => ipcRenderer.send('window-close', opts && typeof opts === 'object' ? opts : {}),
+  setTrayOnClose: (v) => ipcRenderer.send('flow-set-tray-on-close', Boolean(v)),
+  getLaunchAtLogin: () => ipcRenderer.invoke('get-launch-at-login'),
+  setLaunchAtLogin: (enabled) => ipcRenderer.invoke('set-launch-at-login', Boolean(enabled)),
   maximizeToggle: () => ipcRenderer.invoke('window-maximize-toggle'),
   isWindowMaximized: () => ipcRenderer.invoke('window-is-maximized'),
   openExternal: (url) => ipcRenderer.send('open-external', url),
@@ -37,6 +40,8 @@ contextBridge.exposeInMainWorld('api', {
   yandexMyWaveFetch: (payload) => ipcRenderer.invoke('yandex-my-wave-fetch', payload || {}),
   yandexRotorFeedback: (payload) => ipcRenderer.invoke('yandex-rotor-feedback', payload || {}),
   yandexTrackDislike: (payload) => ipcRenderer.invoke('yandex-track-dislike', payload || {}),
+  yandexTrackLike: (payload) => ipcRenderer.invoke('yandex-track-like', payload || {}),
+  yandexTrackUnlike: (payload) => ipcRenderer.invoke('yandex-track-unlike', payload || {}),
   getLyrics: (title, artist, duration, options = {}) => ipcRenderer.invoke('get-lyrics', {
     title,
     artist,

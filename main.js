@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron')
+const { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage } = require('electron')
 const { execFile } = require('child_process')
 const path = require('path')
 const fs = require('fs')
@@ -1175,6 +1175,109 @@ let _discordRpcReady = false
 let _discordRpcClientId = null
 let _mainWindow = null
 
+/** Сворачивание в трей вместо полного закрытия (Windows / Linux). */
+const TRAY_CLOSE_SUPPORTED = process.platform === 'win32' || process.platform === 'linux'
+let _appTray = null
+let _trayQuitting = false
+let _allowMainWindowClose = false
+let _minimizeToTrayOnClose = true
+
+function destroyAppTray() {
+  if (!_appTray) return
+  try {
+    _appTray.removeAllListeners()
+    _appTray.destroy()
+  } catch (_) {}
+  _appTray = null
+}
+
+function buildTrayImage() {
+  try {
+    const p = path.join(__dirname, 'assets/icon.ico')
+    const img = nativeImage.createFromPath(p)
+    if (!img.isEmpty()) return img
+  } catch (_) {}
+  try {
+    return nativeImage.createFromBuffer(
+      Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+        'base64',
+      ),
+    )
+  } catch (_) {}
+  return nativeImage.createEmpty()
+}
+
+function ensureAppTray(win) {
+  if (!TRAY_CLOSE_SUPPORTED || _appTray || !win || win.isDestroyed()) return
+  const img = buildTrayImage()
+  if (img.isEmpty()) return
+  const tray = new Tray(img)
+  _appTray = tray
+  tray.setToolTip('Nexory')
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      {
+        label: 'Открыть Nexory',
+        click: () => {
+          try {
+            if (!win.isDestroyed()) {
+              win.show()
+              win.focus()
+            }
+          } catch (_) {}
+        },
+      },
+      { type: 'separator' },
+      {
+        label: 'Выход',
+        click: () => {
+          _trayQuitting = true
+          _allowMainWindowClose = true
+          destroyAppTray()
+          try {
+            if (win && !win.isDestroyed()) win.destroy()
+          } catch (_) {}
+          try {
+            app.quit()
+          } catch (_) {}
+        },
+      },
+    ]),
+  )
+  tray.on('double-click', () => {
+    try {
+      if (!win.isDestroyed()) {
+        win.show()
+        win.focus()
+      }
+    } catch (_) {}
+  })
+}
+
+ipcMain.on('flow-set-tray-on-close', (e, v) => {
+  _minimizeToTrayOnClose = Boolean(v)
+})
+
+ipcMain.handle('get-launch-at-login', () => {
+  try {
+    const s = app.getLoginItemSettings()
+    return { ok: true, enabled: Boolean(s?.openAtLogin) }
+  } catch (err) {
+    return { ok: false, error: err?.message || String(err), enabled: false }
+  }
+})
+
+ipcMain.handle('set-launch-at-login', (e, enabled) => {
+  try {
+    app.setLoginItemSettings({ openAtLogin: Boolean(enabled) })
+    const s = app.getLoginItemSettings()
+    return { ok: true, enabled: Boolean(s?.openAtLogin) }
+  } catch (err) {
+    return { ok: false, error: err?.message || String(err) }
+  }
+})
+
 function getDiscordRpcLib() {
   try {
     return require('discord-rpc')
@@ -1325,6 +1428,18 @@ function createWindow() {
   })
   win.loadFile('index.html')
   _mainWindow = win
+  win.on('close', (e) => {
+    if (_trayQuitting || _allowMainWindowClose) {
+      _allowMainWindowClose = false
+      return
+    }
+    if (!TRAY_CLOSE_SUPPORTED || !_minimizeToTrayOnClose) return
+    e.preventDefault()
+    ensureAppTray(win)
+    try {
+      win.hide()
+    } catch (_) {}
+  })
   const broadcastWindowPresence = () => {
     try {
       if (win.isDestroyed() || !win.webContents || win.webContents.isDestroyed()) return
@@ -1363,6 +1478,7 @@ function createWindow() {
   })
   win.on('closed', () => {
     if (_mainWindow === win) _mainWindow = null
+    destroyAppTray()
   })
 }
 
@@ -1399,6 +1515,7 @@ app.whenReady().then(() => {
 })
 
 app.on('before-quit', () => {
+  destroyAppTray()
   if (_proxyServer) _proxyServer.close()
   if (_discordRpcClient) {
     try { _discordRpcClient.clearActivity() } catch {}
@@ -1419,9 +1536,23 @@ ipcMain.on('window-minimize', (e) => {
   const w = BrowserWindow.fromWebContents(e.sender)
   if (w && !w.isDestroyed()) w.minimize()
 })
-ipcMain.on('window-close', (e) => {
+ipcMain.on('window-close', (e, payload = {}) => {
   const w = BrowserWindow.fromWebContents(e.sender)
-  if (w && !w.isDestroyed()) w.close()
+  if (!w || w.isDestroyed()) return
+  const toTrayPref = Object.prototype.hasOwnProperty.call(payload, 'toTray')
+    ? Boolean(payload.toTray)
+    : _minimizeToTrayOnClose
+  if (TRAY_CLOSE_SUPPORTED && toTrayPref) {
+    ensureAppTray(w)
+    try {
+      w.hide()
+    } catch (_) {}
+    return
+  }
+  _allowMainWindowClose = true
+  try {
+    w.close()
+  } catch (_) {}
 })
 
 ipcMain.handle('window-maximize-toggle', (e) => {
@@ -3827,9 +3958,9 @@ ipcMain.handle('yandex-my-wave-fetch', async (e, { token, mode, queueTrackId, ra
     const oauth = ymOAuthFromRawToken(token)
     if (!oauth) return { ok: false, error: 'Пустой токен Яндекса' }
     const h = ymOAuthHeaders(oauth)
-    const moodEnergy = mapFlowWaveModeToYmMoodEnergy(mode)
+    // Не дробим волну по «настроению» из Flow — как дефолтная Моя волна в Я.Музыке (без sad/fun/active).
     const settingsForm = new URLSearchParams()
-    settingsForm.set('moodEnergy', moodEnergy)
+    settingsForm.set('moodEnergy', 'all')
     settingsForm.set('diversity', 'default')
     settingsForm.set('language', 'any')
     settingsForm.set('type', 'rotor')
@@ -3854,7 +3985,7 @@ ipcMain.handle('yandex-my-wave-fetch', async (e, { token, mode, queueTrackId, ra
     }
     const parsed = parseYmRotorTracksBody(tr.body)
     if (!parsed.tracks.length) return { ok: false, error: 'Яндекс волна: пустой ответ' }
-    return { ok: true, ...parsed, moodEnergy }
+    return { ok: true, ...parsed, moodEnergy: 'all' }
   } catch (err) {
     return { ok: false, error: String(err?.message || err) }
   }
@@ -3898,6 +4029,48 @@ ipcMain.handle('yandex-track-dislike', async (e, { token, trackId }) => {
     const rev = r?.body?.revision != null || r?.body?.result?.revision != null
     if (r?.body?.error) return { ok: false, error: String(r.body.error?.message || r.body.error?.name || 'dislike') }
     return { ok: Boolean(rev || (Number(r?.status) >= 200 && Number(r?.status) < 300)) }
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err) }
+  }
+})
+
+ipcMain.handle('yandex-track-like', async (e, { token, trackId }) => {
+  try {
+    const oauth = ymOAuthFromRawToken(token)
+    if (!oauth) return { ok: false, error: 'Пустой токен' }
+    const h = ymOAuthHeaders(oauth)
+    const uid = await getYandexMusicAccountUid(h)
+    if (!uid) return { ok: false, error: 'Не удалось получить uid аккаунта' }
+    const tid = String(trackId || '').trim()
+    if (!tid) return { ok: false, error: 'Нет track id' }
+    const path = `/users/${encodeURIComponent(uid)}/likes/tracks/add-multiple`
+    const form = new URLSearchParams()
+    form.append('track-ids', tid)
+    const r = await httpsPostFormJson('api.music.yandex.net', path, Object.fromEntries(form), h, 15000)
+    const rev = r?.body?.revision != null || r?.body?.result?.revision != null
+    if (r?.body?.error) return { ok: false, error: String(r.body.error?.message || r.body.error?.name || 'like') }
+    return { ok: Boolean(rev || (Number(r?.status) >= 200 && Number(r?.status) < 300 && !r?.body?.error)) }
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err) }
+  }
+})
+
+ipcMain.handle('yandex-track-unlike', async (e, { token, trackId }) => {
+  try {
+    const oauth = ymOAuthFromRawToken(token)
+    if (!oauth) return { ok: false, error: 'Пустой токен' }
+    const h = ymOAuthHeaders(oauth)
+    const uid = await getYandexMusicAccountUid(h)
+    if (!uid) return { ok: false, error: 'Не удалось получить uid аккаунта' }
+    const tid = String(trackId || '').trim()
+    if (!tid) return { ok: false, error: 'Нет track id' }
+    const path = `/users/${encodeURIComponent(uid)}/likes/tracks/remove-multiple`
+    const form = new URLSearchParams()
+    form.append('track-ids', tid)
+    const r = await httpsPostFormJson('api.music.yandex.net', path, Object.fromEntries(form), h, 15000)
+    const rev = r?.body?.revision != null || r?.body?.result?.revision != null
+    if (r?.body?.error) return { ok: false, error: String(r.body.error?.message || r.body.error?.name || 'unlike') }
+    return { ok: Boolean(rev || (Number(r?.status) >= 200 && Number(r?.status) < 300 && !r?.body?.error)) }
   } catch (err) {
     return { ok: false, error: String(err?.message || err) }
   }

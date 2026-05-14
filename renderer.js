@@ -2,7 +2,17 @@ const { audioPlayer = {}, smartCleaning = {}, dragDrop = {}, peerSocial = {}, wa
 const audio = (audioPlayer.createPlayerAudio || ((onErr) => {
   const el = new Audio()
   el.volume = 0.8
-  el.onerror = () => onErr(el)
+  el.onerror = () => {
+    if (typeof window.__flowPlayerAudioError === 'function') {
+      try {
+        window.__flowPlayerAudioError(el)
+        return
+      } catch (e) {
+        console.warn('__flowPlayerAudioError failed', e)
+      }
+    }
+    onErr(el)
+  }
   return el
 }))(() => {
   console.error('AUDIO ERROR', {
@@ -544,6 +554,44 @@ const defaultVisual = {
   lyrics: { scrollMode: 'smooth', align: 'left', size: 16, blur: 4 }
 }
 
+/** Нормализация сохранённого положения меню (устраняет «перепутанные» значения из импорта/старых ключей). */
+function normalizeSidebarDockPosition(value) {
+  const raw = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+  const map = {
+    l: 'left',
+    r: 'right',
+    t: 'top',
+    b: 'bottom',
+    tabs_top: 'top',
+    tabs_bottom: 'bottom',
+    tabs_right: 'right',
+    tabs_left: 'left',
+    start: 'left',
+    end: 'right',
+  }
+  const step = map[raw] != null ? map[raw] : raw
+  const allowed = new Set(['left', 'top', 'bottom', 'right'])
+  return allowed.has(step) ? step : 'left'
+}
+
+const VS_GLASS_SLIDER_MAX = 40
+
+/** Ползунок «прозрачность стекла»: 0 — минимум прозрачности (плотнее), дальше — прозрачнее. В `flow_visual.glass` хранится сила белой подложки (0 — почти невидима, 40 — плотнее). */
+function glassTransparencyFromStored(glassStored) {
+  const g = Number(glassStored)
+  const gs = Number.isFinite(g) ? Math.max(0, Math.min(VS_GLASS_SLIDER_MAX, g)) : 8
+  return VS_GLASS_SLIDER_MAX - gs
+}
+
+function glassStoredFromSliderTransparency(t) {
+  const x = Number(t)
+  const tr = Number.isFinite(x) ? Math.max(0, Math.min(VS_GLASS_SLIDER_MAX, x)) : glassTransparencyFromStored(8)
+  return VS_GLASS_SLIDER_MAX - tr
+}
+
 /** Кэш parse localStorage — getVisual() вызывается очень часто (в т.ч. каждый кадр домашнего визуализатора). */
 let _flowVisualMemo = null
 
@@ -564,6 +612,7 @@ function getVisual() {
       try { raw = JSON.parse(rawStr) } catch (_) { raw = {} }
     }
     const out = Object.assign({}, defaultVisual, raw)
+    out.sidebarPosition = normalizeSidebarDockPosition(out.sidebarPosition)
     _flowVisualMemo = { s: rawStr, out }
     return Object.assign({}, out)
   } catch {
@@ -589,6 +638,9 @@ function applyToastPosition(position = getVisual().toastPosition) {
   document.body.setAttribute('data-toast-position', safe)
   document.querySelectorAll('[data-toast-position-option]').forEach((btn) => {
     btn.classList.toggle('active', btn.getAttribute('data-toast-position-option') === safe)
+  })
+  document.querySelectorAll('[data-toast-pos]').forEach((btn) => {
+    btn.classList.toggle('active', btn.getAttribute('data-toast-pos') === safe)
   })
 }
 
@@ -728,6 +780,7 @@ function applyVisualMode(mode) {
   } else {
     document.body.classList.add('visual-minimal')
   }
+  syncNexoryDeskClass()
   const minimalBtn = document.getElementById('vm-minimal')
   const floatedBtn = document.getElementById('vm-floated')
   const liquidBtn = document.getElementById('vm-liquid')
@@ -1333,7 +1386,10 @@ function applyVisualBackdropFilters(blurPx, brightPercent) {
 function applyVisualSettings() {
   const blur   = document.getElementById('vs-blur')?.value ?? 40
   const bright = document.getElementById('vs-bright')?.value ?? 50
-  const glass  = document.getElementById('vs-glass')?.value ?? 8
+  const glassEl = document.getElementById('vs-glass')
+  const glass = glassEl
+    ? glassStoredFromSliderTransparency(glassEl.value)
+    : (getVisual().glass ?? 8)
   const pb     = document.getElementById('vs-panel-blur')?.value ?? 30
   const scaleLegacyEl = document.getElementById('vs-scale')
   const scaleWindowEl = document.getElementById('vs-scale-window')
@@ -1362,7 +1418,8 @@ function applyVisualSettings() {
 
   document.getElementById('vs-blur-val').textContent   = blur + 'px'
   document.getElementById('vs-bright-val').textContent = bright + '%'
-  document.getElementById('vs-glass-val').textContent  = glass + '%'
+  const glassTr = glassTransparencyFromStored(glass)
+  if (document.getElementById('vs-glass-val')) document.getElementById('vs-glass-val').textContent = glassTr + '%'
   document.getElementById('vs-panel-blur-val').textContent = pb + 'px'
   if (document.getElementById('vs-scale-val')) document.getElementById('vs-scale-val').textContent = scale + '%'
   if (document.getElementById('vs-scale-window-val')) document.getElementById('vs-scale-window-val').textContent = scale + '%'
@@ -1819,7 +1876,7 @@ function initVisualSettings() {
   const setSlider = (id, val) => { const el = document.getElementById(id); if (el) el.value = val }
   setSlider('vs-blur', v.blur)
   setSlider('vs-bright', v.bright)
-  setSlider('vs-glass', v.glass)
+  setSlider('vs-glass', glassTransparencyFromStored(v.glass))
   setSlider('vs-panel-blur', v.panelBlur)
   setSlider('vs-scale', v.uiScale || 100)
   setSlider('vs-scale-window', v.uiScale || 100)
@@ -1827,7 +1884,7 @@ function initVisualSettings() {
   // Labels
   if (document.getElementById('vs-blur-val')) document.getElementById('vs-blur-val').textContent = v.blur + 'px'
   if (document.getElementById('vs-bright-val')) document.getElementById('vs-bright-val').textContent = v.bright + '%'
-  if (document.getElementById('vs-glass-val')) document.getElementById('vs-glass-val').textContent = v.glass + '%'
+  if (document.getElementById('vs-glass-val')) document.getElementById('vs-glass-val').textContent = glassTransparencyFromStored(v.glass) + '%'
   if (document.getElementById('vs-panel-blur-val')) document.getElementById('vs-panel-blur-val').textContent = v.panelBlur + 'px'
   if (document.getElementById('vs-scale-val')) document.getElementById('vs-scale-val').textContent = (v.uiScale || 100) + '%'
   if (document.getElementById('vs-scale-window-val')) document.getElementById('vs-scale-window-val').textContent = (v.uiScale || 100) + '%'
@@ -1899,6 +1956,25 @@ function initVisualSettings() {
     setupFlowOptimizationChannel()
   } catch (_) {}
   applyOptimizationSettings()
+  installFlowLayoutPickerDelegatedClicks()
+}
+
+let _flowSidebarLayoutClickInstalled = false
+function installFlowLayoutPickerDelegatedClicks() {
+  if (_flowSidebarLayoutClickInstalled) return
+  _flowSidebarLayoutClickInstalled = true
+  document.addEventListener(
+    'click',
+    (e) => {
+      const btn = e.target && e.target.closest && e.target.closest('[data-flow-sidebar-layout]')
+      if (!btn) return
+      e.preventDefault()
+      const raw = btn.getAttribute('data-flow-sidebar-layout')
+      const pos = normalizeSidebarDockPosition(raw)
+      if (pos) setSidebarPosition(pos)
+    },
+    false,
+  )
 }
 
 function reorderVisualSettingsSections() {
@@ -1911,12 +1987,60 @@ function toggleNavActiveHighlight() {
   applyVisualSettings()
 }
 
+/** Вертикальная колонка меню слева (классический док). */
+function isSidebarDockedLeft() {
+  return (
+    !document.body.classList.contains('layout-top-nav') &&
+    !document.body.classList.contains('layout-bottom-nav') &&
+    !document.body.classList.contains('layout-right-nav')
+  )
+}
+
+/** Горизонтальная полоса меню сверху или снизу. */
+function isSidebarHorizontalDock() {
+  return (
+    document.body.classList.contains('layout-top-nav') ||
+    document.body.classList.contains('layout-bottom-nav')
+  )
+}
+
+/** Nexory «рабочий стол»: заметнее и при меню справа. */
+function syncNexoryDeskClass() {
+  try {
+    const v = getVisual()
+    const floated = normalizeVisualThemeMode(v.visualMode) === 'floated'
+    const pos = normalizeSidebarDockPosition(v.sidebarPosition)
+    const horizontal = pos === 'top' || pos === 'bottom'
+    const dockRight = pos === 'right'
+    document.body.classList.toggle('nexory-desk', Boolean(floated || horizontal || dockRight))
+  } catch (_) {}
+}
+
+/** Меню снизу: переключатель расположения — отдельной полосой над плеером (не внутри #player-bar). */
+function syncLayoutDockMount() {
+  try {
+    const dock = document.getElementById('player-bar-layout-dock')
+    const playerBar = document.getElementById('player-bar')
+    const screenMain = document.getElementById('screen-main')
+    if (!dock || !playerBar || !screenMain) return
+    const safe = normalizeSidebarDockPosition(getVisual()?.sidebarPosition || 'left')
+    if (safe === 'bottom') {
+      if (dock.parentElement !== screenMain) screenMain.insertBefore(dock, playerBar)
+      else if (dock.nextElementSibling !== playerBar) screenMain.insertBefore(dock, playerBar)
+    } else if (dock.parentElement !== playerBar || playerBar.firstElementChild !== dock) {
+      playerBar.insertBefore(dock, playerBar.firstChild)
+    }
+  } catch (_) {}
+}
+
 function applySidebarPosition(position) {
-  const safe = position === 'top' ? 'top' : 'left'
+  const safe = normalizeSidebarDockPosition(position)
   document.body.classList.toggle('layout-top-nav', safe === 'top')
+  document.body.classList.toggle('layout-bottom-nav', safe === 'bottom')
+  document.body.classList.toggle('layout-right-nav', safe === 'right')
   const sidebar = document.getElementById('sidebar')
-  if (sidebar && safe === 'top') sidebar.classList.remove('collapsed')
-  if (safe === 'top') {
+  if (sidebar && (safe === 'top' || safe === 'bottom')) sidebar.classList.remove('collapsed')
+  if (safe === 'top' || safe === 'bottom') {
     document.documentElement.style.setProperty('--sidebar-shift', '0px')
   } else {
     try {
@@ -1928,37 +2052,31 @@ function applySidebarPosition(position) {
       try { window.dispatchEvent(new Event('resize')) } catch (_) {}
     })
   }
-  const leftBtn = document.getElementById('layout-left')
-  const topBtn = document.getElementById('layout-top')
-  if (leftBtn) leftBtn.classList.toggle('active', safe === 'left')
-  if (topBtn) topBtn.classList.toggle('active', safe === 'top')
+  ;['left', 'top', 'bottom', 'right'].forEach((id) => {
+    const el = document.getElementById(`layout-${id}`)
+    if (el) el.classList.toggle('active', safe === id)
+  })
+  document.querySelectorAll('.pbl-dock-btn[data-flow-sidebar-layout]').forEach((el) => {
+    const p = normalizeSidebarDockPosition(el.getAttribute('data-flow-sidebar-layout'))
+    el.classList.toggle('active', p === safe)
+  })
+  syncLayoutDockMount()
+  syncNexoryDeskClass()
 }
 
 function setSidebarPosition(position) {
-  const safe = position === 'top' ? 'top' : 'left'
+  const safe = normalizeSidebarDockPosition(position)
   saveVisual({ sidebarPosition: safe })
   applySidebarPosition(safe)
-  showToast(safe === 'top' ? 'Меню перемещено наверх' : 'Меню возвращено влево')
-}
-
-function getSafeToastPosition(position) {
-  const allowed = new Set(['default', 'top-left', 'top-right', 'bottom-left', 'bottom-right'])
-  return allowed.has(position) ? position : 'default'
-}
-
-function applyToastPosition(position = getVisual().toastPosition) {
-  const safe = getSafeToastPosition(position)
-  document.body.setAttribute('data-toast-position', safe)
-  document.querySelectorAll('[data-toast-pos]').forEach((btn) => {
-    btn.classList.toggle('active', btn.getAttribute('data-toast-pos') === safe)
-  })
-}
-
-function setToastPosition(position) {
-  const safe = getSafeToastPosition(position)
-  saveVisual({ toastPosition: safe })
-  applyToastPosition(safe)
-  showToast('Позиция уведомлений сохранена')
+  const msg =
+    safe === 'top'
+      ? 'Меню сверху'
+      : safe === 'bottom'
+        ? 'Меню снизу'
+        : safe === 'right'
+          ? 'Меню справа'
+          : 'Меню слева'
+  showToast(msg)
 }
 
 /** true = секция свёрнута (как в блоках аккаунтов). Всегда храним полный объект ключей. */
@@ -2113,6 +2231,50 @@ function refreshLyricsPanelsVisibility() {
   } catch (_) {}
 }
 
+function cssQuoteForUrl(value) {
+  if (value == null || typeof value !== 'string') return ''
+  return String(value).trim().replace(/\\/g, '/').replace(/'/g, '%27')
+}
+
+function syncPmQueuePreviews() {
+  const strip = document.getElementById('pm-queue-strip')
+  const countEl = document.getElementById('pm-queue-count')
+  if (!strip || !_playerModeActive) return
+  strip.innerHTML = ''
+  const qlen = Array.isArray(queue) ? queue.length : 0
+  const qIdx = Number(queueIndex) || 0
+  const upcoming = Math.max(0, qlen - qIdx - 1)
+  if (countEl) countEl.textContent = upcoming > 0 ? String(upcoming) : ''
+  if (!qlen || upcoming <= 0) {
+    const empty = document.createElement('span')
+    empty.className = 'pm-queue-empty'
+    empty.textContent = qlen && qIdx >= qlen - 1 ? 'Конец очереди' : 'Нет треков впереди'
+    strip.appendChild(empty)
+    return
+  }
+  const start = qIdx + 1
+  const slice = queue.slice(start, start + 10)
+  slice.forEach((tr, i) => {
+    const targetIdx = start + i
+    const url = getEffectiveCoverUrl(tr)
+    const btn = document.createElement('button')
+    btn.type = 'button'
+    btn.className = 'pm-queue-thumb'
+    btn.setAttribute('role', 'listitem')
+    btn.title = `${tr.title || 'Трек'}${tr.artist ? ' — ' + tr.artist : ''}`
+    const safe = cssQuoteForUrl(url)
+    if (safe) btn.style.backgroundImage = `url('${safe}')`
+    else btn.classList.add('pm-queue-thumb--empty')
+    btn.addEventListener('click', () => {
+      if (typeof playTrackObj !== 'function') return
+      if (targetIdx < 0 || targetIdx >= queue.length) return
+      queueIndex = targetIdx
+      playTrackObj(queue[queueIndex]).catch(() => {})
+    })
+    strip.appendChild(btn)
+  })
+}
+
 function syncPlayerModeUI() {
   if (!_playerModeActive) return
   const t = currentTrack
@@ -2175,6 +2337,7 @@ function syncPlayerModeUI() {
   const pmCoverVol = document.getElementById('pm-cover-volume')
   if (pmCoverVol) pmCoverVol.value = audio.volume
   if (pmCoverLyrics) pmCoverLyrics.classList.toggle('active', _lyricsOpen)
+  syncPmQueuePreviews()
 }
 
 // в”Ђв”Ђв”Ђ TIME FORMATTING в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
@@ -2481,6 +2644,8 @@ function getSettings() {
     discordClientId: '', discordRpcEnabled: false, lastfmApiKey: '', lastfmSharedSecret: '', lastfmSessionKey: '',
     proxyBaseUrl: FLOW_SERVER_DEFAULT_URL,
     compactUi: false,
+    minimizeToTrayOnClose: true,
+    launchAtLogin: false,
     flowSocialApiBase: FLOW_SOCIAL_DEFAULT_API_BASE,
     flowSocialApiSecret: FLOW_SOCIAL_DEFAULT_API_SECRET,
   }
@@ -2495,6 +2660,8 @@ function getSettings() {
   if (typeof raw.optFreezePlayerWhenMinimized !== 'boolean') raw.optFreezePlayerWhenMinimized = true
   if (typeof raw.optPauseHeavyBgWhenBackgrounded !== 'boolean') raw.optPauseHeavyBgWhenBackgrounded = true
   if (typeof raw.optGameSleepMode !== 'boolean') raw.optGameSleepMode = false
+  if (typeof raw.minimizeToTrayOnClose !== 'boolean') raw.minimizeToTrayOnClose = true
+  if (typeof raw.launchAtLogin !== 'boolean') raw.launchAtLogin = false
   if (typeof raw.vkSeleniumBridge !== 'boolean') raw.vkSeleniumBridge = false
   const prevActive = raw.activeSource
   raw.activeSource = normalizeStoredActiveSource(raw.activeSource)
@@ -2644,8 +2811,71 @@ function applyOptimizationSettings() {
   document.body.classList.toggle('flow-opt-no-animations', Boolean(s.optDisableAnimations))
   document.body.classList.toggle('flow-performance', Boolean(s.optSimpleGraphics))
   syncOptimizationPanelToggles()
+  syncPlaybackSystemToggles()
   refreshOptimizationAmbientClasses()
 }
+
+function syncPlaybackSystemToggles() {
+  const s = getSettings()
+  const tray = document.getElementById('toggle-minimize-to-tray')
+  if (tray) tray.classList.toggle('active', Boolean(s.minimizeToTrayOnClose))
+  const login = document.getElementById('toggle-launch-at-login')
+  if (login) login.classList.toggle('active', Boolean(s.launchAtLogin))
+}
+
+function syncTrayClosePreferenceToMain() {
+  try {
+    if (!window.api?.setTrayOnClose) return
+    const s = getSettings()
+    window.api.setTrayOnClose(Boolean(s.minimizeToTrayOnClose))
+  } catch (_) {}
+}
+
+function toggleMinimizeToTrayOnClose() {
+  const cur = getSettings()
+  saveSettingsRaw({ minimizeToTrayOnClose: !Boolean(cur.minimizeToTrayOnClose) })
+  syncPlaybackSystemToggles()
+  syncTrayClosePreferenceToMain()
+  showToast(getSettings().minimizeToTrayOnClose ? 'Закрытие: в трей (музыка играет)' : 'Закрытие: выход из приложения')
+}
+window.toggleMinimizeToTrayOnClose = toggleMinimizeToTrayOnClose
+
+async function toggleLaunchAtLogin() {
+  if (!window.api?.setLaunchAtLogin || !window.api?.getLaunchAtLogin) return
+  const cur = getSettings()
+  const next = !Boolean(cur.launchAtLogin)
+  try {
+    const r = await window.api.setLaunchAtLogin(next)
+    if (!r?.ok) {
+      showToast(String(r?.error || 'Не удалось изменить автозапуск'), true)
+      return
+    }
+    saveSettingsRaw({ launchAtLogin: Boolean(r.enabled) })
+    syncPlaybackSystemToggles()
+    showToast(r.enabled ? 'Автозапуск включён' : 'Автозапуск выключен')
+  } catch (err) {
+    showToast(String(err?.message || err), true)
+  }
+}
+window.toggleLaunchAtLogin = toggleLaunchAtLogin
+
+async function refreshLaunchAtLoginFromMain() {
+  if (!window.api?.getLaunchAtLogin) return
+  try {
+    const r = await window.api.getLaunchAtLogin()
+    if (r?.ok && typeof r.enabled === 'boolean') saveSettingsRaw({ launchAtLogin: r.enabled })
+    syncPlaybackSystemToggles()
+  } catch (_) {}
+}
+
+function flowHandleTitlebarClose() {
+  try {
+    if (!window.api?.close) return
+    const s = getSettings()
+    window.api.close({ toTray: Boolean(s.minimizeToTrayOnClose) })
+  } catch (_) {}
+}
+window.flowHandleTitlebarClose = flowHandleTitlebarClose
 
 function toggleOptimizationSetting(key) {
   const allowed = new Set(['optDisableAnimations', 'optSimpleGraphics', 'optFreezePlayerWhenMinimized', 'optPauseHeavyBgWhenBackgrounded', 'optGameSleepMode'])
@@ -3852,7 +4082,7 @@ function convertDotifyPresetToFlowStorage(preset) {
   const data = preset?.data || {}
   const ui = data.uiSettings || data.ui || {}
   const gifs = data.gifs || {}
-  const visual = Object.assign({}, getVisual())
+  const visual = Object.assign({}, defaultVisual)
 
   /** Dotify ≥ новый формат: gifSettings — объект с ключами "0","1",… или массив; у каждого usage: background | cover | visualizer | … */
   const gifList = []
@@ -3938,6 +4168,8 @@ function convertDotifyPresetToFlowStorage(preset) {
   if (Number.isFinite(scale)) visual.uiScale = Math.max(80, Math.min(130, scale))
 
   if (ui.tabs === 'top' || ui.tabs?.position === 'top') visual.sidebarPosition = 'top'
+  else if (ui.tabs === 'bottom' || ui.tabs?.position === 'bottom') visual.sidebarPosition = 'bottom'
+  else if (ui.tabs === 'right' || ui.tabs?.position === 'right') visual.sidebarPosition = 'right'
   if (ui.customfont?.family) visual.customFontName = String(ui.customfont.family)
 
   const storage = { flow_visual: JSON.stringify(visual) }
@@ -5269,12 +5501,54 @@ function getMyWaveTrackUniqueKey(track) {
   return fallback !== '::' ? `meta:${fallback}` : ''
 }
 
+/** Яндекс-волна: держим в памяти только текущий + один префетч — как цепочка GET /tracks у ротора. */
+function compactYandexMyWaveQueueIfNeeded() {
+  if (queueScope !== 'myWave' || getMyWaveSource() !== 'yandex') return
+  const cur = sanitizeTrack(currentTrack || null)
+  if (!cur?.id) return
+  const curKey = getMyWaveTrackUniqueKey(cur)
+  let next = queue[queueIndex + 1] || null
+  if (next) next = sanitizeTrack(next)
+  const nextKey = next ? getMyWaveTrackUniqueKey(next) : ''
+  if (!nextKey || nextKey === curKey) next = null
+  queue = next ? [cur, next] : [cur]
+  queueIndex = 0
+  try {
+    _myWaveRenderedTracks = queue.slice()
+  } catch (_) {}
+}
+
+function mergeYandexWaveQueueAppend(freshTracks) {
+  const cur = sanitizeTrack(currentTrack || queue[queueIndex] || null)
+  const nxt = sanitizeTrack((freshTracks || [])[0] || null)
+  if (!cur?.id) {
+    queue = nxt?.id ? [nxt] : []
+    queueIndex = 0
+    return
+  }
+  const curKey = getMyWaveTrackUniqueKey(cur)
+  const nxtKey = nxt ? getMyWaveTrackUniqueKey(nxt) : ''
+  if (nxtKey && nxtKey !== curKey) queue = [cur, nxt]
+  else queue = [cur]
+  queueIndex = 0
+}
+
 async function maybePreloadMyWave(force = false) {
   if (queueScope !== 'myWave' || _myWaveBuilding || _myWavePreloading) return
   const remaining = queue.length - queueIndex - 1
-  if (!force && remaining > 3) return
+  if (!force) {
+    if (getMyWaveSource() === 'yandex') {
+      if (remaining >= 1) return
+    } else if (remaining > 3) {
+      return
+    }
+  }
   if (getMyWaveSeedTracks().length < 3) return
-  const startLength = queue.length
+  if (getMyWaveSource() === 'yandex' && currentTrack && String(currentTrack.source || '').toLowerCase() === 'yandex' && currentTrack.id) {
+    try {
+      _yandexWaveRotorQueueHint = String(currentTrack.id).trim()
+    } catch (_) {}
+  }
   _myWavePreloading = true
   renderMyWave()
   try {
@@ -5295,20 +5569,25 @@ async function maybePreloadMyWave(force = false) {
       })
       return fresh
     }
-    const additions = await findMyWaveRecommendations(10, getMyWaveMode())
+    const waveAsk = getMyWaveSource() === 'yandex' ? 1 : 10
+    const additions = await findMyWaveRecommendations(waveAsk, getMyWaveMode())
     let fresh = dedupeWithExisting(additions)
     if (!fresh.length && force && getMyWaveSource() === 'yandex') {
       try { _yandexWaveRotorQueueHint = '' } catch (_) {}
-      const retry = await findMyWaveRecommendations(10, getMyWaveMode())
+      const retry = await findMyWaveRecommendations(waveAsk, getMyWaveMode())
       fresh = dedupeWithExisting(retry)
     }
     if (fresh.length) {
-      queue.push(...fresh)
+      if (getMyWaveSource() === 'yandex') {
+        mergeYandexWaveQueueAppend(fresh)
+      } else {
+        queue.push(...fresh)
+      }
       _myWaveRenderedTracks = queue.slice()
       renderQueue()
-      showToast(`Моя волна дозагрузила ${fresh.length} треков`)
-      if (force && queueIndex >= startLength - 1 && queue[queueIndex + 1]) {
-        queueIndex++
+      showToast(getMyWaveSource() === 'yandex' ? 'Моя волна: подгружен следующий трек' : `Моя волна дозагрузила ${fresh.length} треков`)
+      if (force && queue.length > 1 && queue[1]) {
+        queueIndex = 1
         await playTrackObj(queue[queueIndex])
       }
     } else if (force) {
@@ -5326,16 +5605,20 @@ async function maybePreloadMyWave(force = false) {
         return true
       })
       if (fallback.length) {
-        queue.push(...fallback)
+        if (getMyWaveSource() === 'yandex') {
+          mergeYandexWaveQueueAppend(fallback)
+        } else {
+          queue.push(...fallback)
+        }
         fallback.forEach((track) => {
           const key = getMyWaveTrackUniqueKey(track)
           if (key) _myWaveSeenKeys.add(key)
         })
         _myWaveRenderedTracks = queue.slice()
         renderQueue()
-        showToast(`Моя волна продолжила подборку (${fallback.length})`)
-        if (queueIndex >= startLength - 1 && queue[queueIndex + 1]) {
-          queueIndex++
+        showToast(getMyWaveSource() === 'yandex' ? 'Моя волна: подгружен следующий трек' : `Моя волна продолжила подборку (${fallback.length})`)
+        if (queue.length > 1 && queue[1]) {
+          queueIndex = 1
           await playTrackObj(queue[queueIndex])
         }
       }
@@ -5377,7 +5660,8 @@ async function startMyWave() {
   renderMyWave()
   showToast('Моя волна подбирает новые треки...')
   try {
-    const tracks = await findMyWaveRecommendations(WE?.MY_WAVE_MIN_TRACKS ?? 10, getMyWaveMode())
+    const waveAsk = getMyWaveSource() === 'yandex' ? 1 : (WE?.MY_WAVE_MIN_TRACKS ?? 10)
+    const tracks = await findMyWaveRecommendations(waveAsk, getMyWaveMode())
     const unique = []
     _myWaveSeenKeys = new Set()
     ;(tracks || []).forEach((track) => {
@@ -5391,7 +5675,11 @@ async function startMyWave() {
     queue = unique.slice()
     queueIndex = 0
     queueScope = 'myWave'
-    showToast(`Моя волна собрала ${unique.length} новых треков`)
+    showToast(
+      getMyWaveSource() === 'yandex' && unique.length <= 1
+        ? 'Моя волна: трек из Яндекса'
+        : `Моя волна собрала ${unique.length} новых треков`,
+    )
     await playTrackObj(queue[0])
   } catch (err) {
     showToast(`Моя волна не запустилась: ${sanitizeDisplayText(err?.message || err)}`, true)
@@ -7965,7 +8253,7 @@ function applyUiTextOverrides() {
     const t = (el.textContent || '').trim()
     if (t.includes('Blur') && t.includes('фона')) el.innerHTML = 'Blur фона <span class="vs-val" id="vs-blur-val">40px</span>'
     if (t.includes('Яркость') || t.includes('PЏ')) el.innerHTML = 'Яркость фона <span class="vs-val" id="vs-bright-val">50%</span>'
-    if (t.includes('Прозрачн')) el.innerHTML = 'Прозрачность стекла <span class="vs-val" id="vs-glass-val">8%</span>'
+    if (t.includes('Прозрачн')) el.innerHTML = 'Прозрачность стекла <span class="vs-val" id="vs-glass-val">32%</span>'
     if (t.includes('панел')) el.innerHTML = 'Blur панелей <span class="vs-val" id="vs-panel-blur-val">30px</span>'
   })
 }
@@ -7990,7 +8278,8 @@ function setupFloatedMainContentResize() {
   const modeOk = () =>
     document.body.classList.contains('visual-floated') &&
     !document.body.classList.contains('visual-minimal') &&
-    !document.body.classList.contains('layout-top-nav')
+    typeof isSidebarDockedLeft === 'function' &&
+    isSidebarDockedLeft()
 
   /** @typedef {{ l: number, t: number, r: number, b: number }} Slack */
 
@@ -8360,7 +8649,8 @@ function setupFloatedMainPaneDrag() {
   const modeOkDrag = () =>
     document.body.classList.contains('visual-floated') &&
     !document.body.classList.contains('visual-minimal') &&
-    !document.body.classList.contains('layout-top-nav')
+    typeof isSidebarDockedLeft === 'function' &&
+    isSidebarDockedLeft()
 
   /** Высота sticky-shell = видимая область панели, чтобы рамки не «уплывали» при прокрутке контента. */
   function refreshFrameShellGeometry() {
@@ -8672,7 +8962,11 @@ function setupSidebarResize() {
     const usable = Math.max(0, r.width - pl - pr)
     const gap = getSidebarGapPx()
     /* «Минимал»: сдвиг только в пределах окна — не от ширины flex-контейнера (иначе панель «дрожит» при ресайзе). */
-    if (document.body.classList.contains('visual-floated') && !document.body.classList.contains('layout-top-nav')) {
+    if (
+      document.body.classList.contains('visual-floated') &&
+      typeof isSidebarDockedLeft === 'function' &&
+      isSidebarDockedLeft()
+    ) {
       let insetStart = 0
       let insetEnd = 0
       let paneStack = 300
@@ -8722,7 +9016,7 @@ function setupSidebarResize() {
 
   const sidebarWidthEffectivePx = () => {
     try {
-      if (!document.body.classList.contains('layout-top-nav')) {
+      if (typeof isSidebarHorizontalDock === 'function' && !isSidebarHorizontalDock()) {
         const bw = sidebar.getBoundingClientRect().width
         if (Number.isFinite(bw) && bw >= 48) return Math.round(bw)
       }
@@ -8812,7 +9106,7 @@ function setupSidebarResize() {
   let cornerAnchor = null
 
   const winPointerMove = (e) => {
-    if (!dragging || document.body.classList.contains('layout-top-nav')) return
+    if (!dragging || (typeof isSidebarHorizontalDock === 'function' && isSidebarHorizontalDock())) return
     if (dragEdge === 'left') applyLeftDrag(e.clientX)
     else applyRightDrag(e.clientX)
   }
@@ -8902,7 +9196,7 @@ function setupSidebarResize() {
 
   const startSidebarCornerDrag = (corner, e, capEl) => {
     if (!document.body.classList.contains('visual-floated')) return
-    if (document.body.classList.contains('layout-top-nav')) return
+    if (typeof isSidebarHorizontalDock === 'function' && isSidebarHorizontalDock()) return
     if (
       !document.body.classList.contains('flow-edit-enabled') ||
       !document.body.classList.contains('home-layout-edit')
@@ -8964,7 +9258,7 @@ function setupSidebarResize() {
   }
 
   const startEdgeDrag = (edge, e, capEl) => {
-    if (document.body.classList.contains('layout-top-nav')) return
+    if (typeof isSidebarHorizontalDock === 'function' && isSidebarHorizontalDock()) return
     if (!e.isPrimary) return
     e.preventDefault()
     e.stopPropagation()
@@ -9000,7 +9294,10 @@ function setupSidebarResize() {
   applySidebarPanelHeightFromStorage()
 
   const rebalanceSidebarAfterResize = () => {
-    const floated = document.body.classList.contains('visual-floated') && !document.body.classList.contains('layout-top-nav')
+    const floated =
+      document.body.classList.contains('visual-floated') &&
+      typeof isSidebarDockedLeft === 'function' &&
+      isSidebarDockedLeft()
     if (floated) {
       try {
         const raw = getComputedStyle(root).getPropertyValue('--sidebar-panel-height').trim()
@@ -9136,7 +9433,7 @@ function setupSidebarPanelEditDrag() {
     'pointerdown',
     (e) => {
       if (!document.body.classList.contains('visual-floated')) return
-      if (document.body.classList.contains('layout-top-nav')) return
+      if (typeof isSidebarHorizontalDock === 'function' && isSidebarHorizontalDock()) return
       if (!e.isPrimary || e.button !== 0) return
       const t = e.target
       if (!sidebar.contains(t)) return
@@ -9165,7 +9462,7 @@ function setupSidebarPanelEditDrag() {
 function debounceSidebarLayoutSync(fn, ms = 140) {
   let t = 0
   return () => {
-    if (document.body?.classList?.contains('layout-top-nav')) return
+    if (typeof isSidebarHorizontalDock === 'function' && isSidebarHorizontalDock()) return
     clearTimeout(t)
     t = setTimeout(fn, ms)
   }
@@ -9227,9 +9524,9 @@ function setupMainPaneShift() {
       let rawMin = winMin
       let rawMax = winMax
 
-      const topNav = document.body.classList.contains('layout-top-nav')
+      const barDock = typeof isSidebarHorizontalDock === 'function' && isSidebarHorizontalDock()
       /* «Минимал»: колонка контента не привязана к sb.right — лимиты сдвига только от окна. */
-      if (!topNav && !document.body.classList.contains('visual-floated')) {
+      if (!barDock && !document.body.classList.contains('visual-floated') && !document.body.classList.contains('layout-right-nav')) {
         const sidebar = document.getElementById('sidebar')
         let gapPx = 12
         try {
@@ -10224,6 +10521,7 @@ async function playTrackObj(track, opts = {}) {
   }
   const reqId = ++_playRequestSeq
   const isStale = () => reqId !== _playRequestSeq
+  if (!opts?._recoverPlayback) _flowYandexStreamRetryId = ''
   track = sanitizeTrack(track)
   if (opts?.remoteSync && _roomState?.roomId && !_roomState?.host) {
     track = Object.assign({}, track, { _flowSkipGlobalThemeFromTrack: true })
@@ -10293,9 +10591,11 @@ async function playTrackObj(track, opts = {}) {
 
   currentTrack = track
   const newTrackKey = `${track.source}:${track.id}`
-  const st = getListenStats()
-  if (st.lastTrackKey !== newTrackKey) saveListenStats({ totalTracks: Number(st.totalTracks || 0) + 1, lastTrackKey: newTrackKey })
-  pushListenHistory(track)
+  if (!opts._recoverPlayback) {
+    const st = getListenStats()
+    if (st.lastTrackKey !== newTrackKey) saveListenStats({ totalTracks: Number(st.totalTracks || 0) + 1, lastTrackKey: newTrackKey })
+    pushListenHistory(track)
+  }
   if (_activePageId === 'main') renderMyWave()
   let streamUrl = track.url
   let streamEngine = null
@@ -10717,6 +11017,9 @@ async function playTrackObj(track, opts = {}) {
   } else {
     broadcastPlaybackSync(true)
   }
+  try {
+    compactYandexMyWaveQueueIfNeeded()
+  } catch (_) {}
   syncHomeCloneUI()
   renderQueue()
   try {
@@ -11039,6 +11342,67 @@ function nextTrack(autoEnded = false) {
   }
   const playBtn = document.getElementById('play-btn')
   if (playBtn) playBtn.innerHTML = ICONS.play
+}
+
+let _flowAudioErrCooldownAt = 0
+let _flowYandexStreamRetryId = ''
+
+function flowAdvanceAfterStreamFailure() {
+  _flowYandexStreamRetryId = ''
+  try {
+    if (queueIndex < queue.length - 1) {
+      queueIndex++
+      playTrackObj(queue[queueIndex]).catch(() => {})
+      return
+    }
+    if (queueScope === 'myWave') {
+      void maybePreloadMyWave(true)
+    }
+    if (playbackMode.repeat === 'all' && queue.length) {
+      queueIndex = 0
+      playTrackObj(queue[0]).catch(() => {})
+    }
+  } catch (_) {}
+}
+
+window.__flowPlayerAudioError = function __flowPlayerAudioError(el) {
+  console.error('AUDIO ERROR', {
+    code: el?.error?.code,
+    message: el?.error?.message || null,
+    src: el?.currentSrc || el?.src || null,
+  })
+  const now = Date.now()
+  if (now - _flowAudioErrCooldownAt < 650) return
+  _flowAudioErrCooldownAt = now
+  try {
+    const code = el?.error?.code ? `код ${el.error.code}` : 'код неизвестен'
+    showToast(`Сбой потока (${code}), пробуем восстановить…`, true)
+  } catch (_) {}
+  const t = sanitizeTrack(currentTrack || null)
+  const src = String(t?.source || '').toLowerCase()
+  const tid = String(t?.id || '').trim()
+  if (src === 'yandex' && tid && window.api?.yandexStream && _flowYandexStreamRetryId !== tid) {
+    _flowYandexStreamRetryId = tid
+    const tok = String(getSettings()?.yandexToken || '').trim()
+    if (tok) {
+      void window.api.yandexStream(tid, tok).then((res) => {
+        if (res?.ok && res?.url) {
+          const nt = Object.assign({}, t, { url: res.url })
+          currentTrack = nt
+          if (queue.length && queueIndex >= 0 && queue[queueIndex]) {
+            const qi = sanitizeTrack(queue[queueIndex])
+            if (String(qi.source || '').toLowerCase() === 'yandex' && String(qi.id || '').trim() === tid) {
+              queue[queueIndex] = nt
+            }
+          }
+          return playTrackObj(nt, { _recoverPlayback: true }).catch(() => flowAdvanceAfterStreamFailure())
+        }
+        flowAdvanceAfterStreamFailure()
+      }).catch(() => flowAdvanceAfterStreamFailure())
+      return
+    }
+  }
+  flowAdvanceAfterStreamFailure()
 }
 
 audio.ontimeupdate = () => {
@@ -11509,13 +11873,47 @@ function getLiked() { return JSON.parse(localStorage.getItem('flow_liked')) || [
 function isLiked(track) { return getLiked().some(t => t.id===track.id && t.source===track.source) }
 
 function likeTrack(track) {
+  if (!track) return
+  const wasLiked = isLiked(track)
   let liked = getLiked()
-  if (isLiked(track)) {
+  if (wasLiked) {
     liked = liked.filter((t) => !(t.id === track.id && t.source === track.source))
     showToast('РЈР±СЂР°РЅРѕ РёР· Р»СЋР±РёРјС‹С…')
+    try {
+      const tok = String(getSettings()?.yandexToken || '').trim()
+      if (String(track.source || '').toLowerCase() === 'yandex' && tok && window.api?.yandexTrackUnlike) {
+        void window.api.yandexTrackUnlike({ token: tok, trackId: String(track.id || '').trim() }).then((r) => {
+          if (!r?.ok) showToast('Яндекс: не удалось снять лайк', true)
+        })
+      }
+    } catch (_) {}
   } else {
     liked.push(track)
     showToast('Р”РѕР±Р°РІР»РµРЅРѕ РІ Р»СЋР±РёРјС‹Рµ в™Ґ')
+    try {
+      const tok = String(getSettings()?.yandexToken || '').trim()
+      if (String(track.source || '').toLowerCase() === 'yandex' && tok && window.api?.yandexTrackLike) {
+        void window.api.yandexTrackLike({ token: tok, trackId: String(track.id || '').trim() }).then((r) => {
+          if (!r?.ok) showToast('Яндекс: не удалось отправить лайк', true)
+        })
+      }
+      if (
+        queueScope === 'myWave' &&
+        getMyWaveSource() === 'yandex' &&
+        String(track.source || '').toLowerCase() === 'yandex' &&
+        track?.yandexRotor?.batchId &&
+        tok &&
+        window.api?.yandexRotorFeedback
+      ) {
+        void window.api.yandexRotorFeedback({
+          token: tok,
+          station: track.yandexRotor.station || 'user:onyourwave',
+          type: 'like',
+          trackId: String(track.id || '').trim(),
+          batchId: track.yandexRotor.batchId,
+        })
+      }
+    } catch (_) {}
   }
   localStorage.setItem('flow_liked', JSON.stringify(liked))
   syncLikeButtonsInVisibleLists()
@@ -11565,6 +11963,7 @@ function renderQueue() {
   const headlineEl = document.getElementById('home-up-next-headline')
   if (!listEl) return
 
+  try {
   const qlen = Array.isArray(queue) ? queue.length : 0
   const after = Math.max(0, qlen - (Number(queueIndex) + 1))
   const nextTracks = Array.isArray(queue) ? queue.slice(queueIndex + 1, queueIndex + 11) : []
@@ -11619,6 +12018,13 @@ function renderQueue() {
     frag.appendChild(row)
   })
   listEl.appendChild(frag)
+  } finally {
+    try {
+      if (typeof _playerModeActive !== 'undefined' && _playerModeActive && typeof syncPmQueuePreviews === 'function') {
+        syncPmQueuePreviews()
+      }
+    } catch (_) {}
+  }
 }
 
 function bindHorizontalStripDrag(el) {
@@ -13155,6 +13561,9 @@ window.addEventListener('DOMContentLoaded', () => {
   startApp()
   try { document.body.setAttribute('data-active-page', _activePageId || 'main') } catch {}
   applyUiTextOverrides()
+  syncTrayClosePreferenceToMain()
+  refreshLaunchAtLoginFromMain().catch(() => {})
+  syncPlaybackSystemToggles()
   refreshHomeDashboardLayoutAfterContentChange()
   setupHomeDashboardDragAndDrop()
   document.addEventListener('keydown', (e) => {

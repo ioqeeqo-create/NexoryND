@@ -492,12 +492,54 @@ function getMyWaveTrackUniqueKey(track) {
   return fallback !== '::' ? `meta:${fallback}` : ''
 }
 
+/** Яндекс-волна: держим в памяти только текущий + один префетч — как цепочка GET /tracks у ротора. */
+function compactYandexMyWaveQueueIfNeeded() {
+  if (queueScope !== 'myWave' || getMyWaveSource() !== 'yandex') return
+  const cur = sanitizeTrack(currentTrack || null)
+  if (!cur?.id) return
+  const curKey = getMyWaveTrackUniqueKey(cur)
+  let next = queue[queueIndex + 1] || null
+  if (next) next = sanitizeTrack(next)
+  const nextKey = next ? getMyWaveTrackUniqueKey(next) : ''
+  if (!nextKey || nextKey === curKey) next = null
+  queue = next ? [cur, next] : [cur]
+  queueIndex = 0
+  try {
+    _myWaveRenderedTracks = queue.slice()
+  } catch (_) {}
+}
+
+function mergeYandexWaveQueueAppend(freshTracks) {
+  const cur = sanitizeTrack(currentTrack || queue[queueIndex] || null)
+  const nxt = sanitizeTrack((freshTracks || [])[0] || null)
+  if (!cur?.id) {
+    queue = nxt?.id ? [nxt] : []
+    queueIndex = 0
+    return
+  }
+  const curKey = getMyWaveTrackUniqueKey(cur)
+  const nxtKey = nxt ? getMyWaveTrackUniqueKey(nxt) : ''
+  if (nxtKey && nxtKey !== curKey) queue = [cur, nxt]
+  else queue = [cur]
+  queueIndex = 0
+}
+
 async function maybePreloadMyWave(force = false) {
   if (queueScope !== 'myWave' || _myWaveBuilding || _myWavePreloading) return
   const remaining = queue.length - queueIndex - 1
-  if (!force && remaining > 3) return
+  if (!force) {
+    if (getMyWaveSource() === 'yandex') {
+      if (remaining >= 1) return
+    } else if (remaining > 3) {
+      return
+    }
+  }
   if (getMyWaveSeedTracks().length < 3) return
-  const startLength = queue.length
+  if (getMyWaveSource() === 'yandex' && currentTrack && String(currentTrack.source || '').toLowerCase() === 'yandex' && currentTrack.id) {
+    try {
+      _yandexWaveRotorQueueHint = String(currentTrack.id).trim()
+    } catch (_) {}
+  }
   _myWavePreloading = true
   renderMyWave()
   try {
@@ -518,20 +560,25 @@ async function maybePreloadMyWave(force = false) {
       })
       return fresh
     }
-    const additions = await findMyWaveRecommendations(10, getMyWaveMode())
+    const waveAsk = getMyWaveSource() === 'yandex' ? 1 : 10
+    const additions = await findMyWaveRecommendations(waveAsk, getMyWaveMode())
     let fresh = dedupeWithExisting(additions)
     if (!fresh.length && force && getMyWaveSource() === 'yandex') {
       try { _yandexWaveRotorQueueHint = '' } catch (_) {}
-      const retry = await findMyWaveRecommendations(10, getMyWaveMode())
+      const retry = await findMyWaveRecommendations(waveAsk, getMyWaveMode())
       fresh = dedupeWithExisting(retry)
     }
     if (fresh.length) {
-      queue.push(...fresh)
+      if (getMyWaveSource() === 'yandex') {
+        mergeYandexWaveQueueAppend(fresh)
+      } else {
+        queue.push(...fresh)
+      }
       _myWaveRenderedTracks = queue.slice()
       renderQueue()
-      showToast(`Моя волна дозагрузила ${fresh.length} треков`)
-      if (force && queueIndex >= startLength - 1 && queue[queueIndex + 1]) {
-        queueIndex++
+      showToast(getMyWaveSource() === 'yandex' ? 'Моя волна: подгружен следующий трек' : `Моя волна дозагрузила ${fresh.length} треков`)
+      if (force && queue.length > 1 && queue[1]) {
+        queueIndex = 1
         await playTrackObj(queue[queueIndex])
       }
     } else if (force) {
@@ -549,16 +596,20 @@ async function maybePreloadMyWave(force = false) {
         return true
       })
       if (fallback.length) {
-        queue.push(...fallback)
+        if (getMyWaveSource() === 'yandex') {
+          mergeYandexWaveQueueAppend(fallback)
+        } else {
+          queue.push(...fallback)
+        }
         fallback.forEach((track) => {
           const key = getMyWaveTrackUniqueKey(track)
           if (key) _myWaveSeenKeys.add(key)
         })
         _myWaveRenderedTracks = queue.slice()
         renderQueue()
-        showToast(`Моя волна продолжила подборку (${fallback.length})`)
-        if (queueIndex >= startLength - 1 && queue[queueIndex + 1]) {
-          queueIndex++
+        showToast(getMyWaveSource() === 'yandex' ? 'Моя волна: подгружен следующий трек' : `Моя волна продолжила подборку (${fallback.length})`)
+        if (queue.length > 1 && queue[1]) {
+          queueIndex = 1
           await playTrackObj(queue[queueIndex])
         }
       }
@@ -600,7 +651,8 @@ async function startMyWave() {
   renderMyWave()
   showToast('Моя волна подбирает новые треки...')
   try {
-    const tracks = await findMyWaveRecommendations(WE?.MY_WAVE_MIN_TRACKS ?? 10, getMyWaveMode())
+    const waveAsk = getMyWaveSource() === 'yandex' ? 1 : (WE?.MY_WAVE_MIN_TRACKS ?? 10)
+    const tracks = await findMyWaveRecommendations(waveAsk, getMyWaveMode())
     const unique = []
     _myWaveSeenKeys = new Set()
     ;(tracks || []).forEach((track) => {
@@ -614,7 +666,11 @@ async function startMyWave() {
     queue = unique.slice()
     queueIndex = 0
     queueScope = 'myWave'
-    showToast(`Моя волна собрала ${unique.length} новых треков`)
+    showToast(
+      getMyWaveSource() === 'yandex' && unique.length <= 1
+        ? 'Моя волна: трек из Яндекса'
+        : `Моя волна собрала ${unique.length} новых треков`,
+    )
     await playTrackObj(queue[0])
   } catch (err) {
     showToast(`Моя волна не запустилась: ${sanitizeDisplayText(err?.message || err)}`, true)
@@ -3188,7 +3244,7 @@ function applyUiTextOverrides() {
     const t = (el.textContent || '').trim()
     if (t.includes('Blur') && t.includes('фона')) el.innerHTML = 'Blur фона <span class="vs-val" id="vs-blur-val">40px</span>'
     if (t.includes('Яркость') || t.includes('PЏ')) el.innerHTML = 'Яркость фона <span class="vs-val" id="vs-bright-val">50%</span>'
-    if (t.includes('Прозрачн')) el.innerHTML = 'Прозрачность стекла <span class="vs-val" id="vs-glass-val">8%</span>'
+    if (t.includes('Прозрачн')) el.innerHTML = 'Прозрачность стекла <span class="vs-val" id="vs-glass-val">32%</span>'
     if (t.includes('панел')) el.innerHTML = 'Blur панелей <span class="vs-val" id="vs-panel-blur-val">30px</span>'
   })
 }
@@ -3213,7 +3269,8 @@ function setupFloatedMainContentResize() {
   const modeOk = () =>
     document.body.classList.contains('visual-floated') &&
     !document.body.classList.contains('visual-minimal') &&
-    !document.body.classList.contains('layout-top-nav')
+    typeof isSidebarDockedLeft === 'function' &&
+    isSidebarDockedLeft()
 
   /** @typedef {{ l: number, t: number, r: number, b: number }} Slack */
 
@@ -3583,7 +3640,8 @@ function setupFloatedMainPaneDrag() {
   const modeOkDrag = () =>
     document.body.classList.contains('visual-floated') &&
     !document.body.classList.contains('visual-minimal') &&
-    !document.body.classList.contains('layout-top-nav')
+    typeof isSidebarDockedLeft === 'function' &&
+    isSidebarDockedLeft()
 
   /** Высота sticky-shell = видимая область панели, чтобы рамки не «уплывали» при прокрутке контента. */
   function refreshFrameShellGeometry() {
@@ -3895,7 +3953,11 @@ function setupSidebarResize() {
     const usable = Math.max(0, r.width - pl - pr)
     const gap = getSidebarGapPx()
     /* «Минимал»: сдвиг только в пределах окна — не от ширины flex-контейнера (иначе панель «дрожит» при ресайзе). */
-    if (document.body.classList.contains('visual-floated') && !document.body.classList.contains('layout-top-nav')) {
+    if (
+      document.body.classList.contains('visual-floated') &&
+      typeof isSidebarDockedLeft === 'function' &&
+      isSidebarDockedLeft()
+    ) {
       let insetStart = 0
       let insetEnd = 0
       let paneStack = 300
@@ -3945,7 +4007,7 @@ function setupSidebarResize() {
 
   const sidebarWidthEffectivePx = () => {
     try {
-      if (!document.body.classList.contains('layout-top-nav')) {
+      if (typeof isSidebarHorizontalDock === 'function' && !isSidebarHorizontalDock()) {
         const bw = sidebar.getBoundingClientRect().width
         if (Number.isFinite(bw) && bw >= 48) return Math.round(bw)
       }
@@ -4035,7 +4097,7 @@ function setupSidebarResize() {
   let cornerAnchor = null
 
   const winPointerMove = (e) => {
-    if (!dragging || document.body.classList.contains('layout-top-nav')) return
+    if (!dragging || (typeof isSidebarHorizontalDock === 'function' && isSidebarHorizontalDock())) return
     if (dragEdge === 'left') applyLeftDrag(e.clientX)
     else applyRightDrag(e.clientX)
   }
@@ -4125,7 +4187,7 @@ function setupSidebarResize() {
 
   const startSidebarCornerDrag = (corner, e, capEl) => {
     if (!document.body.classList.contains('visual-floated')) return
-    if (document.body.classList.contains('layout-top-nav')) return
+    if (typeof isSidebarHorizontalDock === 'function' && isSidebarHorizontalDock()) return
     if (
       !document.body.classList.contains('flow-edit-enabled') ||
       !document.body.classList.contains('home-layout-edit')
@@ -4187,7 +4249,7 @@ function setupSidebarResize() {
   }
 
   const startEdgeDrag = (edge, e, capEl) => {
-    if (document.body.classList.contains('layout-top-nav')) return
+    if (typeof isSidebarHorizontalDock === 'function' && isSidebarHorizontalDock()) return
     if (!e.isPrimary) return
     e.preventDefault()
     e.stopPropagation()
@@ -4223,7 +4285,10 @@ function setupSidebarResize() {
   applySidebarPanelHeightFromStorage()
 
   const rebalanceSidebarAfterResize = () => {
-    const floated = document.body.classList.contains('visual-floated') && !document.body.classList.contains('layout-top-nav')
+    const floated =
+      document.body.classList.contains('visual-floated') &&
+      typeof isSidebarDockedLeft === 'function' &&
+      isSidebarDockedLeft()
     if (floated) {
       try {
         const raw = getComputedStyle(root).getPropertyValue('--sidebar-panel-height').trim()
@@ -4359,7 +4424,7 @@ function setupSidebarPanelEditDrag() {
     'pointerdown',
     (e) => {
       if (!document.body.classList.contains('visual-floated')) return
-      if (document.body.classList.contains('layout-top-nav')) return
+      if (typeof isSidebarHorizontalDock === 'function' && isSidebarHorizontalDock()) return
       if (!e.isPrimary || e.button !== 0) return
       const t = e.target
       if (!sidebar.contains(t)) return
@@ -4388,7 +4453,7 @@ function setupSidebarPanelEditDrag() {
 function debounceSidebarLayoutSync(fn, ms = 140) {
   let t = 0
   return () => {
-    if (document.body?.classList?.contains('layout-top-nav')) return
+    if (typeof isSidebarHorizontalDock === 'function' && isSidebarHorizontalDock()) return
     clearTimeout(t)
     t = setTimeout(fn, ms)
   }
@@ -4450,9 +4515,9 @@ function setupMainPaneShift() {
       let rawMin = winMin
       let rawMax = winMax
 
-      const topNav = document.body.classList.contains('layout-top-nav')
+      const barDock = typeof isSidebarHorizontalDock === 'function' && isSidebarHorizontalDock()
       /* «Минимал»: колонка контента не привязана к sb.right — лимиты сдвига только от окна. */
-      if (!topNav && !document.body.classList.contains('visual-floated')) {
+      if (!barDock && !document.body.classList.contains('visual-floated') && !document.body.classList.contains('layout-right-nav')) {
         const sidebar = document.getElementById('sidebar')
         let gapPx = 12
         try {
@@ -5447,6 +5512,7 @@ async function playTrackObj(track, opts = {}) {
   }
   const reqId = ++_playRequestSeq
   const isStale = () => reqId !== _playRequestSeq
+  if (!opts?._recoverPlayback) _flowYandexStreamRetryId = ''
   track = sanitizeTrack(track)
   if (opts?.remoteSync && _roomState?.roomId && !_roomState?.host) {
     track = Object.assign({}, track, { _flowSkipGlobalThemeFromTrack: true })
@@ -5516,9 +5582,11 @@ async function playTrackObj(track, opts = {}) {
 
   currentTrack = track
   const newTrackKey = `${track.source}:${track.id}`
-  const st = getListenStats()
-  if (st.lastTrackKey !== newTrackKey) saveListenStats({ totalTracks: Number(st.totalTracks || 0) + 1, lastTrackKey: newTrackKey })
-  pushListenHistory(track)
+  if (!opts._recoverPlayback) {
+    const st = getListenStats()
+    if (st.lastTrackKey !== newTrackKey) saveListenStats({ totalTracks: Number(st.totalTracks || 0) + 1, lastTrackKey: newTrackKey })
+    pushListenHistory(track)
+  }
   if (_activePageId === 'main') renderMyWave()
   let streamUrl = track.url
   let streamEngine = null
@@ -5940,6 +6008,9 @@ async function playTrackObj(track, opts = {}) {
   } else {
     broadcastPlaybackSync(true)
   }
+  try {
+    compactYandexMyWaveQueueIfNeeded()
+  } catch (_) {}
   syncHomeCloneUI()
   renderQueue()
   try {
@@ -6262,6 +6333,67 @@ function nextTrack(autoEnded = false) {
   }
   const playBtn = document.getElementById('play-btn')
   if (playBtn) playBtn.innerHTML = ICONS.play
+}
+
+let _flowAudioErrCooldownAt = 0
+let _flowYandexStreamRetryId = ''
+
+function flowAdvanceAfterStreamFailure() {
+  _flowYandexStreamRetryId = ''
+  try {
+    if (queueIndex < queue.length - 1) {
+      queueIndex++
+      playTrackObj(queue[queueIndex]).catch(() => {})
+      return
+    }
+    if (queueScope === 'myWave') {
+      void maybePreloadMyWave(true)
+    }
+    if (playbackMode.repeat === 'all' && queue.length) {
+      queueIndex = 0
+      playTrackObj(queue[0]).catch(() => {})
+    }
+  } catch (_) {}
+}
+
+window.__flowPlayerAudioError = function __flowPlayerAudioError(el) {
+  console.error('AUDIO ERROR', {
+    code: el?.error?.code,
+    message: el?.error?.message || null,
+    src: el?.currentSrc || el?.src || null,
+  })
+  const now = Date.now()
+  if (now - _flowAudioErrCooldownAt < 650) return
+  _flowAudioErrCooldownAt = now
+  try {
+    const code = el?.error?.code ? `код ${el.error.code}` : 'код неизвестен'
+    showToast(`Сбой потока (${code}), пробуем восстановить…`, true)
+  } catch (_) {}
+  const t = sanitizeTrack(currentTrack || null)
+  const src = String(t?.source || '').toLowerCase()
+  const tid = String(t?.id || '').trim()
+  if (src === 'yandex' && tid && window.api?.yandexStream && _flowYandexStreamRetryId !== tid) {
+    _flowYandexStreamRetryId = tid
+    const tok = String(getSettings()?.yandexToken || '').trim()
+    if (tok) {
+      void window.api.yandexStream(tid, tok).then((res) => {
+        if (res?.ok && res?.url) {
+          const nt = Object.assign({}, t, { url: res.url })
+          currentTrack = nt
+          if (queue.length && queueIndex >= 0 && queue[queueIndex]) {
+            const qi = sanitizeTrack(queue[queueIndex])
+            if (String(qi.source || '').toLowerCase() === 'yandex' && String(qi.id || '').trim() === tid) {
+              queue[queueIndex] = nt
+            }
+          }
+          return playTrackObj(nt, { _recoverPlayback: true }).catch(() => flowAdvanceAfterStreamFailure())
+        }
+        flowAdvanceAfterStreamFailure()
+      }).catch(() => flowAdvanceAfterStreamFailure())
+      return
+    }
+  }
+  flowAdvanceAfterStreamFailure()
 }
 
 audio.ontimeupdate = () => {
@@ -6732,13 +6864,47 @@ function getLiked() { return JSON.parse(localStorage.getItem('flow_liked')) || [
 function isLiked(track) { return getLiked().some(t => t.id===track.id && t.source===track.source) }
 
 function likeTrack(track) {
+  if (!track) return
+  const wasLiked = isLiked(track)
   let liked = getLiked()
-  if (isLiked(track)) {
+  if (wasLiked) {
     liked = liked.filter((t) => !(t.id === track.id && t.source === track.source))
     showToast('РЈР±СЂР°РЅРѕ РёР· Р»СЋР±РёРјС‹С…')
+    try {
+      const tok = String(getSettings()?.yandexToken || '').trim()
+      if (String(track.source || '').toLowerCase() === 'yandex' && tok && window.api?.yandexTrackUnlike) {
+        void window.api.yandexTrackUnlike({ token: tok, trackId: String(track.id || '').trim() }).then((r) => {
+          if (!r?.ok) showToast('Яндекс: не удалось снять лайк', true)
+        })
+      }
+    } catch (_) {}
   } else {
     liked.push(track)
     showToast('Р”РѕР±Р°РІР»РµРЅРѕ РІ Р»СЋР±РёРјС‹Рµ в™Ґ')
+    try {
+      const tok = String(getSettings()?.yandexToken || '').trim()
+      if (String(track.source || '').toLowerCase() === 'yandex' && tok && window.api?.yandexTrackLike) {
+        void window.api.yandexTrackLike({ token: tok, trackId: String(track.id || '').trim() }).then((r) => {
+          if (!r?.ok) showToast('Яндекс: не удалось отправить лайк', true)
+        })
+      }
+      if (
+        queueScope === 'myWave' &&
+        getMyWaveSource() === 'yandex' &&
+        String(track.source || '').toLowerCase() === 'yandex' &&
+        track?.yandexRotor?.batchId &&
+        tok &&
+        window.api?.yandexRotorFeedback
+      ) {
+        void window.api.yandexRotorFeedback({
+          token: tok,
+          station: track.yandexRotor.station || 'user:onyourwave',
+          type: 'like',
+          trackId: String(track.id || '').trim(),
+          batchId: track.yandexRotor.batchId,
+        })
+      }
+    } catch (_) {}
   }
   localStorage.setItem('flow_liked', JSON.stringify(liked))
   syncLikeButtonsInVisibleLists()
@@ -6788,6 +6954,7 @@ function renderQueue() {
   const headlineEl = document.getElementById('home-up-next-headline')
   if (!listEl) return
 
+  try {
   const qlen = Array.isArray(queue) ? queue.length : 0
   const after = Math.max(0, qlen - (Number(queueIndex) + 1))
   const nextTracks = Array.isArray(queue) ? queue.slice(queueIndex + 1, queueIndex + 11) : []
@@ -6842,6 +7009,13 @@ function renderQueue() {
     frag.appendChild(row)
   })
   listEl.appendChild(frag)
+  } finally {
+    try {
+      if (typeof _playerModeActive !== 'undefined' && _playerModeActive && typeof syncPmQueuePreviews === 'function') {
+        syncPmQueuePreviews()
+      }
+    } catch (_) {}
+  }
 }
 
 function bindHorizontalStripDrag(el) {
@@ -8378,6 +8552,9 @@ window.addEventListener('DOMContentLoaded', () => {
   startApp()
   try { document.body.setAttribute('data-active-page', _activePageId || 'main') } catch {}
   applyUiTextOverrides()
+  syncTrayClosePreferenceToMain()
+  refreshLaunchAtLoginFromMain().catch(() => {})
+  syncPlaybackSystemToggles()
   refreshHomeDashboardLayoutAfterContentChange()
   setupHomeDashboardDragAndDrop()
   document.addEventListener('keydown', (e) => {

@@ -449,6 +449,8 @@
       if (sourceMode === 'yandex' && fetchYandexRotorMyWave) {
         const tok = String(settings?.yandexToken || '').trim()
         if (!tok) return []
+        // Как в клиенте Я.Музыки: один «кусок» волны за раз (меньше дублей и параллельных стримов).
+        const yaChunk = 1
         const queueHint = String(getYandexWaveQueueHint() || '').trim()
         let pack = null
         try {
@@ -486,7 +488,7 @@
           selectedSigs.add(sig)
           return true
         })
-        return filtered.slice(0, target)
+        return filtered.slice(0, yaChunk)
       }
       const queries = buildMyWaveQueries(seedTracks, modeId, profile)
       const excluded = getMyWaveExcludedSignatures()
