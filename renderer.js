@@ -445,10 +445,19 @@ async function saveCustomMediaFile(file, purpose = 'media') {
       purpose,
       bytes,
     })
-    if (saved?.ok && saved.url) return String(saved.url)
+    if (saved?.ok && saved.url) {
+      try {
+        bumpCustomizationGalleryRecent(String(saved.url))
+      } catch (_) {}
+      return String(saved.url)
+    }
     throw new Error(saved?.error || 'media save failed')
   }
-  return readFileAsDataUrl(file)
+  const dataUrl = await readFileAsDataUrl(file)
+  try {
+    bumpCustomizationGalleryRecent(dataUrl)
+  } catch (_) {}
+  return dataUrl
 }
 
 function prepareProfileImageData(file, dataUrl, kind = 'avatar') {
@@ -1957,6 +1966,9 @@ function initVisualSettings() {
   } catch (_) {}
   applyOptimizationSettings()
   installFlowLayoutPickerDelegatedClicks()
+  try {
+    refreshCustomizationPanel()
+  } catch (_) {}
 }
 
 let _flowSidebarLayoutClickInstalled = false
@@ -2158,7 +2170,7 @@ const SETTINGS_TAB_TO_CATEGORY = {
 }
 
 function switchSettingsCategory(cat) {
-  const allowed = new Set(['appearance', 'playback', 'optimization', 'accounts', 'services'])
+  const allowed = new Set(['appearance', 'customization', 'playback', 'optimization', 'accounts', 'services'])
   const c = allowed.has(cat) ? cat : 'appearance'
   _settingsCategory = c
   document.querySelectorAll('.settings-cat').forEach((btn) => {
@@ -2169,6 +2181,11 @@ function switchSettingsCategory(cat) {
     panel.classList.toggle('active', on)
   })
   applyUiTextOverrides()
+  if (c === 'customization') {
+    try {
+      refreshCustomizationPanel()
+    } catch (_) {}
+  }
 }
 
 /** Совместимость со старыми вызовами switchSettingsTab('visual'|'sources'|'integrations'). */
@@ -2177,6 +2194,732 @@ function switchSettingsTab(tab) {
   switchSettingsCategory(mapped)
 }
 window.switchSettingsCategory = switchSettingsCategory
+
+// ——— Settings: «Кастомизация» (галерея, недавние, пресеты вида) ———
+const FLOW_CUSTOM_GALLERY_RECENT_V1 = 'flow_custom_gallery_recent_v1'
+const FLOW_CUST_PRESETS_V1 = 'flow_cust_presets_v1'
+const CUST_BG_COVER_SENT = '__cover__'
+const CUST_BG_GRADIENT_SENT = '__gradient__'
+const CUST_GALLERY_RECENT_CAP = 24
+const CUST_PRESETS_CAP = 28
+
+function bumpCustomizationGalleryRecent(url) {
+  const u = String(url || '').trim()
+  if (!u) return
+  let list = []
+  try {
+    list = JSON.parse(localStorage.getItem(FLOW_CUSTOM_GALLERY_RECENT_V1) || '[]')
+  } catch (_) {
+    list = []
+  }
+  if (!Array.isArray(list)) list = []
+  list = [u, ...list.filter((x) => x !== u)].slice(0, CUST_GALLERY_RECENT_CAP)
+  try {
+    localStorage.setItem(FLOW_CUSTOM_GALLERY_RECENT_V1, JSON.stringify(list))
+  } catch (_) {}
+  try {
+    renderCustRecentStrip()
+  } catch (_) {}
+}
+
+function getCustomizationGalleryRecentList() {
+  try {
+    const list = JSON.parse(localStorage.getItem(FLOW_CUSTOM_GALLERY_RECENT_V1) || '[]')
+    return Array.isArray(list) ? list.filter(Boolean) : []
+  } catch (_) {
+    return []
+  }
+}
+
+function getCustomizationPresets() {
+  try {
+    const list = JSON.parse(localStorage.getItem(FLOW_CUST_PRESETS_V1) || '[]')
+    return Array.isArray(list) ? list : []
+  } catch (_) {
+    return []
+  }
+}
+
+function saveCustomizationPresetsList(arr) {
+  const list = Array.isArray(arr) ? arr.slice(0, CUST_PRESETS_CAP) : []
+  try {
+    localStorage.setItem(FLOW_CUST_PRESETS_V1, JSON.stringify(list))
+  } catch (_) {}
+}
+
+function newCustomizationPresetId() {
+  return `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+}
+
+function custUrlCssBackground(u) {
+  const s = String(u || '').trim()
+  if (!s) return ''
+  return `url(${JSON.stringify(s)})`
+}
+
+function normalizeMediaUrlKey(url) {
+  try {
+    const s = String(url || '').trim()
+    if (!s) return ''
+    const u = new URL(s)
+    const path = String(u.pathname || '').replace(/\\/g, '/')
+    return `${String(u.protocol || '').toLowerCase()}//${String(u.hostname || '').toLowerCase()}${path.toLowerCase()}`
+  } catch (_) {
+    return String(url || '').trim().toLowerCase()
+  }
+}
+
+/** Имя вида `purpose-<ts>-<sha1-16>.ext` из save-custom-media — одинаковое содержимое → один тайл. */
+function contentHashFromCustomMediaFilename(name) {
+  const m = String(name || '').toLowerCase().match(/-([a-f0-9]{16})(\.[a-z0-9]+)$/)
+  return m ? m[1] : ''
+}
+
+function dedupeCustomMediaFiles(files) {
+  const sorted = [...(files || [])].sort((a, b) => (Number(b.mtime) || 0) - (Number(a.mtime) || 0))
+  const seenUrl = new Set()
+  const seenContent = new Set()
+  const out = []
+  for (let i = 0; i < sorted.length; i++) {
+    const f = sorted[i]
+    const urlKey = normalizeMediaUrlKey(f?.url)
+    if (!urlKey || seenUrl.has(urlKey)) continue
+    const ch = contentHashFromCustomMediaFilename(f?.name || '')
+    if (ch) {
+      if (seenContent.has(ch)) continue
+      seenContent.add(ch)
+    }
+    seenUrl.add(urlKey)
+    out.push(f)
+  }
+  return out
+}
+
+function custPreviewEffectiveCoverUrl() {
+  if (!currentTrack) return ''
+  const u = String(getEffectiveCoverUrl(currentTrack) || '').trim()
+  let disp = sanitizeMediaByGifMode(u, 'track')
+  if (disp) return disp
+  const raw = String(currentTrack.cover || '').trim()
+  return raw || ''
+}
+
+function customizationCoverMetaText() {
+  if (!currentTrack) return 'Включи трек — здесь появится обложка из источника или своя.'
+  const map = getCustomCoverMap()
+  if (getGlobalCustomCover(map)) return 'Источник: своя картинка для плеера (глобально).'
+  const keys = getTrackCoverKeys(currentTrack)
+  const per = keys.map((k) => map[k]).find(Boolean)
+  if (per) return 'Источник: своя обложка, привязанная к этому треку.'
+  return 'Источник: обложка из сервиса / локального файла.'
+}
+
+function customizationBgMetaText() {
+  const v = getVisual()
+  if (v.bgType === 'custom' && v.customBg) return 'Источник: свой баннер (файл из галереи или загрузки).'
+  if (v.bgType === 'cover') return 'Источник: размытая обложка текущего трека.'
+  return 'Источник: градиент и орбы (без своего файла).'
+}
+
+function customizationVizMetaText() {
+  const hw = Object.assign({ enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }, getVisual().homeWidget || {})
+  const names = { bars: 'столбцы', wave: 'волна', dots: 'точки', image: 'своё фото', web: 'Web' }
+  if (hw.mode === 'image' && hw.image) return 'Источник: своё изображение в виджете на главной.'
+  return `Источник: анимация «${names[hw.mode] || hw.mode}».`
+}
+
+function galleryRoleMatchesUrl(role, fileUrl) {
+  const key = normalizeMediaUrlKey(fileUrl)
+  if (!key) return false
+  if (role === 'cover') {
+    const map = getCustomCoverMap()
+    const g = getGlobalCustomCover(map)
+    if (g && normalizeMediaUrlKey(g) === key) return true
+    if (currentTrack) {
+      const c = getTrackCoverKeys(currentTrack).map((k) => map[k]).find(Boolean)
+      if (c && normalizeMediaUrlKey(String(c)) === key) return true
+    }
+    return false
+  }
+  if (role === 'bg') {
+    const v = getVisual()
+    return v.bgType === 'custom' && v.customBg && normalizeMediaUrlKey(String(v.customBg)) === key
+  }
+  if (role === 'viz') {
+    const hw = Object.assign({ enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }, getVisual().homeWidget || {})
+    return hw.mode === 'image' && hw.image && normalizeMediaUrlKey(String(hw.image)) === key
+  }
+  return false
+}
+
+function collectCurrentCustomizationSnapshot() {
+  const v = getVisual()
+  const map = getCustomCoverMap()
+  let cover = String(getGlobalCustomCover(map) || '').trim()
+  if (!cover && currentTrack) {
+    const ks = getTrackCoverKeys(currentTrack)
+    cover = String(ks.map((k) => map[k]).find(Boolean) || '').trim()
+  }
+  let bg = CUST_BG_GRADIENT_SENT
+  if (v.bgType === 'custom' && v.customBg) bg = String(v.customBg).trim()
+  else if (v.bgType === 'cover') bg = CUST_BG_COVER_SENT
+  const hw = Object.assign({ enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }, v.homeWidget || {})
+  const viz = hw.mode === 'image' && hw.image ? String(hw.image).trim() : ''
+  return { cover, bg, viz }
+}
+
+function savedViewPresetMatchesCurrentScreen(p) {
+  if (!p || typeof p !== 'object') return false
+  const cur = collectCurrentCustomizationSnapshot()
+  const sameStr = (a, b) => String(a ?? '') === String(b ?? '')
+  const sameMedia = (a, b) => {
+    if (sameStr(a, b)) return true
+    const sa = String(a || '').trim()
+    const sb = String(b || '').trim()
+    if (!sa || !sb) return sa === sb
+    if (/^(file:|https?:|data:)/i.test(sa) && /^(file:|https?:|data:)/i.test(sb))
+      return normalizeMediaUrlKey(sa) === normalizeMediaUrlKey(sb)
+    return false
+  }
+  return sameMedia(p.cover, cur.cover) && sameMedia(p.bg, cur.bg) && sameMedia(p.viz, cur.viz)
+}
+
+function applyCustomizationMediaFromGallery(url, role) {
+  const u = String(url || '').trim()
+  if (!u) return
+  if (role === 'bg') {
+    saveVisual({ bgType: 'custom', customBg: u })
+    refreshCustomBgPreview()
+    updateBackground()
+    showToast('Баннер обновлён')
+  } else if (role === 'viz') {
+    const v = getVisual()
+    const homeWidget = Object.assign({ enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }, v.homeWidget || {})
+    homeWidget.image = u
+    homeWidget.mode = 'image'
+    saveVisual({ homeWidget })
+    syncHomeWidgetUI()
+    showToast('Визуализатор обновлён')
+  } else {
+    const map = getCustomCoverMap()
+    map.__global__ = u
+    if (currentTrack) getTrackCoverKeys(currentTrack).forEach((k) => { map[k] = u })
+    saveCustomCoverMap(map)
+    _coverLoadState.clear()
+    syncPlayerUIFromTrack()
+    try {
+      renderQueue()
+    } catch (_) {}
+    try {
+      renderPlaylists()
+    } catch (_) {}
+    try {
+      renderLiked()
+    } catch (_) {}
+    try {
+      renderRoomQueue()
+    } catch (_) {}
+    try {
+      syncTrackCoverStatus()
+    } catch (_) {}
+    try {
+      refreshTrackCoverPreview()
+    } catch (_) {}
+    showToast('Обложка обновлена')
+  }
+  try {
+    refreshCustomizationPanel()
+  } catch (_) {}
+  try {
+    const go = document.getElementById('cust-gallery-overlay')
+    if (go && !go.classList.contains('hidden')) void renderCustGalleryContent()
+  } catch (_) {}
+}
+
+function syncCustPreviewMedia(container, imageUrl, emptyBackgroundCss) {
+  if (!container) return
+  container.querySelectorAll(':scope > img.cust-prev-thumb').forEach((n) => n.remove())
+  container.style.backgroundImage = ''
+  const u = String(imageUrl || '').trim()
+  if (u) {
+    container.style.background = '#13151d'
+    const img = document.createElement('img')
+    img.className = 'cust-prev-thumb'
+    img.alt = ''
+    img.decoding = 'async'
+    img.loading = 'eager'
+    img.draggable = false
+    img.src = u
+    img.onerror = () => {
+      img.remove()
+      container.style.background = emptyBackgroundCss
+    }
+    container.appendChild(img)
+  } else {
+    container.style.background = emptyBackgroundCss
+  }
+}
+
+function mountPresetStripThumb(el, url, fallbackCss) {
+  if (!el) return
+  el.textContent = ''
+  el.style.backgroundImage = ''
+  const u = String(url || '').trim()
+  if (!u) {
+    el.style.background = fallbackCss || 'rgba(12,14,20,.9)'
+    return
+  }
+  el.style.background = '#12141c'
+  const img = document.createElement('img')
+  img.className = 'cust-preset-thumb-img'
+  img.alt = ''
+  img.decoding = 'async'
+  img.loading = 'lazy'
+  img.draggable = false
+  img.src = u
+  img.onerror = () => {
+    img.remove()
+    el.style.background = fallbackCss || 'rgba(12,14,20,.9)'
+  }
+  el.appendChild(img)
+}
+
+function renderPresetCardBgLayer(bgEl, p) {
+  if (!bgEl) return
+  const v = getVisual()
+  if (p.bg && p.bg !== CUST_BG_COVER_SENT && p.bg !== CUST_BG_GRADIENT_SENT) {
+    mountPresetStripThumb(bgEl, p.bg, 'rgba(20,22,30,.95)')
+    return
+  }
+  if (p.bg === CUST_BG_COVER_SENT) {
+    const u = currentTrack ? sanitizeMediaByGifMode(custPreviewEffectiveCoverUrl(), 'bg') : ''
+    mountPresetStripThumb(bgEl, u, 'rgba(20,22,30,.95)')
+    return
+  }
+  const o1 = v.orb1Color || v.accent || '#7c3aed'
+  const o2 = v.orb2Color || v.accent2 || '#3b82f6'
+  bgEl.textContent = ''
+  bgEl.style.background = `linear-gradient(125deg, ${o1}44, ${o2}55, #0c0e14)`
+}
+
+function refreshCustomizationPanel() {
+  const elCover = document.getElementById('cust-prev-cover')
+  const elBg = document.getElementById('cust-prev-bg')
+  const elViz = document.getElementById('cust-prev-viz')
+  const mCov = document.getElementById('cust-prev-cover-meta')
+  const mBg = document.getElementById('cust-prev-bg-meta')
+  const mViz = document.getElementById('cust-prev-viz-meta')
+  const v = getVisual()
+
+  const coverUrl = custPreviewEffectiveCoverUrl()
+  syncCustPreviewMedia(elCover, coverUrl, 'linear-gradient(145deg,#2d2238,#151a24)')
+  if (mCov) mCov.textContent = customizationCoverMetaText()
+
+  if (elBg) {
+    if (v.bgType === 'custom' && v.customBg) {
+      const raw = String(v.customBg).trim()
+      const u = sanitizeMediaByGifMode(raw, 'bg') || raw
+      syncCustPreviewMedia(elBg, u, 'linear-gradient(125deg,#2a1f32,#12141c)')
+    } else if (v.bgType === 'cover' && currentTrack) {
+      const u0 = custPreviewEffectiveCoverUrl()
+      const bgU = sanitizeMediaByGifMode(u0, 'bg') || u0
+      syncCustPreviewMedia(elBg, bgU, 'linear-gradient(125deg,#2a1f32,#12141c)')
+    } else {
+      const o1 = v.orb1Color || v.accent || '#7c3aed'
+      const o2 = v.orb2Color || v.accent2 || '#3b82f6'
+      syncCustPreviewMedia(elBg, '', `linear-gradient(125deg, ${o1}38, ${o2}42, #0d1018)`)
+    }
+  }
+  if (mBg) mBg.textContent = customizationBgMetaText()
+
+  if (elViz) {
+    const hw = Object.assign({ enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }, v.homeWidget || {})
+    if (hw.mode === 'image' && hw.image) {
+      syncCustPreviewMedia(elViz, String(hw.image).trim(), 'linear-gradient(180deg,rgba(124,58,237,.35),rgba(59,130,246,.2)),repeating-linear-gradient(90deg,rgba(255,255,255,.08) 0 2px,transparent 2px 6px)')
+    } else {
+      syncCustPreviewMedia(elViz, '', 'linear-gradient(180deg,rgba(124,58,237,.35),rgba(59,130,246,.2)),repeating-linear-gradient(90deg,rgba(255,255,255,.08) 0 2px,transparent 2px 6px)')
+    }
+  }
+  if (mViz) mViz.textContent = customizationVizMetaText()
+
+  try {
+    renderCustRecentStrip()
+  } catch (_) {}
+  try {
+    renderCustPresetStrip()
+  } catch (_) {}
+}
+
+function renderCustRecentStrip() {
+  const wrap = document.getElementById('cust-recent-strip')
+  if (!wrap) return
+  const list = getCustomizationGalleryRecentList()
+  wrap.textContent = ''
+  if (!list.length) {
+    wrap.innerHTML =
+      '<span class="cust-hint" style="margin:0;padding:4px 0">Пока нет — загрузи баннер, обложку или картинку виджета в разделе «Оформление».</span>'
+    return
+  }
+  list.forEach((u) => {
+    const t = document.createElement('button')
+    t.type = 'button'
+    t.className = 'cust-recent-tile'
+    t.title = 'Применить как фон'
+    const url = String(u || '').trim()
+    if (url) {
+      const img = document.createElement('img')
+      img.className = 'cust-recent-thumb'
+      img.alt = ''
+      img.decoding = 'async'
+      img.loading = 'lazy'
+      img.draggable = false
+      img.src = url
+      img.onerror = () => {
+        img.remove()
+        t.style.background = 'linear-gradient(145deg,#2a2230,#151a24)'
+      }
+      t.appendChild(img)
+    } else {
+      t.style.background = 'linear-gradient(145deg,#2a2230,#151a24)'
+    }
+    t.addEventListener('click', () => {
+      applyCustomizationMediaFromGallery(u, 'bg')
+    })
+    wrap.appendChild(t)
+  })
+}
+
+function renderCustPresetStrip() {
+  const wrap = document.getElementById('cust-preset-strip')
+  if (!wrap) return
+  const list = getCustomizationPresets()
+  wrap.textContent = ''
+  if (!list.length) {
+    wrap.innerHTML = '<span class="cust-hint" style="margin:0;padding:4px 0">Нет сохранённых видов.</span>'
+    return
+  }
+  list.forEach((p) => {
+    if (!p || !p.id) return
+    const card = document.createElement('div')
+    card.className = 'cust-preset-card'
+    if (savedViewPresetMatchesCurrentScreen(p)) card.classList.add('cust-preset-card--matches-current')
+    card.dataset.presetId = p.id
+    const bg = document.createElement('div')
+    bg.className = 'cust-preset-bg'
+    renderPresetCardBgLayer(bg, p)
+    const cover = document.createElement('div')
+    cover.className = 'cust-preset-cover'
+    mountPresetStripThumb(cover, p.cover, 'rgba(12,14,20,.55)')
+    const viz = document.createElement('div')
+    viz.className = 'cust-preset-viz'
+    if (p.viz) mountPresetStripThumb(viz, p.viz, 'rgba(0,0,0,.35)')
+    else {
+      viz.textContent = ''
+      viz.style.background =
+        'repeating-linear-gradient(90deg,rgba(255,255,255,.12) 0 2px,transparent 2px 5px)'
+    }
+    card.appendChild(bg)
+    card.appendChild(cover)
+    card.appendChild(viz)
+    card.addEventListener('click', (e) => {
+      if (e.button !== 0) return
+      applyCustomizationPresetById(p.id)
+    })
+    card.addEventListener('contextmenu', (e) => {
+      e.preventDefault()
+      deleteCustomizationPresetById(p.id)
+    })
+    wrap.appendChild(card)
+  })
+}
+
+function applyCustomizationPresetById(id, opts) {
+  const list = getCustomizationPresets()
+  const p = list.find((x) => x && x.id === id)
+  if (!p) return
+  const skipToast = opts && opts.skipToast
+  const map = getCustomCoverMap()
+  if (p.cover) {
+    map.__global__ = p.cover
+    if (currentTrack) getTrackCoverKeys(currentTrack).forEach((k) => { map[k] = p.cover })
+  } else {
+    delete map.__global__
+    if (currentTrack) getTrackCoverKeys(currentTrack).forEach((k) => { delete map[k] })
+  }
+  saveCustomCoverMap(map)
+  _coverLoadState.clear()
+  syncPlayerUIFromTrack()
+  try {
+    renderQueue()
+  } catch (_) {}
+  try {
+    renderPlaylists()
+  } catch (_) {}
+  try {
+    renderLiked()
+  } catch (_) {}
+  try {
+    renderRoomQueue()
+  } catch (_) {}
+  try {
+    syncTrackCoverStatus()
+  } catch (_) {}
+  try {
+    refreshTrackCoverPreview()
+  } catch (_) {}
+
+  const v0 = getVisual()
+  const hwBase = { enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }
+  const merged = Object.assign(hwBase, v0.homeWidget || {})
+  if (p.viz) {
+    merged.mode = 'image'
+    merged.image = p.viz
+  } else {
+    merged.image = null
+    if (merged.mode === 'image') merged.mode = 'bars'
+  }
+  if (p.bg === CUST_BG_COVER_SENT) saveVisual({ bgType: 'cover', customBg: null, homeWidget: merged })
+  else if (p.bg === CUST_BG_GRADIENT_SENT) saveVisual({ bgType: 'gradient', customBg: null, homeWidget: merged })
+  else if (p.bg) saveVisual({ bgType: 'custom', customBg: p.bg, homeWidget: merged })
+  else saveVisual({ homeWidget: merged })
+
+  try {
+    initVisualSettings()
+  } catch (_) {}
+  try {
+    updateBackground()
+  } catch (_) {}
+  try {
+    refreshCustomizationPanel()
+  } catch (_) {}
+  if (!skipToast) showToast('Вид применён')
+}
+
+function deleteCustomizationPresetById(id) {
+  const prev = getCustomizationPresets()
+  const next = prev.filter((x) => x && x.id !== id)
+  if (next.length === prev.length) return
+  saveCustomizationPresetsList(next)
+  try {
+    renderCustPresetStrip()
+  } catch (_) {}
+  showToast('Пресет удалён')
+}
+
+function saveCustomizationPresetSnapshot() {
+  const snap = collectCurrentCustomizationSnapshot()
+  const next = [{ id: newCustomizationPresetId(), ts: Date.now(), ...snap }, ...getCustomizationPresets()].slice(0, CUST_PRESETS_CAP)
+  saveCustomizationPresetsList(next)
+  try {
+    renderCustPresetStrip()
+  } catch (_) {}
+  showToast('Текущий вид сохранён')
+}
+
+let _custGalGridBound = false
+let _custGalEscBound = false
+
+function ensureCustGalleryGridDelegate() {
+  if (_custGalGridBound) return
+  const grid = document.getElementById('cust-gallery-grid')
+  if (!grid) return
+  _custGalGridBound = true
+  grid.addEventListener('click', (e) => {
+    const btn = e.target && e.target.closest && e.target.closest('[data-cust-gal]')
+    if (!btn) return
+    e.preventDefault()
+    const role = btn.getAttribute('data-cust-gal')
+    const url = btn.getAttribute('data-url')
+    if (!role || !url) return
+    applyCustomizationMediaFromGallery(url, role)
+  })
+}
+
+function ensureCustGalleryEscClose() {
+  if (_custGalEscBound) return
+  _custGalEscBound = true
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return
+    const ov = document.getElementById('cust-gallery-overlay')
+    if (!ov || ov.classList.contains('hidden')) return
+    closeCustomizationGallery()
+  })
+}
+
+async function renderCustGalleryContent() {
+  const grid = document.getElementById('cust-gallery-grid')
+  if (!grid) return
+  grid.innerHTML = '<span class="cust-hint">Загрузка…</span>'
+  try {
+    if (!window.api?.listCustomMedia) {
+      grid.innerHTML = '<span class="cust-hint">Галерея недоступна в этом режиме.</span>'
+      return
+    }
+    const res = await window.api.listCustomMedia()
+    const raw = res && res.ok && Array.isArray(res.files) ? res.files : []
+    const files = dedupeCustomMediaFiles(raw)
+    if (!files.length) {
+      grid.innerHTML = '<span class="cust-hint">В папке пока нет файлов.</span>'
+      return
+    }
+    grid.textContent = ''
+    files.forEach((f) => {
+      const u = String(f.url || '').trim()
+      if (!u) return
+      const tile = document.createElement('div')
+      tile.className = 'cust-gal-tile'
+      if (['cover', 'bg', 'viz'].some((r) => galleryRoleMatchesUrl(r, u))) tile.classList.add('cust-gal-tile--on')
+
+      const face = document.createElement('div')
+      face.className = 'cust-gal-face'
+      const img = document.createElement('img')
+      img.className = 'cust-gal-thumb'
+      img.alt = ''
+      img.loading = 'lazy'
+      img.decoding = 'async'
+      img.draggable = false
+      img.src = u
+      img.onerror = () => {
+        img.remove()
+        face.classList.add('cust-gal-face--broken')
+      }
+      face.appendChild(img)
+      tile.appendChild(face)
+
+      const actions = document.createElement('div')
+      actions.className = 'cust-gal-actions'
+      ;[
+        ['cover', 'Обложка'],
+        ['bg', 'Баннер'],
+        ['viz', 'Виджет'],
+      ].forEach(([role, label]) => {
+        const b = document.createElement('button')
+        b.type = 'button'
+        b.className = 'vsb cust-gal-btn'
+        if (galleryRoleMatchesUrl(role, u)) b.classList.add('active')
+        b.dataset.custGal = role
+        b.dataset.url = u
+        b.textContent = label
+        actions.appendChild(b)
+      })
+      tile.appendChild(actions)
+      grid.appendChild(tile)
+    })
+  } catch (err) {
+    grid.innerHTML = `<span class="cust-hint">Ошибка: ${escapeHtml(String(err?.message || err))}</span>`
+  }
+}
+
+function exportSavedViewPresetsJson() {
+  try {
+    const presets = getCustomizationPresets()
+    const payload = {
+      format: 'nexory-saved-views-v1',
+      app: 'Nexory',
+      exportedAt: new Date().toISOString(),
+      presets,
+    }
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+    const stamp = new Date().toISOString().slice(0, 10)
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `nexory-saved-views-${stamp}.json`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(link.href)
+    showToast('Список сохранённых видов экспортирован')
+  } catch (err) {
+    showToast(`Экспорт не удался: ${sanitizeDisplayText(err?.message || err)}`, true)
+  }
+}
+
+function pickSavedViewPresetsFile() {
+  document.getElementById('cust-views-import-input')?.click()
+}
+
+function importSavedViewPresetsFromFile(input) {
+  const file = input?.files?.[0]
+  const reset = () => {
+    try {
+      input.value = ''
+    } catch (_) {}
+  }
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = () => {
+    try {
+      const parsed = JSON.parse(String(reader.result || '{}'))
+      let incoming = []
+      if (Array.isArray(parsed)) incoming = parsed
+      else if (parsed && Array.isArray(parsed.presets)) incoming = parsed.presets
+      if (!incoming.length) throw new Error('В файле нет пресетов')
+      const cleaned = []
+      for (let i = 0; i < incoming.length; i++) {
+        const p = incoming[i]
+        if (!p || typeof p !== 'object') continue
+        const id = typeof p.id === 'string' && p.id ? p.id : newCustomizationPresetId()
+        const bgRaw = p.bg != null ? String(p.bg).trim() : ''
+        let bg = CUST_BG_GRADIENT_SENT
+        if (bgRaw === CUST_BG_COVER_SENT || bgRaw === CUST_BG_GRADIENT_SENT) bg = bgRaw
+        else if (bgRaw) bg = bgRaw
+        cleaned.push({
+          id,
+          ts: Number.isFinite(Number(p.ts)) ? Number(p.ts) : Date.now(),
+          cover: p.cover != null ? String(p.cover) : '',
+          bg,
+          viz: p.viz != null ? String(p.viz) : '',
+        })
+      }
+      if (!cleaned.length) throw new Error('Не удалось разобрать пресеты')
+      const impIds = new Set(cleaned.map((p) => p.id))
+      const rest = getCustomizationPresets().filter((p) => p && !impIds.has(p.id))
+      saveCustomizationPresetsList([...cleaned, ...rest].slice(0, CUST_PRESETS_CAP))
+      if (cleaned[0]?.id) {
+        try {
+          applyCustomizationPresetById(cleaned[0].id, { skipToast: true })
+        } catch (_) {}
+      } else {
+        try {
+          refreshCustomizationPanel()
+        } catch (_) {}
+      }
+      showToast(`Импортировано видов: ${cleaned.length}. Первый из списка применён к экрану.`)
+    } catch (err) {
+      showToast(`Импорт: ${sanitizeDisplayText(err?.message || err)}`, true)
+    } finally {
+      reset()
+    }
+  }
+  reader.onerror = () => {
+    showToast('Не удалось прочитать файл', true)
+    reset()
+  }
+  reader.readAsText(file)
+}
+
+function openCustomizationGallery() {
+  ensureCustGalleryGridDelegate()
+  ensureCustGalleryEscClose()
+  const ov = document.getElementById('cust-gallery-overlay')
+  if (ov) {
+    ov.classList.remove('hidden')
+    ov.setAttribute('aria-hidden', 'false')
+  }
+  void renderCustGalleryContent()
+}
+
+function closeCustomizationGallery() {
+  const ov = document.getElementById('cust-gallery-overlay')
+  if (ov) {
+    ov.classList.add('hidden')
+    ov.setAttribute('aria-hidden', 'true')
+  }
+}
+
+window.openCustomizationGallery = openCustomizationGallery
+window.closeCustomizationGallery = closeCustomizationGallery
+window.saveCustomizationPresetSnapshot = saveCustomizationPresetSnapshot
 
 // в”Ђв”Ђв”Ђ FULLSCREEN PLAYER MODE в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 function enterPlayerMode() {
@@ -3904,7 +4647,8 @@ function pickFlowConfigFile() {
 
 /**
  * Импорт .flowpreset / dotify: только внешний вид — подмешиваем в текущий `flow_visual` поля
- * blur, bright, bgType, customBg, gifMode, glass, panelBlur, homeWidget и при наличии `flow_track_covers`.
+ * bgType, customBg, gifMode, glass, panelBlur, homeWidget и при наличии `flow_track_covers`.
+ * Размытие и яркость фона (blur, bright) из файла не применяются — остаются текущие значения пользователя.
  * Остальные ключи localStorage не меняем (сессия, источники, тема UI и т.д.).
  */
 function applyPresetAppearanceOnly(storage) {
@@ -3924,14 +4668,6 @@ function applyPresetAppearanceOnly(storage) {
   const cur = getVisual()
   const patch = {}
 
-  if (Object.prototype.hasOwnProperty.call(incoming, 'blur')) {
-    const n = Number(incoming.blur)
-    if (Number.isFinite(n)) patch.blur = Math.max(0, Math.min(80, n))
-  }
-  if (Object.prototype.hasOwnProperty.call(incoming, 'bright')) {
-    const n = Number(incoming.bright)
-    if (Number.isFinite(n)) patch.bright = Math.max(10, Math.min(100, n))
-  }
   if (Object.prototype.hasOwnProperty.call(incoming, 'glass')) {
     const n = Number(incoming.glass)
     if (Number.isFinite(n)) patch.glass = Math.max(0, Math.min(40, n))
@@ -3994,6 +4730,16 @@ function applyPresetAppearanceOnly(storage) {
   return { appliedVisual, appliedCovers }
 }
 
+/** После импорта .flowpreset — карточка «сохранённый вид» с текущим экраном, чтобы сразу было видно заполненный превью-ряд. */
+function pushCustomizationSnapshotAfterFlowpresetImport() {
+  try {
+    const snap = collectCurrentCustomizationSnapshot()
+    const list = getCustomizationPresets()
+    const entry = { id: newCustomizationPresetId(), ts: Date.now(), ...snap }
+    saveCustomizationPresetsList([entry, ...list].slice(0, CUST_PRESETS_CAP))
+  } catch (_) {}
+}
+
 /** После записи ключей пресета в localStorage подтянуть in-memory состояние и не затирать flow_visual ползунками формы. */
 function syncRuntimeCachesAfterPresetImport() {
   try {
@@ -4036,14 +4782,23 @@ function importFlowConfigFile(input) {
       }
       const { appliedVisual, appliedCovers } = applyPresetAppearanceOnly(storage)
       if (!appliedVisual && !appliedCovers) {
-        throw new Error('В файле нет данных о фоне, размытии, яркости или обложках')
+        throw new Error('В файле нет данных о фоне, обложках или виджете')
       }
       syncRuntimeCachesAfterPresetImport()
+      try {
+        pushCustomizationSnapshotAfterFlowpresetImport()
+      } catch (_) {}
       const parts = []
-      if (appliedVisual) parts.push('фон, GIF-обложки, размытие и яркость фона')
+      if (appliedVisual) parts.push('фон, GIF-обложки, стекло и виджет (размытие/яркость фона не менялись)')
       if (appliedCovers) parts.push('кастомные обложки треков')
       setFlowConfigStatus(`Импортировано: ${parts.join('; ')}. Остальные настройки не менялись.`, false)
-      showToast('Внешний вид из preset применён')
+      showToast('Внешний вид применён; в «Сохранённые виды» добавлена карточка текущего экрана')
+      try {
+        switchSettingsCategory('customization')
+      } catch (_) {}
+      try {
+        refreshCustomizationPanel()
+      } catch (_) {}
       try { applySettingsSectionsState() } catch {}
       // Важно: не вызывать applyVisualSettings() — она берёт значения из DOM и перезаписывает только что импортированный flow_visual.
       try { initVisualSettings() } catch {}

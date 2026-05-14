@@ -6,7 +6,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
   <!-- bump ?v= when profile/CSS/JS layout changes so Electron reloads assets -->
-  <link rel="stylesheet" href="styles.css?v=20260514-topbottom-nav-dock">
+  <link rel="stylesheet" href="styles.css?v=20260514-customization-gallery-ui">
 </head>
 <body>
 
@@ -412,6 +412,10 @@
 
       <div class="settings-shell">
         <nav class="settings-category-rail" aria-label="Разделы настроек">
+          <button type="button" class="settings-cat" data-settings-cat="customization" onclick="switchSettingsCategory('customization')">
+            <span class="settings-cat-title">Кастомизация</span>
+            <span class="settings-cat-hint">Фон, обложка, галерея</span>
+          </button>
           <button type="button" class="settings-cat active" data-settings-cat="appearance" onclick="switchSettingsCategory('appearance')">
             <span class="settings-cat-title">Оформление</span>
             <span class="settings-cat-hint">Тема, фон, цвета, шрифт</span>
@@ -741,6 +745,61 @@
         </div>
       </div>
 
+      <div id="settings-panel-customization" class="settings-category-panel">
+        <div class="cust-shell glass-card">
+          <p class="cust-lead">Здесь видно, откуда сейчас берутся обложка, баннер (фон) и картинка виджета. В галерее наведи на плитку — появятся кнопки: обложка, баннер, виджет.</p>
+          <div class="cust-preview-row">
+            <div class="cust-preview-block">
+              <div class="cust-preview-label">Обложка плеера</div>
+              <div id="cust-prev-cover" class="cust-preview-sq" title="Текущая обложка в плеере"></div>
+              <div id="cust-prev-cover-meta" class="cust-preview-meta">—</div>
+            </div>
+            <div class="cust-preview-block cust-preview-block--center">
+              <div class="cust-preview-label">Баннер (фон)</div>
+              <div id="cust-prev-bg" class="cust-preview-rect" title="Текущий фон"></div>
+              <div id="cust-prev-bg-meta" class="cust-preview-meta">—</div>
+            </div>
+            <div class="cust-preview-block">
+              <div class="cust-preview-label">Визуализатор</div>
+              <div id="cust-prev-viz" class="cust-preview-sq" title="Виджет на главной"></div>
+              <div id="cust-prev-viz-meta" class="cust-preview-meta">—</div>
+            </div>
+          </div>
+          <div class="cust-row-head">
+            <span>Недавние загрузки</span>
+            <button type="button" class="btn-small" onclick="openCustomizationGallery()">Открыть галерею</button>
+          </div>
+          <div id="cust-recent-strip" class="cust-recent-strip"></div>
+          <div class="cust-row-head cust-row-head--presets">
+            <span>Сохранённые виды</span>
+            <button type="button" class="btn-small" onclick="saveCustomizationPresetSnapshot()">Запомнить текущий вид</button>
+          </div>
+          <p class="cust-hint">Карточка: левый клик — применить, ПКМ — удалить.</p>
+          <div id="cust-preset-strip" class="cust-preset-strip"></div>
+          <div class="cust-io-grid">
+            <div class="cust-io-card">
+              <div class="cust-io-title">Пресет Nexory (.flowpreset)</div>
+              <p class="cust-io-desc">Полный бэкап внешнего вида и настроек из localStorage с префиксом <code>flow_</code>.</p>
+              <div class="cust-io-actions">
+                <button type="button" class="vsb cust-io-btn" onclick="exportFlowConfig()">Экспортировать</button>
+                <input type="file" id="flow-config-input" accept=".flowpreset,.dotifypreset,.json,application/json" onchange="importFlowConfigFile(this)" style="display:none" aria-hidden="true">
+                <button type="button" class="vsb cust-io-btn" onclick="pickFlowConfigFile()">Импортировать</button>
+              </div>
+              <div class="token-msg cust-io-status" id="flow-config-status">Экспорт — полный .flowpreset. Импорт: фон, обложки, виджет, стекло; размытие и яркость фона не меняются. После импорта в «Сохранённые виды» добавляется карточка текущего экрана.</div>
+            </div>
+            <div class="cust-io-card">
+              <div class="cust-io-title">Только сохранённые виды</div>
+              <p class="cust-io-desc">JSON со списком карточек «Запомнить текущий вид» — удобно перенести между ПК.</p>
+              <div class="cust-io-actions">
+                <button type="button" class="vsb cust-io-btn" onclick="exportSavedViewPresetsJson()">Экспорт списка</button>
+                <input type="file" id="cust-views-import-input" accept="application/json,.json" style="display:none" onchange="importSavedViewPresetsFromFile(this)">
+                <button type="button" class="vsb cust-io-btn" onclick="pickSavedViewPresetsFile()">Импорт списка</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div id="settings-panel-playback" class="settings-category-panel">
         <div class="visual-settings">
           <div class="vs-section glass-card">
@@ -827,19 +886,6 @@
             <div class="vs-row">
               <label class="vs-label">Текст в fullscreen ниже/выше <span class="vs-val" id="pm-lyrics-offset-val">-60px</span></label>
               <input type="range" id="pm-lyrics-offset" min="-140" max="120" step="1" value="-60" onchange="setPlayerModeOffsets()" oninput="setPlayerModeOffsets()">
-            </div>
-          </div>
-
-          <div class="vs-section glass-card">
-            <div class="vs-section-title">Конфиг Nexory</div>
-            <div class="vs-row" style="align-items:flex-start;flex-direction:column;gap:8px">
-              <label class="vs-label">Экспорт/импорт настроек для друзей</label>
-              <div class="vs-btn-group">
-                <button class="vsb" onclick="exportFlowConfig()">Экспортировать preset Nexory</button>
-                <input type="file" id="flow-config-input" accept=".flowpreset,.dotifypreset,.json,application/json" onchange="importFlowConfigFile(this)" style="display:none">
-                <button class="vsb" onclick="pickFlowConfigFile()">Импортировать preset</button>
-              </div>
-              <div class="token-msg" id="flow-config-status" style="display:block">Экспорт — полный .flowpreset. Импорт подмешивает только внешний вид (фон, обложки, визуализатор, blur/яркость/стекло). Поддерживаются Dotify: старые <code>data.gifs</code> и новые <code>data.gifSettings</code> + <code>data.uiSettings</code>.</div>
             </div>
           </div>
 
@@ -1182,6 +1228,17 @@
         </div><!-- .settings-panels-wrap -->
       </div><!-- .settings-shell -->
     </div><!-- #page-settings -->
+
+    <div id="cust-gallery-overlay" class="cust-gallery-overlay hidden" aria-hidden="true">
+      <div class="cust-gallery-backdrop" onclick="closeCustomizationGallery()"></div>
+      <div class="cust-gallery-sheet glass-card" role="dialog" aria-modal="true" aria-label="Галерея медиа">
+        <div class="cust-gallery-head">
+          <span class="cust-gallery-title">Загруженные изображения</span>
+          <button type="button" class="btn-small" onclick="closeCustomizationGallery()">Закрыть</button>
+        </div>
+        <div id="cust-gallery-grid" class="cust-gallery-grid"></div>
+      </div>
+    </div>
 
   </div><!-- /content -->
 
@@ -1563,7 +1620,7 @@
     <div class="flow-game-sleep-title">Sleep mode</div>
     <div class="flow-game-sleep-sub">Только воспроизведение · верни Nexory на экран</div>
   </div>
-  <script src="renderer.js?v=6433cafdbae4-mp5i0x22"></script>
+  <script src="renderer.js?v=b8b7f87aa697-mp5l9zfh"></script>
 </body>
 </html>
 
