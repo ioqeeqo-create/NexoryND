@@ -7549,6 +7549,8 @@ body.lyrics-effect-contrast .lyrics-line.active { color:#fff; }
   position:relative;
   z-index:4;
   zoom: var(--pm-ui-scale);
+  box-sizing: border-box;
+  padding-inline: clamp(12px, 3vw, 40px);
   transition:
     gap 0.42s cubic-bezier(0.22, 1, 0.36, 1),
     padding-inline 0.42s cubic-bezier(0.22, 1, 0.36, 1);
@@ -7556,14 +7558,13 @@ body.lyrics-effect-contrast .lyrics-line.active { color:#fff; }
 .player-mode.lyrics-mode .pm-layout {
   display:grid;
   grid-template-columns: minmax(300px, 0.45fr) minmax(0, 1fr);
-  align-items:start;
-  justify-items:stretch;
+  align-items: center;
+  justify-items: stretch;
   gap:clamp(14px, 3vw, 36px);
   box-sizing:border-box;
   width:100%;
   max-width:100%;
   margin:0 auto;
-  padding-inline:clamp(12px, 3vw, 40px);
 }
 @keyframes pmLyricsSplitStageIn {
   from {
@@ -7602,8 +7603,8 @@ body.lyrics-effect-contrast .lyrics-line.active { color:#fff; }
   justify-self: start;
   width: min(100%, min(580px, 54vw));
   padding: 0 clamp(12px, 2.4vw, 32px);
-  align-self: start;
-  min-height: min(68vh, 640px);
+  align-self: center;
+  min-height: 0;
   box-sizing: border-box;
   transform: translateY(var(--pm-stage-offset));
 }
