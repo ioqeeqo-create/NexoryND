@@ -2225,7 +2225,7 @@ function bumpCustomizationGalleryRecent(url) {
     localStorage.setItem(FLOW_CUSTOM_GALLERY_RECENT_V1, JSON.stringify(list))
   } catch (_) {}
   try {
-    renderCustRecentStrip()
+    if (isCustomizationSettingsCategoryActive()) renderCustRecentStrip()
   } catch (_) {}
 }
 
@@ -2243,7 +2243,7 @@ function clearCustomizationGalleryRecent() {
     localStorage.removeItem(FLOW_CUSTOM_GALLERY_RECENT_V1)
   } catch (_) {}
   try {
-    renderCustRecentStrip()
+    if (isCustomizationSettingsCategoryActive()) renderCustRecentStrip()
   } catch (_) {}
   showToast('Недавние загрузки очищены')
 }
@@ -2644,6 +2644,10 @@ function renderPresetCardBgLayer(bgEl, p) {
   bgEl.style.background = `linear-gradient(125deg, ${o1}44, ${o2}55, #0c0e14)`
 }
 
+function isCustomizationSettingsCategoryActive() {
+  return _settingsCategory === 'customization'
+}
+
 function refreshCustomizationPanel() {
   const elCover = document.getElementById('cust-prev-cover')
   const elBg = document.getElementById('cust-prev-bg')
@@ -2684,6 +2688,7 @@ function refreshCustomizationPanel() {
   }
   if (mViz) mViz.textContent = customizationVizMetaText()
 
+  if (!isCustomizationSettingsCategoryActive()) return
   try {
     renderCustRecentStrip()
   } catch (_) {}
@@ -2845,7 +2850,7 @@ function deleteCustomizationPresetById(id) {
   if (next.length === prev.length) return
   saveCustomizationPresetsList(next)
   try {
-    renderCustPresetStrip()
+    if (isCustomizationSettingsCategoryActive()) renderCustPresetStrip()
   } catch (_) {}
   showToast('Пресет удалён')
 }
@@ -2855,7 +2860,7 @@ function saveCustomizationPresetSnapshot() {
   const next = [{ id: newCustomizationPresetId(), ts: Date.now(), ...snap }, ...getCustomizationPresets()].slice(0, CUST_PRESETS_CAP)
   saveCustomizationPresetsList(next)
   try {
-    renderCustPresetStrip()
+    if (isCustomizationSettingsCategoryActive()) renderCustPresetStrip()
   } catch (_) {}
   showToast('Текущий вид сохранён')
 }
