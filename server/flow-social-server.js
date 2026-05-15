@@ -232,11 +232,18 @@ app.put('/flow-api/v1/profile', bearerAuth, (req, res) => {
   const username = String(b.username || '').trim().toLowerCase()
   if (!username) return res.status(400).json({ error: 'username required' })
   const existing = db.prepare('SELECT username FROM flow_profiles WHERE username=?').get(username)
+  let onlineVal = 0
+  if (b.online !== undefined) {
+    onlineVal = b.online ? 1 : 0
+  } else if (existing) {
+    const prevOnline = db.prepare('SELECT online FROM flow_profiles WHERE username=?').get(username)
+    onlineVal = Number(prevOnline?.online || 0) ? 1 : 0
+  }
   const payload = {
     username,
     password_hash: b.password_hash != null ? String(b.password_hash) : existing ? undefined : null,
     password_salt: b.password_salt != null ? String(b.password_salt) : existing ? undefined : null,
-    online: b.online !== undefined ? (b.online ? 1 : 0) : 0,
+    online: onlineVal,
     last_seen: b.last_seen || new Date().toISOString(),
     avatar_data: b.avatar_data ?? null,
     banner_data: b.banner_data ?? null,

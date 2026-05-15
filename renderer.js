@@ -154,9 +154,9 @@ let _roomContext = null
 let _roomServerSaveTimer = null
 let _lastServerStatusCheckAt = 0
 const FRIEND_POLL_INTERVAL_MS = 2500
-const FRIEND_FRESH_ONLINE_MS = 9000
+const FRIEND_FRESH_ONLINE_MS = 120000
 const FRIEND_PROFILE_REFRESH_MS = 7000
-const FRIEND_ONLINE_STALE_MS = 65000
+const FRIEND_ONLINE_STALE_MS = 180000
 const FLOW_SERVER_DEFAULT_URL = 'http://85.239.34.229:8787'
 const FLOW_SOCIAL_DEFAULT_API_BASE = 'http://85.239.34.229/social'
 const FLOW_SOCIAL_DEFAULT_API_SECRET = 'flowflow'
@@ -5386,6 +5386,23 @@ function getPublicProfilePayload(username = _profile?.username) {
 }
 
 let _flowSocialProfileSyncTimer = null
+let _profileCloudPresenceTimer = null
+
+function startProfileCloudPresenceHeartbeat() {
+  stopProfileCloudPresenceHeartbeat()
+  if (!ensureActiveProfile()?.username) return
+  syncProfileCloudNow().catch(() => {})
+  _profileCloudPresenceTimer = setInterval(() => {
+    syncProfileCloudNow().catch(() => {})
+  }, 40000)
+}
+
+function stopProfileCloudPresenceHeartbeat() {
+  if (_profileCloudPresenceTimer) {
+    clearInterval(_profileCloudPresenceTimer)
+    _profileCloudPresenceTimer = null
+  }
+}
 
 function isFlowSocialReady() {
   return typeof window.FlowSocialBackend?.isConfigured === 'function' && window.FlowSocialBackend.isConfigured()
@@ -8755,6 +8772,7 @@ async function submitAuth() {
 }
 
 function logout() {
+  stopProfileCloudPresenceHeartbeat()
   removeRoomMemberPresence(_roomState?.roomId).catch(() => {})
   stopRoomServerSync()
   stopProfilesRealtimeSync()
@@ -9215,6 +9233,7 @@ function startApp() {
     syncIntegrationsUI()
     showOnboardingIfNeeded()
     pollFriendsPresence().catch(() => {})
+    startProfileCloudPresenceHeartbeat()
     if (_friendsPollTimer) clearInterval(_friendsPollTimer)
     _friendsPollTimer = setInterval(() => { pollFriendsPresence().catch(() => {}) }, FRIEND_POLL_INTERVAL_MS)
     const s = getSettings()
