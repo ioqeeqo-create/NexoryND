@@ -257,7 +257,7 @@
       scheduleReconnect()
     }
     ws.onerror = () => {
-      emitWsState('degraded', { reason: 'socket_error' })
+      emitWsState('connecting', { reason: 'socket_error' })
       try {
         ws.close()
       } catch (_) {}

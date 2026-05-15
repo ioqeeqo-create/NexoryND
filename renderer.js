@@ -5394,7 +5394,7 @@ function startProfileCloudPresenceHeartbeat() {
   syncProfileCloudNow().catch(() => {})
   _profileCloudPresenceTimer = setInterval(() => {
     syncProfileCloudNow().catch(() => {})
-  }, 40000)
+  }, 25000)
 }
 
 function stopProfileCloudPresenceHeartbeat() {
@@ -5533,6 +5533,9 @@ async function syncProfileCloudNow() {
   for (const body of variants) {
     try {
       await flowSocialPut('/flow-api/v1/profile', body)
+      try {
+        if (typeof setSocialStatus === 'function') setSocialStatus('online')
+      } catch (_) {}
       return { ok: true }
     } catch (e) {
       lastErr = e?.message || String(e)
@@ -8132,8 +8135,13 @@ function setSocialStatus(text) {
       label = 'connecting'
     }
   } else if (raw.startsWith('degraded')) {
-    state = 'degraded'
-    label = 'degraded'
+    if (_socialLastOnlineAt && now - _socialLastOnlineAt < 120000) {
+      state = 'online'
+      label = 'online'
+    } else {
+      state = 'degraded'
+      label = 'degraded'
+    }
   } else if (raw.startsWith('error')) {
     state = 'degraded'
     label = `degraded (${String(text || '').replace(/^error:\s*/i, '')})`
@@ -8487,17 +8495,18 @@ function initPeerSocial() {
         if (evt.state === 'online') {
           _lastWsAuthOkAt = now
           setSocialStatus('online')
-        } else if (evt.state === 'connecting') {
-          const recentWs = _lastWsAuthOkAt && now - _lastWsAuthOkAt < 45000
-          const bootGrace = _peerSocialReadyAt && !_lastWsAuthOkAt && now - _peerSocialReadyAt < 28000
-          if (recentWs || bootGrace) setSocialStatus('online')
-          else if (!_lastWsAuthOkAt && _peerSocialReadyAt && now - _peerSocialReadyAt > 32000) {
-            setSocialStatus('degraded (нет ws)')
-          } else {
+        } else if (evt.state === 'connecting' || evt.state === 'degraded') {
+          const recentWs = _lastWsAuthOkAt && now - _lastWsAuthOkAt < 120000
+          const recentHttp = _socialLastOnlineAt && now - _socialLastOnlineAt < 120000
+          const bootGrace = _peerSocialReadyAt && !_lastWsAuthOkAt && now - _peerSocialReadyAt < 45000
+          if (recentWs || recentHttp || bootGrace) setSocialStatus('online')
+          else if (evt.state === 'connecting') {
             setSocialStatus(`connecting${evt.attempt ? ` (#${evt.attempt})` : ''}`)
+          } else if (evt.reason === 'auth_err') {
+            setSocialStatus('degraded (auth)')
+          } else {
+            setSocialStatus('connecting')
           }
-        } else {
-          setSocialStatus(`degraded${evt.reason ? ` (${evt.reason})` : ''}`)
         }
       }
       if (evt.type === 'peer-joined') {
@@ -9096,11 +9105,13 @@ async function fetchServerFriendsPresence(username) {
     rows.forEach((row) => {
       const uname = String(row?.username || '').trim().toLowerCase()
       if (!uname) return
-      const seen = Date.parse(String(row?.last_seen || row?.lastSeen || ''))
-      const seenFresh = !Number.isNaN(seen) && (Date.now() - seen) < FRIEND_ONLINE_STALE_MS
-      const onlineRaw = row?.online === true || row?.online === 1 || String(row?.online || '') === '1'
+      const onlineFromServer =
+        row?.online === true ||
+        row?.online === 1 ||
+        String(row?.online || '') === '1' ||
+        String(row?.online || '').toLowerCase() === 'true'
       map.set(uname, {
-        online: Boolean(onlineRaw && seenFresh),
+        online: Boolean(onlineFromServer),
         roomId: row?.room_id ? String(row.room_id) : null,
         peerId: row?.peer_id ? String(row.peer_id) : `flow-${uname}`,
         updatedAt: Date.now(),
@@ -9115,15 +9126,28 @@ async function fetchServerFriendsPresence(username) {
 async function pollFriendsPresence(force = false) {
   if (!_socialPeer || !_profile?.username || !peerSocial.getFriends) return
   const serverPresence = await fetchServerFriendsPresence(_profile.username).catch(() => null)
+  if (serverPresence !== null) {
+    _socialLastOnlineAt = Date.now()
+    setSocialStatus('online')
+  }
   const friends = peerSocial.getFriends(_profile.username) || []
   const entries = await Promise.all(friends.map(async (friend) => {
     const uname = String(friend || '').trim().toLowerCase()
     const prev = _friendPresence.get(uname) || {}
     const cloud = serverPresence?.get(uname) || null
     const freshOnline = !force && prev.online && (Date.now() - Number(prev.updatedAt || 0) < FRIEND_FRESH_ONLINE_MS)
-    const isOnline = cloud
-      ? Boolean(cloud.online)
-      : (freshOnline ? true : await _socialPeer.probeUser(uname, 900).catch(() => false))
+    let isOnline = false
+    if (cloud) {
+      isOnline = Boolean(cloud.online)
+    } else if (freshOnline) {
+      isOnline = true
+    } else {
+      isOnline = await _socialPeer.probeUser(uname, 2800).catch(() => false)
+    }
+    if (!isOnline && (freshOnline || cloud === null)) {
+      const probed = await _socialPeer.probeUser(uname, 2200).catch(() => false)
+      if (probed) isOnline = true
+    }
     if (!isOnline) {
       return [uname, { online: false, track: null, roomId: cloud?.roomId || null, peerId: cloud?.peerId || prev.peerId || null, updatedAt: Date.now() }]
     }

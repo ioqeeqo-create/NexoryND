@@ -5394,7 +5394,7 @@ function startProfileCloudPresenceHeartbeat() {
   syncProfileCloudNow().catch(() => {})
   _profileCloudPresenceTimer = setInterval(() => {
     syncProfileCloudNow().catch(() => {})
-  }, 40000)
+  }, 25000)
 }
 
 function stopProfileCloudPresenceHeartbeat() {
@@ -5533,6 +5533,9 @@ async function syncProfileCloudNow() {
   for (const body of variants) {
     try {
       await flowSocialPut('/flow-api/v1/profile', body)
+      try {
+        if (typeof setSocialStatus === 'function') setSocialStatus('online')
+      } catch (_) {}
       return { ok: true }
     } catch (e) {
       lastErr = e?.message || String(e)
