@@ -218,6 +218,56 @@ ipcMain.handle('save-custom-media', async (event, payload = {}) => {
   return { ok: true, url: pathToFileURL(filePath).toString(), path: filePath, name: fileName }
 })
 
+const CUSTOM_MEDIA_IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg'])
+let _sharpForCustomMedia = null
+try {
+  _sharpForCustomMedia = require('sharp')
+} catch (_) {
+  _sharpForCustomMedia = null
+}
+
+ipcMain.handle('list-custom-media', async () => {
+  try {
+    const dir = getCustomMediaDir()
+    const entries = fs.readdirSync(dir, { withFileTypes: true })
+    const files = []
+    for (const ent of entries) {
+      if (!ent.isFile()) continue
+      const name = ent.name
+      const ext = path.extname(name).toLowerCase()
+      if (!CUSTOM_MEDIA_IMAGE_EXT.has(ext)) continue
+      const filePath = path.join(dir, name)
+      let st
+      try {
+        st = fs.statSync(filePath)
+      } catch {
+        continue
+      }
+      let width = 0
+      let height = 0
+      if (_sharpForCustomMedia && ext !== '.svg') {
+        try {
+          const meta = await _sharpForCustomMedia(filePath).metadata()
+          width = Number(meta?.width) || 0
+          height = Number(meta?.height) || 0
+        } catch (_) {}
+      }
+      files.push({
+        url: pathToFileURL(filePath).toString(),
+        name,
+        width,
+        height,
+        size: Number(st.size) || 0,
+        mtimeMs: Number(st.mtimeMs) || 0,
+      })
+    }
+    files.sort((a, b) => (b.mtimeMs || 0) - (a.mtimeMs || 0))
+    return { ok: true, files }
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err), files: [] }
+  }
+})
+
 const PRESET_EMBED_MEDIA_MAX_BYTES = 8 * 1024 * 1024
 
 function mimeFromLocalExt(ext = '') {

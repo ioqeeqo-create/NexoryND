@@ -462,7 +462,7 @@
       if (this._profileHeartbeatTimer) clearInterval(this._profileHeartbeatTimer)
       this._profileHeartbeatTimer = setInterval(() => {
         upsertProfileCloud(this.username).catch(() => {})
-      }, 25000)
+      }, 20000)
     }
 
     _wireRoomChannel(roomId) {

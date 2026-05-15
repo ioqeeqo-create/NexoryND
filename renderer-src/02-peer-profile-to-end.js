@@ -2690,6 +2690,7 @@ async function submitAuth() {
 }
 
 function logout() {
+  stopProfileCloudPresenceHeartbeat()
   removeRoomMemberPresence(_roomState?.roomId).catch(() => {})
   stopRoomServerSync()
   stopProfilesRealtimeSync()
@@ -3150,6 +3151,7 @@ function startApp() {
     syncIntegrationsUI()
     showOnboardingIfNeeded()
     pollFriendsPresence().catch(() => {})
+    startProfileCloudPresenceHeartbeat()
     if (_friendsPollTimer) clearInterval(_friendsPollTimer)
     _friendsPollTimer = setInterval(() => { pollFriendsPresence().catch(() => {}) }, FRIEND_POLL_INTERVAL_MS)
     const s = getSettings()
