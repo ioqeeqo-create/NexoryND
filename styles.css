@@ -1688,11 +1688,10 @@ body.layout-bottom-nav .sidebar {
   gap: 8px;
   min-height: 52px;
   max-height: 58px;
-  border-bottom: 1px solid rgba(255,255,255,0.09);
-  /* Без backdrop-filter: дешевле для GPU при скролле горизонтального меню */
-  background: linear-gradient(180deg, rgba(14, 14, 28, 0.94), rgba(10, 10, 22, 0.88));
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(14, 14, 28, 0.78), rgba(10, 10, 22, 0.68));
+  backdrop-filter: blur(var(--glass-blur)) saturate(155%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(155%);
   isolation: isolate;
 }
 body.layout-top-nav .sidebar {
@@ -1815,8 +1814,45 @@ body.layout-bottom-nav .sidebar-user {
   padding: 0;
   border-radius: 999px;
   background: transparent;
+  border: none !important;
+  box-shadow: none !important;
   gap: 0;
   min-width: 0;
+}
+body.layout-top-nav .sidebar-nav > .nav-group,
+body.layout-bottom-nav .sidebar-nav > .nav-group {
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+  border-top: none !important;
+  box-shadow: none !important;
+}
+body.layout-top-nav .sidebar-nav > .nav-group + .nav-group,
+body.layout-bottom-nav .sidebar-nav > .nav-group + .nav-group {
+  margin-top: 0 !important;
+  margin-left: 2px;
+  padding-top: 0 !important;
+  padding-left: 8px;
+  border-top: none !important;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: none !important;
+}
+body.layout-top-nav .sidebar-nav-shell,
+body.layout-bottom-nav .sidebar-nav-shell {
+  overflow: hidden;
+}
+body.layout-top-nav .sidebar-nav,
+body.layout-bottom-nav .sidebar-nav {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+body.layout-top-nav .sidebar-nav::-webkit-scrollbar,
+body.layout-bottom-nav .sidebar-nav::-webkit-scrollbar {
+  display: none;
 }
 body.layout-top-nav .sidebar-user .user-info,
 body.layout-bottom-nav .sidebar-user .user-info,
@@ -1850,7 +1886,7 @@ body.layout-bottom-nav .sidebar-logo::before {
 }
 body.layout-top-nav,
 body.layout-bottom-nav {
-  --player-layout-dock-h: 46px;
+  --player-layout-dock-h: 0px;
 }
 
 body.layout-top-nav .content,
@@ -3015,19 +3051,21 @@ body.visual-minimal .main-quick-playlist-meta span {
   margin-top: 0;
 }
 
-/* Nexory media desk — без очереди (как на референсе) */
+/* Nexory media desk */
+.home-nx-cover-mode {
+  display: none;
+}
 .home-nx-cover-actions,
-.home-nx-footer,
-.home-nx-vol-row,
 .home-nx-cover-hover-hit,
-.home-nx-cover-mode,
 .home-clone-controls .home-nx-only {
   display: none;
 }
+#page-home .home-nx-footer,
+#page-home .home-nx-vol-row {
+  display: flex;
+}
 #page-home.media-queue-off .home-nx-cover-actions,
-#page-home.media-queue-off .home-nx-cover-hover-hit,
-#page-home.media-queue-off .home-nx-footer,
-#page-home.media-queue-off .home-nx-vol-row {
+#page-home.media-queue-off .home-nx-cover-hover-hit {
   display: flex;
 }
 #page-home.media-queue-off .home-nx-cover-hover-hit {
@@ -3081,11 +3119,11 @@ body.visual-minimal .main-quick-playlist-meta span {
 }
 #page-home.media-queue-off .home-clone-cover {
   width: 100%;
-  max-width: min(100%, 640px);
+  max-width: min(100%, 720px);
   height: auto;
   aspect-ratio: 1;
-  min-height: 340px;
-  max-height: min(62vh, 640px);
+  min-height: 380px;
+  max-height: min(68vh, 720px);
   border-radius: 20px;
   box-shadow: 0 22px 52px rgba(0,0,0,0.48);
 }
@@ -3157,15 +3195,15 @@ body.visual-minimal .main-quick-playlist-meta span {
 }
 #page-home.media-queue-off .home-clone-title {
   font-family: var(--font-title);
-  font-size: clamp(30px, 4.2vw, 44px);
+  font-size: clamp(22px, 3vw, 32px);
   font-weight: 700;
   letter-spacing: 0.02em;
-  line-height: 1.05;
+  line-height: 1.08;
 }
 #page-home.media-queue-off .home-clone-artist {
   font-family: var(--font-title);
-  font-size: clamp(14px, 1.8vw, 18px);
-  color: rgba(255,255,255,0.72);
+  font-size: clamp(12px, 1.4vw, 15px);
+  color: rgba(255,255,255,0.68);
   margin-top: 2px;
 }
 #page-home.media-queue-off .home-clone-progress-wrap {
@@ -3173,10 +3211,54 @@ body.visual-minimal .main-quick-playlist-meta span {
   font-size: 12px;
   color: rgba(255,255,255,0.78);
 }
-#page-home:not(.media-queue-off) #home-clone-progress {
-  height: 20px;
+#page-home #home-clone-progress {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent !important;
+  border: none;
+  outline: none;
+  box-shadow: none;
+  height: 4px;
   accent-color: #ffffff;
-  --media-progress-fill: #ffffff;
+}
+#page-home #home-clone-progress::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  border: none;
+}
+#page-home #home-clone-progress::-webkit-slider-thumb {
+  appearance: none;
+  width: 10px;
+  height: 10px;
+  margin-top: -3px;
+  border-radius: 50%;
+  background: #fff;
+  border: none;
+  box-shadow: 0 0 0 2px rgba(12, 14, 22, 0.65);
+}
+#page-home #home-clone-progress::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  border: none;
+}
+#page-home #home-clone-progress::-moz-range-progress {
+  height: 4px;
+  border-radius: 999px;
+  background: #fff;
+  border: none;
+}
+#page-home #home-clone-progress::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+  border: none;
+}
+#page-home #home-clone-progress.home-slider-wave {
+  height: 4px !important;
+  background: rgba(255, 255, 255, 0.22) !important;
 }
 #page-home.media-queue-off #home-clone-progress {
   accent-color: #ffffff;
@@ -3278,17 +3360,48 @@ body.visual-minimal .main-quick-playlist-meta span {
   border-radius: 14px;
   border-color: rgba(255,255,255,0.12);
 }
-#page-home.media-queue-off .home-clone-progress-wrap {
-  order: -1;
-}
 #page-home.media-queue-off .home-clone-head {
-  order: -2;
-}
-#page-home.media-queue-off .home-clone-controls {
   order: 1;
 }
-#page-home.media-queue-off .home-nx-footer {
+#page-home.media-queue-off .home-clone-progress-wrap {
   order: 2;
+}
+#page-home.media-queue-off .home-clone-controls {
+  order: 3;
+}
+#page-home.media-queue-off .home-nx-vol-row {
+  order: 4;
+  width: min(100%, 200px);
+  max-width: 200px;
+  margin-inline: auto;
+  gap: 8px;
+}
+#page-home.media-queue-off .home-nx-vol-row .home-nx-volume {
+  flex: 1;
+  min-width: 0;
+  max-width: 140px;
+}
+#page-home.media-queue-off .home-nx-vol-row .ui-icon {
+  width: 16px;
+  height: 16px;
+}
+#page-home.media-queue-off .home-nx-vol-val {
+  font-size: 11px;
+  min-width: 1.4em;
+}
+#page-home.media-queue-off .home-nx-footer {
+  order: 5;
+}
+#page-home:not(.media-queue-off) .home-nx-footer {
+  display: flex;
+  margin-top: 8px;
+  width: 100%;
+}
+#page-home:not(.media-queue-off) .home-nx-vol-row {
+  display: flex;
+  width: min(100%, 200px);
+  max-width: 200px;
+  margin: 6px auto 0;
 }
 #page-home.media-queue-off .home-clone-main {
   display: flex;
@@ -7954,7 +8067,7 @@ body:not(.layout-top-nav):not(.layout-bottom-nav) #player-bar-layout-dock {
   display: none;
 }
 #player-bar-layout-dock {
-  display: none;
+  display: none !important;
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
@@ -7965,7 +8078,7 @@ body:not(.layout-top-nav):not(.layout-bottom-nav) #player-bar-layout-dock {
 }
 body.layout-top-nav #player-bar-layout-dock,
 body.layout-bottom-nav #player-bar-layout-dock {
-  display: flex !important;
+  display: none !important;
 }
 body.layout-top-nav #player-bar-layout-dock {
   order: 0;
@@ -7986,7 +8099,7 @@ body.layout-bottom-nav #screen-main > #player-bar-layout-dock {
   right: 0;
   bottom: calc(var(--player-stack-bottom, 0px) + var(--player-h));
   z-index: 92;
-  display: flex !important;
+  display: none !important;
   width: 100%;
   max-width: min(1040px, 100%);
   margin-inline: auto;
@@ -12186,12 +12299,7 @@ body.visual-liquid.layout-bottom-nav #player-bar.player-bar--nover {
 }
 body.visual-floated.layout-top-nav #player-bar-layout-dock,
 body.visual-liquid.layout-top-nav #player-bar-layout-dock {
-  flex: 0 0 auto;
-  min-height: 0 !important;
-  border-bottom: none !important;
-  border-top: none !important;
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
-  padding-right: 10px;
+  display: none !important;
 }
 body.visual-floated.layout-bottom-nav #screen-main > #player-bar-layout-dock,
 body.visual-liquid.layout-bottom-nav #screen-main > #player-bar-layout-dock {
