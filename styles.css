@@ -1697,7 +1697,19 @@ body.layout-bottom-nav .sidebar {
 body.layout-top-nav .sidebar {
   margin-top: 0;
   padding-top: 6px;
-  border-bottom: 1px solid rgba(255,255,255,0.09);
+  border-bottom: none !important;
+}
+body.layout-top-nav .sidebar-bottom {
+  display: none !important;
+}
+body.layout-top-nav .sidebar-nav .nav-group {
+  display: contents;
+}
+body.layout-top-nav .sidebar-nav > .nav-group + .nav-group {
+  margin-left: 0 !important;
+  padding-left: 0 !important;
+  border-left: none !important;
+  box-shadow: none !important;
 }
 /* В горизонтальной навигации у #sidebar много дочерних элементов — grid ломал выравнивание «центральной капсулы». */
 body.layout-top-nav .sidebar-resize-gutter,
@@ -2331,8 +2343,25 @@ body.home-layout-edit #page-home .home-dash-fill .home-card:hover {
   transform: translateX(var(--home-head-shift, 0px));
   transition: transform var(--anim-smooth) var(--ease-flow);
 }
-.home-clone-title { font-size:30px; font-weight:700; font-family:var(--font-title); line-height:1.02; letter-spacing:-0.01em; }
-.home-clone-artist { color:var(--muted); font-size:12px; }
+.home-clone-title { font-size:30px; font-weight:700; font-family:var(--font-title); line-height:1.02; letter-spacing:-0.01em; min-height: 1.05em; }
+.home-clone-artist { color:var(--muted); font-size:12px; min-height: 1.2em; }
+.flow-text-char {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(10px) scale(0.96);
+  filter: blur(3px);
+  animation: flowTextCharIn 0.62s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: var(--ft-delay, 0s);
+  will-change: transform, opacity, filter;
+}
+.flow-text-animated .flow-text-char {
+  animation-play-state: running;
+}
+@keyframes flowTextCharIn {
+  0% { opacity: 0; transform: translateY(10px) scale(0.96); filter: blur(3px); }
+  55% { opacity: 1; filter: blur(0); }
+  100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
 .home-clone-head,
 .home-clone-progress-wrap,
 .home-clone-controls {
@@ -3055,9 +3084,15 @@ body.visual-minimal .main-quick-playlist-meta span {
 .home-nx-cover-mode {
   display: none;
 }
+.home-clone-cover-wrap {
+  position: relative;
+}
 .home-nx-cover-actions,
-.home-nx-cover-expand-btn,
-.home-clone-controls .home-nx-only {
+.home-nx-cover-expand-btn {
+  display: flex;
+}
+.home-clone-controls .home-nx-only,
+.home-nx-aux-btn.home-nx-only {
   display: none;
 }
 #page-home .home-nx-footer {
@@ -3066,11 +3101,8 @@ body.visual-minimal .main-quick-playlist-meta span {
 #page-home .home-nx-vol-row {
   display: flex;
 }
-#page-home.media-queue-off .home-nx-cover-actions,
-#page-home.media-queue-off .home-nx-cover-expand-btn {
-  display: flex;
-}
-#page-home.media-queue-off .home-clone-controls .home-nx-only {
+#page-home.media-queue-off .home-clone-controls .home-nx-only,
+#page-home.media-queue-off .home-nx-aux-btn.home-nx-only {
   display: inline-flex;
 }
 #page-home.media-queue-off #home-up-next {
@@ -3290,30 +3322,8 @@ body.visual-minimal .main-quick-playlist-meta span {
 #page-home.media-queue-off #home-clone-progress::-moz-range-progress {
   background: #ffffff;
 }
-#page-home.media-queue-off .home-clone-controls {
-  justify-content: center;
-  gap: 8px;
-  padding: 10px 12px;
-  border-radius: 16px;
-  border: 1px solid rgba(255,255,255,0.1);
-  background: rgba(8,10,18,0.42);
-}
-#page-home.media-queue-off .home-clone-controls .ctrl-btn {
-  width: 34px;
-  height: 34px;
-  border-radius: 11px;
-}
-#page-home.media-queue-off .home-clone-controls .ctrl-btn.play-btn {
-  width: 44px !important;
-  height: 44px !important;
-}
-#page-home.media-queue-off .home-clone-controls .ctrl-btn .ui-icon {
-  width: 17px;
-  height: 17px;
-}
-#page-home.media-queue-off .home-clone-controls .ctrl-btn.play-btn .ui-icon {
-  width: 20px;
-  height: 20px;
+#page-home.media-queue-off .home-nx-ctrl-dock {
+  width: min(100%, 580px);
 }
 #page-home.media-queue-off #home-clone-progress {
   height: 4px;
@@ -3883,6 +3893,58 @@ body.visual-minimal .main-quick-playlist-meta span {
 }
 .home-clone-controls--nx {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+.home-nx-ctrl-dock {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: min(100%, 560px);
+  margin-inline: auto;
+  padding: 8px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(8,10,18,0.42);
+  box-shadow: 0 10px 28px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.06);
+}
+.home-nx-ctrl-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.home-nx-aux-btn {
+  flex: 0 0 auto;
+}
+#page-home .home-clone-controls--nx {
+  justify-content: center;
+  gap: 8px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+#page-home .home-nx-ctrl-dock .ctrl-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+}
+#page-home .home-nx-ctrl-dock .ctrl-btn.play-btn {
+  width: 44px !important;
+  height: 44px !important;
+}
+#page-home .home-nx-vol-row {
+  width: min(100%, 240px);
+  max-width: 240px;
+  margin-inline: auto;
 }
 .home-clone-controls--nx .home-nx-ctrl-slot {
   position: static;

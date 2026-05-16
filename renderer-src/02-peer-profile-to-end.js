@@ -4777,6 +4777,30 @@ function syncHomeNxFooter() {
   } catch (_) {}
 }
 
+function animateFlowMediaText(el, text, mode = 'letter') {
+  if (!el) return
+  const safe = String(text ?? '')
+  if (el.dataset.flowText === safe) return
+  el.dataset.flowText = safe
+  el.classList.remove('flow-text-animated')
+  const parts =
+    mode === 'word'
+      ? safe.split(/(\s+)/).filter((p) => p.length)
+      : [...safe]
+  const step = mode === 'word' ? 42 : 26
+  el.innerHTML = parts
+    .map((ch, i) => {
+      const delay = ((i * step) / 1000).toFixed(3)
+      const esc =
+        typeof escapeHtml === 'function'
+          ? escapeHtml(ch)
+          : ch.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      return `<span class="flow-text-char" style="--ft-delay:${delay}s">${esc}</span>`
+    })
+    .join('')
+  requestAnimationFrame(() => el.classList.add('flow-text-animated'))
+}
+
 function syncHomeCloneUI() {
   const cover = document.getElementById('home-clone-cover')
   const title = document.getElementById('home-clone-title')
@@ -4786,12 +4810,12 @@ function syncHomeCloneUI() {
   const prog = document.getElementById('home-clone-progress')
   if (!cover || !title || !artist || !cur || !tot || !prog) return
   if (currentTrack) {
-    title.textContent = currentTrack.title || 'Ничего не играет'
-    artist.textContent = currentTrack.artist || '—'
+    animateFlowMediaText(title, currentTrack.title || 'Ничего не играет', 'letter')
+    animateFlowMediaText(artist, currentTrack.artist || '—', 'word')
     applyCoverArt(cover, getEffectiveCoverUrl(currentTrack), currentTrack.bg || 'linear-gradient(135deg,#7c3aed,#a855f7)')
   } else {
-    title.textContent = 'Ничего не играет'
-    artist.textContent = '—'
+    animateFlowMediaText(title, 'Ничего не играет', 'letter')
+    animateFlowMediaText(artist, '—', 'word')
     cover.style.backgroundImage = ''
     cover.innerHTML = COVER_ICON
   }
@@ -7150,7 +7174,7 @@ function renderQueue() {
   try {
   const qlen = Array.isArray(queue) ? queue.length : 0
   const after = Math.max(0, qlen - (Number(queueIndex) + 1))
-  const nextTracks = Array.isArray(queue) ? queue.slice(queueIndex + 1, queueIndex + 11) : []
+  const nextTracks = Array.isArray(queue) ? queue.slice(queueIndex + 1, queueIndex + 6) : []
   const emptyListHtml = '<div class="empty-state compact"><p>Запусти трек, и тут появятся следующие позиции очереди</p></div>'
 
   if (!qlen) {

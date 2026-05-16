@@ -3975,10 +3975,19 @@ function rampAudioPlaybackRate(targetRate) {
   }, Math.max(8, Math.round(ms / steps)))
 }
 
+const HOME_NX_SPEED_MIN = 0.75
+
 function getPlaybackRate() {
   try {
     const v = Number(localStorage.getItem('flow_playback_rate') || '1')
-    return Number.isFinite(v) ? Math.max(0.5, Math.min(2, v)) : 1
+    if (!Number.isFinite(v)) return 1
+    const clamped = Math.max(HOME_NX_SPEED_MIN, Math.min(2, v))
+    if (clamped !== v) {
+      try {
+        localStorage.setItem('flow_playback_rate', String(clamped))
+      } catch (_) {}
+    }
+    return clamped
   } catch (_) {
     return 1
   }
@@ -4010,7 +4019,7 @@ function applyPlaybackRate() {
 }
 
 function setPlaybackRate(rate) {
-  const r = Math.max(0.5, Math.min(2, Number(rate) || 1))
+  const r = Math.max(HOME_NX_SPEED_MIN, Math.min(2, Number(rate) || 1))
   try {
     localStorage.setItem('flow_playback_rate', String(r))
   } catch (_) {}
@@ -4019,10 +4028,21 @@ function setPlaybackRate(rate) {
 }
 window.setPlaybackRate = setPlaybackRate
 
+function restoreHomeNxDropdown(menu) {
+  if (!menu?._homeNxMenuWrap) return
+  try {
+    menu._homeNxMenuWrap.appendChild(menu)
+  } catch (_) {}
+  delete menu._homeNxMenuWrap
+}
+
 function closeHomeNxMenus() {
-  document.getElementById('home-nx-speed-menu')?.classList.add('hidden')
-  document.getElementById('home-nx-eq-menu')?.classList.add('hidden')
-  document.getElementById('home-nx-source-menu')?.classList.add('hidden')
+  ;['home-nx-speed-menu', 'home-nx-eq-menu', 'home-nx-source-menu'].forEach((id) => {
+    const menu = document.getElementById(id)
+    if (!menu) return
+    menu.classList.add('hidden')
+    restoreHomeNxDropdown(menu)
+  })
   document.getElementById('home-nx-speed-btn')?.setAttribute('aria-expanded', 'false')
   document.getElementById('home-nx-eq-btn')?.setAttribute('aria-expanded', 'false')
   document.getElementById('home-nx-source-btn')?.setAttribute('aria-expanded', 'false')
@@ -4037,6 +4057,8 @@ function closeHomeNxMenus() {
     el.style.width = ''
     el.style.maxWidth = ''
     el.style.transform = ''
+    el.style.visibility = ''
+    el.style.pointerEvents = ''
   })
 }
 window.closeHomeNxPopovers = closeHomeNxMenus
@@ -4046,27 +4068,27 @@ function positionHomeNxDropdown(menu, btn) {
   if (!menu || !btn) return
   menu.classList.add('is-fixed')
   menu.style.position = 'fixed'
-  menu.style.top = 'auto'
   menu.style.right = 'auto'
-  const rect = btn.getBoundingClientRect()
-  const gap = 10
+  menu.style.bottom = 'auto'
+  menu.style.visibility = 'hidden'
+  menu.style.pointerEvents = 'auto'
+  const pad = 12
   const vw = window.innerWidth
   const vh = window.innerHeight
-  const mw = Math.min(menu.offsetWidth || 320, vw - 24)
+  const rect = btn.getBoundingClientRect()
+  const gap = 10
+  const mw = Math.min(Math.max(menu.scrollWidth || 0, menu.offsetWidth || 0, 220), vw - pad * 2)
   menu.style.width = `${mw}px`
-  menu.style.maxWidth = `${vw - 24}px`
+  menu.style.maxWidth = `${vw - pad * 2}px`
+  const mh = menu.offsetHeight || 220
   let left = rect.left + rect.width / 2 - mw / 2
-  left = Math.max(12, Math.min(left, vw - mw - 12))
+  left = Math.max(pad, Math.min(left, vw - mw - pad))
+  let top = rect.top - mh - gap
+  if (top < pad) top = Math.min(rect.bottom + gap, vh - mh - pad)
+  if (top + mh > vh - pad) top = Math.max(pad, vh - mh - pad)
   menu.style.left = `${left}px`
-  const estH = menu.offsetHeight || 220
-  const above = rect.top - gap - estH
-  if (above >= 12) {
-    menu.style.bottom = `${vh - rect.top + gap}px`
-    menu.style.top = 'auto'
-  } else {
-    menu.style.top = `${rect.bottom + gap}px`
-    menu.style.bottom = 'auto'
-  }
+  menu.style.top = `${top}px`
+  menu.style.visibility = 'visible'
 }
 
 function toggleHomeNxMenu(ev, menuId, btnId, onOpen) {
@@ -4077,11 +4099,19 @@ function toggleHomeNxMenu(ev, menuId, btnId, onOpen) {
   const willOpen = menu.classList.contains('hidden')
   closeHomeNxMenus()
   if (willOpen) {
+    const wrap = btn?.closest?.('.home-nx-menu-wrap')
+    if (wrap && menu.parentElement !== document.body) {
+      menu._homeNxMenuWrap = wrap
+      document.body.appendChild(menu)
+    }
     menu.classList.remove('hidden')
     btn?.setAttribute('aria-expanded', 'true')
     btn?.classList.add('is-open')
     if (typeof onOpen === 'function') onOpen()
-    requestAnimationFrame(() => positionHomeNxDropdown(menu, btn))
+    requestAnimationFrame(() => {
+      positionHomeNxDropdown(menu, btn)
+      requestAnimationFrame(() => positionHomeNxDropdown(menu, btn))
+    })
   }
 }
 
@@ -4354,6 +4384,7 @@ function initHomeNxMediaTools() {
         closeHomeNxCoverMode()
       }
     })
+    window.addEventListener('resize', () => closeHomeNxMenus())
   }
 }
 
