@@ -91,13 +91,24 @@
       const outputGain = state.audioCtx.createGain()
       outputGain.gain.value = soundCfg.outputGain
 
+      const eqMod = window.FlowModules?.parametricEq
+      const eqFilters = eqMod?.ensureEqChain?.(state.audioCtx, state) || []
+
       // Как в FlowPleerLoww: один линейный граф (два выхода с одного MediaElementSource дают лишнюю работу рендеру аудио)
       src.connect(state.analyser)
-      state.analyser.connect(lowShelf)
+      if (eqFilters.length && eqMod?.connectEqChain) {
+        eqMod.connectEqChain(state.analyser, eqFilters, lowShelf)
+      } else {
+        state.analyser.connect(lowShelf)
+      }
       lowShelf.connect(presence)
       presence.connect(compressor)
       compressor.connect(outputGain)
       outputGain.connect(state.audioCtx.destination)
+
+      try {
+        eqMod?.initEqFromStorage?.(state, state.audioCtx)
+      } catch (_) {}
 
       state.freqData = new Uint8Array(state.analyser.frequencyBinCount)
       resumeAudioCtxIfNeeded(state.audioCtx)

@@ -101,6 +101,7 @@ function flowLucideSvg(name, extraClass = '') {
 }
 const COVER_ICON = flowLucideSvg('music-2', 'lg')
 let _audioCtx = null
+let _eqFilters = null
 let _analyser = null
 let _freqData = null
 let _customFontLoadedKey = ''
@@ -1558,7 +1559,8 @@ function applyHomeSliderStyle() {
   const v = getVisual()
   const style = v.homeSliderStyle === 'wave' ? 'wave' : 'line'
   const p = document.getElementById('home-clone-progress')
-  if (p) p.classList.toggle('home-slider-wave', style === 'wave')
+  const nxLine = document.getElementById('page-home')?.classList.contains('media-queue-off')
+  if (p) p.classList.toggle('home-slider-wave', !nxLine && style === 'wave')
   const b1 = document.getElementById('slider-style-line')
   const b2 = document.getElementById('slider-style-wave')
   if (b1) b1.classList.toggle('active', style === 'line')
@@ -3856,7 +3858,9 @@ function applyMediaQueueLayout() {
   syncMediaQueueToggle()
   applyMediaMetaAlign()
   applyMediaPlayerBarVisibility()
+  applyHomeSliderStyle()
   syncHomeNxFooter()
+  if (!on) initHomeNxMediaTools()
   if (on && typeof renderQueue === 'function') renderQueue()
   queueMicrotask(() => {
     try {
@@ -3916,6 +3920,215 @@ function openMediaSourceSettings() {
   switchSettingsCategory('accounts')
 }
 window.openMediaSourceSettings = openMediaSourceSettings
+
+const HOME_NX_SRC_LOGOS = {
+  vk: 'assets/source-vk.svg',
+  yandex: 'assets/source-yandex-wave.svg',
+  hybrid: 'assets/flow-mark.svg',
+}
+
+function getPlaybackRate() {
+  try {
+    const v = Number(localStorage.getItem('flow_playback_rate') || '1')
+    return Number.isFinite(v) ? Math.max(0.5, Math.min(2, v)) : 1
+  } catch (_) {
+    return 1
+  }
+}
+
+function formatPlaybackRateLabel(rate) {
+  const n = Math.round(Number(rate) * 100) / 100
+  if (Math.abs(n - Math.round(n)) < 0.01) return `${Math.round(n)}×`
+  return `${n.toFixed(2).replace(/\.?0+$/, '')}×`
+}
+
+function syncHomeNxSpeedUI() {
+  const r = getPlaybackRate()
+  const slider = document.getElementById('home-nx-speed-slider')
+  const badge = document.getElementById('home-nx-speed-badge')
+  if (slider) slider.value = String(r)
+  if (badge) badge.textContent = formatPlaybackRateLabel(r)
+  document.querySelectorAll('.home-nx-speed-chip').forEach((btn) => {
+    const v = Number(btn.getAttribute('data-rate'))
+    btn.classList.toggle('active', Math.abs(v - r) < 0.03)
+  })
+}
+
+function applyPlaybackRate() {
+  const r = getPlaybackRate()
+  try {
+    audio.playbackRate = r
+  } catch (_) {}
+  syncHomeNxSpeedUI()
+}
+
+function setPlaybackRate(rate) {
+  const r = Math.max(0.5, Math.min(2, Number(rate) || 1))
+  try {
+    localStorage.setItem('flow_playback_rate', String(r))
+  } catch (_) {}
+  try {
+    audio.playbackRate = r
+  } catch (_) {}
+  syncHomeNxSpeedUI()
+}
+window.setPlaybackRate = setPlaybackRate
+
+function closeHomeNxPopovers() {
+  document.getElementById('home-nx-speed-popover')?.classList.add('hidden')
+  document.getElementById('home-nx-eq-popover')?.classList.add('hidden')
+  document.getElementById('home-nx-popover-layer')?.classList.add('hidden')
+  document.getElementById('home-nx-source-menu')?.classList.add('hidden')
+  document.getElementById('home-nx-speed-btn')?.setAttribute('aria-expanded', 'false')
+  document.getElementById('home-nx-eq-btn')?.setAttribute('aria-expanded', 'false')
+  document.getElementById('home-nx-source-btn')?.setAttribute('aria-expanded', 'false')
+}
+window.closeHomeNxPopovers = closeHomeNxPopovers
+
+function toggleHomeNxSpeedPopover(ev) {
+  ev?.stopPropagation?.()
+  const pop = document.getElementById('home-nx-speed-popover')
+  const layer = document.getElementById('home-nx-popover-layer')
+  const btn = document.getElementById('home-nx-speed-btn')
+  if (!pop || !layer) return
+  const open = pop.classList.contains('hidden')
+  closeHomeNxPopovers()
+  if (open) {
+    pop.classList.remove('hidden')
+    layer.classList.remove('hidden')
+    btn?.setAttribute('aria-expanded', 'true')
+    syncHomeNxSpeedUI()
+  }
+}
+window.toggleHomeNxSpeedPopover = toggleHomeNxSpeedPopover
+
+function toggleHomeNxEqPopover(ev) {
+  ev?.stopPropagation?.()
+  const pop = document.getElementById('home-nx-eq-popover')
+  const layer = document.getElementById('home-nx-popover-layer')
+  const btn = document.getElementById('home-nx-eq-btn')
+  if (!pop || !layer) return
+  const open = pop.classList.contains('hidden')
+  closeHomeNxPopovers()
+  if (open) {
+    pop.classList.remove('hidden')
+    layer.classList.remove('hidden')
+    btn?.setAttribute('aria-expanded', 'true')
+    renderHomeNxEqUI()
+  }
+}
+window.toggleHomeNxEqPopover = toggleHomeNxEqPopover
+
+function toggleHomeNxSourceMenu(ev) {
+  ev?.stopPropagation?.()
+  const menu = document.getElementById('home-nx-source-menu')
+  const btn = document.getElementById('home-nx-source-btn')
+  if (!menu) return
+  const open = menu.classList.contains('hidden')
+  closeHomeNxPopovers()
+  menu.classList.toggle('hidden', !open)
+  btn?.setAttribute('aria-expanded', open ? 'true' : 'false')
+}
+window.toggleHomeNxSourceMenu = toggleHomeNxSourceMenu
+
+function pickHomeNxSource(src) {
+  switchSearchSource(src)
+  closeHomeNxPopovers()
+  syncHomeNxSourceLogo()
+}
+window.pickHomeNxSource = pickHomeNxSource
+
+function syncHomeNxSourceLogo() {
+  const img = document.getElementById('home-nx-src-logo')
+  if (!img) return
+  const raw = normalizeStoredActiveSource(getSettings()?.activeSource || currentSource || 'hybrid')
+  img.src = HOME_NX_SRC_LOGOS[raw] || HOME_NX_SRC_LOGOS.hybrid
+  img.alt = raw
+  const menu = document.getElementById('home-nx-source-menu')
+  menu?.querySelectorAll('.home-nx-src-opt').forEach((btn) => {
+    btn.classList.toggle('active', btn.getAttribute('data-src') === raw)
+  })
+}
+
+function getParametricEqModule() {
+  return window.FlowModules?.parametricEq || null
+}
+
+function getEqAudioState() {
+  return { audioCtx: _audioCtx, analyser: _analyser, freqData: _freqData, eqFilters: _eqFilters }
+}
+
+function applyHomeNxEqPreset(presetId) {
+  const eq = getParametricEqModule()
+  if (!eq) return
+  ensureAudioAnalyzer()
+  const state = getEqAudioState()
+  eq.applyPreset?.(presetId, state, _audioCtx, true)
+  _eqFilters = state.eqFilters
+  renderHomeNxEqUI()
+}
+
+function renderHomeNxEqUI() {
+  const eq = getParametricEqModule()
+  const presetsEl = document.getElementById('home-nx-eq-presets')
+  const graph = document.getElementById('home-nx-eq-graph')
+  const labels = document.getElementById('home-nx-eq-freq-labels')
+  if (!eq || !presetsEl || !graph) return
+  const activePreset = eq.readStoredPreset?.() || 'neutral'
+  const gains = eq.getCurrentGains?.() || eq.getPresetGains('neutral')
+  const order = ['neutral', 'bass', 'highs', 'vocal', 'classic', 'jazz', 'liquid', 'deep-ocean', 'rock']
+  if (!presetsEl.dataset.ready) {
+    presetsEl.dataset.ready = '1'
+    presetsEl.innerHTML = order
+      .map((id) => {
+        const label = eq.PRESET_LABELS?.[id] || id
+        return `<button type="button" class="home-nx-eq-preset" data-preset="${id}">${label}</button>`
+      })
+      .join('')
+    presetsEl.querySelectorAll('.home-nx-eq-preset').forEach((btn) => {
+      btn.addEventListener('click', () => applyHomeNxEqPreset(btn.getAttribute('data-preset')))
+    })
+  }
+  presetsEl.querySelectorAll('.home-nx-eq-preset').forEach((btn) => {
+    btn.classList.toggle('active', btn.getAttribute('data-preset') === activePreset)
+  })
+  const freqs = eq.EQ_FREQS || []
+  const w = 400
+  const h = 120
+  const midY = h * 0.55
+  const pts = gains.map((g, i) => {
+    const x = freqs.length > 1 ? (i / (freqs.length - 1)) * w : w / 2
+    const y = midY - (Number(g) / 12) * (h * 0.42)
+    return [x, y]
+  })
+  const line = pts.map((p) => p.join(',')).join(' ')
+  const area = `M0,${h} L${pts.map((p) => p.join(',')).join(' L')} L${w},${h} Z`
+  graph.innerHTML = `<path class="home-nx-eq-fill" d="${area}"></path><polyline class="home-nx-eq-line" points="${line}"></polyline>${pts
+    .map(
+      ([x, y], i) =>
+        `<circle class="home-nx-eq-node" data-band="${i}" cx="${x}" cy="${y}" r="5"></circle>`
+    )
+    .join('')}`
+  if (labels && !labels.dataset.ready) {
+    labels.dataset.ready = '1'
+    labels.innerHTML = freqs
+      .map((f) => `<span>${f >= 1000 ? `${f / 1000}k` : f}</span>`)
+      .join('')
+  }
+}
+
+function initHomeNxMediaTools() {
+  syncHomeNxSpeedUI()
+  syncHomeNxSourceLogo()
+  applyPlaybackRate()
+  if (!document.body.dataset.homeNxPopBound) {
+    document.body.dataset.homeNxPopBound = '1'
+    document.addEventListener('click', (e) => {
+      if (e.target.closest?.('.home-nx-foot-tools, .home-nx-popover-layer, .home-nx-popover')) return
+      closeHomeNxPopovers()
+    })
+  }
+}
 
 function syncPlaybackSystemToggles() {
   const s = getSettings()
@@ -4664,6 +4877,7 @@ function setActiveSource(src) {
     syncAuthSourceStackActive()
     syncSearchSourcePills()
     updateSourceBadge()
+    if (typeof syncHomeNxSourceLogo === 'function') syncHomeNxSourceLogo()
   } catch (_) {}
 }
 

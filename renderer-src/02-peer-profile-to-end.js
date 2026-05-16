@@ -4048,7 +4048,7 @@ function applySidebarFloatYPx(px) {
   } catch (_) {
     maxY = 320
   }
-  const c = Math.max(-maxY, Math.min(maxY, Math.round(px)))
+  const c = Math.max(0, Math.min(maxY, Math.round(px)))
   try {
     document.documentElement.style.setProperty('--sidebar-float-y', `${c}px`)
   } catch (_) {}
@@ -4759,18 +4759,14 @@ function syncHomeClonePlaybackProgress() {
 function syncHomeNxFooter() {
   const vol = document.getElementById('home-nx-volume')
   const volVal = document.getElementById('home-nx-vol-val')
-  const srcBtn = document.getElementById('home-nx-source-btn')
   if (vol) {
     const slider = Math.max(0, Math.min(1, Number(localStorage.getItem('flow_volume_slider') || '0.8') || 0.8))
     vol.value = String(slider)
     if (volVal) volVal.textContent = String(Math.max(0, Math.min(10, Math.round(slider * 10))))
   }
-  if (srcBtn) {
-    const raw = normalizeStoredActiveSource(getSettings()?.activeSource || currentSource || 'hybrid')
-    const SHORT = { hybrid: 'N', yandex: 'Я', vk: 'VK', spotify: 'SP', soundcloud: 'SC', audius: 'AU' }
-    srcBtn.textContent = SHORT[raw] || 'N'
-    srcBtn.title = `Источник: ${raw}`
-  }
+  try {
+    if (typeof syncHomeNxSourceLogo === 'function') syncHomeNxSourceLogo()
+  } catch (_) {}
 }
 
 function syncHomeCloneUI() {
@@ -4816,12 +4812,13 @@ function alignHomeHeaderToPlay() {
 function ensureAudioAnalyzer() {
   const ensure = audioPlayer.ensureAudioAnalyser
   if (typeof ensure !== 'function') return false
-  const state = { audioCtx: _audioCtx, analyser: _analyser, freqData: _freqData }
+  const state = { audioCtx: _audioCtx, analyser: _analyser, freqData: _freqData, eqFilters: _eqFilters }
   const ok = ensure(audio, state)
   if (!ok) return false
   _audioCtx = state.audioCtx
   _analyser = state.analyser
   _freqData = state.freqData
+  _eqFilters = state.eqFilters
   try {
     if (_audioCtx?.state === 'suspended') _audioCtx.resume().catch(() => {})
   } catch (_) {}
@@ -4830,11 +4827,12 @@ function ensureAudioAnalyzer() {
 
 function teardownAudioAnalyzer() {
   const close = audioPlayer.closeAudioContext
-  const state = { audioCtx: _audioCtx, analyser: _analyser, freqData: _freqData }
+  const state = { audioCtx: _audioCtx, analyser: _analyser, freqData: _freqData, eqFilters: _eqFilters }
   if (typeof close === 'function') close(state)
   _audioCtx = null
   _analyser = null
   _freqData = null
+  _eqFilters = null
 }
 
 function resizeHomeVisualizerCanvas() {
@@ -8764,7 +8762,7 @@ window.addEventListener('DOMContentLoaded', () => {
   })
   {
     const fySaved = parseInt(localStorage.getItem(FLOW_SIDEBAR_FLOAT_Y_LS) || '0', 10)
-    applySidebarFloatYPx(Number.isFinite(fySaved) ? fySaved : 0)
+    applySidebarFloatYPx(Math.max(0, Number.isFinite(fySaved) ? fySaved : 0))
   }
   setupSidebarResize()
   setupFloatedMainContentResize()

@@ -6,7 +6,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
   <!-- bump ?v= when profile/CSS/JS layout changes so Electron reloads assets -->
-  <link rel="stylesheet" href="styles.css?v=20260514-customization-gallery-ui">
+  <link rel="stylesheet" href="styles.css?v=20260516-media-eq-speed">
 </head>
 <body>
 
@@ -253,6 +253,11 @@
               <canvas class="home-visualizer-canvas" id="home-visualizer-canvas" width="640" height="130"></canvas>
               <div class="home-visualizer-image hidden" id="home-visualizer-image"></div>
             </div>
+            <div class="home-nx-vol-row home-nx-only" id="home-nx-vol-row">
+              <svg class="ui-icon" data-lucide="volume-2" viewBox="0 0 24 24" aria-hidden="true"></svg>
+              <input type="range" class="home-nx-volume" id="home-nx-volume" min="0" max="1" step="0.01" value="0.8" oninput="setVolume(this.value)">
+              <span class="home-nx-vol-val" id="home-nx-vol-val">8</span>
+            </div>
             <div class="home-clone-controls">
               <span id="host-lock-indicator-home" style="display:none;align-items:center;gap:4px;font-size:11px;opacity:.75;padding:0 4px">🔒 Host only</span>
               <button type="button" class="ctrl-btn home-nx-only" onclick="findSimilarTracks()" title="Похожие треки"><svg class="ui-icon" data-lucide="download" viewBox="0 0 24 24"></svg></button>
@@ -264,16 +269,38 @@
               <button type="button" class="ctrl-btn home-nx-only hidden" id="home-wave-dislike-btn" onclick="dislikeCurrentYandexWaveTrack()" title="Не нравится"><svg class="ui-icon" data-lucide="thumbs-down" viewBox="0 0 24 24"></svg></button>
             </div>
             <div class="home-nx-footer" id="home-nx-footer">
-              <div class="home-nx-vol">
-                <svg class="ui-icon" data-lucide="volume-2" viewBox="0 0 24 24" aria-hidden="true"></svg>
-                <input type="range" class="home-nx-volume" id="home-nx-volume" min="0" max="1" step="0.01" value="0.8" oninput="setVolume(this.value)">
-                <span class="home-nx-vol-val" id="home-nx-vol-val">8</span>
+              <div class="home-nx-foot-tools">
+                <div class="home-nx-source-wrap">
+                  <button type="button" class="home-nx-foot-btn home-nx-source-btn" id="home-nx-source-btn" onclick="toggleHomeNxSourceMenu(event)" title="Источник музыки" aria-expanded="false" aria-haspopup="true">
+                    <img class="home-nx-src-logo" id="home-nx-src-logo" src="assets/flow-mark.svg" alt="">
+                  </button>
+                  <div class="home-nx-dropdown home-nx-dropdown--down hidden" id="home-nx-source-menu" role="menu" aria-label="Источник">
+                    <button type="button" class="home-nx-src-opt" data-src="vk" onclick="pickHomeNxSource('vk')"><img src="assets/source-vk.svg" alt=""><span>ВКонтакте</span></button>
+                    <button type="button" class="home-nx-src-opt" data-src="yandex" onclick="pickHomeNxSource('yandex')"><img src="assets/source-yandex-wave.svg" alt=""><span>Яндекс</span></button>
+                    <button type="button" class="home-nx-src-opt" data-src="hybrid" onclick="pickHomeNxSource('hybrid')"><img src="assets/flow-mark.svg" alt=""><span>Classic</span></button>
+                  </div>
+                </div>
+                <button type="button" class="home-nx-foot-btn" id="home-nx-speed-btn" onclick="toggleHomeNxSpeedPopover(event)" title="Скорость воспроизведения" aria-expanded="false"><svg class="ui-icon" data-lucide="gauge" viewBox="0 0 24 24"></svg><span class="home-nx-foot-badge" id="home-nx-speed-badge">1×</span></button>
+                <button type="button" class="home-nx-foot-btn" id="home-nx-eq-btn" onclick="toggleHomeNxEqPopover(event)" title="Эквалайзер" aria-expanded="false"><svg class="ui-icon" data-lucide="sliders-vertical" viewBox="0 0 24 24"></svg></button>
               </div>
-              <button type="button" class="home-nx-foot-btn" id="home-nx-source-btn" onclick="openMediaSourceSettings()" title="Источник музыки">N</button>
-              <button type="button" class="home-nx-foot-btn" onclick="openPlaybackEqSettings()" title="Профиль звука"><svg class="ui-icon" data-lucide="sliders-horizontal" viewBox="0 0 24 24"></svg></button>
-              <button type="button" class="home-nx-foot-btn" onclick="cycleSoundEnhancerProfile()" title="Профиль чистоты звука"><svg class="ui-icon" data-lucide="gauge" viewBox="0 0 24 24"></svg></button>
-              <button type="button" class="home-nx-foot-btn" onclick="toggleLyrics()" title="Текст трека"><svg class="ui-icon" data-lucide="message-square" viewBox="0 0 24 24"></svg></button>
-              <button type="button" class="home-nx-foot-btn" onclick="enterPlayerMode()" title="Полноэкранный плеер"><svg class="ui-icon" data-lucide="maximize-2" viewBox="0 0 24 24"></svg></button>
+            </div>
+            <div class="home-nx-popover-layer hidden" id="home-nx-popover-layer" aria-hidden="true">
+              <div class="home-nx-popover home-nx-speed-popover hidden" id="home-nx-speed-popover" role="dialog" aria-label="Скорость">
+                <div class="home-nx-speed-quick">
+                  <button type="button" class="home-nx-speed-chip" data-rate="0.75" onclick="setPlaybackRate(0.75)"><span class="home-nx-speed-chip-ico">−</span><span class="home-nx-speed-chip-lbl">0.75×</span></button>
+                  <button type="button" class="home-nx-speed-chip active" data-rate="1" onclick="setPlaybackRate(1)"><span class="home-nx-speed-chip-ico">▶</span><span class="home-nx-speed-chip-lbl">1×</span></button>
+                  <button type="button" class="home-nx-speed-chip" data-rate="1.25" onclick="setPlaybackRate(1.25)"><span class="home-nx-speed-chip-ico">◎</span><span class="home-nx-speed-chip-lbl">1.25×</span></button>
+                </div>
+                <input type="range" class="home-nx-speed-slider" id="home-nx-speed-slider" min="0.5" max="2" step="0.05" value="1" oninput="setPlaybackRate(this.value)">
+                <div class="home-nx-speed-ticks"><span>0.5×</span><span>1.0×</span><span>1.5×</span><span>2.0×</span></div>
+              </div>
+              <div class="home-nx-popover home-nx-eq-popover hidden" id="home-nx-eq-popover" role="dialog" aria-label="Эквалайзер">
+                <div class="home-nx-eq-presets" id="home-nx-eq-presets"></div>
+                <div class="home-nx-eq-graph-wrap">
+                  <svg class="home-nx-eq-graph" id="home-nx-eq-graph" viewBox="0 0 400 120" preserveAspectRatio="none" aria-hidden="true"></svg>
+                  <div class="home-nx-eq-freq-labels" id="home-nx-eq-freq-labels"></div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1647,6 +1674,7 @@
 <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <script src="src/modules/network/flow-social-backend.js"></script>
   <script src="src/modules/utils/smart-cleaning.js"></script>
+  <script src="src/modules/audio/parametric-eq.js"></script>
   <script src="src/modules/audio/player-core.js"></script>
   <script src="src/modules/network/peer-social.js"></script>
   <script src="src/modules/ui/drag-drop.js"></script>
@@ -1656,7 +1684,7 @@
     <div class="flow-game-sleep-title">Sleep mode</div>
     <div class="flow-game-sleep-sub">Только воспроизведение · верни Nexory на экран</div>
   </div>
-  <script src="renderer.js?v=bd03cbf64190-mp8rjku0"></script>
+  <script src="renderer.js?v=eb60a482c97c-mp8sjidm"></script>
 </body>
 </html>
 
