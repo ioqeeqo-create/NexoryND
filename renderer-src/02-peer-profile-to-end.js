@@ -201,20 +201,34 @@ function flowWaveSourceBadgeLine(track) {
 }
 
 /** Цветной бейдж источника (SC / VK / Ян …) как в списках треков. */
-function flowTrackSourceBadgeHtml(track) {
+const FLOW_SRC_LOGO = {
+  vk: 'assets/source-vk.png',
+  yandex: 'assets/source-yandex-music.png',
+  hybrid: 'assets/icon-source.png',
+  soundcloud: 'assets/icon-source.png',
+  spotify: 'assets/icon-source.png',
+  youtube: 'assets/icon-source.png',
+  audius: 'assets/icon-source.png',
+}
+
+function flowTrackSourceBadgeHtml(track, opts = {}) {
   const t = track && typeof track === 'object' ? track : null
   if (!t?.source) return ''
   const badgeKey = trackSourceBadgeKey(t.source)
   const SHORT = { soundcloud: 'SC', vk: 'VK', youtube: 'YT', spotify: 'SP', yandex: 'Ян' }
   const lbl = SHORT[badgeKey]
   if (!lbl) return ''
+  if (opts?.mono) {
+    const logo = FLOW_SRC_LOGO[badgeKey] || FLOW_SRC_LOGO.hybrid
+    return `<span class="track-source track-source-mono" title="${lbl}"><img src="${logo}" alt="${lbl}"></span>`
+  }
   return `<span class="track-source track-source-${badgeKey}">${lbl}</span>`
 }
 
 function syncInlineTrackSourcePill(track) {
   const el = document.getElementById('player-track-source-inline')
   if (!el) return
-  const html = flowTrackSourceBadgeHtml(track || currentTrack)
+  const html = flowTrackSourceBadgeHtml(track || currentTrack, { mono: true })
   if (!html) {
     el.classList.add('hidden')
     el.innerHTML = ''
@@ -763,6 +777,17 @@ async function startMyWave() {
   }
 }
 
+function myWaveOrbPlayInnerHtml() {
+  try {
+    const playing = Boolean(audio && !audio.paused && !audio.ended && queueScope === 'myWave')
+    return playing
+      ? `<svg class="my-wave-orb-play-svg" viewBox="0 0 24 24" aria-hidden="true">${PM_PAUSE_INNER}</svg>`
+      : `<svg class="my-wave-orb-play-svg" viewBox="0 0 24 24" aria-hidden="true">${PM_PLAY_INNER}</svg>`
+  } catch (_) {
+    return `<svg class="my-wave-orb-play-svg" viewBox="0 0 24 24" aria-hidden="true">${PM_PLAY_INNER}</svg>`
+  }
+}
+
 function renderMyWave() {
   const listEl = document.getElementById('my-wave-list')
   const hintEl = document.getElementById('my-wave-hint')
@@ -770,6 +795,21 @@ function renderMyWave() {
   if (!listEl) return
   const mode = getMyWaveMode()
   const modeCfg = WE?.MY_WAVE_MODES?.[mode] || WE?.MY_WAVE_MODES?.default
+  const loading = _myWaveBuilding || _myWavePreloading
+  const stack = listEl.querySelector('.my-wave-visual-stack')
+  if (stack) {
+    const orb = stack.querySelector('.my-wave-orb')
+    if (orb) {
+      orb.className = `my-wave-orb mode-${mode} my-wave-orb--hero ${loading ? 'is-loading' : ''}`
+      orb.setAttribute('aria-label', modeCfg.label)
+      const playBtn = stack.querySelector('.my-wave-glass-btn--play')
+      if (playBtn) playBtn.innerHTML = myWaveOrbPlayInnerHtml()
+      const slot = document.getElementById('my-wave-source-slot')
+      if (slot) renderMyWaveSourceSlotInto(slot)
+      renderRoomsMyWave()
+      return
+    }
+  }
   if (hintEl) {
     hintEl.textContent = ''
     hintEl.classList.add('hidden')
@@ -780,16 +820,7 @@ function renderMyWave() {
     modesEl.innerHTML = ''
     modesEl.style.display = 'none'
   }
-  const orbPlayInner = (() => {
-    try {
-      const playing = Boolean(audio && !audio.paused && !audio.ended && queueScope === 'myWave')
-      return playing
-        ? `<svg class="my-wave-orb-play-svg" viewBox="0 0 24 24" aria-hidden="true">${PM_PAUSE_INNER}</svg>`
-        : `<svg class="my-wave-orb-play-svg" viewBox="0 0 24 24" aria-hidden="true">${PM_PLAY_INNER}</svg>`
-    } catch (_) {
-      return `<svg class="my-wave-orb-play-svg" viewBox="0 0 24 24" aria-hidden="true">${PM_PLAY_INNER}</svg>`
-    }
-  })()
+  const orbPlayInner = myWaveOrbPlayInnerHtml()
   listEl.innerHTML = `
     <div class="my-wave-visual-stack">
       <div class="my-wave-orb mode-${mode} my-wave-orb--hero ${_myWaveBuilding || _myWavePreloading ? 'is-loading' : ''}" aria-label="${modeCfg.label}">
@@ -5514,12 +5545,16 @@ function drawHomeVisualizerFrame() {
   ctx.globalAlpha = 0.9
   const mode = typeof normalizeHomeWidgetMode === 'function' ? normalizeHomeWidgetMode(hw.mode) : hw.mode
   if (mode === 'liquid') {
-    const cols = 72
-    const step = Math.max(1, Math.floor(data.length / cols))
+    const cols = 48
+    const t = performance.now() * 0.001
     const pts = []
     for (let i = 0; i <= cols; i++) {
-      const val = data[Math.min(data.length - 1, i * step)] || 0
-      const x = (i / cols) * w
+      const ratio = i / cols
+      const binIdx = Math.min(data.length - 1, Math.floor(Math.pow(ratio, 1.45) * (data.length - 1)))
+      let val = data[binIdx] || 0
+      if (!canAnalyze) val = 48 + Math.sin(ratio * 9 + t * 2.2) * 36 + Math.sin(ratio * 3.1 - t) * 22
+      else val = Math.min(255, val * 1.08 + Math.sin(ratio * 6 + t * 3) * 18)
+      const x = ratio * w
       const y = h - (Math.min(255, val * intensityScale) / 255) * (h - 14) - 8
       pts.push({ x, y })
     }
@@ -5594,7 +5629,7 @@ function startHomeVisualizerLoop() {
           const now = performance.now()
           const mode = typeof normalizeHomeWidgetMode === 'function' ? normalizeHomeWidgetMode(hw.mode) : hw.mode
           const heavy = mode === 'liquid'
-          const minMs = playing ? (heavy ? 50 : 40) : 220
+          const minMs = playing ? (heavy ? 66 : 40) : 240
           if (now - _homeVizLastDrawAt < minMs) shouldDraw = false
           else _homeVizLastDrawAt = now
         }
@@ -5682,6 +5717,17 @@ function openPage(id, opts = {}) {
     _deferredPageRenderRaf = 0
     runDeferredPageRender(id)
   })
+  if (id === 'search') {
+    queueMicrotask(() => {
+      try {
+        if (typeof syncHomeNxSourceLogo === 'function') syncHomeNxSourceLogo()
+      } catch (_) {}
+      try {
+        const shell = document.getElementById('nx-search-shell')
+        if (shell && typeof hydrateFlowLucideIcons === 'function') hydrateFlowLucideIcons(shell)
+      } catch (_) {}
+    })
+  }
   if (id === 'home') {
     queueMicrotask(() => {
       try {
@@ -6885,8 +6931,77 @@ async function searchTracksDirect(query, settings = getSettings()) {
   const hybrid = await searchHybridTracks(q, settings)
   return sanitizeTrackList(hybrid?.tracks || [])
 }
+let _lastSearchResults = []
+let _searchFilter = 'all'
+
+function setSearchFilter(filter) {
+  _searchFilter = String(filter || 'all').toLowerCase()
+  document.querySelectorAll('.nx-search-filter').forEach((btn) => {
+    btn.classList.toggle('active', btn.getAttribute('data-filter') === _searchFilter)
+  })
+  if (_lastSearchResults.length) renderResults(_lastSearchResults)
+  else searchTracks()
+}
+window.setSearchFilter = setSearchFilter
+
+function onSearchInput() {
+  const input = document.getElementById('search-input')
+  const clearBtn = document.getElementById('search-clear-btn')
+  const q = String(input?.value || '')
+  if (clearBtn) clearBtn.classList.toggle('hidden', !q.trim())
+  searchTracks()
+}
+window.onSearchInput = onSearchInput
+
+function clearSearchInput() {
+  const input = document.getElementById('search-input')
+  if (input) input.value = ''
+  onSearchInput()
+  const container = document.getElementById('search-results')
+  if (container) container.innerHTML = ''
+  _lastSearchResults = []
+}
+window.clearSearchInput = clearSearchInput
+
+function toggleSearchSourcePopover(ev) {
+  try {
+    ev?.preventDefault?.()
+    ev?.stopPropagation?.()
+  } catch (_) {}
+  const pop = document.getElementById('search-src-pop')
+  const btn = document.getElementById('search-src-btn')
+  if (!pop || !btn) return
+  const wasHidden = pop.classList.contains('hidden')
+  pop.classList.toggle('hidden')
+  btn.setAttribute('aria-expanded', wasHidden ? 'true' : 'false')
+  if (wasHidden) syncHomeNxSourceLogo()
+}
+window.toggleSearchSourcePopover = toggleSearchSourcePopover
+
+function pickSearchSource(src) {
+  switchSearchSource(src)
+  const pop = document.getElementById('search-src-pop')
+  const btn = document.getElementById('search-src-btn')
+  pop?.classList.add('hidden')
+  btn?.setAttribute('aria-expanded', 'false')
+  syncHomeNxSourceLogo(true)
+}
+window.pickSearchSource = pickSearchSource
+
+function filterSearchResultsByCategory(results) {
+  const list = sanitizeTrackList(results || [])
+  const f = _searchFilter
+  if (!f || f === 'all' || f === 'tracks') return list
+  if (f === 'playlists') return list.filter((t) => /playlist|плейлист/i.test(String(t?.title || '') + String(t?.artist || '')))
+  if (f === 'albums') return list.filter((t) => /album|альбом/i.test(String(t?.title || '') + String(t?.artist || '')))
+  if (f === 'artists') return list.filter((t) => Boolean(t?.artist) && !t?.url && !t?.ytId)
+  if (f === 'lyrics') return list.filter((t) => Boolean(t?.lyrics) || /lyric|текст/i.test(String(t?.title || '')))
+  return list
+}
+
 function renderResults(results) {
-  results = sanitizeTrackList(results)
+  _lastSearchResults = sanitizeTrackList(results)
+  results = filterSearchResultsByCategory(_lastSearchResults)
   const container = document.getElementById('search-results')
   const meta = document.getElementById('search-results-meta')
   const countEl = document.getElementById('results-count')
@@ -7173,9 +7288,11 @@ function updatePlayerLikeBtn() {
   const pmBtn = document.getElementById('pm-like-btn')
   const pmCoverBtn = document.getElementById('pm-cover-like-btn')
   const homeNxBtn = document.getElementById('home-nx-like-btn')
+  const homeNxRowBtn = document.getElementById('home-nx-row-like-btn')
   if (pmBtn) { pmBtn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; pmBtn.classList.toggle('liked', liked) }
   if (pmCoverBtn) { pmCoverBtn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; pmCoverBtn.classList.toggle('liked', liked) }
   if (homeNxBtn) { homeNxBtn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; homeNxBtn.classList.toggle('liked', liked) }
+  if (homeNxRowBtn) { homeNxRowBtn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; homeNxRowBtn.classList.toggle('liked', liked) }
 }
 
 /** Склонение для «N трек/трека/треков» (рус.). */

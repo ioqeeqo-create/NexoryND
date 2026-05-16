@@ -1550,22 +1550,112 @@ function refreshCustomBgPreview(fileName = '') {
   setMediaPreviewBox('custom-bg', media, label)
 }
 
+function normalizeHomeSliderStyle(style) {
+  const s = String(style || 'line').toLowerCase()
+  if (s === 'wave' || s === 'ios') return s
+  return 'line'
+}
+
 function setHomeSliderStyle(style) {
-  saveVisual({ homeSliderStyle: style === 'wave' ? 'wave' : 'line' })
+  const normalized = normalizeHomeSliderStyle(style)
+  saveVisual({ homeSliderStyle: normalized })
   applyHomeSliderStyle()
 }
 
 function applyHomeSliderStyle() {
   const v = getVisual()
-  const style = v.homeSliderStyle === 'wave' ? 'wave' : 'line'
+  const style = normalizeHomeSliderStyle(v.homeSliderStyle)
   const p = document.getElementById('home-clone-progress')
   const nxLine = document.getElementById('page-home')?.classList.contains('media-queue-off')
-  if (p) p.classList.toggle('home-slider-wave', !nxLine && style === 'wave')
+  if (p) {
+    p.classList.toggle('home-slider-wave', nxLine && style === 'wave')
+    p.classList.toggle('home-slider-ios', nxLine && style === 'ios')
+  }
   const b1 = document.getElementById('slider-style-line')
   const b2 = document.getElementById('slider-style-wave')
+  const b3 = document.getElementById('slider-style-ios')
   if (b1) b1.classList.toggle('active', style === 'line')
   if (b2) b2.classList.toggle('active', style === 'wave')
+  if (b3) b3.classList.toggle('active', style === 'ios')
+  try {
+    if (typeof startSliderPreviewLoop === 'function') startSliderPreviewLoop()
+  } catch (_) {}
 }
+
+let _sliderPreviewRaf = 0
+let _sliderPreviewPhase = 0
+
+function drawSliderPreviewFrame() {
+  const canvas = document.getElementById('vs-slider-preview-canvas')
+  if (!canvas) return
+  let ctx = canvas._flowPreview2d
+  if (!ctx) {
+    ctx = canvas.getContext('2d', { alpha: true })
+    canvas._flowPreview2d = ctx
+  }
+  const w = canvas.width
+  const h = canvas.height
+  ctx.clearRect(0, 0, w, h)
+  const style = normalizeHomeSliderStyle(getVisual().homeSliderStyle)
+  const bars = 48
+  const progress = 0.34 + Math.sin(_sliderPreviewPhase * 0.7) * 0.04
+  const data = new Uint8Array(bars)
+  for (let i = 0; i < bars; i++) {
+    const t = _sliderPreviewPhase + i * 0.22
+    data[i] = Math.floor(90 + Math.abs(Math.sin(t)) * 120 + Math.sin(t * 2.3) * 28)
+  }
+  if (style === 'wave') {
+    const bw = (w - 8) / bars
+    for (let i = 0; i < bars; i++) {
+      const bh = 6 + (data[i] / 255) * (h - 10)
+      const x = 4 + i * bw
+      const y = h - bh
+      const played = i / bars <= progress
+      ctx.fillStyle = played ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.28)'
+      ctx.fillRect(x, y, Math.max(2, bw - 1.5), bh)
+    }
+    const px = 4 + progress * (w - 8)
+    ctx.fillStyle = '#fff'
+    ctx.fillRect(px - 1, 2, 2, h - 4)
+  } else if (style === 'ios') {
+    const trackY = h / 2
+    ctx.fillStyle = 'rgba(255,255,255,0.22)'
+    ctx.fillRect(4, trackY - 2, w - 8, 4)
+    ctx.fillStyle = '#f2f2f2'
+    ctx.fillRect(4, trackY - 2, (w - 8) * progress, 4)
+    ctx.beginPath()
+    ctx.arc(4 + (w - 8) * progress, trackY, 7, 0, Math.PI * 2)
+    ctx.fill()
+  } else {
+    const trackY = h / 2
+    ctx.strokeStyle = 'rgba(255,255,255,0.24)'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(4, trackY)
+    ctx.lineTo(w - 4, trackY)
+    ctx.stroke()
+    ctx.strokeStyle = '#fff'
+    ctx.beginPath()
+    ctx.moveTo(4, trackY)
+    ctx.lineTo(4 + (w - 8) * progress, trackY)
+    ctx.stroke()
+    ctx.fillStyle = '#fff'
+    ctx.fillRect(4 + (w - 8) * progress - 1, trackY - 7, 2, 14)
+  }
+  _sliderPreviewPhase += 0.06
+}
+
+function startSliderPreviewLoop() {
+  if (_sliderPreviewRaf) cancelAnimationFrame(_sliderPreviewRaf)
+  const tick = () => {
+    const panel = document.getElementById('settings-panel-visual')
+    const visible = panel && !panel.classList.contains('hidden') && panel.offsetParent !== null
+    if (visible && document.getElementById('vs-slider-preview-canvas')) drawSliderPreviewFrame()
+    _sliderPreviewRaf = requestAnimationFrame(tick)
+  }
+  _sliderPreviewRaf = requestAnimationFrame(tick)
+}
+window.startSliderPreviewLoop = startSliderPreviewLoop
 
 function toggleHomeWidgetEnabled() {
   const v = getVisual()
@@ -3279,7 +3369,7 @@ function syncPlayerModeUI() {
     pmArtist.textContent = t.artist || 'вЂ”'
     const pmSrc = document.getElementById('pm-source-badge')
     if (pmSrc && typeof window.flowTrackSourceBadgeHtml === 'function') {
-      const html = window.flowTrackSourceBadgeHtml(t)
+      const html = window.flowTrackSourceBadgeHtml(t, { mono: true })
       if (html) {
         pmSrc.innerHTML = html
         pmSrc.classList.remove('hidden')
@@ -4149,18 +4239,31 @@ window.toggleHomeNxSourceMenu = toggleHomeNxSourceMenu
 function pickHomeNxSource(src) {
   switchSearchSource(src)
   closeHomeNxMenus()
-  syncHomeNxSourceLogo()
+  syncHomeNxSourceLogo(true)
 }
 window.pickHomeNxSource = pickHomeNxSource
 
-function syncHomeNxSourceLogo() {
-  const img = document.getElementById('home-nx-src-logo')
-  if (!img) return
+function syncHomeNxSourceLogo(pulse = false) {
   const raw = normalizeStoredActiveSource(getSettings()?.activeSource || currentSource || 'hybrid')
-  img.src = HOME_NX_SRC_LOGOS[raw] || HOME_NX_SRC_LOGOS.hybrid
-  img.alt = raw
+  const src = HOME_NX_SRC_LOGOS[raw] || HOME_NX_SRC_LOGOS.hybrid
+  ;['home-nx-src-logo', 'pm-source-logo', 'search-src-logo'].forEach((id) => {
+    const img = document.getElementById(id)
+    if (!img) return
+    if (!String(img.getAttribute('src') || '').includes(src.replace(/^\//, ''))) img.src = src
+    img.alt = raw
+    img.classList.add('nx-src-mono')
+    if (pulse) {
+      const btn = img.closest('.home-nx-source-btn, .pm-source-btn, .nx-search-src-btn')
+      btn?.classList.remove('home-nx-source-btn--pulse')
+      void btn?.offsetWidth
+      btn?.classList.add('home-nx-source-btn--pulse')
+    }
+  })
   const menu = document.getElementById('home-nx-source-menu')
   menu?.querySelectorAll('.home-nx-src-opt').forEach((btn) => {
+    btn.classList.toggle('active', btn.getAttribute('data-src') === raw)
+  })
+  document.querySelectorAll('.nx-search-src-opt').forEach((btn) => {
     btn.classList.toggle('active', btn.getAttribute('data-src') === raw)
   })
 }

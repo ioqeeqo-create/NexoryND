@@ -234,7 +234,7 @@
         <div class="home-clone glass-card" id="home-media-player">
           <div class="home-clone-cover-wrap" id="home-clone-cover-wrap">
             <div class="home-clone-cover" id="home-clone-cover"><svg class="ui-icon lg" data-lucide="music-2" viewBox="0 0 24 24"></svg></div>
-            <button type="button" class="home-nx-cover-expand-btn" onclick="enterPlayerMode()" title="Fullscreen" aria-label="Fullscreen"><span class="home-nx-cover-fs-ico" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span class="home-nx-cover-fs-label">Fullscreen</span></button>
+            <button type="button" class="home-nx-cover-expand-btn" onclick="enterPlayerMode()" title="Полный экран" aria-label="Полный экран"><svg class="ui-icon home-nx-cover-fs-min" data-lucide="maximize-2" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
             <div class="home-nx-cover-actions" aria-label="Действия с обложкой">
               <button type="button" class="home-nx-cover-btn home-nx-like" id="home-nx-like-btn" onclick="likeCurrentTrack()" title="Лайк"><svg class="ui-icon flow-ref-heart-player" data-lucide="heart" viewBox="0 0 24 24"></svg></button>
               <button type="button" class="home-nx-cover-btn home-nx-add" onclick="addCurrentTrackToPlaylist()" title="Добавить в плейлист"><svg class="ui-icon" data-lucide="plus" viewBox="0 0 24 24"></svg></button>
@@ -257,21 +257,20 @@
                                     <div class="home-clone-controls home-clone-controls--nx">
               <span id="host-lock-indicator-home" style="display:none;align-items:center;gap:4px;font-size:11px;opacity:.75;padding:0 4px">🔒 Host only</span>
               <div class="home-nx-ctrl-dock">
-                <button type="button" class="ctrl-btn home-nx-aux-btn home-nx-only" onclick="findSimilarTracks()" title="Похожие треки"><svg class="ui-icon" data-lucide="download" viewBox="0 0 24 24"></svg></button>
                 <div class="home-nx-ctrl-row">
                   <div class="home-nx-menu-wrap home-nx-ctrl-slot">
-                    <button type="button" class="ctrl-btn home-nx-ctrl-btn home-nx-source-btn" id="home-nx-source-btn" onclick="toggleHomeNxSourceMenu(event)" title="Источник" aria-expanded="false"><img class="home-nx-src-logo" id="home-nx-src-logo" src="assets/auth/flow.svg" alt=""></button>
+                    <button type="button" class="ctrl-btn home-nx-ctrl-btn home-nx-source-btn" id="home-nx-source-btn" onclick="toggleHomeNxSourceMenu(event)" title="Источник" aria-expanded="false"><img class="home-nx-src-logo nx-src-mono" id="home-nx-src-logo" src="assets/icon-source.png" alt=""></button>
                     <div class="home-nx-dropdown home-nx-dropdown--up hidden" id="home-nx-source-menu" role="menu">
                       <button type="button" class="home-nx-src-opt" data-src="vk" onclick="pickHomeNxSource('vk')"><img src="assets/source-vk.png" alt=""><span>ВКонтакте</span></button>
                       <button type="button" class="home-nx-src-opt" data-src="yandex" onclick="pickHomeNxSource('yandex')"><img src="assets/source-yandex-music.png" alt=""><span>Яндекс</span></button>
                       <button type="button" class="home-nx-src-opt" data-src="hybrid" onclick="pickHomeNxSource('hybrid')"><img src="assets/icon-source.png" alt=""><span>Classic</span></button>
                     </div>
                   </div>
-                  <button class="ctrl-btn" id="home-shuffle-btn" onclick="toggleShuffleMode()" title="Перемешка"><svg class="ui-icon flow-ref-ctrl" data-lucide="shuffle" viewBox="0 0 24 24"></svg></button>
+                  <button type="button" class="ctrl-btn home-nx-row-like" id="home-nx-row-like-btn" onclick="likeCurrentTrack()" title="Лайк"><svg class="ui-icon flow-ref-heart-player" data-lucide="heart" viewBox="0 0 24 24"></svg></button>
                   <button class="ctrl-btn" onclick="prevTrack()"><svg class="ui-icon" data-lucide="skip-back" viewBox="0 0 24 24"></svg></button>
                   <button class="ctrl-btn play-btn" id="home-play-btn" onclick="togglePlay()"><svg class="ui-icon ctrl-play-icon" data-lucide="play" viewBox="0 0 24 24"></svg></button>
                   <button class="ctrl-btn" onclick="nextTrack()"><svg class="ui-icon" data-lucide="skip-forward" viewBox="0 0 24 24"></svg></button>
-                  <button class="ctrl-btn" id="home-repeat-btn" onclick="toggleRepeatMode()" title="Повтор"><svg class="ui-icon flow-ref-ctrl" data-lucide="repeat" viewBox="0 0 24 24"></svg></button>
+                  <button class="ctrl-btn" id="home-shuffle-btn" onclick="toggleShuffleMode()" title="Перемешка"><svg class="ui-icon flow-ref-ctrl" data-lucide="shuffle" viewBox="0 0 24 24"></svg></button>
                   <div class="home-nx-menu-wrap home-nx-ctrl-slot">
                     <button type="button" class="ctrl-btn home-nx-ctrl-btn" id="home-nx-speed-btn" onclick="toggleHomeNxSpeedMenu(event)" title="Скорость" aria-expanded="false"><svg class="ui-icon" data-lucide="gauge" viewBox="0 0 24 24"></svg><span class="home-nx-ctrl-badge" id="home-nx-speed-badge">1×</span></button>
                     <div class="home-nx-dropdown home-nx-dropdown--up home-nx-speed-dropdown hidden" id="home-nx-speed-menu" role="dialog">
@@ -325,29 +324,33 @@
     </div>
 
     <div id="page-search" class="page">
-      <div class="content-header">
+      <div class="content-header content-header--search">
         <h2>Поиск</h2>
-        <p class="content-sub">Найди трек</p>
       </div>
-      <div class="search-bar glass" id="search-bar" title="Поиск">
-        <svg class="ui-icon lg" data-lucide="search" viewBox="0 0 24 24" aria-hidden="true"></svg>
-        <input id="search-input" type="search" enterkeyhint="search" placeholder="Исполнитель, название трека..." oninput="searchTracks()" autocomplete="off">
-      </div>
-      <div class="search-source-row">
-        <span style="font-size:11px;color:var(--muted);margin-right:2px">Источник:</span>
-        <div class="source-mode-grid source-mode-grid--compact">
-          <button class="source-mode-card active" data-src="hybrid" onclick="switchSearchSource('hybrid')" title="Nexory classic">
-            <span class="source-mode-icon">F</span>
-            <span class="source-mode-label">classic</span>
+      <div class="nx-search-shell glass" id="nx-search-shell">
+        <div class="nx-search-top-row">
+          <div class="nx-search-input-wrap">
+            <svg class="ui-icon md nx-search-ico" data-lucide="search" viewBox="0 0 24 24" aria-hidden="true"></svg>
+            <input id="search-input" type="search" enterkeyhint="search" placeholder="Исполнитель, название трека..." oninput="onSearchInput()" autocomplete="off">
+            <button type="button" class="nx-search-clear hidden" id="search-clear-btn" onclick="clearSearchInput()" aria-label="Очистить"><svg class="ui-icon sm" data-lucide="x" viewBox="0 0 24 24"></svg></button>
+          </div>
+          <button type="button" class="nx-search-src-btn" id="search-src-btn" onclick="toggleSearchSourcePopover(event)" title="Источник" aria-expanded="false">
+            <img id="search-src-logo" class="nx-search-src-logo nx-src-mono" src="assets/icon-source.png" alt="">
           </button>
-          <button class="source-mode-card" data-src="yandex" onclick="switchSearchSource('yandex')" title="Яндекс">
-            <span class="source-mode-icon source-mode-icon-ya">✶</span>
-            <span class="source-mode-label">Ya</span>
-          </button>
-          <button class="source-mode-card" data-src="vk" onclick="switchSearchSource('vk')" title="ВКонтакте">
-            <span class="source-mode-icon" style="font-size:13px;font-weight:800;background:linear-gradient(135deg,#4680c2,#5b9bd5);color:#fff">VK</span>
-            <span class="source-mode-label">VK</span>
-          </button>
+          <div class="nx-search-src-pop hidden" id="search-src-pop" role="menu">
+            <button type="button" class="nx-search-src-opt" data-src="hybrid" onclick="pickSearchSource('hybrid')"><img src="assets/icon-source.png" alt=""><span>Classic</span></button>
+            <button type="button" class="nx-search-src-opt" data-src="yandex" onclick="pickSearchSource('yandex')"><img src="assets/source-yandex-music.png" alt=""><span>Яндекс</span></button>
+            <button type="button" class="nx-search-src-opt" data-src="vk" onclick="pickSearchSource('vk')"><img src="assets/source-vk.png" alt=""><span>ВКонтакте</span></button>
+          </div>
+        </div>
+        <div class="nx-search-divider" aria-hidden="true"></div>
+        <div class="nx-search-filters" role="tablist" aria-label="Категория поиска">
+          <button type="button" class="nx-search-filter active" data-filter="all" onclick="setSearchFilter('all')"><svg class="ui-icon sm" data-lucide="search" viewBox="0 0 24 24"></svg><span>Все</span></button>
+          <button type="button" class="nx-search-filter" data-filter="tracks" onclick="setSearchFilter('tracks')"><svg class="ui-icon sm" data-lucide="music-2" viewBox="0 0 24 24"></svg><span>Треки</span></button>
+          <button type="button" class="nx-search-filter" data-filter="playlists" onclick="setSearchFilter('playlists')"><svg class="ui-icon sm" data-lucide="list-music" viewBox="0 0 24 24"></svg><span>Плейлисты</span></button>
+          <button type="button" class="nx-search-filter" data-filter="albums" onclick="setSearchFilter('albums')"><svg class="ui-icon sm" data-lucide="disc-3" viewBox="0 0 24 24"></svg><span>Альбомы</span></button>
+          <button type="button" class="nx-search-filter" data-filter="artists" onclick="setSearchFilter('artists')"><svg class="ui-icon sm" data-lucide="user-round" viewBox="0 0 24 24"></svg><span>Артисты</span></button>
+          <button type="button" class="nx-search-filter" data-filter="lyrics" onclick="setSearchFilter('lyrics')"><svg class="ui-icon sm" data-lucide="align-left" viewBox="0 0 24 24"></svg><span>По тексту</span></button>
         </div>
       </div>
       <div id="search-results-meta" class="results-meta" style="display:none">
@@ -933,11 +936,20 @@
                 <button class="vsb" onclick="clearHomeWidgetImage()">Убрать фото</button>
               </div>
             </div>
-            <div class="vs-row">
+            <div class="vs-row vs-row--slider-style">
               <label class="vs-label">Стиль слайдера</label>
-              <div class="vs-btn-group">
-                <button class="vsb" id="slider-style-line" onclick="setHomeSliderStyle('line')">Линия</button>
-                <button class="vsb" id="slider-style-wave" onclick="setHomeSliderStyle('wave')">Wave</button>
+              <div class="vs-slider-style-block">
+                <div class="vs-btn-group">
+                  <button class="vsb" id="slider-style-line" onclick="setHomeSliderStyle('line')">Обычный</button>
+                  <button class="vsb" id="slider-style-wave" onclick="setHomeSliderStyle('wave')">Волновой</button>
+                  <button class="vsb" id="slider-style-ios" onclick="setHomeSliderStyle('ios')">iOS</button>
+                </div>
+                <div class="vs-slider-preview" id="vs-slider-preview" aria-hidden="true">
+                  <canvas id="vs-slider-preview-canvas" width="320" height="72"></canvas>
+                  <span class="vs-slider-preview-title" id="vs-slider-preview-title">ARXANGEL</span>
+                  <span class="vs-slider-preview-time vs-slider-preview-time--l" id="vs-slider-preview-cur">0:43</span>
+                  <span class="vs-slider-preview-time vs-slider-preview-time--r" id="vs-slider-preview-tot">2:07</span>
+                </div>
               </div>
             </div>
             <div class="vs-row">
@@ -1423,8 +1435,10 @@
   <div class="pm-controls pm-controls--rail">
     <span id="host-lock-indicator-pm" class="pm-host-lock-pm" style="display:none">🔒 Host only</span>
     <div class="pm-controls-rail-bar">
-    <button type="button" class="pm-btn-side hidden" onclick="dislikeCurrentYandexWaveTrack()" id="pm-wave-dislike-btn" title="Не нравится (Яндекс)"><svg class="ui-icon" data-lucide="thumbs-down" viewBox="0 0 24 24"></svg></button>
-    <button class="pm-btn-side" id="pm-shuffle-btn" onclick="toggleShuffleMode()" title="Перемешка"><svg class="ui-icon" data-lucide="shuffle" viewBox="0 0 24 24"></svg></button>
+    <div class="home-nx-menu-wrap pm-src-wrap">
+      <button type="button" class="pm-btn-side pm-source-btn" id="pm-source-btn" onclick="toggleHomeNxSourceMenu(event)" title="Источник" aria-expanded="false"><img class="home-nx-src-logo nx-src-mono" id="pm-source-logo" src="assets/icon-source.png" alt=""></button>
+    </div>
+    <button type="button" class="pm-btn-side" id="pm-like-btn" onclick="likeCurrentTrack()" title="Лайк"><svg class="ui-icon flow-ref-heart-player" data-lucide="heart" viewBox="0 0 24 24"></svg></button>
     <button class="pm-btn" onclick="prevTrack()" title="Предыдущий">
       <svg class="ui-icon lg" data-lucide="skip-back" viewBox="0 0 24 24"></svg>
     </button>
@@ -1434,8 +1448,10 @@
     <button class="pm-btn" onclick="nextTrack()" title="Следующий">
       <svg class="ui-icon lg" data-lucide="skip-forward" viewBox="0 0 24 24"></svg>
     </button>
-    <button class="pm-btn-side" id="pm-repeat-pm-btn" onclick="toggleRepeatMode()" title="Повтор"><svg class="ui-icon" data-lucide="repeat" viewBox="0 0 24 24"></svg></button>
-    <button type="button" class="pm-btn-side" id="pm-like-btn" onclick="likeCurrentTrack()" title="Лайк"><svg class="ui-icon flow-ref-heart-player" data-lucide="heart" viewBox="0 0 24 24"></svg></button>
+    <button class="pm-btn-side" id="pm-shuffle-btn" onclick="toggleShuffleMode()" title="Перемешка"><svg class="ui-icon" data-lucide="shuffle" viewBox="0 0 24 24"></svg></button>
+    <button type="button" class="pm-btn-side pm-speed-btn" id="pm-speed-btn" onclick="toggleHomeNxSpeedMenu(event)" title="Скорость"><svg class="ui-icon" data-lucide="gauge" viewBox="0 0 24 24"></svg></button>
+    <button type="button" class="pm-btn-side pm-eq-btn" id="pm-eq-btn" onclick="toggleHomeNxEqMenu(event)" title="Фильтр / EQ"><svg class="ui-icon" data-lucide="sliders-vertical" viewBox="0 0 24 24"></svg></button>
+    <button type="button" class="pm-btn-side hidden" onclick="dislikeCurrentYandexWaveTrack()" id="pm-wave-dislike-btn" title="Не нравится"><svg class="ui-icon" data-lucide="thumbs-down" viewBox="0 0 24 24"></svg></button>
     </div>
   </div>
 
@@ -1684,7 +1700,7 @@
     <div class="flow-game-sleep-title">Sleep mode</div>
     <div class="flow-game-sleep-sub">Только воспроизведение · верни Nexory на экран</div>
   </div>
-  <script src="renderer.js?v=cd0192732332-mp8wvqcn"></script>
+  <script src="renderer.js?v=5fd0d52868a2-mp8zdm7g"></script>
 </body>
 </html>
 
