@@ -3613,6 +3613,8 @@ function getSettings() {
     proxyBaseUrl: FLOW_SERVER_DEFAULT_URL,
     compactUi: false,
     mediaShowQueue: true,
+    mediaMetaAlign: 'left',
+    mediaPlayerBarMode: 'always',
     minimizeToTrayOnClose: true,
     launchAtLogin: false,
     flowSocialApiBase: FLOW_SOCIAL_DEFAULT_API_BASE,
@@ -3620,6 +3622,10 @@ function getSettings() {
   }
   if (typeof raw.compactUi !== 'boolean') raw.compactUi = false
   if (typeof raw.mediaShowQueue !== 'boolean') raw.mediaShowQueue = true
+  const metaAlign = String(raw.mediaMetaAlign || 'left').trim().toLowerCase()
+  raw.mediaMetaAlign = metaAlign === 'center' || metaAlign === 'right' ? metaAlign : 'left'
+  const barMode = String(raw.mediaPlayerBarMode || 'always').trim().toLowerCase()
+  raw.mediaPlayerBarMode = barMode === 'hide-on-media' ? 'hide-on-media' : 'always'
   if (!Object.prototype.hasOwnProperty.call(raw, 'flowSocialApiBase')) raw.flowSocialApiBase = FLOW_SOCIAL_DEFAULT_API_BASE
   if (!Object.prototype.hasOwnProperty.call(raw, 'flowSocialApiSecret')) raw.flowSocialApiSecret = FLOW_SOCIAL_DEFAULT_API_SECRET
   if (!String(raw.flowSocialApiBase || '').trim()) raw.flowSocialApiBase = FLOW_SOCIAL_DEFAULT_API_BASE
@@ -3794,6 +3800,49 @@ function syncMediaQueueToggle() {
   if (el) el.classList.toggle('active', isMediaQueueEnabled())
 }
 
+function getMediaMetaAlign() {
+  const a = String(getSettings().mediaMetaAlign || 'left').trim().toLowerCase()
+  return a === 'center' || a === 'right' ? a : 'left'
+}
+
+function getMediaPlayerBarMode() {
+  return String(getSettings().mediaPlayerBarMode || 'always').trim().toLowerCase() === 'hide-on-media'
+    ? 'hide-on-media'
+    : 'always'
+}
+
+function syncMediaMetaAlignUI() {
+  const align = getMediaMetaAlign()
+  ;['center', 'left', 'right'].forEach((id) => {
+    const btn = document.getElementById(`media-meta-align-${id}`)
+    if (btn) btn.classList.toggle('active', id === align)
+  })
+}
+
+function syncMediaPlayerBarModeUI() {
+  const mode = getMediaPlayerBarMode()
+  const always = document.getElementById('media-player-bar-always')
+  const hide = document.getElementById('media-player-bar-hide')
+  if (always) always.classList.toggle('active', mode === 'always')
+  if (hide) hide.classList.toggle('active', mode === 'hide-on-media')
+}
+
+function applyMediaMetaAlign() {
+  const page = document.getElementById('page-home')
+  if (!page) return
+  page.classList.remove('media-meta-align-center', 'media-meta-align-left', 'media-meta-align-right')
+  page.classList.add(`media-meta-align-${getMediaMetaAlign()}`)
+  syncMediaMetaAlignUI()
+}
+
+function applyMediaPlayerBarVisibility() {
+  const onMedia = _activePageId === 'home'
+  const hide = onMedia && getMediaPlayerBarMode() === 'hide-on-media'
+  document.body.classList.toggle('media-page-active', onMedia)
+  document.body.classList.toggle('media-player-bar-hidden', hide)
+  syncMediaPlayerBarModeUI()
+}
+
 function applyMediaQueueLayout() {
   const on = isMediaQueueEnabled()
   const page = document.getElementById('page-home')
@@ -3805,15 +3854,35 @@ function applyMediaQueueLayout() {
   const upNext = document.getElementById('home-up-next')
   if (upNext) upNext.classList.toggle('hidden', !on)
   syncMediaQueueToggle()
+  applyMediaMetaAlign()
+  applyMediaPlayerBarVisibility()
   syncHomeNxFooter()
   if (on && typeof renderQueue === 'function') renderQueue()
   queueMicrotask(() => {
     try {
-      alignHomeHeaderToPlay()
+      if (on) alignHomeHeaderToPlay()
       resizeHomeVisualizerCanvas()
     } catch (_) {}
   })
 }
+
+function setMediaMetaAlign(align) {
+  const a = String(align || '').trim().toLowerCase()
+  const safe = a === 'center' || a === 'right' ? a : 'left'
+  saveSettingsRaw({ mediaMetaAlign: safe })
+  applyMediaMetaAlign()
+  showToast(`Текст в медиа: ${safe === 'center' ? 'по центру' : safe === 'right' ? 'справа' : 'слева'}`)
+}
+window.setMediaMetaAlign = setMediaMetaAlign
+
+function setMediaPlayerBarMode(mode) {
+  const m = String(mode || '').trim().toLowerCase()
+  const safe = m === 'hide-on-media' ? 'hide-on-media' : 'always'
+  saveSettingsRaw({ mediaPlayerBarMode: safe })
+  applyMediaPlayerBarVisibility()
+  showToast(safe === 'hide-on-media' ? 'Панель скрывается в медиа' : 'Панель всегда видна')
+}
+window.setMediaPlayerBarMode = setMediaPlayerBarMode
 
 function toggleMediaShowQueue() {
   const next = !isMediaQueueEnabled()
@@ -4634,6 +4703,8 @@ function loadSettingsPage() {
     switchSettingsCategory(_settingsCategory)
     applyOptimizationSettings()
     applyMediaQueueLayout()
+    syncMediaMetaAlignUI()
+    syncMediaPlayerBarModeUI()
     syncSearchSourceRows()
     syncAuthSourceStackActive()
     updateSourceBadge()
@@ -11780,6 +11851,9 @@ function openPage(id, opts = {}) {
   }
   _activePageId = id
   try { document.body.setAttribute('data-active-page', id) } catch {}
+  try {
+    applyMediaPlayerBarVisibility()
+  } catch (_) {}
   syncSearchBarCollapsedState()
   if (_deferredPageRenderRaf) cancelAnimationFrame(_deferredPageRenderRaf)
   _deferredPageRenderRaf = requestAnimationFrame(() => {

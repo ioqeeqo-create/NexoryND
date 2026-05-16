@@ -5628,6 +5628,9 @@ function openPage(id, opts = {}) {
   }
   _activePageId = id
   try { document.body.setAttribute('data-active-page', id) } catch {}
+  try {
+    applyMediaPlayerBarVisibility()
+  } catch (_) {}
   syncSearchBarCollapsedState()
   if (_deferredPageRenderRaf) cancelAnimationFrame(_deferredPageRenderRaf)
   _deferredPageRenderRaf = requestAnimationFrame(() => {

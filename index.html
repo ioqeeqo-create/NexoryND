@@ -249,6 +249,10 @@
               <input type="range" id="home-clone-progress" min="0" max="1" step="0.001" value="0" oninput="seekTo(this.value)">
               <span id="home-clone-time-total">0:00</span>
             </div>
+            <div class="home-visualizer-wrap" id="home-visualizer-wrap">
+              <canvas class="home-visualizer-canvas" id="home-visualizer-canvas" width="640" height="130"></canvas>
+              <div class="home-visualizer-image hidden" id="home-visualizer-image"></div>
+            </div>
             <div class="home-clone-controls">
               <span id="host-lock-indicator-home" style="display:none;align-items:center;gap:4px;font-size:11px;opacity:.75;padding:0 4px">🔒 Host only</span>
               <button type="button" class="ctrl-btn home-nx-only" onclick="findSimilarTracks()" title="Похожие треки"><svg class="ui-icon" data-lucide="download" viewBox="0 0 24 24"></svg></button>
@@ -270,10 +274,6 @@
               <button type="button" class="home-nx-foot-btn" onclick="cycleSoundEnhancerProfile()" title="Профиль чистоты звука"><svg class="ui-icon" data-lucide="gauge" viewBox="0 0 24 24"></svg></button>
               <button type="button" class="home-nx-foot-btn" onclick="toggleLyrics()" title="Текст трека"><svg class="ui-icon" data-lucide="message-square" viewBox="0 0 24 24"></svg></button>
               <button type="button" class="home-nx-foot-btn" onclick="enterPlayerMode()" title="Полноэкранный плеер"><svg class="ui-icon" data-lucide="maximize-2" viewBox="0 0 24 24"></svg></button>
-            </div>
-            <div class="home-visualizer-wrap" id="home-visualizer-wrap">
-              <canvas class="home-visualizer-canvas" id="home-visualizer-canvas" width="640" height="130"></canvas>
-              <div class="home-visualizer-image hidden" id="home-visualizer-image"></div>
             </div>
           </div>
         </div>
@@ -830,6 +830,21 @@
             <div class="vs-row">
               <label class="vs-label">Очередь в разделе «Медиа»</label>
               <div class="vs-toggle active" id="toggle-media-show-queue" onclick="toggleMediaShowQueue()" title="Показывать список «Дальше в очереди» на странице медиа"><div class="vs-toggle-thumb"></div></div>
+            </div>
+            <div class="vs-row vs-row--stack">
+              <label class="vs-label">Расположение названия в медиа</label>
+              <div class="vs-btn-group vs-media-preview-grid" role="group" aria-label="Расположение текста в медиа">
+                <button type="button" class="vsb vs-media-layout-card" id="media-meta-align-center" onclick="setMediaMetaAlign('center')"><span class="vs-media-preview vs-media-preview--meta-center" aria-hidden="true"></span><span class="vs-media-layout-name">По центру</span></button>
+                <button type="button" class="vsb vs-media-layout-card" id="media-meta-align-left" onclick="setMediaMetaAlign('left')"><span class="vs-media-preview vs-media-preview--meta-left" aria-hidden="true"></span><span class="vs-media-layout-name">Слева</span></button>
+                <button type="button" class="vsb vs-media-layout-card" id="media-meta-align-right" onclick="setMediaMetaAlign('right')"><span class="vs-media-preview vs-media-preview--meta-right" aria-hidden="true"></span><span class="vs-media-layout-name">Справа</span></button>
+              </div>
+            </div>
+            <div class="vs-row vs-row--stack">
+              <label class="vs-label">Нижняя панель плеера</label>
+              <div class="vs-btn-group vs-media-preview-grid vs-media-preview-grid--2" role="group" aria-label="Нижняя панель">
+                <button type="button" class="vsb vs-media-layout-card" id="media-player-bar-always" onclick="setMediaPlayerBarMode('always')"><span class="vs-media-preview vs-media-preview--bar-always" aria-hidden="true"></span><span class="vs-media-layout-name">Всегда</span></button>
+                <button type="button" class="vsb vs-media-layout-card" id="media-player-bar-hide" onclick="setMediaPlayerBarMode('hide-on-media')"><span class="vs-media-preview vs-media-preview--bar-hide" aria-hidden="true"></span><span class="vs-media-layout-name">Скрывать в медиа</span></button>
+              </div>
             </div>
             <div class="vs-row">
               <label class="vs-label">Перемешка</label>
@@ -1641,7 +1656,7 @@
     <div class="flow-game-sleep-title">Sleep mode</div>
     <div class="flow-game-sleep-sub">Только воспроизведение · верни Nexory на экран</div>
   </div>
-  <script src="renderer.js?v=3514354b21b4-mp8r26t8"></script>
+  <script src="renderer.js?v=bd03cbf64190-mp8rjku0"></script>
 </body>
 </html>
 

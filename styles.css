@@ -3000,15 +3000,30 @@ body.visual-minimal .main-quick-playlist-meta span {
 #page-home.media-queue-off #home-up-next {
   display: none !important;
 }
+#page-home.media-queue-off.active {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - var(--titlebar-h) - var(--player-h) - 40px);
+}
+#page-home.media-queue-off .content-header {
+  flex-shrink: 0;
+  text-align: center;
+}
 #page-home.media-queue-off .playback-page-shell {
-  max-width: min(940px, 100%);
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(1120px, 94vw);
+  max-width: min(1120px, 94vw);
   margin-inline: auto;
-  padding-top: 6px;
+  padding: var(--space-3) 0;
 }
 #page-home.media-queue-off .home-clone {
-  grid-template-columns: minmax(260px, 38%) minmax(0, 1fr);
-  gap: clamp(18px, 3vw, 32px);
-  padding: clamp(16px, 2.4vw, 26px);
+  width: 100%;
+  grid-template-columns: minmax(320px, 44%) minmax(0, 1fr);
+  gap: clamp(22px, 3.5vw, 40px);
+  padding: clamp(22px, 3vw, 40px);
   border-radius: 22px;
   border: 1px solid rgba(255,255,255,0.12);
   background:
@@ -3021,14 +3036,19 @@ body.visual-minimal .main-quick-playlist-meta span {
   position: relative;
   min-width: 0;
 }
+#page-home.media-queue-off .home-clone-cover-wrap {
+  display: flex;
+  justify-content: center;
+}
 #page-home.media-queue-off .home-clone-cover {
   width: 100%;
+  max-width: min(100%, 640px);
   height: auto;
   aspect-ratio: 1;
-  min-height: 260px;
-  max-height: min(52vh, 520px);
-  border-radius: 18px;
-  box-shadow: 0 18px 44px rgba(0,0,0,0.45);
+  min-height: 340px;
+  max-height: min(62vh, 640px);
+  border-radius: 20px;
+  box-shadow: 0 22px 52px rgba(0,0,0,0.48);
 }
 .home-nx-cover-actions {
   position: absolute;
@@ -3078,9 +3098,22 @@ body.visual-minimal .main-quick-playlist-meta span {
   max-width: none;
   margin-inline: 0;
 }
-#page-home.media-queue-off .home-clone-head {
+#page-home.media-meta-align-center .home-clone-head {
+  align-items: center;
+  text-align: center;
+  transform: none;
+}
+#page-home.media-meta-align-left .home-clone-head {
   align-items: flex-start;
   text-align: left;
+  transform: none;
+}
+#page-home.media-meta-align-right .home-clone-head {
+  align-items: flex-end;
+  text-align: right;
+  transform: none;
+}
+#page-home.media-queue-off .home-clone-head {
   transform: none;
 }
 #page-home.media-queue-off .home-clone-title {
@@ -3101,10 +3134,40 @@ body.visual-minimal .main-quick-playlist-meta span {
   font-size: 12px;
   color: rgba(255,255,255,0.78);
 }
-#page-home.media-queue-off #home-clone-progress.home-slider-wave,
+#page-home #home-clone-progress,
 #page-home.media-queue-off #home-clone-progress {
   height: 20px;
-  accent-color: #f59e0b;
+  accent-color: #ffffff;
+  --media-progress-fill: #ffffff;
+}
+#page-home #home-clone-progress.home-slider-wave,
+#page-home.media-queue-off #home-clone-progress.home-slider-wave {
+  background:
+    radial-gradient(circle at 8px 50%, rgba(255,255,255,0.95) 0 2.5px, transparent 2.6px) 0 0 / 16px 100% repeat-x,
+    linear-gradient(90deg, #ffffff var(--progress-fill, 0%), rgba(255,255,255,0.22) var(--progress-fill, 0%));
+  border-radius: 999px;
+}
+#page-home #home-clone-progress.home-slider-wave::-webkit-slider-thumb,
+#page-home.media-queue-off #home-clone-progress.home-slider-wave::-webkit-slider-thumb {
+  background: #ffffff;
+  box-shadow: 0 0 0 2px rgba(12,14,22,0.75);
+}
+#page-home #home-clone-progress.home-slider-wave::-moz-range-thumb,
+#page-home.media-queue-off #home-clone-progress.home-slider-wave::-moz-range-thumb {
+  background: #ffffff;
+  border: none;
+}
+#page-home #home-clone-progress::-webkit-slider-runnable-track,
+#page-home.media-queue-off #home-clone-progress::-webkit-slider-runnable-track {
+  background: linear-gradient(90deg, #ffffff var(--progress-fill, 0%), rgba(255,255,255,0.2) var(--progress-fill, 0%));
+}
+#page-home #home-clone-progress::-moz-range-track,
+#page-home.media-queue-off #home-clone-progress::-moz-range-track {
+  background: rgba(255,255,255,0.2);
+}
+#page-home #home-clone-progress::-moz-range-progress,
+#page-home.media-queue-off #home-clone-progress::-moz-range-progress {
+  background: #ffffff;
 }
 #page-home.media-queue-off .home-clone-controls {
   justify-content: center;
@@ -3124,10 +3187,27 @@ body.visual-minimal .main-quick-playlist-meta span {
   height: 52px !important;
 }
 #page-home.media-queue-off .home-visualizer-wrap {
-  height: 76px;
-  margin-top: 2px;
-  border-radius: 12px;
-  border-color: rgba(255,255,255,0.1);
+  order: 0;
+  height: clamp(88px, 12vh, 120px);
+  margin-top: 0;
+  border-radius: 14px;
+  border-color: rgba(255,255,255,0.12);
+}
+#page-home.media-queue-off .home-clone-progress-wrap {
+  order: -1;
+}
+#page-home.media-queue-off .home-clone-head {
+  order: -2;
+}
+#page-home.media-queue-off .home-clone-controls {
+  order: 1;
+}
+#page-home.media-queue-off .home-nx-footer {
+  order: 2;
+}
+#page-home.media-queue-off .home-clone-main {
+  display: flex;
+  flex-direction: column;
 }
 .home-nx-footer {
   align-items: center;
@@ -3184,12 +3264,131 @@ body.visual-minimal .main-quick-playlist-meta span {
   width: 18px;
   height: 18px;
 }
+body.media-player-bar-hidden.media-page-active #player-bar,
+body.media-player-bar-hidden.media-page-active #player-bar-layout-dock,
+body.media-player-bar-hidden.media-page-active #screen-main > #player-bar-layout-dock {
+  display: none !important;
+}
+body.media-player-bar-hidden.media-page-active {
+  --player-h: 0px;
+  --player-layout-dock-h: 0px;
+}
+
+.vs-row--stack {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+.vs-media-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-1);
+  width: min(420px, 100%);
+}
+.vs-media-preview-grid--2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: min(280px, 100%);
+}
+.vs-media-layout-card {
+  min-height: 108px;
+  padding: 10px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.vs-media-layout-card.active {
+  border-color: rgba(255,255,255,0.42);
+  background: color-mix(in srgb, var(--accent2) 22%, rgba(255,255,255,0.1));
+}
+.vs-media-layout-name {
+  font-size: 11px;
+  line-height: 1.1;
+  text-align: center;
+}
+.vs-media-preview {
+  width: 100%;
+  max-width: 118px;
+  height: 64px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(8,10,18,0.72);
+  position: relative;
+  overflow: hidden;
+}
+.vs-media-preview--meta-center::before,
+.vs-media-preview--meta-left::before,
+.vs-media-preview--meta-right::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 14px;
+  height: 8px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.82);
+}
+.vs-media-preview--meta-center::after,
+.vs-media-preview--meta-left::after,
+.vs-media-preview--meta-right::after {
+  content: '';
+  position: absolute;
+  width: 46%;
+  height: 5px;
+  top: 28px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.42);
+}
+.vs-media-preview--meta-center::before { left: 50%; right: auto; width: 56px; transform: translateX(-50%); }
+.vs-media-preview--meta-center::after { left: 50%; transform: translateX(-50%); }
+.vs-media-preview--meta-left::after { left: 10px; }
+.vs-media-preview--meta-right::before { left: auto; right: 10px; width: 56px; }
+.vs-media-preview--meta-right::after { left: auto; right: 10px; }
+.vs-media-preview--bar-always::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  height: 14px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.16);
+  border: 1px solid rgba(255,255,255,0.2);
+}
+.vs-media-preview--bar-hide::before {
+  content: '';
+  position: absolute;
+  inset: 10px 8px 22px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.08);
+}
+.vs-media-preview--bar-hide::after {
+  content: '—';
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  transform: translateX(-50%);
+  font-size: 16px;
+  color: rgba(255,255,255,0.35);
+}
+
 @media (max-width: 900px) {
   #page-home.media-queue-off .home-clone {
     grid-template-columns: 1fr;
   }
   #page-home.media-queue-off .home-clone-cover {
-    max-height: min(44vh, 400px);
+    min-height: 300px;
+    max-height: min(52vh, 480px);
+    max-width: min(92vw, 480px);
+  }
+  .vs-media-preview-grid {
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+  .vs-media-preview-grid--2 {
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
   }
 }
 
