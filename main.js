@@ -3981,9 +3981,9 @@ function parseYmRotorTracksBody(body) {
     const row = mapYmRotorTrackToFlow(item.track, batchId, YM_MY_WAVE_STATION)
     if (row) tracks.push(row)
   }
-  // Для следующего GET /tracks параметр queue — якорь цепочки (как в официальном API: первый трек выдачи).
-  const head = tracks.length ? tracks[0] : null
-  const nextQueueTrackId = head?.id ? String(head.id) : ''
+  // queue в следующем GET — id точки продолжения (последний трек выдачи, не первый).
+  const tail = tracks.length ? tracks[tracks.length - 1] : null
+  const nextQueueTrackId = tail?.id ? String(tail.id) : ''
   return { tracks, batchId, nextQueueTrackId }
 }
 
@@ -4008,9 +4008,8 @@ ipcMain.handle('yandex-my-wave-fetch', async (e, { token, mode, queueTrackId, ra
     const oauth = ymOAuthFromRawToken(token)
     if (!oauth) return { ok: false, error: 'Пустой токен Яндекса' }
     const h = ymOAuthHeaders(oauth)
-    // Не дробим волну по «настроению» из Flow — как дефолтная Моя волна в Я.Музыке (без sad/fun/active).
     const settingsForm = new URLSearchParams()
-    settingsForm.set('moodEnergy', 'all')
+    settingsForm.set('moodEnergy', mapFlowWaveModeToYmMoodEnergy(mode))
     settingsForm.set('diversity', 'default')
     settingsForm.set('language', 'any')
     settingsForm.set('type', 'rotor')

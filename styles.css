@@ -22,7 +22,12 @@
   --font-ui: 'Minecraft', 'DM Sans', sans-serif;
   --font-title: 'Minecraft', 'Syne', sans-serif;
   --text: #f0eeff;
-  --muted: rgba(240,238,255,0.4);
+  --muted: rgba(240,238,255,0.52);
+  --text-strong: rgba(255,255,255,0.96);
+  --text-secondary: rgba(255,255,255,0.62);
+  --space-1: 8px;
+  --space-2: 16px;
+  --space-3: 24px;
   --border: rgba(255,255,255,0.08);
   --glass-bg: rgba(255,255,255,0.08);
   --glass-blur: 30px;
@@ -319,10 +324,10 @@ body.audio-buffering .spin-icon {
 }
 
 .glass-card {
-  background: color-mix(in srgb, var(--glass-bg) 72%, rgba(255,255,255,0.02));
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255,255,255,0.1);
+  background: color-mix(in srgb, var(--glass-bg) 78%, rgba(10,12,20,0.42));
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  border: 1px solid rgba(255,255,255,0.11);
   border-radius: 16px;
   transition:
     background-color var(--anim-ui) var(--ease-flow),
@@ -2906,7 +2911,7 @@ body.visual-minimal .main-quick-playlist-meta span {
 .home-up-next-item {
   border: 1px solid rgba(255,255,255,0.12);
   border-radius: 11px;
-  background: color-mix(in srgb, var(--glass-bg) 26%, rgba(255,255,255,0.02));
+  background: color-mix(in srgb, var(--glass-bg) 38%, rgba(10,12,20,0.82));
   color: var(--text);
   display: grid;
   grid-template-columns: 22px 44px minmax(0, 1fr) 22px;
@@ -2948,16 +2953,17 @@ body.visual-minimal .main-quick-playlist-meta span {
   flex-direction: column;
 }
 .home-up-next-meta-wrap strong {
-  font-size: 12px;
+  font-size: 13px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-family: var(--font-ui);
   font-weight: 600;
+  color: var(--text-strong);
 }
 .home-up-next-meta-wrap span {
   font-size: 11px;
-  color: var(--muted);
+  color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -5472,9 +5478,10 @@ input:not([type])::placeholder {
   contain-intrinsic-size: 84px;
 }
 .track-card {
-  display:flex; align-items:center; gap:12px;
-  padding:10px 14px; border-radius:14px;
-  background:rgba(255,255,255,0.04); border:1px solid transparent;
+  display:flex; align-items:center; gap:var(--space-2);
+  padding:var(--space-1) var(--space-2); border-radius:14px;
+  background: color-mix(in srgb, var(--glass-bg) 42%, rgba(10,12,20,0.88));
+  border:1px solid rgba(255,255,255,0.09);
   cursor:pointer;
   position: relative;
   overflow: hidden;
@@ -5495,8 +5502,25 @@ input:not([type])::placeholder {
   transition: opacity 0.5s ease, transform 0.5s ease;
 }
 .track-info { flex:1; min-width:0; }
-.track-name { display:block; font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.track-artist { display:block; font-size:12px; color:var(--muted); margin-top:2px; }
+.track-name {
+  display:block;
+  font-family: var(--font-ui);
+  font-size:14px;
+  font-weight:600;
+  color:var(--text-strong);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  line-height:1.25;
+}
+.track-artist {
+  display:block;
+  font-family: var(--font-ui);
+  font-size:12px;
+  color:var(--text-secondary);
+  margin-top:4px;
+  line-height:1.2;
+}
 .track-like {
   background:none; border:none; color:var(--muted); cursor:pointer;
   font-size:16px; padding:6px; border-radius:8px; transition:all 0.2s; flex-shrink:0;

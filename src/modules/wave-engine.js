@@ -449,8 +449,8 @@
       if (sourceMode === 'yandex' && fetchYandexRotorMyWave) {
         const tok = String(settings?.yandexToken || '').trim()
         if (!tok) return []
-        // Как в клиенте Я.Музыки: один «кусок» волны за раз (меньше дублей и параллельных стримов).
-        const yaChunk = 1
+        // Яндекс отдаёт пачку 3–5 треков в sequence — забираем всю пачку, иначе queue зацикливает те же 4–5 треков.
+        const yaChunk = 5
         const queueHint = String(getYandexWaveQueueHint() || '').trim()
         let pack = null
         try {

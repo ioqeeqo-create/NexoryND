@@ -6644,36 +6644,101 @@ function getMyWaveTrackUniqueKey(track) {
   return fallback !== '::' ? `meta:${fallback}` : ''
 }
 
-/** Яндекс-волна: держим в памяти только текущий + один префетч — как цепочка GET /tracks у ротора. */
+const YANDEX_WAVE_RECENT_LS = 'flow_yandex_wave_recent_ids'
+const YANDEX_WAVE_RECENT_MAX = 120
+const YANDEX_WAVE_QUEUE_BUFFER_MAX = 8
+
+function loadYandexWaveRecentIds() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(YANDEX_WAVE_RECENT_LS) || '[]')
+    return Array.isArray(raw) ? raw.map((x) => String(x || '').trim()).filter(Boolean) : []
+  } catch {
+    return []
+  }
+}
+
+function rememberYandexWaveTracks(tracks = []) {
+  try {
+    const set = new Set(loadYandexWaveRecentIds())
+    ;(tracks || []).forEach((track) => {
+      const key = getMyWaveTrackUniqueKey(track)
+      if (key) set.add(key)
+    })
+    const list = Array.from(set).slice(-YANDEX_WAVE_RECENT_MAX)
+    localStorage.setItem(YANDEX_WAVE_RECENT_LS, JSON.stringify(list))
+    list.forEach((key) => _myWaveSeenKeys.add(key))
+  } catch (_) {}
+}
+
+function syncYandexWaveQueueHintFromTrack(track) {
+  const id = String(track?.id || '').trim()
+  if (id && String(track?.source || '').toLowerCase() === 'yandex') {
+    try {
+      _yandexWaveRotorQueueHint = id
+    } catch (_) {}
+  }
+}
+
+/** Яндекс-волна: буфер до 8 треков вперёд (вся пачка из rotor, без обрезки до 2). */
 function compactYandexMyWaveQueueIfNeeded() {
   if (queueScope !== 'myWave' || getMyWaveSource() !== 'yandex') return
-  const cur = sanitizeTrack(currentTrack || null)
+  const cur = sanitizeTrack(currentTrack || queue[queueIndex] || null)
   if (!cur?.id) return
   const curKey = getMyWaveTrackUniqueKey(cur)
-  let next = queue[queueIndex + 1] || null
-  if (next) next = sanitizeTrack(next)
-  const nextKey = next ? getMyWaveTrackUniqueKey(next) : ''
-  if (!nextKey || nextKey === curKey) next = null
-  queue = next ? [cur, next] : [cur]
+  const head = queue.slice(0, Math.max(0, queueIndex))
+  const tail = queue.slice(queueIndex + 1)
+  const uniqTail = []
+  const seen = new Set([curKey])
+  tail.forEach((track) => {
+    const safe = sanitizeTrack(track)
+    const key = getMyWaveTrackUniqueKey(safe)
+    if (!key || seen.has(key)) return
+    seen.add(key)
+    uniqTail.push(safe)
+  })
+  const capped = uniqTail.slice(0, YANDEX_WAVE_QUEUE_BUFFER_MAX - 1)
+  queue = [cur, ...capped]
   queueIndex = 0
   try {
     _myWaveRenderedTracks = queue.slice()
   } catch (_) {}
+  syncYandexWaveQueueHintFromTrack(cur)
 }
 
 function mergeYandexWaveQueueAppend(freshTracks) {
   const cur = sanitizeTrack(currentTrack || queue[queueIndex] || null)
-  const nxt = sanitizeTrack((freshTracks || [])[0] || null)
+  const incoming = (freshTracks || []).map(sanitizeTrack).filter((t) => t?.id)
   if (!cur?.id) {
-    queue = nxt?.id ? [nxt] : []
+    queue = incoming.slice(0, YANDEX_WAVE_QUEUE_BUFFER_MAX)
     queueIndex = 0
+    if (queue[0]) syncYandexWaveQueueHintFromTrack(queue[queue.length - 1] || queue[0])
     return
   }
   const curKey = getMyWaveTrackUniqueKey(cur)
-  const nxtKey = nxt ? getMyWaveTrackUniqueKey(nxt) : ''
-  if (nxtKey && nxtKey !== curKey) queue = [cur, nxt]
-  else queue = [cur]
+  const seen = new Set([curKey])
+  const append = []
+  incoming.forEach((track) => {
+    const key = getMyWaveTrackUniqueKey(track)
+    if (!key || seen.has(key)) return
+    seen.add(key)
+    append.push(track)
+  })
+  const head = queue.slice(0, Math.max(0, queueIndex))
+  const tail = queue.slice(queueIndex + 1)
+  const mergedTail = []
+  const tailSeen = new Set([curKey])
+  ;[...tail, ...append].forEach((track) => {
+    const safe = sanitizeTrack(track)
+    const key = getMyWaveTrackUniqueKey(safe)
+    if (!key || tailSeen.has(key)) return
+    tailSeen.add(key)
+    mergedTail.push(safe)
+  })
+  queue = [cur, ...mergedTail.slice(0, YANDEX_WAVE_QUEUE_BUFFER_MAX - 1)]
   queueIndex = 0
+  const anchor = queue[queue.length - 1] || cur
+  syncYandexWaveQueueHintFromTrack(anchor)
+  rememberYandexWaveTracks(queue)
 }
 
 async function maybePreloadMyWave(force = false) {
@@ -6681,16 +6746,21 @@ async function maybePreloadMyWave(force = false) {
   const remaining = queue.length - queueIndex - 1
   if (!force) {
     if (getMyWaveSource() === 'yandex') {
-      if (remaining >= 1) return
+      if (remaining >= 3) return
     } else if (remaining > 3) {
       return
     }
   }
   if (getMyWaveSeedTracks().length < 3) return
-  if (getMyWaveSource() === 'yandex' && currentTrack && String(currentTrack.source || '').toLowerCase() === 'yandex' && currentTrack.id) {
-    try {
-      _yandexWaveRotorQueueHint = String(currentTrack.id).trim()
-    } catch (_) {}
+  if (getMyWaveSource() === 'yandex') {
+    loadYandexWaveRecentIds().forEach((key) => _myWaveSeenKeys.add(key))
+    const anchor = sanitizeTrack(currentTrack || queue[queueIndex] || null)
+    if (anchor?.id) syncYandexWaveQueueHintFromTrack(anchor)
+    else if (_yandexWaveRotorQueueHint) {
+      try {
+        _yandexWaveRotorQueueHint = String(_yandexWaveRotorQueueHint).trim()
+      } catch (_) {}
+    }
   }
   _myWavePreloading = true
   renderMyWave()
@@ -6702,6 +6772,7 @@ async function maybePreloadMyWave(force = false) {
           .filter(Boolean),
       )
       _myWaveSeenKeys.forEach((key) => existing.add(key))
+      loadYandexWaveRecentIds().forEach((key) => existing.add(key))
       const fresh = []
       tracks.forEach((track) => {
         const key = getMyWaveTrackUniqueKey(track)
@@ -6712,11 +6783,22 @@ async function maybePreloadMyWave(force = false) {
       })
       return fresh
     }
-    const waveAsk = getMyWaveSource() === 'yandex' ? 1 : 10
+    const waveAsk = getMyWaveSource() === 'yandex' ? 5 : 10
     const additions = await findMyWaveRecommendations(waveAsk, getMyWaveMode())
     let fresh = dedupeWithExisting(additions)
-    if (!fresh.length && force && getMyWaveSource() === 'yandex') {
-      try { _yandexWaveRotorQueueHint = '' } catch (_) {}
+    if (!fresh.length && force && getMyWaveSource() === 'yandex' && currentTrack?.yandexRotor?.batchId) {
+      const tok = String(getSettings()?.yandexToken || '').trim()
+      if (tok && window.api?.yandexRotorFeedback) {
+        void window.api.yandexRotorFeedback({
+          token: tok,
+          station: currentTrack.yandexRotor.station || 'user:onyourwave',
+          type: 'skip',
+          trackId: currentTrack.id,
+          batchId: currentTrack.yandexRotor.batchId,
+          totalPlayedSeconds: Number(audio?.currentTime || 0) || 0,
+        })
+      }
+      syncYandexWaveQueueHintFromTrack(currentTrack)
       const retry = await findMyWaveRecommendations(waveAsk, getMyWaveMode())
       fresh = dedupeWithExisting(retry)
     }
@@ -6803,10 +6885,10 @@ async function startMyWave() {
   renderMyWave()
   showToast('Моя волна подбирает новые треки...')
   try {
-    const waveAsk = getMyWaveSource() === 'yandex' ? 1 : (WE?.MY_WAVE_MIN_TRACKS ?? 10)
+    const waveAsk = getMyWaveSource() === 'yandex' ? 5 : (WE?.MY_WAVE_MIN_TRACKS ?? 10)
+    _myWaveSeenKeys = new Set(loadYandexWaveRecentIds())
     const tracks = await findMyWaveRecommendations(waveAsk, getMyWaveMode())
     const unique = []
-    _myWaveSeenKeys = new Set()
     ;(tracks || []).forEach((track) => {
       const key = getMyWaveTrackUniqueKey(track)
       if (!key || _myWaveSeenKeys.has(key)) return
@@ -6818,6 +6900,7 @@ async function startMyWave() {
     queue = unique.slice()
     queueIndex = 0
     queueScope = 'myWave'
+    if (getMyWaveSource() === 'yandex') rememberYandexWaveTracks(unique)
     showToast(
       getMyWaveSource() === 'yandex' && unique.length <= 1
         ? 'Моя волна: трек из Яндекса'
@@ -12194,6 +12277,7 @@ async function playTrackObj(track, opts = {}) {
         })
       }
     }
+    rememberYandexWaveTracks([track])
   } else {
     _yandexRotorTrackStartedForId = null
   }
@@ -12677,7 +12761,7 @@ audio.ontimeupdate = () => {
       }
     }
   }
-  if (queueScope === 'myWave' && !audio.paused && queue.length - queueIndex - 1 <= 3) {
+  if (queueScope === 'myWave' && !audio.paused && queue.length - queueIndex - 1 <= 2) {
     const t = performance.now()
     if (t - (_lastMyWavePreloadCheckAt || 0) > 3500) {
       _lastMyWavePreloadCheckAt = t
