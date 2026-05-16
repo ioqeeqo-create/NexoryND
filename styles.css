@@ -3298,14 +3298,39 @@ body.visual-minimal .main-quick-playlist-meta span {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  margin-top: 4px;
+  margin-top: 8px;
+  width: 100%;
+}
+.home-nx-foot-dock {
+  width: min(100%, 420px);
+  padding: 8px 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(8, 10, 18, 0.72);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 .home-nx-foot-tools {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 10px;
+  justify-content: space-between;
+  gap: 12px;
   flex-wrap: nowrap;
+  width: 100%;
+}
+.home-nx-foot-left {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+.home-nx-foot-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 .home-nx-vol-row {
   display: flex;
@@ -3374,6 +3399,9 @@ body.visual-minimal .main-quick-playlist-meta span {
 .home-nx-cover-hover-hit:focus-visible .home-nx-cover-expand-ico {
   opacity: 1;
   transform: translate(-50%, -50%) scale(1);
+}
+.home-clone-cover[role="button"] {
+  cursor: pointer;
 }
 .home-nx-cover-mode {
   position: absolute;
@@ -3462,6 +3490,10 @@ body.visual-minimal .main-quick-playlist-meta span {
 .home-nx-menu-wrap {
   position: relative;
 }
+.home-nx-dropdown.hidden {
+  display: none !important;
+  pointer-events: none;
+}
 .home-nx-dropdown--up {
   bottom: calc(100% + 8px);
   top: auto;
@@ -3469,6 +3501,14 @@ body.visual-minimal .main-quick-playlist-meta span {
 .home-nx-eq-dropdown {
   width: min(380px, 92vw);
   padding: 10px;
+  right: 0;
+  left: auto;
+}
+.home-nx-speed-dropdown {
+  width: min(300px, 88vw);
+  padding: 10px 12px;
+  right: 0;
+  left: auto;
 }
 .home-nx-source-btn {
   padding: 0;
@@ -3521,11 +3561,16 @@ body.visual-minimal .main-quick-playlist-meta span {
 }
 .home-nx-foot-badge {
   position: absolute;
-  right: 4px;
-  bottom: 3px;
-  font-size: 9px;
-  font-weight: 700;
-  opacity: 0.9;
+  right: 3px;
+  bottom: 2px;
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 6px;
+  background: rgba(8, 10, 18, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  opacity: 1;
   pointer-events: none;
 }
 .home-nx-foot-btn {
@@ -3551,6 +3596,35 @@ body.visual-minimal .main-quick-playlist-meta span {
 @keyframes homeNxDropIn {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
+}
+.home-nx-speed-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.home-nx-speed-pill {
+  flex: 1 1 calc(33% - 6px);
+  min-width: 52px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-family: var(--font-title);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+}
+.home-nx-speed-pill:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+.home-nx-speed-pill.active {
+  border-color: rgba(255, 255, 255, 0.45);
+  background: color-mix(in srgb, var(--accent2) 24%, rgba(255, 255, 255, 0.12));
+  transform: translateY(-1px);
 }
 .home-nx-speed-quick {
   display: flex;
@@ -3582,8 +3656,28 @@ body.visual-minimal .main-quick-playlist-meta span {
 }
 .home-nx-speed-slider {
   width: 100%;
-  accent-color: #fff;
+  accent-color: rgba(255, 255, 255, 0.85);
   margin: 4px 0 8px;
+  height: 4px;
+  appearance: none;
+  -webkit-appearance: none;
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+}
+.home-nx-speed-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+}
+.home-nx-speed-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  margin-top: -4px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  border: none;
+  box-shadow: 0 0 0 2px rgba(12, 14, 24, 0.5);
 }
 .home-nx-speed-ticks {
   display: flex;
@@ -3592,32 +3686,76 @@ body.visual-minimal .main-quick-playlist-meta span {
   color: rgba(255,255,255,0.55);
   font-family: var(--font-title);
 }
+.home-nx-eq-presets-row {
+  display: grid;
+  grid-template-columns: 28px 1fr 28px 34px;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.home-nx-eq-scroll-btn,
+.home-nx-eq-save-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.home-nx-eq-save-btn {
+  width: 34px;
+  height: 34px;
+  font-size: 20px;
+  font-weight: 700;
+  border-color: rgba(255, 255, 255, 0.28);
+  background: color-mix(in srgb, var(--accent2) 22%, rgba(255, 255, 255, 0.1));
+}
+.home-nx-eq-scroll-btn:hover,
+.home-nx-eq-save-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
 .home-nx-eq-presets {
   display: flex;
   gap: 6px;
   overflow-x: auto;
-  padding-bottom: 8px;
-  margin-bottom: 8px;
-  scrollbar-width: thin;
+  overflow-y: hidden;
+  padding: 2px 0 6px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.home-nx-eq-presets::-webkit-scrollbar {
+  display: none;
 }
 .home-nx-eq-preset {
   flex: 0 0 auto;
   padding: 6px 12px;
   border-radius: 999px;
-  border: 1px solid rgba(255,255,255,0.14);
-  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
   color: #fff;
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
 }
 .home-nx-eq-preset.active {
-  border-color: rgba(255,255,255,0.45);
-  background: color-mix(in srgb, var(--accent2) 28%, rgba(255,255,255,0.12));
+  border-color: rgba(255, 255, 255, 0.45);
+  background: color-mix(in srgb, var(--accent2) 28%, rgba(255, 255, 255, 0.12));
 }
 .home-nx-eq-graph-wrap {
   position: relative;
-  height: 140px;
+  height: 132px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: hidden;
 }
 .home-nx-eq-graph {
   width: 100%;
@@ -3686,11 +3824,11 @@ body.visual-minimal .main-quick-playlist-meta span {
   color: rgba(255,255,255,0.82);
 }
 .home-nx-foot-btn {
-  width: 38px;
-  height: 38px;
-  border-radius: 12px;
-  border: 1px solid rgba(255,255,255,0.12);
-  background: rgba(255,255,255,0.06);
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
   color: #fff;
   display: inline-flex;
   align-items: center;
@@ -3699,7 +3837,25 @@ body.visual-minimal .main-quick-playlist-meta span {
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
-  transition: background 0.16s ease, border-color 0.16s ease;
+  transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
+  position: relative;
+  flex-shrink: 0;
+}
+.home-nx-foot-btn .home-nx-foot-ico,
+.home-nx-foot-btn .ui-icon {
+  width: 20px;
+  height: 20px;
+  opacity: 0.95;
+}
+.home-nx-source-btn.home-nx-foot-btn {
+  padding: 6px;
+}
+.home-nx-src-logo {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  display: block;
+  border-radius: 6px;
 }
 .home-nx-foot-btn:hover {
   background: rgba(255,255,255,0.12);

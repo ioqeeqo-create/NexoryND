@@ -3329,15 +3329,18 @@ function withTimeout(promise, ms, label = 'timeout') {
 
 function looksLikeMojibake(value) {
   if (!value || typeof value !== 'string') return false
-  return /(?:[ÃÂÐÑРС]{2,}|Р[А-яЁёA-Za-z0-9]|С[А-яЁёA-Za-z0-9]|Ð.|Ñ.|Ã.|Â.|рџ|вЂ|сГ|Г[А-яЁёA-Za-z0-9]|�)/.test(value)
+  if (hasCommonMojibakeToken(value)) return true
+  if (/[ÃÂÐÑ]|Ð.|Ñ.|Ã.|Â.|рџ|в‚|сГ|�/.test(value)) return true
+  const runs = value.match(/(?:Р|С)[Ѐ-ӿ]/g)
+  if (!runs || runs.length < 4) return false
+  return runs.length * 2 >= value.replace(/\s/g, '').length * 0.34
 }
 
 function mojibakeScore(value) {
   if (!value) return 0
   let score = 0
-  score += (value.match(/Р[А-яЁёA-Za-z0-9]/g) || []).length
-  score += (value.match(/С[А-яЁёA-Za-z0-9]/g) || []).length
-  score += (value.match(/Ð.|Ñ.|рџ|вЂ/g) || []).length
+  score += (value.match(/(?:Р|С)[Ѐ-ӿ]/g) || []).length
+  score += (value.match(/Ð.|Ñ.|рџ|в‚/g) || []).length * 2
   score += (value.match(/�/g) || []).length * 3
   return score
 }
@@ -3923,8 +3926,8 @@ window.openMediaSourceSettings = openMediaSourceSettings
 
 const HOME_NX_SRC_LOGOS = {
   vk: 'assets/source-vk.svg',
-  yandex: 'assets/source-yandex-wave.svg',
-  hybrid: 'assets/auth/nexory.png',
+  yandex: 'assets/source-yandex-music.png',
+  hybrid: 'assets/auth/flow.svg',
 }
 
 function getPlaybackRate() {
@@ -3948,7 +3951,7 @@ function syncHomeNxSpeedUI() {
   const badge = document.getElementById('home-nx-speed-badge')
   if (slider) slider.value = String(r)
   if (badge) badge.textContent = formatPlaybackRateLabel(r)
-  document.querySelectorAll('.home-nx-speed-chip').forEach((btn) => {
+  document.querySelectorAll('.home-nx-speed-pill, .home-nx-speed-chip').forEach((btn) => {
     const v = Number(btn.getAttribute('data-rate'))
     btn.classList.toggle('active', Math.abs(v - r) < 0.03)
   })
@@ -4113,27 +4116,81 @@ function bindHomeNxEqGraphDrag() {
   })
 }
 
+const HOME_NX_EQ_PRESET_ORDER = ['neutral', 'bass', 'highs', 'vocal', 'classic', 'jazz', 'liquid', 'deep-ocean', 'rock']
+
+function bindHomeNxEqPresetControls() {
+  const presetsEl = document.getElementById('home-nx-eq-presets')
+  const eq = getParametricEqModule()
+  if (!presetsEl || !eq || presetsEl.dataset.ready) return
+  presetsEl.dataset.ready = '1'
+  presetsEl.innerHTML = HOME_NX_EQ_PRESET_ORDER.map((id) => {
+    const label = eq.PRESET_LABELS?.[id] || id
+    return `<button type="button" class="home-nx-eq-preset" data-preset="${id}">${label}</button>`
+  }).join('')
+  presetsEl.querySelectorAll('.home-nx-eq-preset').forEach((btn) => {
+    btn.addEventListener('click', () => applyHomeNxEqPreset(btn.getAttribute('data-preset')))
+  })
+  presetsEl.addEventListener(
+    'wheel',
+    (e) => {
+      e.preventDefault()
+      presetsEl.scrollLeft += (e.deltaY || e.deltaX) * 0.85
+    },
+    { passive: false }
+  )
+  document.getElementById('home-nx-eq-scroll-l')?.addEventListener('click', (e) => {
+    e.stopPropagation()
+    presetsEl.scrollBy({ left: -140, behavior: 'smooth' })
+  })
+  document.getElementById('home-nx-eq-scroll-r')?.addEventListener('click', (e) => {
+    e.stopPropagation()
+    presetsEl.scrollBy({ left: 140, behavior: 'smooth' })
+  })
+}
+
+function onHomeNxTrackEqChanged(track) {
+  const eq = getParametricEqModule()
+  if (!eq?.loadEqForTrack) return
+  if (ensureEqAudioChainReady()) {
+    const state = getEqAudioState()
+    eq.loadEqForTrack(track, state, _audioCtx)
+    _eqFilters = state.eqFilters
+  } else {
+    eq.loadEqForTrack(track, { eqFilters: [] }, null)
+  }
+  renderHomeNxEqUI(true)
+}
+
+function saveHomeNxEqForTrack(ev) {
+  ev?.stopPropagation?.()
+  if (!currentTrack) {
+    showToast('Сначала включи трек', true)
+    return
+  }
+  const eq = getParametricEqModule()
+  if (!eq?.saveTrackEqState) return
+  if (!ensureEqAudioChainReady()) {
+    showToast('Эквалайзер: запусти трек и попробуй снова', true)
+    return
+  }
+  const gains = eq.getCurrentGains?.() || []
+  const presetId = eq.readStoredPreset?.() || 'custom'
+  eq.saveTrackEqState(currentTrack, presetId, gains)
+  showToast('Эквалайзер сохранён для этого трека')
+  renderHomeNxEqUI(false)
+}
+window.saveHomeNxEqForTrack = saveHomeNxEqForTrack
+window.onHomeNxTrackEqChanged = onHomeNxTrackEqChanged
+
 function renderHomeNxEqUI(rebindPresets = true) {
   const eq = getParametricEqModule()
   const presetsEl = document.getElementById('home-nx-eq-presets')
   const graph = document.getElementById('home-nx-eq-graph')
   const labels = document.getElementById('home-nx-eq-freq-labels')
   if (!eq || !presetsEl || !graph) return
+  if (rebindPresets) bindHomeNxEqPresetControls()
   const activePreset = eq.readStoredPreset?.() || 'neutral'
   const gains = eq.getCurrentGains?.() || eq.getPresetGains('neutral')
-  const order = ['neutral', 'bass', 'highs', 'vocal', 'classic', 'jazz', 'liquid', 'deep-ocean', 'rock']
-  if (rebindPresets && !presetsEl.dataset.ready) {
-    presetsEl.dataset.ready = '1'
-    presetsEl.innerHTML = order
-      .map((id) => {
-        const label = eq.PRESET_LABELS?.[id] || id
-        return `<button type="button" class="home-nx-eq-preset" data-preset="${id}">${label}</button>`
-      })
-      .join('')
-    presetsEl.querySelectorAll('.home-nx-eq-preset').forEach((btn) => {
-      btn.addEventListener('click', () => applyHomeNxEqPreset(btn.getAttribute('data-preset')))
-    })
-  }
   presetsEl.querySelectorAll('.home-nx-eq-preset').forEach((btn) => {
     btn.classList.toggle('active', btn.getAttribute('data-preset') === activePreset)
   })
@@ -4163,20 +4220,10 @@ function renderHomeNxEqUI(rebindPresets = true) {
 }
 
 function openHomeNxCoverMode() {
-  const panel = document.getElementById('home-nx-cover-mode')
-  const art = document.getElementById('home-nx-cover-mode-art')
-  const title = document.getElementById('home-nx-cover-mode-title')
-  const artist = document.getElementById('home-nx-cover-mode-artist')
-  if (!panel || !art) return
-  if (currentTrack) {
-    if (title) title.textContent = currentTrack.title || '—'
-    if (artist) artist.textContent = currentTrack.artist || '—'
-    applyCoverArt(art, getEffectiveCoverUrl(currentTrack), currentTrack.bg || 'linear-gradient(135deg,#7c3aed,#a855f7)')
+  if (typeof enterPlayerMode === 'function') {
+    enterPlayerMode()
+    return
   }
-  syncHomeNxCoverModeProgress()
-  panel.classList.remove('hidden')
-  panel.setAttribute('aria-hidden', 'false')
-  document.getElementById('page-home')?.classList.add('home-nx-cover-mode-active')
 }
 window.openHomeNxCoverMode = openHomeNxCoverMode
 
@@ -4201,9 +4248,14 @@ function syncHomeNxCoverModeProgress() {
 }
 
 function initHomeNxMediaTools() {
+  closeHomeNxMenus()
   syncHomeNxSpeedUI()
   syncHomeNxSourceLogo()
   applyPlaybackRate()
+  try {
+    hydrateFlowLucideIcons?.(document.getElementById('home-nx-footer') || document)
+  } catch (_) {}
+  bindHomeNxEqPresetControls()
   if (!document.body.dataset.homeNxPopBound) {
     document.body.dataset.homeNxPopBound = '1'
     document.addEventListener('click', (e) => {
@@ -12291,6 +12343,9 @@ async function playTrackObj(track, opts = {}) {
     const st = getListenStats()
     if (st.lastTrackKey !== newTrackKey) saveListenStats({ totalTracks: Number(st.totalTracks || 0) + 1, lastTrackKey: newTrackKey })
     pushListenHistory(track)
+    try {
+      onHomeNxTrackEqChanged(track)
+    } catch (_) {}
   }
   if (_activePageId === 'main') renderMyWave()
   let streamUrl = track.url
@@ -15270,7 +15325,7 @@ window.addEventListener('DOMContentLoaded', () => {
     },
     { passive: true },
   )
-  enableMojibakeAutoFix()
+  fixNodeTextMojibake(document.body)
   startApp()
   try { document.body.setAttribute('data-active-page', _activePageId || 'main') } catch {}
   applyUiTextOverrides()

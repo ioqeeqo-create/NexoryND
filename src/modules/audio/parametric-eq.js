@@ -1,5 +1,6 @@
 (() => {
   const EQ_FREQS = [64, 125, 250, 500, 1000, 2000, 4000, 8000, 12000, 16000, 20000]
+  const TRACK_MAP_KEY = 'flow_eq_track_map'
 
   /** Gain in dB per band (11 values). */
   const PRESETS = {
@@ -26,31 +27,44 @@
     rock: 'Rock',
   }
 
-  function readStoredGains() {
+  let _sessionPreset = 'neutral'
+  let _sessionGains = PRESETS.neutral.slice()
+
+  function readTrackMap() {
     try {
-      const raw = localStorage.getItem('flow_eq_gains')
-      if (!raw) return null
-      const arr = JSON.parse(raw)
-      if (!Array.isArray(arr) || arr.length !== EQ_FREQS.length) return null
-      return arr.map((v) => (Number.isFinite(Number(v)) ? Number(v) : 0))
+      const raw = localStorage.getItem(TRACK_MAP_KEY)
+      if (!raw) return {}
+      const map = JSON.parse(raw)
+      return map && typeof map === 'object' ? map : {}
     } catch (_) {
-      return null
+      return {}
     }
+  }
+
+  function writeTrackMap(map) {
+    try {
+      localStorage.setItem(TRACK_MAP_KEY, JSON.stringify(map))
+    } catch (_) {}
+  }
+
+  function trackEqKey(track) {
+    if (!track) return ''
+    const src = String(track.source || 'unknown').trim() || 'unknown'
+    const id = String(track.id ?? track.ytId ?? track.scId ?? track.title ?? '').trim()
+    return `${src}:${id}`
+  }
+
+  function readStoredGains() {
+    return _sessionGains.slice()
   }
 
   function readStoredPreset() {
-    try {
-      return String(localStorage.getItem('flow_eq_preset') || 'neutral').trim().toLowerCase()
-    } catch (_) {
-      return 'neutral'
-    }
+    return _sessionPreset
   }
 
   function storeEqState(presetId, gains) {
-    try {
-      localStorage.setItem('flow_eq_preset', presetId)
-      localStorage.setItem('flow_eq_gains', JSON.stringify(gains))
-    } catch (_) {}
+    _sessionPreset = PRESETS[presetId] ? presetId : presetId === 'custom' ? 'custom' : 'neutral'
+    _sessionGains = gains.map((v) => (Number.isFinite(Number(v)) ? Number(v) : 0))
   }
 
   function getPresetGains(presetId) {
@@ -59,7 +73,7 @@
   }
 
   function getCurrentGains() {
-    return readStoredGains() || getPresetGains(readStoredPreset())
+    return _sessionGains.slice()
   }
 
   function ensureEqChain(audioCtx, state) {
@@ -127,11 +141,36 @@
     return safe
   }
 
+  function loadEqForTrack(track, state, audioCtx) {
+    const key = trackEqKey(track)
+    const saved = key ? readTrackMap()[key] : null
+    if (saved?.gains?.length === EQ_FREQS.length) {
+      const presetId = saved.presetId || 'custom'
+      storeEqState(presetId, saved.gains)
+      if (state?.eqFilters?.length) applyGainsToFilters(state.eqFilters, saved.gains, audioCtx, false)
+      return { presetId, gains: saved.gains.slice(), fromTrack: true }
+    }
+    return applyPreset('neutral', state, audioCtx, false)
+  }
+
+  function saveTrackEqState(track, presetId, gains) {
+    const key = trackEqKey(track)
+    if (!key) return false
+    const safe = EQ_FREQS.map((_, i) => {
+      const v = Number(gains[i])
+      return Number.isFinite(v) ? Math.max(-12, Math.min(12, v)) : 0
+    })
+    const map = readTrackMap()
+    map[key] = { presetId: presetId || 'custom', gains: safe, at: Date.now() }
+    writeTrackMap(map)
+    storeEqState(presetId || 'custom', safe)
+    return true
+  }
+
   function initEqFromStorage(state, audioCtx) {
-    const preset = readStoredPreset()
-    const gains = readStoredGains() || getPresetGains(preset)
+    const gains = _sessionGains.slice()
     if (state?.eqFilters?.length) applyGainsToFilters(state.eqFilters, gains, audioCtx, false)
-    return { presetId: preset, gains }
+    return { presetId: _sessionPreset, gains }
   }
 
   window.FlowModules = window.FlowModules || {}
@@ -144,6 +183,9 @@
     applyPreset,
     applyCustomGains,
     initEqFromStorage,
+    loadEqForTrack,
+    saveTrackEqState,
+    trackEqKey,
     getCurrentGains,
     getPresetGains,
     readStoredPreset,

@@ -5765,6 +5765,9 @@ async function playTrackObj(track, opts = {}) {
     const st = getListenStats()
     if (st.lastTrackKey !== newTrackKey) saveListenStats({ totalTracks: Number(st.totalTracks || 0) + 1, lastTrackKey: newTrackKey })
     pushListenHistory(track)
+    try {
+      onHomeNxTrackEqChanged(track)
+    } catch (_) {}
   }
   if (_activePageId === 'main') renderMyWave()
   let streamUrl = track.url
@@ -8744,7 +8747,7 @@ window.addEventListener('DOMContentLoaded', () => {
     },
     { passive: true },
   )
-  enableMojibakeAutoFix()
+  fixNodeTextMojibake(document.body)
   startApp()
   try { document.body.setAttribute('data-active-page', _activePageId || 'main') } catch {}
   applyUiTextOverrides()
