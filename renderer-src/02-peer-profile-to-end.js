@@ -232,7 +232,7 @@ function updateYandexWaveDislikeButtonsVisible() {
     String(currentTrack.source || '').toLowerCase() === 'yandex' &&
     Boolean(currentTrack?.yandexRotor?.batchId)
   )
-  ;['player-wave-dislike-btn', 'pm-wave-dislike-btn'].forEach((id) => {
+  ;['player-wave-dislike-btn', 'pm-wave-dislike-btn', 'home-wave-dislike-btn'].forEach((id) => {
     const b = document.getElementById(id)
     if (b) b.classList.toggle('hidden', !show)
   })
@@ -1588,6 +1588,7 @@ function ensureFriendInteractionUI() {
     menu.id = 'playlist-card-context-menu'
     menu.className = 'friend-context-menu hidden glass-card'
     menu.innerHTML = `
+      <button type="button" class="friend-context-item" onclick="playlistCardCtxExportJson()">Экспорт JSON</button>
       <button type="button" class="friend-context-item" onclick="playlistCardCtxEdit()">Изменить</button>
       <button type="button" class="friend-context-item danger" onclick="playlistCardCtxDelete()">Удалить</button>
     `
@@ -1629,8 +1630,49 @@ function playlistCardCtxDelete() {
   deletePlaylist(i)
 }
 
+function exportPlaylistToJsonFile(playlistIndex) {
+  const idx = Number(playlistIndex)
+  const pls = getPlaylists()
+  if (!Number.isFinite(idx) || idx < 0 || idx >= pls.length) return showToast('Плейлист не найден', true)
+  try {
+    const pl = normalizePlaylist(pls[idx])
+    const payload = {
+      format: 'flow-playlists-v1',
+      exportedAt: new Date().toISOString(),
+      playlists: [pl],
+    }
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+    const stamp = String(pl.name || 'playlist').replace(/[\\/:*?"<>|]+/g, '_').trim().slice(0, 120) || 'playlist'
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `${stamp}.json`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(link.href)
+    showToast('Плейлист экспортирован')
+  } catch (err) {
+    showToast(`Ошибка экспорта: ${err?.message || err}`, true)
+  }
+}
+
+function exportOpenPlaylistJson() {
+  if (openPlaylistIndex == null) return showToast('Плейлист не выбран', true)
+  exportPlaylistToJsonFile(openPlaylistIndex)
+}
+
+function playlistCardCtxExportJson() {
+  const i = Number(_playlistCardCtxIdx)
+  closePlaylistCardContextMenu()
+  if (!Number.isFinite(i) || i < 0) return
+  exportPlaylistToJsonFile(i)
+}
+
 window.playlistCardCtxEdit = playlistCardCtxEdit
 window.playlistCardCtxDelete = playlistCardCtxDelete
+window.playlistCardCtxExportJson = playlistCardCtxExportJson
+window.exportPlaylistToJsonFile = exportPlaylistToJsonFile
+window.exportOpenPlaylistJson = exportOpenPlaylistJson
 window.openPlaylistCardContextMenu = openPlaylistCardContextMenu
 
 function openRoomMemberContextMenu(event, peerId = '', username = '') {
@@ -4631,6 +4673,23 @@ function syncHomeClonePlaybackProgress() {
   prog.style.setProperty('--progress-fill', `${Math.max(0, Math.min(100, fill))}%`)
 }
 
+function syncHomeNxFooter() {
+  const vol = document.getElementById('home-nx-volume')
+  const volVal = document.getElementById('home-nx-vol-val')
+  const srcBtn = document.getElementById('home-nx-source-btn')
+  if (vol) {
+    const slider = Math.max(0, Math.min(1, Number(localStorage.getItem('flow_volume_slider') || '0.8') || 0.8))
+    vol.value = String(slider)
+    if (volVal) volVal.textContent = String(Math.max(0, Math.min(10, Math.round(slider * 10))))
+  }
+  if (srcBtn) {
+    const raw = normalizeStoredActiveSource(getSettings()?.activeSource || currentSource || 'hybrid')
+    const SHORT = { hybrid: 'N', yandex: 'Я', vk: 'VK', spotify: 'SP', soundcloud: 'SC', audius: 'AU' }
+    srcBtn.textContent = SHORT[raw] || 'N'
+    srcBtn.title = `Источник: ${raw}`
+  }
+}
+
 function syncHomeCloneUI() {
   const cover = document.getElementById('home-clone-cover')
   const title = document.getElementById('home-clone-title')
@@ -4650,8 +4709,10 @@ function syncHomeCloneUI() {
     cover.innerHTML = COVER_ICON
   }
   syncHomeClonePlaybackProgress()
+  syncHomeNxFooter()
   if (_activePageId === 'profile') renderProfileNowPlaying()
 }
+window.syncHomeNxFooter = syncHomeNxFooter
 
 function alignHomeHeaderToPlay() {
   const main = document.querySelector('.home-clone-main')
@@ -5493,6 +5554,9 @@ function openPage(id, opts = {}) {
   if (id === 'home') {
     queueMicrotask(() => {
       try {
+        applyMediaQueueLayout()
+      } catch (_) {}
+      try {
         if (isVisualFloatedLayout()) {
           refreshHomeDashboardLayoutAfterContentChange()
         }
@@ -6229,9 +6293,13 @@ function setVolume(val) {
   const v1 = document.getElementById('volume')
   const v2 = document.getElementById('pm-volume')
   const v3 = document.getElementById('pm-cover-volume')
+  const v4 = document.getElementById('home-nx-volume')
+  const v4Val = document.getElementById('home-nx-vol-val')
   if (v1) v1.value = slider
   if (v2) v2.value = slider
   if (v3) v3.value = slider
+  if (v4) v4.value = slider
+  if (v4Val) v4Val.textContent = String(Math.max(0, Math.min(10, Math.round(slider * 10))))
   try { localStorage.setItem('flow_volume_slider', String(slider)) } catch {}
 }
 function pickRandomQueueIndex() {
@@ -6951,14 +7019,19 @@ function syncLikeButtonsInVisibleLists() {
 function likeCurrentTrack() { if (currentTrack) likeTrack(currentTrack) }
 
 function updatePlayerLikeBtn() {
-  const btn = document.getElementById('player-like-btn'); if (!btn||!currentTrack) return
+  if (!currentTrack) return
   const liked = isLiked(currentTrack)
-  btn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE
-  btn.classList.toggle('liked', liked)
+  const btn = document.getElementById('player-like-btn')
+  if (btn) {
+    btn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE
+    btn.classList.toggle('liked', liked)
+  }
   const pmBtn = document.getElementById('pm-like-btn')
   const pmCoverBtn = document.getElementById('pm-cover-like-btn')
+  const homeNxBtn = document.getElementById('home-nx-like-btn')
   if (pmBtn) { pmBtn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; pmBtn.classList.toggle('liked', liked) }
   if (pmCoverBtn) { pmCoverBtn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; pmCoverBtn.classList.toggle('liked', liked) }
+  if (homeNxBtn) { homeNxBtn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; homeNxBtn.classList.toggle('liked', liked) }
 }
 
 /** Склонение для «N трек/трека/треков» (рус.). */
@@ -6976,6 +7049,7 @@ function renderQueue() {
   const metaEl = document.getElementById('home-up-next-meta')
   const headlineEl = document.getElementById('home-up-next-headline')
   if (!listEl) return
+  if (typeof isMediaQueueEnabled === 'function' && !isMediaQueueEnabled()) return
 
   try {
   const qlen = Array.isArray(queue) ? queue.length : 0
@@ -7783,6 +7857,12 @@ function addToPlaylist(track) {
     payload: { track }
   })
 }
+
+function addCurrentTrackToPlaylist() {
+  if (!currentTrack) return showToast('Сначала включи трек', true)
+  addToPlaylist(currentTrack)
+}
+window.addCurrentTrackToPlaylist = addCurrentTrackToPlaylist
 
 let _playlistRenderToken = 0
 let _openPlaylistTrackRenderToken = 0
@@ -8613,6 +8693,7 @@ window.addEventListener('DOMContentLoaded', () => {
   syncHomeCloneUI()
   syncHomeWidgetUI()
   applyHomeSliderStyle()
+  applyMediaQueueLayout()
   startHomeVisualizerLoop()
   alignHomeHeaderToPlay()
   window.addEventListener('resize', () => {

@@ -3612,12 +3612,14 @@ function getSettings() {
     discordClientId: '', discordRpcEnabled: false, lastfmApiKey: '', lastfmSharedSecret: '', lastfmSessionKey: '',
     proxyBaseUrl: FLOW_SERVER_DEFAULT_URL,
     compactUi: false,
+    mediaShowQueue: true,
     minimizeToTrayOnClose: true,
     launchAtLogin: false,
     flowSocialApiBase: FLOW_SOCIAL_DEFAULT_API_BASE,
     flowSocialApiSecret: FLOW_SOCIAL_DEFAULT_API_SECRET,
   }
   if (typeof raw.compactUi !== 'boolean') raw.compactUi = false
+  if (typeof raw.mediaShowQueue !== 'boolean') raw.mediaShowQueue = true
   if (!Object.prototype.hasOwnProperty.call(raw, 'flowSocialApiBase')) raw.flowSocialApiBase = FLOW_SOCIAL_DEFAULT_API_BASE
   if (!Object.prototype.hasOwnProperty.call(raw, 'flowSocialApiSecret')) raw.flowSocialApiSecret = FLOW_SOCIAL_DEFAULT_API_SECRET
   if (!String(raw.flowSocialApiBase || '').trim()) raw.flowSocialApiBase = FLOW_SOCIAL_DEFAULT_API_BASE
@@ -3783,12 +3785,76 @@ function applyOptimizationSettings() {
   refreshOptimizationAmbientClasses()
 }
 
+function isMediaQueueEnabled() {
+  return getSettings().mediaShowQueue !== false
+}
+
+function syncMediaQueueToggle() {
+  const el = document.getElementById('toggle-media-show-queue')
+  if (el) el.classList.toggle('active', isMediaQueueEnabled())
+}
+
+function applyMediaQueueLayout() {
+  const on = isMediaQueueEnabled()
+  const page = document.getElementById('page-home')
+  const shell = document.getElementById('playback-page-shell')
+  const sub = document.getElementById('page-home-sub')
+  if (page) page.classList.toggle('media-queue-off', !on)
+  if (shell) shell.classList.toggle('media-queue-off', !on)
+  if (sub) sub.textContent = on ? 'Управляй текущим треком и очередью' : 'Сейчас играет — режим Nexory'
+  const upNext = document.getElementById('home-up-next')
+  if (upNext) upNext.classList.toggle('hidden', !on)
+  syncMediaQueueToggle()
+  syncHomeNxFooter()
+  if (on && typeof renderQueue === 'function') renderQueue()
+  queueMicrotask(() => {
+    try {
+      alignHomeHeaderToPlay()
+      resizeHomeVisualizerCanvas()
+    } catch (_) {}
+  })
+}
+
+function toggleMediaShowQueue() {
+  const next = !isMediaQueueEnabled()
+  saveSettingsRaw({ mediaShowQueue: next })
+  applyMediaQueueLayout()
+  showToast(next ? 'Очередь в медиа включена' : 'Очередь скрыта — режим Nexory')
+}
+window.toggleMediaShowQueue = toggleMediaShowQueue
+window.applyMediaQueueLayout = applyMediaQueueLayout
+window.isMediaQueueEnabled = isMediaQueueEnabled
+
+function cycleSoundEnhancerProfile() {
+  const order = ['clean', 'balanced', 'bright']
+  const cur = getSoundEnhancerProfile()
+  const i = Math.max(0, order.indexOf(cur))
+  setSoundEnhancerProfile(order[(i + 1) % order.length])
+}
+window.cycleSoundEnhancerProfile = cycleSoundEnhancerProfile
+
+function openPlaybackEqSettings() {
+  openPage('settings')
+  switchSettingsCategory('playback')
+  requestAnimationFrame(() => {
+    document.getElementById('sound-profile-clean')?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  })
+}
+window.openPlaybackEqSettings = openPlaybackEqSettings
+
+function openMediaSourceSettings() {
+  openPage('settings')
+  switchSettingsCategory('accounts')
+}
+window.openMediaSourceSettings = openMediaSourceSettings
+
 function syncPlaybackSystemToggles() {
   const s = getSettings()
   const tray = document.getElementById('toggle-minimize-to-tray')
   if (tray) tray.classList.toggle('active', Boolean(s.minimizeToTrayOnClose))
   const login = document.getElementById('toggle-launch-at-login')
   if (login) login.classList.toggle('active', Boolean(s.launchAtLogin))
+  syncMediaQueueToggle()
 }
 
 function syncTrayClosePreferenceToMain() {
@@ -4567,6 +4633,7 @@ function loadSettingsPage() {
     applyCompactUi()
     switchSettingsCategory(_settingsCategory)
     applyOptimizationSettings()
+    applyMediaQueueLayout()
     syncSearchSourceRows()
     syncAuthSourceStackActive()
     updateSourceBadge()
@@ -6317,7 +6384,7 @@ function updateYandexWaveDislikeButtonsVisible() {
     String(currentTrack.source || '').toLowerCase() === 'yandex' &&
     Boolean(currentTrack?.yandexRotor?.batchId)
   )
-  ;['player-wave-dislike-btn', 'pm-wave-dislike-btn'].forEach((id) => {
+  ;['player-wave-dislike-btn', 'pm-wave-dislike-btn', 'home-wave-dislike-btn'].forEach((id) => {
     const b = document.getElementById(id)
     if (b) b.classList.toggle('hidden', !show)
   })
@@ -7673,6 +7740,7 @@ function ensureFriendInteractionUI() {
     menu.id = 'playlist-card-context-menu'
     menu.className = 'friend-context-menu hidden glass-card'
     menu.innerHTML = `
+      <button type="button" class="friend-context-item" onclick="playlistCardCtxExportJson()">Экспорт JSON</button>
       <button type="button" class="friend-context-item" onclick="playlistCardCtxEdit()">Изменить</button>
       <button type="button" class="friend-context-item danger" onclick="playlistCardCtxDelete()">Удалить</button>
     `
@@ -7714,8 +7782,49 @@ function playlistCardCtxDelete() {
   deletePlaylist(i)
 }
 
+function exportPlaylistToJsonFile(playlistIndex) {
+  const idx = Number(playlistIndex)
+  const pls = getPlaylists()
+  if (!Number.isFinite(idx) || idx < 0 || idx >= pls.length) return showToast('Плейлист не найден', true)
+  try {
+    const pl = normalizePlaylist(pls[idx])
+    const payload = {
+      format: 'flow-playlists-v1',
+      exportedAt: new Date().toISOString(),
+      playlists: [pl],
+    }
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+    const stamp = String(pl.name || 'playlist').replace(/[\\/:*?"<>|]+/g, '_').trim().slice(0, 120) || 'playlist'
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `${stamp}.json`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(link.href)
+    showToast('Плейлист экспортирован')
+  } catch (err) {
+    showToast(`Ошибка экспорта: ${err?.message || err}`, true)
+  }
+}
+
+function exportOpenPlaylistJson() {
+  if (openPlaylistIndex == null) return showToast('Плейлист не выбран', true)
+  exportPlaylistToJsonFile(openPlaylistIndex)
+}
+
+function playlistCardCtxExportJson() {
+  const i = Number(_playlistCardCtxIdx)
+  closePlaylistCardContextMenu()
+  if (!Number.isFinite(i) || i < 0) return
+  exportPlaylistToJsonFile(i)
+}
+
 window.playlistCardCtxEdit = playlistCardCtxEdit
 window.playlistCardCtxDelete = playlistCardCtxDelete
+window.playlistCardCtxExportJson = playlistCardCtxExportJson
+window.exportPlaylistToJsonFile = exportPlaylistToJsonFile
+window.exportOpenPlaylistJson = exportOpenPlaylistJson
 window.openPlaylistCardContextMenu = openPlaylistCardContextMenu
 
 function openRoomMemberContextMenu(event, peerId = '', username = '') {
@@ -10716,6 +10825,23 @@ function syncHomeClonePlaybackProgress() {
   prog.style.setProperty('--progress-fill', `${Math.max(0, Math.min(100, fill))}%`)
 }
 
+function syncHomeNxFooter() {
+  const vol = document.getElementById('home-nx-volume')
+  const volVal = document.getElementById('home-nx-vol-val')
+  const srcBtn = document.getElementById('home-nx-source-btn')
+  if (vol) {
+    const slider = Math.max(0, Math.min(1, Number(localStorage.getItem('flow_volume_slider') || '0.8') || 0.8))
+    vol.value = String(slider)
+    if (volVal) volVal.textContent = String(Math.max(0, Math.min(10, Math.round(slider * 10))))
+  }
+  if (srcBtn) {
+    const raw = normalizeStoredActiveSource(getSettings()?.activeSource || currentSource || 'hybrid')
+    const SHORT = { hybrid: 'N', yandex: 'Я', vk: 'VK', spotify: 'SP', soundcloud: 'SC', audius: 'AU' }
+    srcBtn.textContent = SHORT[raw] || 'N'
+    srcBtn.title = `Источник: ${raw}`
+  }
+}
+
 function syncHomeCloneUI() {
   const cover = document.getElementById('home-clone-cover')
   const title = document.getElementById('home-clone-title')
@@ -10735,8 +10861,10 @@ function syncHomeCloneUI() {
     cover.innerHTML = COVER_ICON
   }
   syncHomeClonePlaybackProgress()
+  syncHomeNxFooter()
   if (_activePageId === 'profile') renderProfileNowPlaying()
 }
+window.syncHomeNxFooter = syncHomeNxFooter
 
 function alignHomeHeaderToPlay() {
   const main = document.querySelector('.home-clone-main')
@@ -11578,6 +11706,9 @@ function openPage(id, opts = {}) {
   if (id === 'home') {
     queueMicrotask(() => {
       try {
+        applyMediaQueueLayout()
+      } catch (_) {}
+      try {
         if (isVisualFloatedLayout()) {
           refreshHomeDashboardLayoutAfterContentChange()
         }
@@ -12314,9 +12445,13 @@ function setVolume(val) {
   const v1 = document.getElementById('volume')
   const v2 = document.getElementById('pm-volume')
   const v3 = document.getElementById('pm-cover-volume')
+  const v4 = document.getElementById('home-nx-volume')
+  const v4Val = document.getElementById('home-nx-vol-val')
   if (v1) v1.value = slider
   if (v2) v2.value = slider
   if (v3) v3.value = slider
+  if (v4) v4.value = slider
+  if (v4Val) v4Val.textContent = String(Math.max(0, Math.min(10, Math.round(slider * 10))))
   try { localStorage.setItem('flow_volume_slider', String(slider)) } catch {}
 }
 function pickRandomQueueIndex() {
@@ -13036,14 +13171,19 @@ function syncLikeButtonsInVisibleLists() {
 function likeCurrentTrack() { if (currentTrack) likeTrack(currentTrack) }
 
 function updatePlayerLikeBtn() {
-  const btn = document.getElementById('player-like-btn'); if (!btn||!currentTrack) return
+  if (!currentTrack) return
   const liked = isLiked(currentTrack)
-  btn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE
-  btn.classList.toggle('liked', liked)
+  const btn = document.getElementById('player-like-btn')
+  if (btn) {
+    btn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE
+    btn.classList.toggle('liked', liked)
+  }
   const pmBtn = document.getElementById('pm-like-btn')
   const pmCoverBtn = document.getElementById('pm-cover-like-btn')
+  const homeNxBtn = document.getElementById('home-nx-like-btn')
   if (pmBtn) { pmBtn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; pmBtn.classList.toggle('liked', liked) }
   if (pmCoverBtn) { pmCoverBtn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; pmCoverBtn.classList.toggle('liked', liked) }
+  if (homeNxBtn) { homeNxBtn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; homeNxBtn.classList.toggle('liked', liked) }
 }
 
 /** Склонение для «N трек/трека/треков» (рус.). */
@@ -13061,6 +13201,7 @@ function renderQueue() {
   const metaEl = document.getElementById('home-up-next-meta')
   const headlineEl = document.getElementById('home-up-next-headline')
   if (!listEl) return
+  if (typeof isMediaQueueEnabled === 'function' && !isMediaQueueEnabled()) return
 
   try {
   const qlen = Array.isArray(queue) ? queue.length : 0
@@ -13868,6 +14009,12 @@ function addToPlaylist(track) {
     payload: { track }
   })
 }
+
+function addCurrentTrackToPlaylist() {
+  if (!currentTrack) return showToast('Сначала включи трек', true)
+  addToPlaylist(currentTrack)
+}
+window.addCurrentTrackToPlaylist = addCurrentTrackToPlaylist
 
 let _playlistRenderToken = 0
 let _openPlaylistTrackRenderToken = 0
@@ -14698,6 +14845,7 @@ window.addEventListener('DOMContentLoaded', () => {
   syncHomeCloneUI()
   syncHomeWidgetUI()
   applyHomeSliderStyle()
+  applyMediaQueueLayout()
   startHomeVisualizerLoop()
   alignHomeHeaderToPlay()
   window.addEventListener('resize', () => {

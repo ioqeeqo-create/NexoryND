@@ -228,11 +228,17 @@
     <div id="page-home" class="page">
       <div class="content-header">
         <h2>Медиа</h2>
-        <p class="content-sub">Управляй текущим треком и очередью</p>
+        <p class="content-sub" id="page-home-sub">Управляй текущим треком и очередью</p>
       </div>
-      <div class="playback-page-shell">
-        <div class="home-clone glass-card">
-          <div class="home-clone-cover" id="home-clone-cover"><svg class="ui-icon lg" data-lucide="music-2" viewBox="0 0 24 24"></svg></div>
+      <div class="playback-page-shell" id="playback-page-shell">
+        <div class="home-clone glass-card" id="home-media-player">
+          <div class="home-clone-cover-wrap" id="home-clone-cover-wrap">
+            <div class="home-clone-cover" id="home-clone-cover"><svg class="ui-icon lg" data-lucide="music-2" viewBox="0 0 24 24"></svg></div>
+            <div class="home-nx-cover-actions" aria-label="Действия с обложкой">
+              <button type="button" class="home-nx-cover-btn home-nx-like" id="home-nx-like-btn" onclick="likeCurrentTrack()" title="Лайк"><svg class="ui-icon flow-ref-heart-player" data-lucide="heart" viewBox="0 0 24 24"></svg></button>
+              <button type="button" class="home-nx-cover-btn home-nx-add" onclick="addCurrentTrackToPlaylist()" title="Добавить в плейлист"><svg class="ui-icon" data-lucide="plus" viewBox="0 0 24 24"></svg></button>
+            </div>
+          </div>
           <div class="home-clone-main">
             <div class="home-clone-head">
               <div class="home-clone-title" id="home-clone-title">Ничего не играет</div>
@@ -245,11 +251,25 @@
             </div>
             <div class="home-clone-controls">
               <span id="host-lock-indicator-home" style="display:none;align-items:center;gap:4px;font-size:11px;opacity:.75;padding:0 4px">🔒 Host only</span>
+              <button type="button" class="ctrl-btn home-nx-only" onclick="findSimilarTracks()" title="Похожие треки"><svg class="ui-icon" data-lucide="download" viewBox="0 0 24 24"></svg></button>
               <button class="ctrl-btn" id="home-repeat-btn" onclick="toggleRepeatMode()" title="Повтор"><svg class="ui-icon flow-ref-ctrl" data-lucide="repeat" viewBox="0 0 24 24"></svg></button>
               <button class="ctrl-btn" onclick="prevTrack()"><svg class="ui-icon" data-lucide="skip-back" viewBox="0 0 24 24"></svg></button>
               <button class="ctrl-btn play-btn" id="home-play-btn" onclick="togglePlay()"><svg class="ui-icon ctrl-play-icon" data-lucide="play" viewBox="0 0 24 24"></svg></button>
               <button class="ctrl-btn" onclick="nextTrack()"><svg class="ui-icon" data-lucide="skip-forward" viewBox="0 0 24 24"></svg></button>
               <button class="ctrl-btn" id="home-shuffle-btn" onclick="toggleShuffleMode()" title="Перемешка"><svg class="ui-icon flow-ref-ctrl" data-lucide="shuffle" viewBox="0 0 24 24"></svg></button>
+              <button type="button" class="ctrl-btn home-nx-only hidden" id="home-wave-dislike-btn" onclick="dislikeCurrentYandexWaveTrack()" title="Не нравится"><svg class="ui-icon" data-lucide="thumbs-down" viewBox="0 0 24 24"></svg></button>
+            </div>
+            <div class="home-nx-footer" id="home-nx-footer">
+              <div class="home-nx-vol">
+                <svg class="ui-icon" data-lucide="volume-2" viewBox="0 0 24 24" aria-hidden="true"></svg>
+                <input type="range" class="home-nx-volume" id="home-nx-volume" min="0" max="1" step="0.01" value="0.8" oninput="setVolume(this.value)">
+                <span class="home-nx-vol-val" id="home-nx-vol-val">8</span>
+              </div>
+              <button type="button" class="home-nx-foot-btn" id="home-nx-source-btn" onclick="openMediaSourceSettings()" title="Источник музыки">N</button>
+              <button type="button" class="home-nx-foot-btn" onclick="openPlaybackEqSettings()" title="Профиль звука"><svg class="ui-icon" data-lucide="sliders-horizontal" viewBox="0 0 24 24"></svg></button>
+              <button type="button" class="home-nx-foot-btn" onclick="cycleSoundEnhancerProfile()" title="Профиль чистоты звука"><svg class="ui-icon" data-lucide="gauge" viewBox="0 0 24 24"></svg></button>
+              <button type="button" class="home-nx-foot-btn" onclick="toggleLyrics()" title="Текст трека"><svg class="ui-icon" data-lucide="message-square" viewBox="0 0 24 24"></svg></button>
+              <button type="button" class="home-nx-foot-btn" onclick="enterPlayerMode()" title="Полноэкранный плеер"><svg class="ui-icon" data-lucide="maximize-2" viewBox="0 0 24 24"></svg></button>
             </div>
             <div class="home-visualizer-wrap" id="home-visualizer-wrap">
               <canvas class="home-visualizer-canvas" id="home-visualizer-canvas" width="640" height="130"></canvas>
@@ -339,6 +359,7 @@
                   <button class="btn-small" onclick="playOpenPlaylist()">▶ Слушать</button>
                   <button class="btn-small" onclick="shuffleOpenPlaylist()">⇄</button>
                   <button class="btn-small" onclick="editOpenPlaylist()">✎ Редактировать</button>
+                  <button class="btn-small" onclick="exportOpenPlaylistJson()" title="Скачать этот плейлист в JSON">⬇ JSON</button>
                   <button class="btn-small" onclick="removeOpenPlaylistDuplicates()">Убрать дубли</button>
                   <button class="btn-small playlist-close-x" onclick="closePlaylist()" title="Ко всем плейлистам">✕</button>
                 </div>
@@ -806,6 +827,10 @@
         <div class="visual-settings">
           <div class="vs-section glass-card">
             <div class="vs-section-title">Плеер</div>
+            <div class="vs-row">
+              <label class="vs-label">Очередь в разделе «Медиа»</label>
+              <div class="vs-toggle active" id="toggle-media-show-queue" onclick="toggleMediaShowQueue()" title="Показывать список «Дальше в очереди» на странице медиа"><div class="vs-toggle-thumb"></div></div>
+            </div>
             <div class="vs-row">
               <label class="vs-label">Перемешка</label>
               <button class="vsb" id="toggle-shuffle-btn" onclick="toggleShuffleMode()">Выключена</button>
@@ -1616,7 +1641,7 @@
     <div class="flow-game-sleep-title">Sleep mode</div>
     <div class="flow-game-sleep-sub">Только воспроизведение · верни Nexory на экран</div>
   </div>
-  <script src="renderer.js?v=41f14e2c19b5-mp5qb4kg"></script>
+  <script src="renderer.js?v=3514354b21b4-mp8r26t8"></script>
 </body>
 </html>
 

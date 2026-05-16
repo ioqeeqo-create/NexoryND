@@ -3612,12 +3612,14 @@ function getSettings() {
     discordClientId: '', discordRpcEnabled: false, lastfmApiKey: '', lastfmSharedSecret: '', lastfmSessionKey: '',
     proxyBaseUrl: FLOW_SERVER_DEFAULT_URL,
     compactUi: false,
+    mediaShowQueue: true,
     minimizeToTrayOnClose: true,
     launchAtLogin: false,
     flowSocialApiBase: FLOW_SOCIAL_DEFAULT_API_BASE,
     flowSocialApiSecret: FLOW_SOCIAL_DEFAULT_API_SECRET,
   }
   if (typeof raw.compactUi !== 'boolean') raw.compactUi = false
+  if (typeof raw.mediaShowQueue !== 'boolean') raw.mediaShowQueue = true
   if (!Object.prototype.hasOwnProperty.call(raw, 'flowSocialApiBase')) raw.flowSocialApiBase = FLOW_SOCIAL_DEFAULT_API_BASE
   if (!Object.prototype.hasOwnProperty.call(raw, 'flowSocialApiSecret')) raw.flowSocialApiSecret = FLOW_SOCIAL_DEFAULT_API_SECRET
   if (!String(raw.flowSocialApiBase || '').trim()) raw.flowSocialApiBase = FLOW_SOCIAL_DEFAULT_API_BASE
@@ -3783,12 +3785,76 @@ function applyOptimizationSettings() {
   refreshOptimizationAmbientClasses()
 }
 
+function isMediaQueueEnabled() {
+  return getSettings().mediaShowQueue !== false
+}
+
+function syncMediaQueueToggle() {
+  const el = document.getElementById('toggle-media-show-queue')
+  if (el) el.classList.toggle('active', isMediaQueueEnabled())
+}
+
+function applyMediaQueueLayout() {
+  const on = isMediaQueueEnabled()
+  const page = document.getElementById('page-home')
+  const shell = document.getElementById('playback-page-shell')
+  const sub = document.getElementById('page-home-sub')
+  if (page) page.classList.toggle('media-queue-off', !on)
+  if (shell) shell.classList.toggle('media-queue-off', !on)
+  if (sub) sub.textContent = on ? 'Управляй текущим треком и очередью' : 'Сейчас играет — режим Nexory'
+  const upNext = document.getElementById('home-up-next')
+  if (upNext) upNext.classList.toggle('hidden', !on)
+  syncMediaQueueToggle()
+  syncHomeNxFooter()
+  if (on && typeof renderQueue === 'function') renderQueue()
+  queueMicrotask(() => {
+    try {
+      alignHomeHeaderToPlay()
+      resizeHomeVisualizerCanvas()
+    } catch (_) {}
+  })
+}
+
+function toggleMediaShowQueue() {
+  const next = !isMediaQueueEnabled()
+  saveSettingsRaw({ mediaShowQueue: next })
+  applyMediaQueueLayout()
+  showToast(next ? 'Очередь в медиа включена' : 'Очередь скрыта — режим Nexory')
+}
+window.toggleMediaShowQueue = toggleMediaShowQueue
+window.applyMediaQueueLayout = applyMediaQueueLayout
+window.isMediaQueueEnabled = isMediaQueueEnabled
+
+function cycleSoundEnhancerProfile() {
+  const order = ['clean', 'balanced', 'bright']
+  const cur = getSoundEnhancerProfile()
+  const i = Math.max(0, order.indexOf(cur))
+  setSoundEnhancerProfile(order[(i + 1) % order.length])
+}
+window.cycleSoundEnhancerProfile = cycleSoundEnhancerProfile
+
+function openPlaybackEqSettings() {
+  openPage('settings')
+  switchSettingsCategory('playback')
+  requestAnimationFrame(() => {
+    document.getElementById('sound-profile-clean')?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  })
+}
+window.openPlaybackEqSettings = openPlaybackEqSettings
+
+function openMediaSourceSettings() {
+  openPage('settings')
+  switchSettingsCategory('accounts')
+}
+window.openMediaSourceSettings = openMediaSourceSettings
+
 function syncPlaybackSystemToggles() {
   const s = getSettings()
   const tray = document.getElementById('toggle-minimize-to-tray')
   if (tray) tray.classList.toggle('active', Boolean(s.minimizeToTrayOnClose))
   const login = document.getElementById('toggle-launch-at-login')
   if (login) login.classList.toggle('active', Boolean(s.launchAtLogin))
+  syncMediaQueueToggle()
 }
 
 function syncTrayClosePreferenceToMain() {
@@ -4567,6 +4633,7 @@ function loadSettingsPage() {
     applyCompactUi()
     switchSettingsCategory(_settingsCategory)
     applyOptimizationSettings()
+    applyMediaQueueLayout()
     syncSearchSourceRows()
     syncAuthSourceStackActive()
     updateSourceBadge()
