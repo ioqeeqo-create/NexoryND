@@ -4752,8 +4752,16 @@ function syncHomeClonePlaybackProgress() {
   tot.textContent = fmtTime(audio.duration)
   const ratio = audio.duration ? audio.currentTime / audio.duration : 0
   prog.value = ratio
-  const fill = ratio * 100
-  prog.style.setProperty('--progress-fill', `${Math.max(0, Math.min(100, fill))}%`)
+  const nxLine = document.getElementById('page-home')?.classList.contains('media-queue-off')
+  if (!nxLine) {
+    const fill = ratio * 100
+    prog.style.setProperty('--progress-fill', `${Math.max(0, Math.min(100, fill))}%`)
+  } else {
+    prog.style.removeProperty('--progress-fill')
+  }
+  try {
+    if (typeof syncHomeNxCoverModeProgress === 'function') syncHomeNxCoverModeProgress()
+  } catch (_) {}
 }
 
 function syncHomeNxFooter() {

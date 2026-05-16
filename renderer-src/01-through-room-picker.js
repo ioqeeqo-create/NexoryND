@@ -3924,7 +3924,7 @@ window.openMediaSourceSettings = openMediaSourceSettings
 const HOME_NX_SRC_LOGOS = {
   vk: 'assets/source-vk.svg',
   yandex: 'assets/source-yandex-wave.svg',
-  hybrid: 'assets/flow-mark.svg',
+  hybrid: 'assets/auth/nexory.png',
 }
 
 function getPlaybackRate() {
@@ -3974,66 +3974,53 @@ function setPlaybackRate(rate) {
 }
 window.setPlaybackRate = setPlaybackRate
 
-function closeHomeNxPopovers() {
-  document.getElementById('home-nx-speed-popover')?.classList.add('hidden')
-  document.getElementById('home-nx-eq-popover')?.classList.add('hidden')
-  document.getElementById('home-nx-popover-layer')?.classList.add('hidden')
+function closeHomeNxMenus() {
+  document.getElementById('home-nx-speed-menu')?.classList.add('hidden')
+  document.getElementById('home-nx-eq-menu')?.classList.add('hidden')
   document.getElementById('home-nx-source-menu')?.classList.add('hidden')
   document.getElementById('home-nx-speed-btn')?.setAttribute('aria-expanded', 'false')
   document.getElementById('home-nx-eq-btn')?.setAttribute('aria-expanded', 'false')
   document.getElementById('home-nx-source-btn')?.setAttribute('aria-expanded', 'false')
+  document.querySelectorAll('.home-nx-foot-btn.is-open').forEach((el) => el.classList.remove('is-open'))
 }
-window.closeHomeNxPopovers = closeHomeNxPopovers
+window.closeHomeNxPopovers = closeHomeNxMenus
+window.closeHomeNxMenus = closeHomeNxMenus
 
-function toggleHomeNxSpeedPopover(ev) {
+function toggleHomeNxMenu(ev, menuId, btnId, onOpen) {
   ev?.stopPropagation?.()
-  const pop = document.getElementById('home-nx-speed-popover')
-  const layer = document.getElementById('home-nx-popover-layer')
-  const btn = document.getElementById('home-nx-speed-btn')
-  if (!pop || !layer) return
-  const open = pop.classList.contains('hidden')
-  closeHomeNxPopovers()
-  if (open) {
-    pop.classList.remove('hidden')
-    layer.classList.remove('hidden')
+  const menu = document.getElementById(menuId)
+  const btn = document.getElementById(btnId)
+  if (!menu) return
+  const willOpen = menu.classList.contains('hidden')
+  closeHomeNxMenus()
+  if (willOpen) {
+    menu.classList.remove('hidden')
     btn?.setAttribute('aria-expanded', 'true')
-    syncHomeNxSpeedUI()
+    btn?.classList.add('is-open')
+    if (typeof onOpen === 'function') onOpen()
   }
 }
-window.toggleHomeNxSpeedPopover = toggleHomeNxSpeedPopover
 
-function toggleHomeNxEqPopover(ev) {
-  ev?.stopPropagation?.()
-  const pop = document.getElementById('home-nx-eq-popover')
-  const layer = document.getElementById('home-nx-popover-layer')
-  const btn = document.getElementById('home-nx-eq-btn')
-  if (!pop || !layer) return
-  const open = pop.classList.contains('hidden')
-  closeHomeNxPopovers()
-  if (open) {
-    pop.classList.remove('hidden')
-    layer.classList.remove('hidden')
-    btn?.setAttribute('aria-expanded', 'true')
-    renderHomeNxEqUI()
-  }
+function toggleHomeNxSpeedMenu(ev) {
+  toggleHomeNxMenu(ev, 'home-nx-speed-menu', 'home-nx-speed-btn', syncHomeNxSpeedUI)
 }
-window.toggleHomeNxEqPopover = toggleHomeNxEqPopover
+window.toggleHomeNxSpeedMenu = toggleHomeNxSpeedMenu
+window.toggleHomeNxSpeedPopover = toggleHomeNxSpeedMenu
+
+function toggleHomeNxEqMenu(ev) {
+  toggleHomeNxMenu(ev, 'home-nx-eq-menu', 'home-nx-eq-btn', renderHomeNxEqUI)
+}
+window.toggleHomeNxEqMenu = toggleHomeNxEqMenu
+window.toggleHomeNxEqPopover = toggleHomeNxEqMenu
 
 function toggleHomeNxSourceMenu(ev) {
-  ev?.stopPropagation?.()
-  const menu = document.getElementById('home-nx-source-menu')
-  const btn = document.getElementById('home-nx-source-btn')
-  if (!menu) return
-  const open = menu.classList.contains('hidden')
-  closeHomeNxPopovers()
-  menu.classList.toggle('hidden', !open)
-  btn?.setAttribute('aria-expanded', open ? 'true' : 'false')
+  toggleHomeNxMenu(ev, 'home-nx-source-menu', 'home-nx-source-btn')
 }
 window.toggleHomeNxSourceMenu = toggleHomeNxSourceMenu
 
 function pickHomeNxSource(src) {
   switchSearchSource(src)
-  closeHomeNxPopovers()
+  closeHomeNxMenus()
   syncHomeNxSourceLogo()
 }
 window.pickHomeNxSource = pickHomeNxSource
@@ -4058,17 +4045,75 @@ function getEqAudioState() {
   return { audioCtx: _audioCtx, analyser: _analyser, freqData: _freqData, eqFilters: _eqFilters }
 }
 
+function ensureEqAudioChainReady() {
+  if (_eqFilters?.length && _audioCtx?.state !== 'closed') return true
+  try {
+    if (typeof teardownAudioAnalyzer === 'function') teardownAudioAnalyzer()
+  } catch (_) {}
+  try {
+    if (typeof ensureAudioAnalyzer === 'function') ensureAudioAnalyzer()
+  } catch (_) {}
+  return !!_eqFilters?.length
+}
+
 function applyHomeNxEqPreset(presetId) {
   const eq = getParametricEqModule()
   if (!eq) return
-  ensureAudioAnalyzer()
+  if (!ensureEqAudioChainReady()) {
+    showToast('Эквалайзер: запусти трек и попробуй снова', true)
+    return
+  }
   const state = getEqAudioState()
   eq.applyPreset?.(presetId, state, _audioCtx, true)
   _eqFilters = state.eqFilters
   renderHomeNxEqUI()
 }
 
-function renderHomeNxEqUI() {
+let _homeNxEqDrag = null
+
+function bindHomeNxEqGraphDrag() {
+  const graph = document.getElementById('home-nx-eq-graph')
+  const eq = getParametricEqModule()
+  if (!graph || !eq || graph.dataset.dragBound) return
+  graph.dataset.dragBound = '1'
+  const onMove = (e) => {
+    if (!_homeNxEqDrag) return
+    const pt = graph.createSVGPoint()
+    pt.x = e.clientX
+    pt.y = e.clientY
+    const ctm = graph.getScreenCTM()
+    if (!ctm) return
+    const sp = pt.matrixTransform(ctm.inverse())
+    const h = 120
+    const midY = h * 0.55
+    const db = ((midY - sp.y) / (h * 0.42)) * 12
+    const gains = eq.getCurrentGains?.() || []
+    gains[_homeNxEqDrag] = Math.max(-12, Math.min(12, db))
+    const state = getEqAudioState()
+    eq.applyCustomGains?.(gains, state, _audioCtx, false)
+    _eqFilters = state.eqFilters
+    renderHomeNxEqUI(false)
+  }
+  const onUp = () => {
+    _homeNxEqDrag = null
+    window.removeEventListener('pointermove', onMove)
+    window.removeEventListener('pointerup', onUp)
+    window.removeEventListener('pointercancel', onUp)
+  }
+  graph.addEventListener('pointerdown', (e) => {
+    const node = e.target.closest?.('.home-nx-eq-node')
+    if (!node) return
+    if (!ensureEqAudioChainReady()) return
+    _homeNxEqDrag = Number(node.getAttribute('data-band'))
+    if (!Number.isFinite(_homeNxEqDrag)) return
+    e.preventDefault()
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
+  })
+}
+
+function renderHomeNxEqUI(rebindPresets = true) {
   const eq = getParametricEqModule()
   const presetsEl = document.getElementById('home-nx-eq-presets')
   const graph = document.getElementById('home-nx-eq-graph')
@@ -4077,7 +4122,7 @@ function renderHomeNxEqUI() {
   const activePreset = eq.readStoredPreset?.() || 'neutral'
   const gains = eq.getCurrentGains?.() || eq.getPresetGains('neutral')
   const order = ['neutral', 'bass', 'highs', 'vocal', 'classic', 'jazz', 'liquid', 'deep-ocean', 'rock']
-  if (!presetsEl.dataset.ready) {
+  if (rebindPresets && !presetsEl.dataset.ready) {
     presetsEl.dataset.ready = '1'
     presetsEl.innerHTML = order
       .map((id) => {
@@ -4102,19 +4147,57 @@ function renderHomeNxEqUI() {
     return [x, y]
   })
   const line = pts.map((p) => p.join(',')).join(' ')
-  const area = `M0,${h} L${pts.map((p) => p.join(',')).join(' L')} L${w},${h} Z`
-  graph.innerHTML = `<path class="home-nx-eq-fill" d="${area}"></path><polyline class="home-nx-eq-line" points="${line}"></polyline>${pts
+  graph.innerHTML = `<polyline class="home-nx-eq-line" points="${line}"></polyline>${pts
     .map(
       ([x, y], i) =>
         `<circle class="home-nx-eq-node" data-band="${i}" cx="${x}" cy="${y}" r="5"></circle>`
     )
-    .join('')}`
+      .join('')}`
+  bindHomeNxEqGraphDrag()
   if (labels && !labels.dataset.ready) {
     labels.dataset.ready = '1'
     labels.innerHTML = freqs
       .map((f) => `<span>${f >= 1000 ? `${f / 1000}k` : f}</span>`)
       .join('')
   }
+}
+
+function openHomeNxCoverMode() {
+  const panel = document.getElementById('home-nx-cover-mode')
+  const art = document.getElementById('home-nx-cover-mode-art')
+  const title = document.getElementById('home-nx-cover-mode-title')
+  const artist = document.getElementById('home-nx-cover-mode-artist')
+  if (!panel || !art) return
+  if (currentTrack) {
+    if (title) title.textContent = currentTrack.title || '—'
+    if (artist) artist.textContent = currentTrack.artist || '—'
+    applyCoverArt(art, getEffectiveCoverUrl(currentTrack), currentTrack.bg || 'linear-gradient(135deg,#7c3aed,#a855f7)')
+  }
+  syncHomeNxCoverModeProgress()
+  panel.classList.remove('hidden')
+  panel.setAttribute('aria-hidden', 'false')
+  document.getElementById('page-home')?.classList.add('home-nx-cover-mode-active')
+}
+window.openHomeNxCoverMode = openHomeNxCoverMode
+
+function closeHomeNxCoverMode() {
+  const panel = document.getElementById('home-nx-cover-mode')
+  if (!panel) return
+  panel.classList.add('hidden')
+  panel.setAttribute('aria-hidden', 'true')
+  document.getElementById('page-home')?.classList.remove('home-nx-cover-mode-active')
+}
+window.closeHomeNxCoverMode = closeHomeNxCoverMode
+
+function syncHomeNxCoverModeProgress() {
+  const cur = document.getElementById('home-nx-cover-mode-cur')
+  const tot = document.getElementById('home-nx-cover-mode-tot')
+  const prog = document.getElementById('home-nx-cover-mode-progress')
+  if (!cur || !tot || !prog) return
+  cur.textContent = fmtTime(audio.currentTime)
+  tot.textContent = fmtTime(audio.duration)
+  const ratio = audio.duration ? audio.currentTime / audio.duration : 0
+  prog.value = ratio
 }
 
 function initHomeNxMediaTools() {
@@ -4124,8 +4207,14 @@ function initHomeNxMediaTools() {
   if (!document.body.dataset.homeNxPopBound) {
     document.body.dataset.homeNxPopBound = '1'
     document.addEventListener('click', (e) => {
-      if (e.target.closest?.('.home-nx-foot-tools, .home-nx-popover-layer, .home-nx-popover')) return
-      closeHomeNxPopovers()
+      if (e.target.closest?.('.home-nx-menu-wrap, .home-nx-source-wrap, .home-nx-dropdown')) return
+      closeHomeNxMenus()
+    })
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeHomeNxMenus()
+        closeHomeNxCoverMode()
+      }
     })
   }
 }
