@@ -3056,20 +3056,19 @@ body.visual-minimal .main-quick-playlist-meta span {
   display: none;
 }
 .home-nx-cover-actions,
-.home-nx-cover-hover-hit,
+.home-nx-cover-expand-btn,
 .home-clone-controls .home-nx-only {
   display: none;
 }
-#page-home .home-nx-footer,
+#page-home .home-nx-footer {
+  display: none !important;
+}
 #page-home .home-nx-vol-row {
   display: flex;
 }
 #page-home.media-queue-off .home-nx-cover-actions,
-#page-home.media-queue-off .home-nx-cover-hover-hit {
+#page-home.media-queue-off .home-nx-cover-expand-btn {
   display: flex;
-}
-#page-home.media-queue-off .home-nx-cover-hover-hit {
-  display: block;
 }
 #page-home.media-queue-off .home-clone-controls .home-nx-only {
   display: inline-flex;
@@ -3135,7 +3134,7 @@ body.visual-minimal .main-quick-playlist-meta span {
   justify-content: space-between;
   align-items: center;
   pointer-events: none;
-  z-index: 2;
+  z-index: 5;
 }
 .home-nx-cover-btn {
   pointer-events: auto;
@@ -3368,11 +3367,13 @@ body.visual-minimal .main-quick-playlist-meta span {
 }
 #page-home.media-queue-off .home-clone-controls {
   order: 3;
+  flex-wrap: wrap;
+  row-gap: 6px;
 }
 #page-home.media-queue-off .home-nx-vol-row {
   order: 4;
-  width: min(100%, 200px);
-  max-width: 200px;
+  width: min(100%, 240px);
+  max-width: 240px;
   margin-inline: auto;
   gap: 8px;
 }
@@ -3470,51 +3471,39 @@ body.visual-minimal .main-quick-playlist-meta span {
   text-align: right;
   color: rgba(255,255,255,0.82);
 }
-.home-nx-cover-hover-hit {
+.home-nx-cover-expand-btn {
   position: absolute;
-  inset: 0;
-  z-index: 3;
-  border: none;
-  padding: 0;
-  margin: 0;
-  background: transparent;
-  cursor: pointer;
-  border-radius: inherit;
-  overflow: hidden;
-}
-.home-nx-cover-hover-dim {
-  position: absolute;
-  inset: 0;
-  background: rgba(0,0,0,0);
-  transition: background 0.22s ease;
-  pointer-events: none;
-}
-.home-nx-cover-expand-ico {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%) scale(0.88);
-  opacity: 0;
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  top: 12px;
+  right: 12px;
+  z-index: 4;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.22);
+  background: rgba(10,12,20,0.55);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   color: #fff;
-  pointer-events: none;
-}
-.home-nx-cover-expand-ico .ui-icon {
-  width: 34px;
-  height: 34px;
-  filter: drop-shadow(0 2px 8px rgba(0,0,0,0.45));
-}
-.home-clone-cover-wrap:hover .home-nx-cover-hover-dim,
-.home-nx-cover-hover-hit:focus-visible .home-nx-cover-hover-dim {
-  background: rgba(0,0,0,0.42);
-}
-.home-clone-cover-wrap:hover .home-nx-cover-expand-ico,
-.home-nx-cover-hover-hit:focus-visible .home-nx-cover-expand-ico {
-  opacity: 1;
-  transform: translate(-50%, -50%) scale(1);
-}
-.home-clone-cover[role="button"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
+  opacity: 0;
+  transform: translateY(-4px) scale(0.94);
+  transition: opacity 0.18s ease, transform 0.18s ease, background 0.16s ease;
+  pointer-events: auto;
+}
+.home-nx-cover-expand-btn .ui-icon {
+  width: 18px;
+  height: 18px;
+}
+.home-clone-cover-wrap:hover .home-nx-cover-expand-btn,
+.home-nx-cover-expand-btn:focus-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+.home-nx-cover-expand-btn:hover {
+  background: rgba(18,20,30,0.78);
 }
 .home-nx-cover-mode {
   position: absolute;
@@ -3612,15 +3601,17 @@ body.visual-minimal .main-quick-playlist-meta span {
   top: auto;
 }
 .home-nx-eq-dropdown {
-  width: min(380px, 92vw);
+  width: min(340px, calc(100vw - 24px));
   padding: 10px;
-  right: 0;
-  left: auto;
 }
 .home-nx-speed-dropdown {
-  width: min(300px, 88vw);
+  width: min(280px, calc(100vw - 24px));
   padding: 10px 12px;
-  right: 0;
+}
+.home-nx-dropdown.is-fixed {
+  position: fixed !important;
+  z-index: 12000;
+  right: auto !important;
   left: auto;
 }
 .home-nx-source-btn {
@@ -3874,17 +3865,61 @@ body.visual-minimal .main-quick-playlist-meta span {
   width: 100%;
   height: 120px;
   display: block;
+  touch-action: none;
+  cursor: crosshair;
 }
 .home-nx-eq-line {
   fill: none;
   stroke: rgba(255,255,255,0.55);
   stroke-width: 1.5;
+  pointer-events: none;
 }
 .home-nx-eq-node {
   fill: rgba(255,255,255,0.92);
   stroke: rgba(12,14,22,0.8);
   stroke-width: 1.5;
   cursor: ns-resize;
+  pointer-events: all;
+}
+.home-clone-controls--nx {
+  position: relative;
+}
+.home-clone-controls--nx .home-nx-ctrl-slot {
+  position: static;
+}
+.home-clone-controls--nx .home-nx-ctrl-btn {
+  position: relative;
+}
+.home-clone-controls--nx .home-nx-ctrl-btn .ui-icon {
+  width: 17px;
+  height: 17px;
+}
+.home-clone-controls--nx .home-nx-source-btn {
+  padding: 0;
+  overflow: hidden;
+}
+.home-clone-controls--nx .home-nx-src-logo {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  display: block;
+}
+.home-nx-ctrl-badge {
+  position: absolute;
+  right: 2px;
+  bottom: 1px;
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 6px;
+  background: rgba(8, 10, 18, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  pointer-events: none;
+}
+.home-clone-controls--nx .home-nx-ctrl-btn.is-open {
+  border-color: rgba(255,255,255,0.38);
+  background: rgba(255,255,255,0.14);
 }
 #page-home.media-queue-off .home-nx-vol-row .home-nx-volume {
   height: 3px;

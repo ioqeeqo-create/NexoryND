@@ -3925,9 +3925,54 @@ function openMediaSourceSettings() {
 window.openMediaSourceSettings = openMediaSourceSettings
 
 const HOME_NX_SRC_LOGOS = {
-  vk: 'assets/source-vk.svg',
+  vk: 'assets/source-vk.png',
   yandex: 'assets/source-yandex-music.png',
   hybrid: 'assets/auth/flow.svg',
+}
+
+let _homeNxPlaybackRamp = null
+
+function applyPlaybackPitchForRate(rate) {
+  const slowed = Number(rate) < 1
+  try {
+    if ('preservesPitch' in audio) audio.preservesPitch = !slowed
+    if ('mozPreservesPitch' in audio) audio.mozPreservesPitch = !slowed
+    if ('webkitPreservesPitch' in audio) audio.webkitPreservesPitch = !slowed
+  } catch (_) {}
+}
+
+function rampAudioPlaybackRate(targetRate) {
+  const r = Math.max(0.5, Math.min(2, Number(targetRate) || 1))
+  applyPlaybackPitchForRate(r)
+  if (_homeNxPlaybackRamp) {
+    clearInterval(_homeNxPlaybackRamp)
+    _homeNxPlaybackRamp = null
+  }
+  const from = Number(audio.playbackRate) || 1
+  if (!audio?.src || Math.abs(from - r) < 0.02) {
+    try {
+      audio.playbackRate = r
+    } catch (_) {}
+    return
+  }
+  const steps = 14
+  const ms = 160
+  let i = 0
+  _homeNxPlaybackRamp = setInterval(() => {
+    i += 1
+    const t = i / steps
+    const eased = t * t * (3 - 2 * t)
+    try {
+      audio.playbackRate = from + (r - from) * eased
+    } catch (_) {}
+    if (i >= steps) {
+      clearInterval(_homeNxPlaybackRamp)
+      _homeNxPlaybackRamp = null
+      try {
+        audio.playbackRate = r
+      } catch (_) {}
+    }
+  }, Math.max(8, Math.round(ms / steps)))
 }
 
 function getPlaybackRate() {
@@ -3959,9 +4004,8 @@ function syncHomeNxSpeedUI() {
 
 function applyPlaybackRate() {
   const r = getPlaybackRate()
-  try {
-    audio.playbackRate = r
-  } catch (_) {}
+  applyPlaybackPitchForRate(r)
+  rampAudioPlaybackRate(r)
   syncHomeNxSpeedUI()
 }
 
@@ -3970,9 +4014,7 @@ function setPlaybackRate(rate) {
   try {
     localStorage.setItem('flow_playback_rate', String(r))
   } catch (_) {}
-  try {
-    audio.playbackRate = r
-  } catch (_) {}
+  rampAudioPlaybackRate(r)
   syncHomeNxSpeedUI()
 }
 window.setPlaybackRate = setPlaybackRate
@@ -3984,10 +4026,48 @@ function closeHomeNxMenus() {
   document.getElementById('home-nx-speed-btn')?.setAttribute('aria-expanded', 'false')
   document.getElementById('home-nx-eq-btn')?.setAttribute('aria-expanded', 'false')
   document.getElementById('home-nx-source-btn')?.setAttribute('aria-expanded', 'false')
-  document.querySelectorAll('.home-nx-foot-btn.is-open').forEach((el) => el.classList.remove('is-open'))
+  document.querySelectorAll('.home-nx-foot-btn.is-open, .home-nx-ctrl-btn.is-open').forEach((el) => el.classList.remove('is-open'))
+  document.querySelectorAll('.home-nx-dropdown.is-fixed').forEach((el) => {
+    el.classList.remove('is-fixed')
+    el.style.position = ''
+    el.style.left = ''
+    el.style.right = ''
+    el.style.bottom = ''
+    el.style.top = ''
+    el.style.width = ''
+    el.style.maxWidth = ''
+    el.style.transform = ''
+  })
 }
 window.closeHomeNxPopovers = closeHomeNxMenus
 window.closeHomeNxMenus = closeHomeNxMenus
+
+function positionHomeNxDropdown(menu, btn) {
+  if (!menu || !btn) return
+  menu.classList.add('is-fixed')
+  menu.style.position = 'fixed'
+  menu.style.top = 'auto'
+  menu.style.right = 'auto'
+  const rect = btn.getBoundingClientRect()
+  const gap = 10
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  const mw = Math.min(menu.offsetWidth || 320, vw - 24)
+  menu.style.width = `${mw}px`
+  menu.style.maxWidth = `${vw - 24}px`
+  let left = rect.left + rect.width / 2 - mw / 2
+  left = Math.max(12, Math.min(left, vw - mw - 12))
+  menu.style.left = `${left}px`
+  const estH = menu.offsetHeight || 220
+  const above = rect.top - gap - estH
+  if (above >= 12) {
+    menu.style.bottom = `${vh - rect.top + gap}px`
+    menu.style.top = 'auto'
+  } else {
+    menu.style.top = `${rect.bottom + gap}px`
+    menu.style.bottom = 'auto'
+  }
+}
 
 function toggleHomeNxMenu(ev, menuId, btnId, onOpen) {
   ev?.stopPropagation?.()
@@ -4001,6 +4081,7 @@ function toggleHomeNxMenu(ev, menuId, btnId, onOpen) {
     btn?.setAttribute('aria-expanded', 'true')
     btn?.classList.add('is-open')
     if (typeof onOpen === 'function') onOpen()
+    requestAnimationFrame(() => positionHomeNxDropdown(menu, btn))
   }
 }
 
@@ -4051,9 +4132,6 @@ function getEqAudioState() {
 function ensureEqAudioChainReady() {
   if (_eqFilters?.length && _audioCtx?.state !== 'closed') return true
   try {
-    if (typeof teardownAudioAnalyzer === 'function') teardownAudioAnalyzer()
-  } catch (_) {}
-  try {
     if (typeof ensureAudioAnalyzer === 'function') ensureAudioAnalyzer()
   } catch (_) {}
   return !!_eqFilters?.length
@@ -4062,12 +4140,10 @@ function ensureEqAudioChainReady() {
 function applyHomeNxEqPreset(presetId) {
   const eq = getParametricEqModule()
   if (!eq) return
-  if (!ensureEqAudioChainReady()) {
-    showToast('Эквалайзер: запусти трек и попробуй снова', true)
-    return
-  }
   const state = getEqAudioState()
-  eq.applyPreset?.(presetId, state, _audioCtx, true)
+  ensureEqAudioChainReady()
+  const animate = !!state.eqFilters?.length
+  eq.applyPreset?.(presetId, state, _audioCtx, animate)
   _eqFilters = state.eqFilters
   renderHomeNxEqUI()
 }
@@ -4093,7 +4169,7 @@ function bindHomeNxEqGraphDrag() {
     const gains = eq.getCurrentGains?.() || []
     gains[_homeNxEqDrag] = Math.max(-12, Math.min(12, db))
     const state = getEqAudioState()
-    eq.applyCustomGains?.(gains, state, _audioCtx, false)
+    eq.applyCustomGains?.(gains, state, _audioCtx, !!state.eqFilters?.length)
     _eqFilters = state.eqFilters
     renderHomeNxEqUI(false)
   }
@@ -4103,13 +4179,26 @@ function bindHomeNxEqGraphDrag() {
     window.removeEventListener('pointerup', onUp)
     window.removeEventListener('pointercancel', onUp)
   }
-  graph.addEventListener('pointerdown', (e) => {
+  const pickBandFromEvent = (e) => {
     const node = e.target.closest?.('.home-nx-eq-node')
-    if (!node) return
-    if (!ensureEqAudioChainReady()) return
-    _homeNxEqDrag = Number(node.getAttribute('data-band'))
+    if (node) return Number(node.getAttribute('data-band'))
+    const pt = graph.createSVGPoint()
+    pt.x = e.clientX
+    pt.y = e.clientY
+    const ctm = graph.getScreenCTM()
+    if (!ctm) return NaN
+    const sp = pt.matrixTransform(ctm.inverse())
+    const freqs = eq.EQ_FREQS || []
+    const w = 400
+    const idx = freqs.length > 1 ? Math.round((sp.x / w) * (freqs.length - 1)) : 0
+    return Math.max(0, Math.min(freqs.length - 1, idx))
+  }
+  graph.addEventListener('pointerdown', (e) => {
+    _homeNxEqDrag = pickBandFromEvent(e)
     if (!Number.isFinite(_homeNxEqDrag)) return
+    ensureEqAudioChainReady()
     e.preventDefault()
+    graph.setPointerCapture?.(e.pointerId)
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
     window.addEventListener('pointercancel', onUp)
@@ -4169,10 +4258,7 @@ function saveHomeNxEqForTrack(ev) {
   }
   const eq = getParametricEqModule()
   if (!eq?.saveTrackEqState) return
-  if (!ensureEqAudioChainReady()) {
-    showToast('Эквалайзер: запусти трек и попробуй снова', true)
-    return
-  }
+  ensureEqAudioChainReady()
   const gains = eq.getCurrentGains?.() || []
   const presetId = eq.readStoredPreset?.() || 'custom'
   eq.saveTrackEqState(currentTrack, presetId, gains)
@@ -4207,7 +4293,7 @@ function renderHomeNxEqUI(rebindPresets = true) {
   graph.innerHTML = `<polyline class="home-nx-eq-line" points="${line}"></polyline>${pts
     .map(
       ([x, y], i) =>
-        `<circle class="home-nx-eq-node" data-band="${i}" cx="${x}" cy="${y}" r="5"></circle>`
+        `<circle class="home-nx-eq-node" data-band="${i}" cx="${x}" cy="${y}" r="8"></circle>`
     )
       .join('')}`
   bindHomeNxEqGraphDrag()
@@ -4253,7 +4339,7 @@ function initHomeNxMediaTools() {
   syncHomeNxSourceLogo()
   applyPlaybackRate()
   try {
-    hydrateFlowLucideIcons?.(document.getElementById('home-nx-footer') || document)
+    hydrateFlowLucideIcons?.(document.querySelector('.home-clone-controls--nx') || document.getElementById('page-home') || document)
   } catch (_) {}
   bindHomeNxEqPresetControls()
   if (!document.body.dataset.homeNxPopBound) {
