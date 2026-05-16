@@ -1575,9 +1575,15 @@ function toggleHomeWidgetEnabled() {
   syncHomeWidgetUI()
 }
 
+function normalizeHomeWidgetMode(mode) {
+  const m = String(mode || 'bars').toLowerCase()
+  if (m === 'wave' || m === 'dots' || m === 'web') return 'bars'
+  if (m === 'liquid' || m === 'image' || m === 'bars') return m
+  return 'bars'
+}
+
 function setHomeWidgetMode(mode) {
-  const modes = ['bars', 'wave', 'dots', 'image']
-  const safe = modes.includes(mode) ? mode : 'bars'
+  const safe = normalizeHomeWidgetMode(mode)
   const v = getVisual()
   const homeWidget = Object.assign({ enabled: true, mode: 'bars', image: null, intensity: 100, smoothing: 72 }, v.homeWidget || {})
   homeWidget.mode = safe
@@ -1642,12 +1648,20 @@ function syncHomeWidgetUI() {
     img.classList.toggle('hidden', hw.mode !== 'image' || !hw.image)
     img.style.backgroundImage = hw.image ? `url(${hw.image})` : ''
   }
-  if (canvas) canvas.style.display = hw.mode === 'image' ? 'none' : 'block'
+  const mode = normalizeHomeWidgetMode(hw.mode)
+  if (mode !== hw.mode) {
+    hw.mode = mode
+    saveVisual({ homeWidget: hw })
+  }
+  if (canvas) {
+    canvas.style.display = mode === 'image' ? 'none' : 'block'
+    canvas.classList.toggle('home-viz-liquid', mode === 'liquid')
+  }
   const t = document.getElementById('toggle-home-widget')
   if (t) t.classList.toggle('active', hw.enabled)
-  ;['bars','wave','dots','image'].forEach((m) => {
+  ;['bars', 'liquid', 'image'].forEach((m) => {
     const el = document.getElementById('hw-mode-' + m)
-    if (el) el.classList.toggle('active', hw.mode === m)
+    if (el) el.classList.toggle('active', mode === m)
   })
   const imageRow = document.getElementById('home-widget-image-row')
   if (imageRow) imageRow.style.display = hw.mode === 'image' ? 'flex' : 'none'
@@ -3927,7 +3941,7 @@ window.openMediaSourceSettings = openMediaSourceSettings
 const HOME_NX_SRC_LOGOS = {
   vk: 'assets/source-vk.png',
   yandex: 'assets/source-yandex-music.png',
-  hybrid: 'assets/auth/flow.svg',
+  hybrid: 'assets/icon-source.png',
 }
 
 let _homeNxPlaybackRamp = null
@@ -4193,7 +4207,7 @@ function bindHomeNxEqGraphDrag() {
     const ctm = graph.getScreenCTM()
     if (!ctm) return
     const sp = pt.matrixTransform(ctm.inverse())
-    const h = 120
+    const h = 132
     const midY = h * 0.55
     const db = ((midY - sp.y) / (h * 0.42)) * 12
     const gains = eq.getCurrentGains?.() || []
@@ -4312,7 +4326,7 @@ function renderHomeNxEqUI(rebindPresets = true) {
   })
   const freqs = eq.EQ_FREQS || []
   const w = 400
-  const h = 120
+  const h = 132
   const midY = h * 0.55
   const pts = gains.map((g, i) => {
     const x = freqs.length > 1 ? (i / (freqs.length - 1)) * w : w / 2
@@ -4323,7 +4337,7 @@ function renderHomeNxEqUI(rebindPresets = true) {
   graph.innerHTML = `<polyline class="home-nx-eq-line" points="${line}"></polyline>${pts
     .map(
       ([x, y], i) =>
-        `<circle class="home-nx-eq-node" data-band="${i}" cx="${x}" cy="${y}" r="8"></circle>`
+        `<circle class="home-nx-eq-node" data-band="${i}" cx="${x}" cy="${y}" r="7"></circle>`
     )
       .join('')}`
   bindHomeNxEqGraphDrag()
@@ -5612,7 +5626,9 @@ function applyPresetAppearanceOnly(storage) {
     patch.homeWidget = Object.assign({}, base)
     if (typeof hw.enabled === 'boolean') patch.homeWidget.enabled = hw.enabled
     const mode = String(hw.mode || '')
-    if (mode === 'image' || mode === 'bars' || mode === 'wave') patch.homeWidget.mode = mode
+    if (mode === 'image' || mode === 'bars' || mode === 'liquid' || mode === 'wave') {
+      patch.homeWidget.mode = normalizeHomeWidgetMode(mode)
+    }
     if (hw.image != null && String(hw.image).trim() !== '') patch.homeWidget.image = String(hw.image)
     const inten = Number(hw.intensity)
     if (Number.isFinite(inten)) patch.homeWidget.intensity = Math.max(60, Math.min(180, inten))

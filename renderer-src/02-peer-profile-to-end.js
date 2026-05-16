@@ -5512,34 +5512,48 @@ function drawHomeVisualizerFrame() {
   ctx.strokeStyle = baseColor
   ctx.fillStyle = baseColor
   ctx.globalAlpha = 0.9
-  if (hw.mode === 'wave') {
-    ctx.beginPath()
-    const step = Math.max(1, Math.floor(data.length / 52))
-    for (let i = 0; i < 52; i++) {
-      const val = data[i * step] || 0
-      const y = h - (Math.min(255, val * intensityScale) / 255) * (h - 18) - 9
-      const x = (i / 51) * w
-      if (i === 0) ctx.moveTo(x, y)
-      else ctx.lineTo(x, y)
-    }
-    ctx.lineWidth = 2
-    ctx.stroke()
-    return
-  }
-  if (hw.mode === 'dots') {
-    const cols = 44
+  const mode = typeof normalizeHomeWidgetMode === 'function' ? normalizeHomeWidgetMode(hw.mode) : hw.mode
+  if (mode === 'liquid') {
+    const cols = 72
     const step = Math.max(1, Math.floor(data.length / cols))
-    for (let i = 0; i < cols; i++) {
-      const val = data[i * step] || 0
-      const dots = Math.max(2, Math.round((Math.min(255, val * intensityScale) / 255) * 8))
-      const x = 10 + (i / cols) * (w - 20)
-      for (let d = 0; d < dots; d++) {
-        const y = h - 10 - d * 12
-        ctx.beginPath()
-        ctx.arc(x, y, 2.4, 0, Math.PI * 2)
-        ctx.fill()
-      }
+    const pts = []
+    for (let i = 0; i <= cols; i++) {
+      const val = data[Math.min(data.length - 1, i * step)] || 0
+      const x = (i / cols) * w
+      const y = h - (Math.min(255, val * intensityScale) / 255) * (h - 14) - 8
+      pts.push({ x, y })
     }
+    ctx.save()
+    ctx.shadowColor = 'rgba(255,255,255,0.65)'
+    ctx.shadowBlur = 16
+    ctx.beginPath()
+    ctx.moveTo(0, h)
+    ctx.lineTo(pts[0].x, pts[0].y)
+    for (let i = 1; i < pts.length - 1; i++) {
+      const xc = (pts[i].x + pts[i + 1].x) / 2
+      const yc = (pts[i].y + pts[i + 1].y) / 2
+      ctx.quadraticCurveTo(pts[i].x, pts[i].y, xc, yc)
+    }
+    ctx.lineTo(w, pts[pts.length - 1].y)
+    ctx.lineTo(w, h)
+    ctx.closePath()
+    const fillGrad = ctx.createLinearGradient(0, 0, 0, h)
+    fillGrad.addColorStop(0, 'rgba(255,255,255,0.88)')
+    fillGrad.addColorStop(1, 'rgba(255,255,255,0)')
+    ctx.fillStyle = fillGrad
+    ctx.fill()
+    ctx.beginPath()
+    ctx.moveTo(pts[0].x, pts[0].y)
+    for (let i = 1; i < pts.length - 1; i++) {
+      const xc = (pts[i].x + pts[i + 1].x) / 2
+      const yc = (pts[i].y + pts[i + 1].y) / 2
+      ctx.quadraticCurveTo(pts[i].x, pts[i].y, xc, yc)
+    }
+    ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y)
+    ctx.strokeStyle = 'rgba(255,255,255,0.92)'
+    ctx.lineWidth = 2.2
+    ctx.stroke()
+    ctx.restore()
     return
   }
   const bars = 56
@@ -5578,7 +5592,8 @@ function startHomeVisualizerLoop() {
         if (!hw.enabled || hw.mode === 'image') shouldDraw = false
         else {
           const now = performance.now()
-          const heavy = hw.mode === 'wave' || hw.mode === 'dots'
+          const mode = typeof normalizeHomeWidgetMode === 'function' ? normalizeHomeWidgetMode(hw.mode) : hw.mode
+          const heavy = mode === 'liquid'
           const minMs = playing ? (heavy ? 50 : 40) : 220
           if (now - _homeVizLastDrawAt < minMs) shouldDraw = false
           else _homeVizLastDrawAt = now
@@ -5787,7 +5802,16 @@ async function playTrackObj(track, opts = {}) {
   const newTrackKey = `${track.source}:${track.id}`
   if (!opts._recoverPlayback) {
     const st = getListenStats()
-    if (st.lastTrackKey !== newTrackKey) saveListenStats({ totalTracks: Number(st.totalTracks || 0) + 1, lastTrackKey: newTrackKey })
+    if (st.lastTrackKey !== newTrackKey) {
+      saveListenStats({ totalTracks: Number(st.totalTracks || 0) + 1, lastTrackKey: newTrackKey })
+      try {
+        localStorage.setItem('flow_playback_rate', '1')
+      } catch (_) {}
+      try {
+        if (typeof setPlaybackRate === 'function') setPlaybackRate(1)
+        else if (typeof applyPlaybackRate === 'function') applyPlaybackRate()
+      } catch (_) {}
+    }
     pushListenHistory(track)
     try {
       onHomeNxTrackEqChanged(track)
@@ -7166,8 +7190,6 @@ function ruTrackWordAfterCurrent(n) {
 
 function renderQueue() {
   const listEl = document.getElementById('home-up-next-list')
-  const metaEl = document.getElementById('home-up-next-meta')
-  const headlineEl = document.getElementById('home-up-next-headline')
   if (!listEl) return
   if (typeof isMediaQueueEnabled === 'function' && !isMediaQueueEnabled()) return
 
@@ -7178,22 +7200,15 @@ function renderQueue() {
   const emptyListHtml = '<div class="empty-state compact"><p>Запусти трек, и тут появятся следующие позиции очереди</p></div>'
 
   if (!qlen) {
-    if (headlineEl) headlineEl.textContent = 'Очередь пуста'
-    if (metaEl) metaEl.textContent = 'Очередь пока пуста'
     listEl.innerHTML = emptyListHtml
     return
   }
 
   if (after === 0) {
-    if (headlineEl) headlineEl.textContent = 'Сейчас последний в очереди'
-    if (metaEl) metaEl.textContent = 'Следующих треков: 0'
     listEl.innerHTML =
       '<div class="empty-state compact"><p>Дальше в очереди ничего нет — добавь треки или выбери другой плейлист</p></div>'
     return
   }
-
-  if (headlineEl) headlineEl.textContent = `${after} ${ruTrackWordAfterCurrent(after)} после текущего`
-  if (metaEl) metaEl.textContent = `Следующих треков: ${after}`
 
   listEl.innerHTML = ''
   const frag = document.createDocumentFragment()

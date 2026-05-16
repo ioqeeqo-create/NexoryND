@@ -6,7 +6,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
   <!-- bump ?v= when profile/CSS/JS layout changes so Electron reloads assets -->
-  <link rel="stylesheet" href="styles.css?v=20260516-media-fix281">
+  <link rel="stylesheet" href="styles.css?v=20260516-media-fix283">
 </head>
 <body>
 
@@ -234,7 +234,7 @@
         <div class="home-clone glass-card" id="home-media-player">
           <div class="home-clone-cover-wrap" id="home-clone-cover-wrap">
             <div class="home-clone-cover" id="home-clone-cover"><svg class="ui-icon lg" data-lucide="music-2" viewBox="0 0 24 24"></svg></div>
-            <button type="button" class="home-nx-cover-expand-btn" onclick="enterPlayerMode()" title="Режим обложки" aria-label="Режим обложки"><svg class="ui-icon" data-lucide="expand" viewBox="0 0 24 24"></svg></button>
+            <button type="button" class="home-nx-cover-expand-btn" onclick="enterPlayerMode()" title="Fullscreen" aria-label="Fullscreen"><span class="home-nx-cover-fs-ico" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span class="home-nx-cover-fs-label">Fullscreen</span></button>
             <div class="home-nx-cover-actions" aria-label="Действия с обложкой">
               <button type="button" class="home-nx-cover-btn home-nx-like" id="home-nx-like-btn" onclick="likeCurrentTrack()" title="Лайк"><svg class="ui-icon flow-ref-heart-player" data-lucide="heart" viewBox="0 0 24 24"></svg></button>
               <button type="button" class="home-nx-cover-btn home-nx-add" onclick="addCurrentTrackToPlaylist()" title="Добавить в плейлист"><svg class="ui-icon" data-lucide="plus" viewBox="0 0 24 24"></svg></button>
@@ -264,7 +264,7 @@
                     <div class="home-nx-dropdown home-nx-dropdown--up hidden" id="home-nx-source-menu" role="menu">
                       <button type="button" class="home-nx-src-opt" data-src="vk" onclick="pickHomeNxSource('vk')"><img src="assets/source-vk.png" alt=""><span>ВКонтакте</span></button>
                       <button type="button" class="home-nx-src-opt" data-src="yandex" onclick="pickHomeNxSource('yandex')"><img src="assets/source-yandex-music.png" alt=""><span>Яндекс</span></button>
-                      <button type="button" class="home-nx-src-opt" data-src="hybrid" onclick="pickHomeNxSource('hybrid')"><img src="assets/auth/flow.svg" alt=""><span>Classic</span></button>
+                      <button type="button" class="home-nx-src-opt" data-src="hybrid" onclick="pickHomeNxSource('hybrid')"><img src="assets/icon-source.png" alt=""><span>Classic</span></button>
                     </div>
                   </div>
                   <button class="ctrl-btn" id="home-shuffle-btn" onclick="toggleShuffleMode()" title="Перемешка"><svg class="ui-icon flow-ref-ctrl" data-lucide="shuffle" viewBox="0 0 24 24"></svg></button>
@@ -295,14 +295,14 @@
                         <button type="button" class="home-nx-eq-save-btn" id="home-nx-eq-save-btn" onclick="saveHomeNxEqForTrack(event)" title="Сохранить">+</button>
                       </div>
                       <div class="home-nx-eq-graph-wrap">
-                        <svg class="home-nx-eq-graph" id="home-nx-eq-graph" viewBox="0 0 400 120" preserveAspectRatio="none"></svg>
+                        <svg class="home-nx-eq-graph" id="home-nx-eq-graph" viewBox="0 0 400 132" preserveAspectRatio="none"></svg>
                         <div class="home-nx-eq-freq-labels" id="home-nx-eq-freq-labels"></div>
                       </div>
                     </div>
                   </div>
+                  <button type="button" class="ctrl-btn hidden" id="home-wave-dislike-btn" onclick="dislikeCurrentYandexWaveTrack()" title="Не нравится"><svg class="ui-icon" data-lucide="thumbs-down" viewBox="0 0 24 24"></svg></button>
                 </div>
               </div>
-              <button type="button" class="ctrl-btn home-nx-only hidden" id="home-wave-dislike-btn" onclick="dislikeCurrentYandexWaveTrack()" title="Не нравится"><svg class="ui-icon" data-lucide="thumbs-down" viewBox="0 0 24 24"></svg></button>
             </div>
             <div class="home-nx-vol-row" id="home-nx-vol-row">
               <svg class="ui-icon" data-lucide="volume-2" viewBox="0 0 24 24" aria-hidden="true"></svg>
@@ -312,13 +312,8 @@
           </div>
         </div>
         <div class="home-up-next glass-card" id="home-up-next">
-          <div class="home-up-next-head">
-            <div>
-              <div class="home-up-next-badge">Дальше в очереди</div>
-              <h3 id="home-up-next-headline">Очередь</h3>
-              <p id="home-up-next-meta">Очередь пока пуста</p>
-            </div>
-            <button type="button" class="btn-small" onclick="openPage('liked')">Из любимых</button>
+                    <div class="home-up-next-head">
+            <div class="home-up-next-badge">Дальше в очереди</div>
           </div>
           <div class="home-up-next-list" id="home-up-next-list">
             <div class="empty-state compact">
@@ -904,10 +899,8 @@
               <label class="vs-label">Стиль визуализации</label>
               <div class="vs-btn-group vs-widget-grid">
                 <button class="vsb vs-widget-card" id="hw-mode-bars" onclick="setHomeWidgetMode('bars')"><span class="vs-widget-preview vs-widget-preview-bars"></span><span class="vs-widget-name">Bars</span></button>
-                <button class="vsb vs-widget-card" id="hw-mode-wave" onclick="setHomeWidgetMode('wave')"><span class="vs-widget-preview vs-widget-preview-wave"></span><span class="vs-widget-name">Wave</span></button>
-                <button class="vsb vs-widget-card" id="hw-mode-dots" onclick="setHomeWidgetMode('dots')"><span class="vs-widget-preview vs-widget-preview-dots"></span><span class="vs-widget-name">Dots</span></button>
+                <button class="vsb vs-widget-card" id="hw-mode-liquid" onclick="setHomeWidgetMode('liquid')"><span class="vs-widget-preview vs-widget-preview-liquid"></span><span class="vs-widget-name">Liquid</span></button>
                 <button class="vsb vs-widget-card" id="hw-mode-image" onclick="setHomeWidgetMode('image')"><span class="vs-widget-preview vs-widget-preview-image"></span><span class="vs-widget-name">Image</span></button>
-                <button class="vsb vs-widget-card" id="hw-mode-web" onclick="setHomeWidgetMode('web')"><span class="vs-widget-preview vs-widget-preview-web"></span><span class="vs-widget-name">Web</span></button>
               </div>
             </div>
             <div class="vs-row">
@@ -1691,7 +1684,7 @@
     <div class="flow-game-sleep-title">Sleep mode</div>
     <div class="flow-game-sleep-sub">Только воспроизведение · верни Nexory на экран</div>
   </div>
-  <script src="renderer.js?v=b4e18c13382f-mp8vodqi"></script>
+  <script src="renderer.js?v=cd0192732332-mp8wvqcn"></script>
 </body>
 </html>
 
