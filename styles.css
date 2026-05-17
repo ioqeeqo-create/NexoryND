@@ -14516,3 +14516,114 @@ body.flow-slider-style-ios #home-clone-progress.home-slider-wave {
 .home-slider-wave-canvas {
   height: 22px !important;
 }
+
+/* v295 — wave replaces bar; cover like/+; download icon; richer controls */
+#page-home.media-queue-off .home-nx-cover-actions,
+#page-home:not(.media-queue-off) .home-nx-cover-actions {
+  display: flex !important;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+#page-home.media-queue-off .home-clone-cover-wrap:hover .home-nx-cover-actions,
+#page-home:not(.media-queue-off) .home-clone-cover-wrap:hover .home-nx-cover-actions {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+#page-home.media-queue-off .home-clone-cover-wrap .home-nx-cover-actions {
+  left: 0 !important;
+  right: 0 !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  padding: 0 16px !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+}
+
+.home-nx-vol-dl .home-nx-dl-icon,
+.home-nx-vol-dl .ui-icon {
+  width: 18px !important;
+  height: 18px !important;
+  color: #fff !important;
+  stroke: currentColor !important;
+  opacity: 1 !important;
+  display: block !important;
+}
+
+/* Wave mode: kill native bar (beats #page-home rules at 13996+) */
+body.flow-slider-style-wave #page-home #home-clone-progress[data-slider-style="wave"]::-webkit-slider-runnable-track,
+body.flow-slider-style-wave #page-home.media-queue-off #home-clone-progress[data-slider-style="wave"]::-webkit-slider-runnable-track,
+body.flow-slider-style-wave #pm-progress[data-slider-style="wave"]::-webkit-slider-runnable-track,
+body.flow-slider-style-wave #page-home #home-clone-progress.home-slider-wave-active::-webkit-slider-runnable-track,
+body.flow-slider-style-wave #page-home.media-queue-off #home-clone-progress.home-slider-wave-active::-webkit-slider-runnable-track {
+  background: transparent !important;
+  background-image: none !important;
+  height: 24px !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+body.flow-slider-style-wave #page-home #home-clone-progress[data-slider-style="wave"]::-moz-range-track,
+body.flow-slider-style-wave #page-home #home-clone-progress[data-slider-style="wave"]::-moz-range-progress,
+body.flow-slider-style-wave #page-home.media-queue-off #home-clone-progress[data-slider-style="wave"]::-moz-range-track,
+body.flow-slider-style-wave #page-home.media-queue-off #home-clone-progress[data-slider-style="wave"]::-moz-range-progress,
+body.flow-slider-style-wave #pm-progress[data-slider-style="wave"]::-moz-range-track,
+body.flow-slider-style-wave #pm-progress[data-slider-style="wave"]::-moz-range-progress,
+body.flow-slider-style-wave #page-home #home-clone-progress.home-slider-wave-active::-moz-range-track,
+body.flow-slider-style-wave #page-home #home-clone-progress.home-slider-wave-active::-moz-range-progress {
+  background: transparent !important;
+  height: 24px !important;
+  border: none !important;
+}
+body.flow-slider-style-wave #page-home #home-clone-progress[data-slider-style="wave"],
+body.flow-slider-style-wave #page-home.media-queue-off #home-clone-progress[data-slider-style="wave"] {
+  background: transparent !important;
+  background-image: none !important;
+}
+
+.flow-slider-host--wave input[type="range"] {
+  opacity: 0.001;
+}
+.flow-slider-host--wave .home-slider-wave-canvas {
+  z-index: 2;
+  opacity: 1;
+  pointer-events: none;
+}
+.flow-slider-host--wave input[type="range"] {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* Line/ios keep visible native track */
+body.flow-slider-style-line .flow-slider-host--wave input[type="range"],
+body.flow-slider-style-ios .flow-slider-host--wave input[type="range"] {
+  position: relative;
+  opacity: 1;
+}
+
+.home-nx-ctrl-row--deck .ctrl-btn:not(.play-btn),
+.home-nx-ctrl-row--deck .home-nx-ctrl-btn {
+  background: linear-gradient(165deg, rgba(255,255,255,0.14), rgba(255,255,255,0.04)) !important;
+  border: 1px solid rgba(255,255,255,0.2) !important;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.12) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease !important;
+}
+.home-nx-ctrl-row--deck .ctrl-btn:not(.play-btn):hover,
+.home-nx-ctrl-row--deck .home-nx-ctrl-btn:hover {
+  transform: translateY(-1px) scale(1.04);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.18) !important;
+  background: linear-gradient(165deg, rgba(255,255,255,0.22), rgba(255,255,255,0.08)) !important;
+}
+.home-nx-ctrl-row--deck .ctrl-btn.play-btn {
+  background: linear-gradient(180deg, #fff 0%, #e8e8ec 100%) !important;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.35), 0 6px 22px rgba(0,0,0,0.4) !important;
+}
+.home-nx-ctrl-dock {
+  background: linear-gradient(180deg, rgba(16,18,28,0.72), rgba(8,10,18,0.55)) !important;
+  border: 1px solid rgba(255,255,255,0.14) !important;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.32) !important;
+}

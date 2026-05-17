@@ -1628,6 +1628,8 @@ function syncHomeWaveSliderCanvases(progress) {
     if (!canvas || !input) continue
     canvas.classList.toggle('hidden', !isWave)
     input.classList.toggle('home-slider-wave-active', isWave)
+    const host = canvas.closest('.home-slider-track-host')
+    if (host) host.classList.toggle('flow-slider-host--wave', isWave)
     if (!isWave) continue
     const p = Number.isFinite(progress) ? ratio : Number(input.value) || 0
     drawHomeWaveSliderCanvas(canvas, p, trackKey)
@@ -1642,6 +1644,7 @@ function applyHomeSliderStyle() {
     if (!el) continue
     el.dataset.sliderStyle = style
     el.classList.remove('home-slider-wave', 'home-slider-ios', 'home-slider-line', 'home-slider-wave-active')
+    if (style === 'wave') el.classList.add('home-slider-wave-active')
     el.style.removeProperty('background')
   }
   const b1 = document.getElementById('slider-style-line')
@@ -1654,6 +1657,12 @@ function applyHomeSliderStyle() {
   if (preview) preview.dataset.sliderStyle = style
   document.body.classList.remove('flow-slider-style-line', 'flow-slider-style-wave', 'flow-slider-style-ios')
   document.body.classList.add('flow-slider-style-' + style)
+  for (const hostId of ['home-slider-track-host']) {
+    const host = document.getElementById(hostId)
+    if (host) host.classList.toggle('flow-slider-host--wave', style === 'wave')
+  }
+  const pmWrap = document.querySelector('.pm-progress-wrap .home-slider-track-host')
+  if (pmWrap) pmWrap.classList.toggle('flow-slider-host--wave', style === 'wave')
   try { drawSliderPreviewFrame() } catch (_) {}
   try { startSliderPreviewLoop() } catch (_) {}
   try {
