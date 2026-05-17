@@ -3413,6 +3413,8 @@ function syncPlayerModeUI() {
   // volume sync
   const pmVol = document.getElementById('pm-volume')
   if (pmVol) pmVol.value = audio.volume
+  const pmVolVal = document.getElementById('pm-vol-val')
+  if (pmVolVal) pmVolVal.textContent = String(Math.max(0, Math.min(10, Math.round(audio.volume * 10))))
   const pmCoverVol = document.getElementById('pm-cover-volume')
   if (pmCoverVol) pmCoverVol.value = audio.volume
   if (pmCoverLyrics) pmCoverLyrics.classList.toggle('active', _lyricsOpen)
@@ -3676,7 +3678,9 @@ function cacheSet(key, val) {
 
 function getSearchCacheKey(query, settings = getSettings(), filter = 'all') {
   const q = String(query || '').trim().toLowerCase()
-  const src = String(settings?.activeSource || currentSource || 'hybrid').toLowerCase()
+  const src = typeof getSearchActiveSource === 'function'
+    ? getSearchActiveSource(settings)
+    : String(settings?.activeSource || currentSource || 'hybrid').toLowerCase()
   const f = String(filter || 'all').toLowerCase()
   const tokenSig = [
     settings?.spotifyToken ? 'sp1' : 'sp0',
@@ -4257,6 +4261,7 @@ function syncHomeNxSourceLogo(pulse = false) {
     if (!img) return
     if (!String(img.getAttribute('src') || '').includes(src.replace(/^\//, ''))) img.src = src
     img.alt = raw
+    if (id === 'search-src-logo') img.setAttribute('data-search-src', raw)
     if (pulse) {
       const btn = img.closest('.home-nx-source-btn, .pm-source-btn, .nx-search-src-btn')
       btn?.classList.remove('home-nx-source-btn--pulse')
@@ -6002,6 +6007,23 @@ function syncAuthSourceStackActive() {
     btn.classList.toggle('active', ds === resolved)
   })
 }
+
+function getSearchActiveSource(settings = getSettings()) {
+  const img = document.getElementById('search-src-logo')
+  const fromUi = img?.getAttribute('data-search-src')
+  if (fromUi) return normalizeStoredActiveSource(fromUi)
+  return normalizeStoredActiveSource(settings?.activeSource || currentSource || 'hybrid')
+}
+window.getSearchActiveSource = getSearchActiveSource
+
+function getSearchSourceLabelBySrc(src) {
+  const s = normalizeStoredActiveSource(src)
+  if (s === 'yandex') return 'Яндекс Музыка'
+  if (s === 'vk') return 'ВКонтакте'
+  if (s === 'youtube' || s === 'yt') return 'YouTube'
+  return 'Classic'
+}
+window.getSearchSourceLabelBySrc = getSearchSourceLabelBySrc
 
 function switchSearchSource(src) {
   const raw = String(src || 'hybrid').toLowerCase()
@@ -11621,7 +11643,7 @@ function animateFlowMediaText(el, text, mode = 'letter') {
     mode === 'word'
       ? safe.split(/(\s+)/).filter((p) => p.length)
       : [...safe]
-  const step = mode === 'word' ? 42 : 26
+  const step = mode === 'word' ? 52 : 34
   el.innerHTML = parts
     .map((ch, i) => {
       const delay = ((i * step) / 1000).toFixed(3)
@@ -13636,7 +13658,7 @@ function searchTracks(queryOverride = '') {
       renderResults(results.items)
     } catch (err) {
       const message = sanitizeDisplayText(normalizeInvokeError(err))
-      container.innerHTML = `<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.8 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0Z"/></svg></div><p>${message}</p><small>Источник: ${getSourceLabel()}</small><div style="display:flex;gap:8px;justify-content:center;margin-top:12px"><button class="btn-small" onclick="searchTracks()">Повторить</button><button class="btn-small" onclick="openPage('settings')">Настройки</button></div></div>`
+      container.innerHTML = `<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.8 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0Z"/></svg></div><p>${message}</p><small>Источник: ${typeof getSearchSourceLabelBySrc === 'function' ? getSearchSourceLabelBySrc(getSearchActiveSource(s)) : getSourceLabel()}</small><div style="display:flex;gap:8px;justify-content:center;margin-top:12px"><button class="btn-small" onclick="searchTracks()">Повторить</button><button class="btn-small" onclick="openPage('settings')">Настройки</button></div></div>`
     }
   }, 350)
 }
@@ -13660,7 +13682,9 @@ function mapSearchFilterToApiType(filter) {
 }
 
 async function fetchSearchResultsForFilter(q, settings = getSettings(), filter = 'all') {
-  const src = String(settings?.activeSource || currentSource || 'hybrid').toLowerCase()
+  const src = typeof getSearchActiveSource === 'function'
+    ? getSearchActiveSource(settings)
+    : String(settings?.activeSource || currentSource || 'hybrid').toLowerCase()
   const apiType = mapSearchFilterToApiType(filter)
   const needTyped = apiType !== 'track'
 
@@ -13672,10 +13696,24 @@ async function fetchSearchResultsForFilter(q, settings = getSettings(), filter =
       throw new Error(normalizeInvokeError(e) || 'таймаут поиска')
     })
     if (!Array.isArray(ymList)) throw new Error('Яндекс: некорректный ответ')
-    return { mode: 'yandex', items: ymList }
+    const items = apiType === 'lyrics'
+      ? ymList.map((t) => Object.assign({}, t, { entityType: 'track' }))
+      : ymList
+    return { mode: 'yandex', items }
   }
 
   if (needTyped) {
+    const yandexToken = String(settings?.yandexToken || '').trim()
+    if ((src === 'hybrid' || src === 'vk') && yandexToken && window.api?.yandexSearch) {
+      const ymList = await withTimeout(window.api.yandexSearch(q, yandexToken, apiType), 24000, 'yandex search timeout').catch((e) => {
+        throw new Error(normalizeInvokeError(e) || 'таймаут поиска')
+      })
+      if (!Array.isArray(ymList)) throw new Error('Яндекс: некорректный ответ')
+      const items = apiType === 'lyrics'
+        ? ymList.map((t) => Object.assign({}, t, { entityType: 'track' }))
+        : ymList
+      return { mode: 'yandex', items }
+    }
     const filterLabel = apiType === 'playlist' ? 'плейлисты'
       : apiType === 'album' ? 'альбомы'
       : apiType === 'artist' ? 'артисты'
@@ -13881,11 +13919,12 @@ function renderResults(results) {
   if (meta) meta.style.display = 'flex'
   const kind = _lastSearchResults[0]?.entityType || 'track'
   if (countEl) countEl.textContent = `${_lastSearchResults.length} ${searchEntityTypeLabel(kind)}`
-  if (srcEl) srcEl.textContent = getSourceLabel()
+  if (srcEl) srcEl.textContent = typeof getSearchSourceLabelBySrc === 'function' ? getSearchSourceLabelBySrc(_lastSearchMode || getSearchActiveSource()) : getSourceLabel()
   container.innerHTML = ''
   let trackQueueIdx = 0
+  const lyricsAsTracks = _searchFilter === 'lyrics'
   _lastSearchResults.forEach((item, i) => {
-    const type = String(item?.entityType || 'track').toLowerCase()
+    const type = lyricsAsTracks ? 'track' : String(item?.entityType || 'track').toLowerCase()
     if (type === 'track') {
       const track = sanitizeTrack(item)
       const el = makeTrackEl(track, true, false)

@@ -3413,6 +3413,8 @@ function syncPlayerModeUI() {
   // volume sync
   const pmVol = document.getElementById('pm-volume')
   if (pmVol) pmVol.value = audio.volume
+  const pmVolVal = document.getElementById('pm-vol-val')
+  if (pmVolVal) pmVolVal.textContent = String(Math.max(0, Math.min(10, Math.round(audio.volume * 10))))
   const pmCoverVol = document.getElementById('pm-cover-volume')
   if (pmCoverVol) pmCoverVol.value = audio.volume
   if (pmCoverLyrics) pmCoverLyrics.classList.toggle('active', _lyricsOpen)
@@ -3676,7 +3678,9 @@ function cacheSet(key, val) {
 
 function getSearchCacheKey(query, settings = getSettings(), filter = 'all') {
   const q = String(query || '').trim().toLowerCase()
-  const src = String(settings?.activeSource || currentSource || 'hybrid').toLowerCase()
+  const src = typeof getSearchActiveSource === 'function'
+    ? getSearchActiveSource(settings)
+    : String(settings?.activeSource || currentSource || 'hybrid').toLowerCase()
   const f = String(filter || 'all').toLowerCase()
   const tokenSig = [
     settings?.spotifyToken ? 'sp1' : 'sp0',
@@ -4257,6 +4261,7 @@ function syncHomeNxSourceLogo(pulse = false) {
     if (!img) return
     if (!String(img.getAttribute('src') || '').includes(src.replace(/^\//, ''))) img.src = src
     img.alt = raw
+    if (id === 'search-src-logo') img.setAttribute('data-search-src', raw)
     if (pulse) {
       const btn = img.closest('.home-nx-source-btn, .pm-source-btn, .nx-search-src-btn')
       btn?.classList.remove('home-nx-source-btn--pulse')
@@ -6002,6 +6007,23 @@ function syncAuthSourceStackActive() {
     btn.classList.toggle('active', ds === resolved)
   })
 }
+
+function getSearchActiveSource(settings = getSettings()) {
+  const img = document.getElementById('search-src-logo')
+  const fromUi = img?.getAttribute('data-search-src')
+  if (fromUi) return normalizeStoredActiveSource(fromUi)
+  return normalizeStoredActiveSource(settings?.activeSource || currentSource || 'hybrid')
+}
+window.getSearchActiveSource = getSearchActiveSource
+
+function getSearchSourceLabelBySrc(src) {
+  const s = normalizeStoredActiveSource(src)
+  if (s === 'yandex') return 'Яндекс Музыка'
+  if (s === 'vk') return 'ВКонтакте'
+  if (s === 'youtube' || s === 'yt') return 'YouTube'
+  return 'Classic'
+}
+window.getSearchSourceLabelBySrc = getSearchSourceLabelBySrc
 
 function switchSearchSource(src) {
   const raw = String(src || 'hybrid').toLowerCase()

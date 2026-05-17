@@ -4802,7 +4802,7 @@ function animateFlowMediaText(el, text, mode = 'letter') {
     mode === 'word'
       ? safe.split(/(\s+)/).filter((p) => p.length)
       : [...safe]
-  const step = mode === 'word' ? 42 : 26
+  const step = mode === 'word' ? 52 : 34
   el.innerHTML = parts
     .map((ch, i) => {
       const delay = ((i * step) / 1000).toFixed(3)
@@ -6817,7 +6817,7 @@ function searchTracks(queryOverride = '') {
       renderResults(results.items)
     } catch (err) {
       const message = sanitizeDisplayText(normalizeInvokeError(err))
-      container.innerHTML = `<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.8 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0Z"/></svg></div><p>${message}</p><small>Источник: ${getSourceLabel()}</small><div style="display:flex;gap:8px;justify-content:center;margin-top:12px"><button class="btn-small" onclick="searchTracks()">Повторить</button><button class="btn-small" onclick="openPage('settings')">Настройки</button></div></div>`
+      container.innerHTML = `<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.8 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0Z"/></svg></div><p>${message}</p><small>Источник: ${typeof getSearchSourceLabelBySrc === 'function' ? getSearchSourceLabelBySrc(getSearchActiveSource(s)) : getSourceLabel()}</small><div style="display:flex;gap:8px;justify-content:center;margin-top:12px"><button class="btn-small" onclick="searchTracks()">Повторить</button><button class="btn-small" onclick="openPage('settings')">Настройки</button></div></div>`
     }
   }, 350)
 }
@@ -6841,7 +6841,9 @@ function mapSearchFilterToApiType(filter) {
 }
 
 async function fetchSearchResultsForFilter(q, settings = getSettings(), filter = 'all') {
-  const src = String(settings?.activeSource || currentSource || 'hybrid').toLowerCase()
+  const src = typeof getSearchActiveSource === 'function'
+    ? getSearchActiveSource(settings)
+    : String(settings?.activeSource || currentSource || 'hybrid').toLowerCase()
   const apiType = mapSearchFilterToApiType(filter)
   const needTyped = apiType !== 'track'
 
@@ -6853,10 +6855,24 @@ async function fetchSearchResultsForFilter(q, settings = getSettings(), filter =
       throw new Error(normalizeInvokeError(e) || 'таймаут поиска')
     })
     if (!Array.isArray(ymList)) throw new Error('Яндекс: некорректный ответ')
-    return { mode: 'yandex', items: ymList }
+    const items = apiType === 'lyrics'
+      ? ymList.map((t) => Object.assign({}, t, { entityType: 'track' }))
+      : ymList
+    return { mode: 'yandex', items }
   }
 
   if (needTyped) {
+    const yandexToken = String(settings?.yandexToken || '').trim()
+    if ((src === 'hybrid' || src === 'vk') && yandexToken && window.api?.yandexSearch) {
+      const ymList = await withTimeout(window.api.yandexSearch(q, yandexToken, apiType), 24000, 'yandex search timeout').catch((e) => {
+        throw new Error(normalizeInvokeError(e) || 'таймаут поиска')
+      })
+      if (!Array.isArray(ymList)) throw new Error('Яндекс: некорректный ответ')
+      const items = apiType === 'lyrics'
+        ? ymList.map((t) => Object.assign({}, t, { entityType: 'track' }))
+        : ymList
+      return { mode: 'yandex', items }
+    }
     const filterLabel = apiType === 'playlist' ? 'плейлисты'
       : apiType === 'album' ? 'альбомы'
       : apiType === 'artist' ? 'артисты'
@@ -7062,11 +7078,12 @@ function renderResults(results) {
   if (meta) meta.style.display = 'flex'
   const kind = _lastSearchResults[0]?.entityType || 'track'
   if (countEl) countEl.textContent = `${_lastSearchResults.length} ${searchEntityTypeLabel(kind)}`
-  if (srcEl) srcEl.textContent = getSourceLabel()
+  if (srcEl) srcEl.textContent = typeof getSearchSourceLabelBySrc === 'function' ? getSearchSourceLabelBySrc(_lastSearchMode || getSearchActiveSource()) : getSourceLabel()
   container.innerHTML = ''
   let trackQueueIdx = 0
+  const lyricsAsTracks = _searchFilter === 'lyrics'
   _lastSearchResults.forEach((item, i) => {
-    const type = String(item?.entityType || 'track').toLowerCase()
+    const type = lyricsAsTracks ? 'track' : String(item?.entityType || 'track').toLowerCase()
     if (type === 'track') {
       const track = sanitizeTrack(item)
       const el = makeTrackEl(track, true, false)
