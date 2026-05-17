@@ -262,41 +262,8 @@
               <span id="host-lock-indicator-home" style="display:none;align-items:center;gap:4px;font-size:11px;opacity:.75;padding:0 4px">🔒 Host only</span>
               <div class="home-nx-ctrl-dock">
                 <div class="home-nx-ctrl-row home-nx-ctrl-row--deck">
-                  <div class="home-nx-deck-side home-nx-deck-side--l">
-                  <button type="button" class="ctrl-btn home-nx-ctrl-btn home-nx-slot-dl" id="home-nx-download-btn" onclick="downloadCurrentTrack()" title="Скачать трек на компьютер"><svg class="ui-icon" data-lucide="download" viewBox="0 0 24 24"></svg></button>
-                  <div class="home-nx-menu-wrap home-nx-ctrl-slot home-nx-slot-src">
-                    <button type="button" class="ctrl-btn home-nx-ctrl-btn home-nx-source-btn" id="home-nx-source-btn" onclick="toggleHomeNxSourceMenu(event)" title="Источник" aria-expanded="false"><img class="home-nx-src-logo" id="home-nx-src-logo" src="assets/icon-source.png" alt=""></button>
-                    <div class="home-nx-dropdown home-nx-dropdown--up hidden" id="home-nx-source-menu" role="menu">
-                      <button type="button" class="home-nx-src-opt" data-src="vk" onclick="pickHomeNxSource('vk')"><img src="assets/source-vk.png" alt=""><span>ВКонтакте</span></button>
-                      <button type="button" class="home-nx-src-opt" data-src="yandex" onclick="pickHomeNxSource('yandex')"><img src="assets/source-yandex-music.png" alt=""><span>Яндекс</span></button>
-                      <button type="button" class="home-nx-src-opt" data-src="hybrid" onclick="pickHomeNxSource('hybrid')"><img src="assets/icon-source.png" alt=""><span>Classic</span></button>
-                    </div>
-                  </div>
-                  <button type="button" class="ctrl-btn home-nx-slot-dislike" id="home-nx-dislike-btn" onclick="dislikeCurrentYandexWaveTrack()" title="Не нравится"><svg class="ui-icon" data-lucide="thumbs-down" viewBox="0 0 24 24"></svg></button>
-                  </div>
-                  <div class="home-nx-deck-center">
-                  <button type="button" class="ctrl-btn home-nx-slot-repeat" id="home-repeat-btn" onclick="toggleRepeatMode()" title="Повтор"><svg class="ui-icon flow-ref-ctrl" data-lucide="repeat" viewBox="0 0 24 24"></svg></button>
-                  <button class="ctrl-btn home-nx-slot-prev" onclick="prevTrack()"><svg class="ui-icon" data-lucide="skip-back" viewBox="0 0 24 24"></svg></button>
-                  <button class="ctrl-btn play-btn home-nx-slot-play" id="home-play-btn" onclick="togglePlay()"><svg class="ui-icon ctrl-play-icon" data-lucide="play" viewBox="0 0 24 24"></svg></button>
-                  <button class="ctrl-btn home-nx-slot-next" onclick="nextTrack()"><svg class="ui-icon" data-lucide="skip-forward" viewBox="0 0 24 24"></svg></button>
-                  <button class="ctrl-btn home-nx-slot-shuffle" id="home-shuffle-btn" onclick="toggleShuffleMode()" title="Перемешка"><svg class="ui-icon flow-ref-ctrl" data-lucide="shuffle" viewBox="0 0 24 24"></svg></button>
-                  </div>
-                  <div class="home-nx-deck-side home-nx-deck-side--r">
-                  <div class="home-nx-menu-wrap home-nx-ctrl-slot home-nx-slot-speed">
-                    <button type="button" class="ctrl-btn home-nx-ctrl-btn" id="home-nx-speed-btn" onclick="toggleHomeNxSpeedMenu(event)" title="Скорость" aria-expanded="false"><svg class="ui-icon" data-lucide="gauge" viewBox="0 0 24 24"></svg><span class="home-nx-ctrl-badge" id="home-nx-speed-badge">1×</span></button>
-                    <div class="home-nx-dropdown home-nx-dropdown--up home-nx-speed-dropdown hidden" id="home-nx-speed-menu" role="dialog">
-                      <div class="home-nx-speed-pills">
-                        <button type="button" class="home-nx-speed-pill" data-rate="0.75" onclick="setPlaybackRate(0.75)">0.75×</button>
-                        <button type="button" class="home-nx-speed-pill active" data-rate="1" onclick="setPlaybackRate(1)">1×</button>
-                        <button type="button" class="home-nx-speed-pill" data-rate="1.25" onclick="setPlaybackRate(1.25)">1.25×</button>
-                        <button type="button" class="home-nx-speed-pill" data-rate="1.5" onclick="setPlaybackRate(1.5)">1.5×</button>
-                        <button type="button" class="home-nx-speed-pill" data-rate="2" onclick="setPlaybackRate(2)">2×</button>
-                      </div>
-                      <input type="range" class="home-nx-speed-slider" id="home-nx-speed-slider" min="0.75" max="2" step="0.05" value="1" oninput="setPlaybackRate(this.value)">
-                    </div>
-                  </div>
-                  <div class="home-nx-menu-wrap home-nx-ctrl-slot home-nx-ctrl-slot--eq home-nx-slot-eq">
-                    <button type="button" class="ctrl-btn home-nx-ctrl-btn" id="home-nx-eq-btn" onclick="toggleHomeNxEqMenu(event)" title="Эквалайзер" aria-expanded="false"><svg class="ui-icon" data-lucide="sliders-vertical" viewBox="0 0 24 24"></svg></button>
+                  <div class="home-nx-menu-wrap home-nx-ctrl-slot home-nx-slot-eq">
+                    <button type="button" class="ctrl-btn home-nx-ctrl-btn" id="home-nx-eq-btn" onclick="toggleHomeNxEqMenu(event)" title="Фильтр / EQ" aria-expanded="false"><svg class="ui-icon" data-lucide="sliders-vertical" viewBox="0 0 24 24"></svg></button>
                     <div class="home-nx-dropdown home-nx-dropdown--up home-nx-eq-dropdown hidden" id="home-nx-eq-menu" role="dialog">
                       <div class="home-nx-eq-presets-row">
                         <button type="button" class="home-nx-eq-scroll-btn" id="home-nx-eq-scroll-l" title="Влево">‹</button>
@@ -310,17 +277,42 @@
                       </div>
                     </div>
                   </div>
+                  <button type="button" class="ctrl-btn home-nx-slot-repeat" id="home-repeat-btn" onclick="toggleRepeatMode()" title="Повтор"><svg class="ui-icon flow-ref-ctrl" data-lucide="repeat" viewBox="0 0 24 24"></svg></button>
+                  <button class="ctrl-btn home-nx-slot-prev" onclick="prevTrack()"><svg class="ui-icon" data-lucide="skip-back" viewBox="0 0 24 24"></svg></button>
+                  <button class="ctrl-btn play-btn home-nx-slot-play" id="home-play-btn" onclick="togglePlay()"><svg class="ui-icon ctrl-play-icon" data-lucide="play" viewBox="0 0 24 24"></svg></button>
+                  <button class="ctrl-btn home-nx-slot-next" onclick="nextTrack()"><svg class="ui-icon" data-lucide="skip-forward" viewBox="0 0 24 24"></svg></button>
+                  <button class="ctrl-btn home-nx-slot-shuffle" id="home-shuffle-btn" onclick="toggleShuffleMode()" title="Перемешка"><svg class="ui-icon flow-ref-ctrl" data-lucide="shuffle" viewBox="0 0 24 24"></svg></button>
+                  <div class="home-nx-menu-wrap home-nx-ctrl-slot home-nx-slot-speed">
+                    <button type="button" class="ctrl-btn home-nx-ctrl-btn" id="home-nx-speed-btn" onclick="toggleHomeNxSpeedMenu(event)" title="Скорость" aria-expanded="false"><svg class="ui-icon" data-lucide="gauge" viewBox="0 0 24 24"></svg><span class="home-nx-ctrl-badge" id="home-nx-speed-badge">1×</span></button>
+                    <div class="home-nx-dropdown home-nx-dropdown--up home-nx-speed-dropdown hidden" id="home-nx-speed-menu" role="dialog">
+                      <div class="home-nx-speed-pills">
+                        <button type="button" class="home-nx-speed-pill" data-rate="0.75" onclick="setPlaybackRate(0.75)">0.75×</button>
+                        <button type="button" class="home-nx-speed-pill active" data-rate="1" onclick="setPlaybackRate(1)">1×</button>
+                        <button type="button" class="home-nx-speed-pill" data-rate="1.25" onclick="setPlaybackRate(1.25)">1.25×</button>
+                        <button type="button" class="home-nx-speed-pill" data-rate="1.5" onclick="setPlaybackRate(1.5)">1.5×</button>
+                        <button type="button" class="home-nx-speed-pill" data-rate="2" onclick="setPlaybackRate(2)">2×</button>
+                      </div>
+                      <input type="range" class="home-nx-speed-slider" id="home-nx-speed-slider" min="0.75" max="2" step="0.05" value="1" oninput="setPlaybackRate(this.value)">
+                    </div>
                   </div>
+                  <button type="button" class="ctrl-btn home-nx-slot-dislike hidden" id="home-nx-dislike-btn" onclick="dislikeCurrentYandexWaveTrack()" title="Не нравится"><svg class="ui-icon" data-lucide="thumbs-down" viewBox="0 0 24 24"></svg></button>
                 </div>
               </div>
             </div>
             </div>
             <div class="home-nx-vol-row" id="home-nx-vol-row">
-              <button type="button" class="home-nx-vol-side home-nx-vol-like" id="home-nx-vol-like-btn" onclick="likeCurrentTrack()" title="Лайк"><svg class="ui-icon flow-ref-heart-player" data-lucide="heart" viewBox="0 0 24 24"></svg></button>
-              <svg class="ui-icon" data-lucide="volume-2" viewBox="0 0 24 24" aria-hidden="true"></svg>
+              <button type="button" class="home-nx-vol-aux home-nx-vol-dl" id="home-nx-download-btn" onclick="downloadCurrentTrack()" title="Скачать трек"><svg class="ui-icon" data-lucide="download" viewBox="0 0 24 24"></svg></button>
+              <div class="home-nx-menu-wrap home-nx-vol-src">
+                <button type="button" class="home-nx-vol-aux home-nx-source-btn" id="home-nx-source-btn" onclick="toggleHomeNxSourceMenu(event)" title="Источник" aria-expanded="false"><img class="home-nx-src-logo" id="home-nx-src-logo" src="assets/icon-source.png" alt=""></button>
+                <div class="home-nx-dropdown home-nx-dropdown--up hidden" id="home-nx-source-menu" role="menu">
+                  <button type="button" class="home-nx-src-opt" data-src="vk" onclick="pickHomeNxSource('vk')"><img src="assets/source-vk.png" alt=""><span>ВКонтакте</span></button>
+                  <button type="button" class="home-nx-src-opt" data-src="yandex" onclick="pickHomeNxSource('yandex')"><img src="assets/source-yandex-music.png" alt=""><span>Яндекс</span></button>
+                  <button type="button" class="home-nx-src-opt" data-src="hybrid" onclick="pickHomeNxSource('hybrid')"><img src="assets/icon-source.png" alt=""><span>Classic</span></button>
+                </div>
+              </div>
+              <svg class="ui-icon home-nx-vol-ico" data-lucide="volume-2" viewBox="0 0 24 24" aria-hidden="true"></svg>
               <input type="range" class="home-nx-volume" id="home-nx-volume" min="0" max="1" step="0.01" value="0.8" oninput="setVolume(this.value)">
               <span class="home-nx-vol-val" id="home-nx-vol-val">8</span>
-              <button type="button" class="home-nx-vol-side home-nx-vol-add-icon" id="home-nx-vol-add-btn" onclick="addCurrentTrackToPlaylist()" title="Добавить в плейлист"><svg class="ui-icon" data-lucide="plus" viewBox="0 0 24 24"></svg></button>
             </div>
           </div>
         </div>
@@ -1716,7 +1708,7 @@
     <div class="flow-game-sleep-title">Sleep mode</div>
     <div class="flow-game-sleep-sub">Только воспроизведение · верни Nexory на экран</div>
   </div>
-  <script src="renderer.js?v=1b41d0fd565d-mp9o8qbs"></script>
+  <script src="renderer.js?v=b50e3a332702-mp9p0d0c"></script>
 </body>
 </html>
 

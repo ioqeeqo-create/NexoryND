@@ -1568,12 +1568,9 @@ const _homeWaveSliderBars = new Map()
 function getHomeWaveSliderBars(key) {
   const k = String(key || 'default')
   if (_homeWaveSliderBars.has(k)) return _homeWaveSliderBars.get(k)
-  const bars = 56
+  const bars = 72
   const data = new Uint8Array(bars)
-  for (let i = 0; i < bars; i++) {
-    const t = i * 0.37 + k.length * 0.11
-    data[i] = Math.floor(72 + Math.abs(Math.sin(t)) * 118 + Math.sin(t * 2.1) * 24)
-  }
+  for (let i = 0; i < bars; i++) data[i] = 200
   _homeWaveSliderBars.set(k, data)
   return data
 }
@@ -1582,7 +1579,7 @@ function drawHomeWaveSliderCanvas(canvas, progress, trackKey) {
   if (!canvas) return
   const host = canvas.parentElement
   const wCss = Math.max(120, Math.floor(host?.clientWidth || canvas.clientWidth || 320))
-  const hCss = 26
+  const hCss = 22
   const dpr = Math.min(window.devicePixelRatio || 1, 2)
   const w = Math.floor(wCss * dpr)
   const h = Math.floor(hCss * dpr)
@@ -1598,25 +1595,23 @@ function drawHomeWaveSliderCanvas(canvas, progress, trackKey) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   ctx.clearRect(0, 0, wCss, hCss)
   const bars = getHomeWaveSliderBars(trackKey).length
-  const data = getHomeWaveSliderBars(trackKey)
   const ratio = Math.max(0, Math.min(1, Number(progress) || 0))
-  const pad = 2
+  const pad = 3
   const bw = (wCss - pad * 2) / bars
-  const barW = Math.max(2.5, bw - 1.4)
+  const barW = Math.max(1.5, Math.min(3, bw - 1.2))
+  const bh = 4
+  const y = Math.round((hCss - bh) * 0.5)
   for (let i = 0; i < bars; i++) {
-    const norm = data[i] / 255
-    const bh = 6 + norm * (hCss - 12)
     const x = pad + i * bw + (bw - barW) * 0.5
-    const y = hCss - bh - 2
     const center = (i + 0.5) / bars
     const played = center <= ratio
-    const alpha = played ? 0.94 : 0.34
+    const alpha = played ? 0.92 : 0.28
     ctx.fillStyle = `rgba(255,255,255,${alpha})`
     ctx.fillRect(x, y, barW, bh)
   }
   const px = pad + ratio * (wCss - pad * 2)
-  ctx.fillStyle = 'rgba(255,255,255,0.98)'
-  ctx.fillRect(Math.round(px) - 1, 3, 2, hCss - 6)
+  ctx.fillStyle = 'rgba(255,255,255,0.95)'
+  ctx.fillRect(Math.round(px), y - 1, 1, bh + 2)
 }
 
 function syncHomeWaveSliderCanvases(progress) {
@@ -1647,9 +1642,6 @@ function applyHomeSliderStyle() {
     if (!el) continue
     el.dataset.sliderStyle = style
     el.classList.remove('home-slider-wave', 'home-slider-ios', 'home-slider-line', 'home-slider-wave-active')
-    if (style === 'wave') el.classList.add('home-slider-wave')
-    else if (style === 'ios') el.classList.add('home-slider-ios')
-    else el.classList.add('home-slider-line')
     el.style.removeProperty('background')
   }
   const b1 = document.getElementById('slider-style-line')
