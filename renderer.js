@@ -1582,7 +1582,7 @@ function drawHomeWaveSliderCanvas(canvas, progress, trackKey) {
   if (!canvas) return
   const host = canvas.parentElement
   const wCss = Math.max(120, Math.floor(host?.clientWidth || canvas.clientWidth || 320))
-  const hCss = 32
+  const hCss = 26
   const dpr = Math.min(window.devicePixelRatio || 1, 2)
   const w = Math.floor(wCss * dpr)
   const h = Math.floor(hCss * dpr)

@@ -14245,3 +14245,115 @@ body.nexory-desk .settings-category-panel .glass-card {
 #lyrics-content .lyrics-char {
   transition: color 320ms cubic-bezier(0.22, 1, 0.36, 1), opacity 320ms cubic-bezier(0.22, 1, 0.36, 1), text-shadow 320ms cubic-bezier(0.22, 1, 0.36, 1) !important;
 }
+
+/* v293 — viz above controls, clean symmetric deck */
+.home-nx-viz-ctrl-stack {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 12px !important;
+  grid-template-areas: none !important;
+  width: min(100%, 640px) !important;
+  max-width: min(92%, 640px) !important;
+}
+.home-nx-viz-ctrl-stack .home-visualizer-wrap {
+  position: relative !important;
+  grid-area: unset !important;
+  z-index: 0 !important;
+  width: 100% !important;
+  height: 72px !important;
+  min-height: 72px !important;
+  max-height: 80px !important;
+  margin: 0 !important;
+  border-radius: 12px !important;
+  border: 1px solid rgba(255,255,255,0.1) !important;
+  background: rgba(8,10,18,0.35) !important;
+  overflow: hidden !important;
+}
+.home-nx-viz-ctrl-stack .home-clone-controls {
+  position: relative !important;
+  grid-area: unset !important;
+  z-index: 1 !important;
+  width: 100% !important;
+  pointer-events: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+.home-nx-ctrl-dock {
+  width: 100% !important;
+  max-width: 100% !important;
+  padding: 10px 14px !important;
+  border-radius: 14px !important;
+  background: rgba(10,12,20,0.55) !important;
+  border: 1px solid rgba(255,255,255,0.1) !important;
+  box-shadow: none !important;
+}
+.home-nx-ctrl-row--deck {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: clamp(10px, 2.5vw, 18px) !important;
+  width: 100% !important;
+}
+.home-nx-deck-side {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+}
+.home-nx-deck-side--l { justify-content: flex-end !important; }
+.home-nx-deck-side--r { justify-content: flex-start !important; }
+.home-nx-deck-center {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 10px !important;
+  flex: 0 0 auto !important;
+}
+.home-nx-ctrl-row--deck .ctrl-btn,
+.home-nx-ctrl-row--deck .home-nx-ctrl-btn {
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  min-height: 36px !important;
+  border-radius: 50% !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  align-self: center !important;
+  flex-shrink: 0 !important;
+  background: rgba(255,255,255,0.08) !important;
+  border: 1px solid rgba(255,255,255,0.14) !important;
+}
+.home-nx-ctrl-row--deck .ctrl-btn .ui-icon { width: 17px !important; height: 17px !important; }
+.home-nx-ctrl-row--deck .ctrl-btn.play-btn {
+  width: 46px !important;
+  height: 46px !important;
+  min-width: 46px !important;
+  min-height: 46px !important;
+  background: #fff !important;
+  color: #111 !important;
+  border: none !important;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.35) !important;
+}
+.home-nx-ctrl-row--deck .ctrl-btn.play-btn .ui-icon { width: 20px !important; height: 20px !important; }
+.home-nx-slot-dislike.hidden {
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  display: inline-flex !important;
+}
+.home-nx-menu-wrap { position: relative !important; }
+.home-nx-ctrl-badge {
+  position: absolute !important;
+  right: -2px !important;
+  bottom: -2px !important;
+  font-size: 8px !important;
+  line-height: 1.1 !important;
+}
