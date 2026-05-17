@@ -1565,11 +1565,11 @@ function setHomeSliderStyle(style) {
 function applyHomeSliderStyle() {
   const v = getVisual()
   const style = normalizeHomeSliderStyle(v.homeSliderStyle)
-  const p = document.getElementById('home-clone-progress')
-  const nxLine = document.getElementById('page-home')?.classList.contains('media-queue-off')
-  if (p) {
-    p.classList.toggle('home-slider-wave', nxLine && style === 'wave')
-    p.classList.toggle('home-slider-ios', nxLine && style === 'ios')
+  for (const id of ['home-clone-progress', 'pm-progress']) {
+    const el = document.getElementById(id)
+    if (!el) continue
+    el.classList.toggle('home-slider-wave', style === 'wave')
+    el.classList.toggle('home-slider-ios', style === 'ios')
   }
   const b1 = document.getElementById('slider-style-line')
   const b2 = document.getElementById('slider-style-wave')
@@ -1577,9 +1577,10 @@ function applyHomeSliderStyle() {
   if (b1) b1.classList.toggle('active', style === 'line')
   if (b2) b2.classList.toggle('active', style === 'wave')
   if (b3) b3.classList.toggle('active', style === 'ios')
-  try {
-    if (typeof startSliderPreviewLoop === 'function') startSliderPreviewLoop()
-  } catch (_) {}
+  const preview = document.getElementById('vs-slider-preview')
+  if (preview) preview.dataset.sliderStyle = style
+  try { drawSliderPreviewFrame() } catch (_) {}
+  try { startSliderPreviewLoop() } catch (_) {}
 }
 
 let _sliderPreviewRaf = 0
@@ -1648,8 +1649,8 @@ function drawSliderPreviewFrame() {
 function startSliderPreviewLoop() {
   if (_sliderPreviewRaf) cancelAnimationFrame(_sliderPreviewRaf)
   const tick = () => {
-    const panel = document.getElementById('settings-panel-visual')
-    const visible = panel && !panel.classList.contains('hidden') && panel.offsetParent !== null
+    const panel = document.getElementById('settings-panel-playback')
+    const visible = panel && panel.classList.contains('active') && panel.offsetParent !== null
     if (visible && document.getElementById('vs-slider-preview-canvas')) drawSliderPreviewFrame()
     _sliderPreviewRaf = requestAnimationFrame(tick)
   }
@@ -1668,8 +1669,7 @@ function toggleHomeWidgetEnabled() {
 function normalizeHomeWidgetMode(mode) {
   const m = String(mode || 'bars').toLowerCase()
   if (m === 'wave' || m === 'dots' || m === 'web') return 'bars'
-  if (m === 'liquid') return 'bars'
-  if (m === 'image' || m === 'bars') return m
+  if (m === 'liquid' || m === 'image' || m === 'bars') return m
   return 'bars'
 }
 
@@ -2299,6 +2299,10 @@ function switchSettingsCategory(cat) {
     try {
       refreshCustomizationPanel()
     } catch (_) {}
+  }
+  if (c === 'playback') {
+    try { drawSliderPreviewFrame() } catch (_) {}
+    try { startSliderPreviewLoop() } catch (_) {}
   }
 }
 
@@ -3358,7 +3362,6 @@ function syncPlayerModeUI() {
   const pmBg     = document.getElementById('pm-bg')
   const pmTitle  = document.getElementById('pm-title')
   const pmArtist = document.getElementById('pm-artist')
-  const pmLike   = document.getElementById('pm-like-btn')
   const pmCoverLike = document.getElementById('pm-cover-like-btn')
   const pmCoverLyrics = document.getElementById('pm-cover-lyrics-btn')
   const v = getVisual()
@@ -3400,7 +3403,6 @@ function syncPlayerModeUI() {
       }
     }
     const liked = isLiked(t)
-    if (pmLike) { pmLike.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; pmLike.classList.toggle('liked', liked) }
     if (pmCoverLike) { pmCoverLike.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; pmCoverLike.classList.toggle('liked', liked) }
   }
   // play/pause icon sync

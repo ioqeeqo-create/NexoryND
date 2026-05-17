@@ -5531,7 +5531,7 @@ function drawHomeVisualizerFrame() {
   ctx.globalAlpha = 0.9
   const mode = typeof normalizeHomeWidgetMode === 'function' ? normalizeHomeWidgetMode(hw.mode) : hw.mode
   if (mode === 'liquid') {
-    const cols = 48
+    const cols = 32
     const t = performance.now() * 0.001
     const pts = []
     for (let i = 0; i <= cols; i++) {
@@ -5539,14 +5539,9 @@ function drawHomeVisualizerFrame() {
       const binIdx = Math.min(data.length - 1, Math.floor(Math.pow(ratio, 1.45) * (data.length - 1)))
       let val = data[binIdx] || 0
       if (!canAnalyze) val = 48 + Math.sin(ratio * 9 + t * 2.2) * 36 + Math.sin(ratio * 3.1 - t) * 22
-      else val = Math.min(255, val * 1.08 + Math.sin(ratio * 6 + t * 3) * 18)
-      const x = ratio * w
-      const y = h - (Math.min(255, val * intensityScale) / 255) * (h - 14) - 8
-      pts.push({ x, y })
+      else val = Math.min(255, val * 1.05 + Math.sin(ratio * 6 + t * 3) * 14)
+      pts.push({ x: ratio * w, y: h - (Math.min(255, val * intensityScale) / 255) * (h - 14) - 8 })
     }
-    ctx.save()
-    ctx.shadowColor = 'rgba(255,255,255,0.65)'
-    ctx.shadowBlur = 16
     ctx.beginPath()
     ctx.moveTo(0, h)
     ctx.lineTo(pts[0].x, pts[0].y)
@@ -5559,10 +5554,12 @@ function drawHomeVisualizerFrame() {
     ctx.lineTo(w, h)
     ctx.closePath()
     const fillGrad = ctx.createLinearGradient(0, 0, 0, h)
-    fillGrad.addColorStop(0, 'rgba(255,255,255,0.88)')
+    fillGrad.addColorStop(0, 'rgba(255,255,255,0.82)')
     fillGrad.addColorStop(1, 'rgba(255,255,255,0)')
     ctx.fillStyle = fillGrad
     ctx.fill()
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)'
+    ctx.lineWidth = 1.8
     ctx.beginPath()
     ctx.moveTo(pts[0].x, pts[0].y)
     for (let i = 1; i < pts.length - 1; i++) {
@@ -5571,10 +5568,7 @@ function drawHomeVisualizerFrame() {
       ctx.quadraticCurveTo(pts[i].x, pts[i].y, xc, yc)
     }
     ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y)
-    ctx.strokeStyle = 'rgba(255,255,255,0.92)'
-    ctx.lineWidth = 2.2
     ctx.stroke()
-    ctx.restore()
     return
   }
   const bars = 56
@@ -6865,12 +6859,14 @@ async function fetchSearchResultsForFilter(q, settings = getSettings(), filter =
   }
 
   if (needTyped) {
-    const token = String(settings?.yandexToken || '').trim()
-    if (token && window.api?.yandexSearch) {
-      const ymList = await withTimeout(window.api.yandexSearch(q, token, apiType), 24000, 'yandex search timeout').catch(() => [])
-      if (Array.isArray(ymList) && ymList.length) return { mode: 'yandex', items: ymList }
-    }
-    throw new Error('Плейлисты, альбомы, артисты и поиск по тексту доступны с токеном Яндекс Музыки')
+    const filterLabel = apiType === 'playlist' ? 'плейлисты'
+      : apiType === 'album' ? 'альбомы'
+      : apiType === 'artist' ? 'артисты'
+      : apiType === 'lyrics' ? 'текст песен' : 'этот тип'
+    if (src === 'youtube' || src === 'yt') throw new Error(`YouTube: поиск «${filterLabel}» недоступен — только треки`)
+    if (src === 'vk') throw new Error(`VK: поиск «${filterLabel}» недоступен — только треки`)
+    if (src === 'hybrid') throw new Error(`Classic: поиск «${filterLabel}» недоступен — выбери Яндекс в источнике поиска`)
+    throw new Error(`Для этого источника поиск «${filterLabel}» недоступен`)
   }
 
   if (src === 'youtube' || src === 'yt') {
@@ -7353,14 +7349,10 @@ function updatePlayerLikeBtn() {
     btn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE
     btn.classList.toggle('liked', liked)
   }
-  const pmBtn = document.getElementById('pm-like-btn')
   const pmCoverBtn = document.getElementById('pm-cover-like-btn')
   const homeNxBtn = document.getElementById('home-nx-like-btn')
-  const homeNxRowBtn = document.getElementById('home-nx-row-like-btn')
-  if (pmBtn) { pmBtn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; pmBtn.classList.toggle('liked', liked) }
   if (pmCoverBtn) { pmCoverBtn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; pmCoverBtn.classList.toggle('liked', liked) }
   if (homeNxBtn) { homeNxBtn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; homeNxBtn.classList.toggle('liked', liked) }
-  if (homeNxRowBtn) { homeNxRowBtn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; homeNxRowBtn.classList.toggle('liked', liked) }
 }
 
 /** Склонение для «N трек/трека/треков» (рус.). */

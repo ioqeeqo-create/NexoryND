@@ -266,8 +266,8 @@
                       <button type="button" class="home-nx-src-opt" data-src="hybrid" onclick="pickHomeNxSource('hybrid')"><img src="assets/icon-source.png" alt=""><span>Classic</span></button>
                     </div>
                   </div>
-                  <button type="button" class="ctrl-btn home-nx-row-like" id="home-nx-row-like-btn" onclick="likeCurrentTrack()" title="Лайк"><svg class="ui-icon flow-ref-heart-player" data-lucide="heart" viewBox="0 0 24 24"></svg></button>
                   <button type="button" class="ctrl-btn home-nx-row-dislike" id="home-nx-row-dislike-btn" onclick="dislikeCurrentYandexWaveTrack()" title="Не нравится"><svg class="ui-icon" data-lucide="thumbs-down" viewBox="0 0 24 24"></svg></button>
+                  <button type="button" class="ctrl-btn" id="home-repeat-btn" onclick="toggleRepeatMode()" title="Повтор"><svg class="ui-icon flow-ref-ctrl" data-lucide="repeat" viewBox="0 0 24 24"></svg></button>
                   <button class="ctrl-btn" onclick="prevTrack()"><svg class="ui-icon" data-lucide="skip-back" viewBox="0 0 24 24"></svg></button>
                   <button class="ctrl-btn play-btn" id="home-play-btn" onclick="togglePlay()"><svg class="ui-icon ctrl-play-icon" data-lucide="play" viewBox="0 0 24 24"></svg></button>
                   <button class="ctrl-btn" onclick="nextTrack()"><svg class="ui-icon" data-lucide="skip-forward" viewBox="0 0 24 24"></svg></button>
@@ -307,8 +307,10 @@
             <div class="home-nx-vol-row" id="home-nx-vol-row">
               <svg class="ui-icon" data-lucide="volume-2" viewBox="0 0 24 24" aria-hidden="true"></svg>
               <input type="range" class="home-nx-volume" id="home-nx-volume" min="0" max="1" step="0.01" value="0.8" oninput="setVolume(this.value)">
-              <button type="button" class="home-nx-vol-add-btn" onclick="addCurrentTrackToPlaylist()" title="Добавить в плейлист"><svg class="ui-icon" data-lucide="plus" viewBox="0 0 24 24"></svg></button>
               <span class="home-nx-vol-val" id="home-nx-vol-val">8</span>
+            </div>
+            <div class="home-nx-extra-row" id="home-nx-extra-row">
+              <button type="button" class="home-nx-extra-btn" id="home-nx-add-btn" onclick="addCurrentTrackToPlaylist()" title="Добавить в плейлист"><svg class="ui-icon" data-lucide="plus" viewBox="0 0 24 24"></svg><span>Добавить в плейлист</span></button>
             </div>
           </div>
         </div>
@@ -946,9 +948,9 @@
                   <button class="vsb" id="slider-style-wave" onclick="setHomeSliderStyle('wave')">Волновой</button>
                   <button class="vsb" id="slider-style-ios" onclick="setHomeSliderStyle('ios')">iOS</button>
                 </div>
-                <div class="vs-slider-preview" id="vs-slider-preview" aria-hidden="true">
-                  <canvas id="vs-slider-preview-canvas" width="320" height="72"></canvas>
-                  <span class="vs-slider-preview-title" id="vs-slider-preview-title">ARXANGEL</span>
+                <div class="vs-slider-preview" id="vs-slider-preview" data-slider-style="line" aria-hidden="true">
+                  <canvas id="vs-slider-preview-canvas" width="360" height="80"></canvas>
+                  <span class="vs-slider-preview-title" id="vs-slider-preview-title">Трек</span>
                   <span class="vs-slider-preview-time vs-slider-preview-time--l" id="vs-slider-preview-cur">0:43</span>
                   <span class="vs-slider-preview-time vs-slider-preview-time--r" id="vs-slider-preview-tot">2:07</span>
                 </div>
@@ -1411,9 +1413,11 @@
   <div class="pm-player-row">
   <div class="pm-cover-zone">
   <div class="pm-cover-wrap">
-    <div class="pm-cover" id="pm-cover"><svg class="ui-icon lg" data-lucide="music-2" viewBox="0 0 24 24"></svg></div>
-    <div class="pm-cover-actions" id="pm-cover-actions">
-      <button type="button" class="pm-cover-action-btn pm-cover-lyrics-t" id="pm-cover-lyrics-btn" onclick="togglePmLyricsFromCover()" title="Текст трека">T</button>
+        <div class="pm-cover" id="pm-cover"><svg class="ui-icon lg" data-lucide="music-2" viewBox="0 0 24 24"></svg></div>
+    <button type="button" class="pm-cover-lyrics-float" id="pm-cover-lyrics-btn" onclick="togglePmLyricsFromCover()" title="Текст трека">T</button>
+    <div class="pm-cover-actions" id="pm-cover-actions" aria-label="Действия с обложкой">
+      <button type="button" class="pm-cover-side-btn pm-cover-like" id="pm-cover-like-btn" onclick="likeCurrentTrack()" title="Лайк"><svg class="ui-icon flow-ref-heart-player" data-lucide="heart" viewBox="0 0 24 24"></svg></button>
+      <button type="button" class="pm-cover-side-btn pm-cover-add" onclick="addCurrentTrackToPlaylist()" title="Добавить в плейлист"><svg class="ui-icon" data-lucide="plus" viewBox="0 0 24 24"></svg></button>
     </div>
     <div class="pm-cover-glow" id="pm-cover-glow"></div>
   </div>
@@ -1437,8 +1441,8 @@
   <div class="pm-controls pm-controls--rail">
     <span id="host-lock-indicator-pm" class="pm-host-lock-pm" style="display:none">🔒 Host only</span>
     <div class="pm-controls-rail-bar">
-    <button type="button" class="pm-btn-side" id="pm-like-btn" onclick="likeCurrentTrack()" title="Лайк"><svg class="ui-icon flow-ref-heart-player" data-lucide="heart" viewBox="0 0 24 24"></svg></button>
     <button type="button" class="pm-btn-side hidden" id="pm-dislike-btn" onclick="dislikeCurrentYandexWaveTrack()" title="Не нравится"><svg class="ui-icon" data-lucide="thumbs-down" viewBox="0 0 24 24"></svg></button>
+    <button type="button" class="pm-btn-side" id="pm-repeat-pm-btn" onclick="toggleRepeatMode()" title="Повтор"><svg class="ui-icon" data-lucide="repeat" viewBox="0 0 24 24"></svg></button>
     <button class="pm-btn" onclick="prevTrack()" title="Предыдущий">
       <svg class="ui-icon lg" data-lucide="skip-back" viewBox="0 0 24 24"></svg>
     </button>
@@ -1455,8 +1459,10 @@
   <div class="pm-volume-wrap">
     <svg class="flow-vol-icon ui-icon md" data-lucide="volume-2" viewBox="0 0 24 24" style="opacity:0.75;flex-shrink:0"></svg>
     <input type="range" class="pm-volume" min="0" max="1" step="0.01" value="0.8" oninput="setVolume(this.value)" id="pm-volume">
-    <button type="button" class="pm-vol-add-btn" onclick="addCurrentTrackToPlaylist()" title="Добавить в плейлист"><svg class="ui-icon" data-lucide="plus" viewBox="0 0 24 24"></svg></button>
     <svg class="flow-vol-icon ui-icon md" data-lucide="volume-2" viewBox="0 0 24 24" style="opacity:0.75;flex-shrink:0"></svg>
+  </div>
+  <div class="pm-extra-row">
+    <button type="button" class="pm-extra-btn" id="pm-add-btn" onclick="addCurrentTrackToPlaylist()" title="Добавить в плейлист"><svg class="ui-icon" data-lucide="plus" viewBox="0 0 24 24"></svg><span>Добавить в плейлист</span></button>
   </div>
   </div>
   </div>
@@ -1698,7 +1704,7 @@
     <div class="flow-game-sleep-title">Sleep mode</div>
     <div class="flow-game-sleep-sub">Только воспроизведение · верни Nexory на экран</div>
   </div>
-  <script src="renderer.js?v=1e3fcb2df262-mp90n1ds"></script>
+  <script src="renderer.js?v=9d266fb62366-mp91ejwt"></script>
 </body>
 </html>
 
