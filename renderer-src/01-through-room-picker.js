@@ -1668,7 +1668,8 @@ function toggleHomeWidgetEnabled() {
 function normalizeHomeWidgetMode(mode) {
   const m = String(mode || 'bars').toLowerCase()
   if (m === 'wave' || m === 'dots' || m === 'web') return 'bars'
-  if (m === 'liquid' || m === 'image' || m === 'bars') return m
+  if (m === 'liquid') return 'bars'
+  if (m === 'image' || m === 'bars') return m
   return 'bars'
 }
 
@@ -3369,7 +3370,7 @@ function syncPlayerModeUI() {
     pmArtist.textContent = t.artist || 'вЂ”'
     const pmSrc = document.getElementById('pm-source-badge')
     if (pmSrc && typeof window.flowTrackSourceBadgeHtml === 'function') {
-      const html = window.flowTrackSourceBadgeHtml(t, { mono: true })
+      const html = window.flowTrackSourceBadgeHtml(t)
       if (html) {
         pmSrc.innerHTML = html
         pmSrc.classList.remove('hidden')
@@ -3669,9 +3670,10 @@ function cacheSet(key, val) {
   searchCache.set(key, { ts: Date.now(), val })
 }
 
-function getSearchCacheKey(query, settings = getSettings()) {
+function getSearchCacheKey(query, settings = getSettings(), filter = 'all') {
   const q = String(query || '').trim().toLowerCase()
   const src = String(settings?.activeSource || currentSource || 'hybrid').toLowerCase()
+  const f = String(filter || 'all').toLowerCase()
   const tokenSig = [
     settings?.spotifyToken ? 'sp1' : 'sp0',
     settings?.vkToken ? 'vk1' : 'vk0',
@@ -3679,7 +3681,7 @@ function getSearchCacheKey(query, settings = getSettings()) {
     settings?.yandexToken ? 'ym1' : 'ym0',
     settings?.proxyBaseUrl ? `srv:${String(settings.proxyBaseUrl).trim().toLowerCase()}` : 'srv0',
   ].join(':')
-  return `${src}:${q}:${tokenSig}`
+  return `${src}:${f}:${q}:${tokenSig}`
 }
 
 // в”Ђв”Ђв”Ђ PROVIDERS в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
@@ -4251,7 +4253,6 @@ function syncHomeNxSourceLogo(pulse = false) {
     if (!img) return
     if (!String(img.getAttribute('src') || '').includes(src.replace(/^\//, ''))) img.src = src
     img.alt = raw
-    img.classList.add('nx-src-mono')
     if (pulse) {
       const btn = img.closest('.home-nx-source-btn, .pm-source-btn, .nx-search-src-btn')
       btn?.classList.remove('home-nx-source-btn--pulse')

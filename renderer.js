@@ -1668,7 +1668,8 @@ function toggleHomeWidgetEnabled() {
 function normalizeHomeWidgetMode(mode) {
   const m = String(mode || 'bars').toLowerCase()
   if (m === 'wave' || m === 'dots' || m === 'web') return 'bars'
-  if (m === 'liquid' || m === 'image' || m === 'bars') return m
+  if (m === 'liquid') return 'bars'
+  if (m === 'image' || m === 'bars') return m
   return 'bars'
 }
 
@@ -3369,7 +3370,7 @@ function syncPlayerModeUI() {
     pmArtist.textContent = t.artist || 'вЂ”'
     const pmSrc = document.getElementById('pm-source-badge')
     if (pmSrc && typeof window.flowTrackSourceBadgeHtml === 'function') {
-      const html = window.flowTrackSourceBadgeHtml(t, { mono: true })
+      const html = window.flowTrackSourceBadgeHtml(t)
       if (html) {
         pmSrc.innerHTML = html
         pmSrc.classList.remove('hidden')
@@ -3669,9 +3670,10 @@ function cacheSet(key, val) {
   searchCache.set(key, { ts: Date.now(), val })
 }
 
-function getSearchCacheKey(query, settings = getSettings()) {
+function getSearchCacheKey(query, settings = getSettings(), filter = 'all') {
   const q = String(query || '').trim().toLowerCase()
   const src = String(settings?.activeSource || currentSource || 'hybrid').toLowerCase()
+  const f = String(filter || 'all').toLowerCase()
   const tokenSig = [
     settings?.spotifyToken ? 'sp1' : 'sp0',
     settings?.vkToken ? 'vk1' : 'vk0',
@@ -3679,7 +3681,7 @@ function getSearchCacheKey(query, settings = getSettings()) {
     settings?.yandexToken ? 'ym1' : 'ym0',
     settings?.proxyBaseUrl ? `srv:${String(settings.proxyBaseUrl).trim().toLowerCase()}` : 'srv0',
   ].join(':')
-  return `${src}:${q}:${tokenSig}`
+  return `${src}:${f}:${q}:${tokenSig}`
 }
 
 // в”Ђв”Ђв”Ђ PROVIDERS в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
@@ -4251,7 +4253,6 @@ function syncHomeNxSourceLogo(pulse = false) {
     if (!img) return
     if (!String(img.getAttribute('src') || '').includes(src.replace(/^\//, ''))) img.src = src
     img.alt = raw
-    img.classList.add('nx-src-mono')
     if (pulse) {
       const btn = img.closest('.home-nx-source-btn, .pm-source-btn, .nx-search-src-btn')
       btn?.classList.remove('home-nx-source-btn--pulse')
@@ -7015,34 +7016,20 @@ function flowWaveSourceBadgeLine(track) {
 }
 
 /** Цветной бейдж источника (SC / VK / Ян …) как в списках треков. */
-const FLOW_SRC_LOGO = {
-  vk: 'assets/source-vk.png',
-  yandex: 'assets/source-yandex-music.png',
-  hybrid: 'assets/icon-source.png',
-  soundcloud: 'assets/icon-source.png',
-  spotify: 'assets/icon-source.png',
-  youtube: 'assets/icon-source.png',
-  audius: 'assets/icon-source.png',
-}
-
-function flowTrackSourceBadgeHtml(track, opts = {}) {
+function flowTrackSourceBadgeHtml(track) {
   const t = track && typeof track === 'object' ? track : null
   if (!t?.source) return ''
   const badgeKey = trackSourceBadgeKey(t.source)
   const SHORT = { soundcloud: 'SC', vk: 'VK', youtube: 'YT', spotify: 'SP', yandex: 'Ян' }
   const lbl = SHORT[badgeKey]
   if (!lbl) return ''
-  if (opts?.mono) {
-    const logo = FLOW_SRC_LOGO[badgeKey] || FLOW_SRC_LOGO.hybrid
-    return `<span class="track-source track-source-mono" title="${lbl}"><img src="${logo}" alt="${lbl}"></span>`
-  }
   return `<span class="track-source track-source-${badgeKey}">${lbl}</span>`
 }
 
 function syncInlineTrackSourcePill(track) {
   const el = document.getElementById('player-track-source-inline')
   if (!el) return
-  const html = flowTrackSourceBadgeHtml(track || currentTrack, { mono: true })
+  const html = flowTrackSourceBadgeHtml(track || currentTrack)
   if (!html) {
     el.classList.add('hidden')
     el.innerHTML = ''
@@ -7060,7 +7047,7 @@ function updateYandexWaveDislikeButtonsVisible() {
     String(currentTrack.source || '').toLowerCase() === 'yandex' &&
     Boolean(currentTrack?.yandexRotor?.batchId)
   )
-  ;['player-wave-dislike-btn', 'pm-wave-dislike-btn', 'home-wave-dislike-btn'].forEach((id) => {
+  ;['player-wave-dislike-btn', 'pm-wave-dislike-btn', 'pm-dislike-btn', 'home-wave-dislike-btn'].forEach((id) => {
     const b = document.getElementById(id)
     if (b) b.classList.toggle('hidden', !show)
   })
@@ -13638,7 +13625,7 @@ function searchTracks(queryOverride = '') {
 
   searchDebounceTimer = setTimeout(async () => {
     const s = getSettings()
-    const key = getSearchCacheKey(q, s)
+    const key = getSearchCacheKey(q, s, _searchFilter)
     const cached = cacheGet(key)
     if (cached) {
       _lastSearchMode = cached.mode || 'hybrid'
@@ -13647,53 +13634,10 @@ function searchTracks(queryOverride = '') {
     }
 
     try {
-      const src = String(s.activeSource || currentSource || 'hybrid').toLowerCase()
-      let results = []
-      let mode = 'hybrid'
-      if (src === 'youtube' || src === 'yt') {
-        if (!window.api?.youtubeSearch) throw new Error('YouTube поиск доступен только в Electron')
-        const ytList = await window.api.youtubeSearch(q)
-        if (!Array.isArray(ytList)) throw new Error('YouTube: некорректный ответ')
-        results = sanitizeTrackList(ytList.map((t) => ({
-          title: t?.title || 'Без названия',
-          artist: t?.artist || 'YouTube',
-          ytId: t?.ytId || t?.id || '',
-          url: t?.url || null,
-          cover: t?.cover || null,
-          bg: t?.bg || 'linear-gradient(135deg,#ff0000,#cc0000)',
-          source: 'youtube',
-          id: String(t?.id || t?.ytId || `${t?.title || ''}:${t?.artist || ''}`)
-        }))).filter((t) => t.ytId)
-        mode = 'youtube'
-      } else if (src === 'yandex' || src === 'ya' || src === 'ym') {
-        const token = String(s.yandexToken || '').trim()
-        if (!token) throw new Error('Яндекс: укажи токен Музыки в настройках')
-        if (!window.api?.yandexSearch) throw new Error('Яндекс поиск недоступен в этой сборке')
-        const ymList = await withTimeout(window.api.yandexSearch(q, token), 22000, 'yandex search timeout').catch((e) => {
-          throw new Error(normalizeInvokeError(e) || 'таймаут поиска')
-        })
-        if (!Array.isArray(ymList)) throw new Error('Яндекс: некорректный ответ')
-        results = sanitizeTrackList(ymList)
-        mode = 'yandex'
-      } else if (src === 'vk') {
-        _lastSearchMode = 'vk'
-        const token = String(s.vkToken || '').trim()
-        if (!token) throw new Error('VK: укажи токен в настройках → Источники → ВКонтакте')
-        if (!window.api?.vkSearch) throw new Error('VK поиск доступен только в приложении Electron')
-        const vkList = await withTimeout(searchVK(q, token), 60000, 'vk search timeout').catch((e) => {
-          throw new Error(normalizeInvokeError(e) || 'таймаут поиска')
-        })
-        if (!Array.isArray(vkList)) throw new Error('VK: некорректный ответ')
-        results = sanitizeTrackList(vkList)
-        mode = 'vk'
-      } else {
-        const hybrid = await searchHybridTracks(q, s)
-        results = sanitizeTrackList(hybrid.tracks || [])
-        mode = hybrid.mode || 'hybrid'
-      }
-      _lastSearchMode = mode
-      cacheSet(key, { mode: _lastSearchMode, tracks: results })
-      renderResults(results)
+      const results = await fetchSearchResultsForFilter(q, s, _searchFilter)
+      _lastSearchMode = results.mode
+      cacheSet(key, { mode: _lastSearchMode, tracks: results.items })
+      renderResults(results.items)
     } catch (err) {
       const message = sanitizeDisplayText(normalizeInvokeError(err))
       container.innerHTML = `<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.8 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0Z"/></svg></div><p>${message}</p><small>Источник: ${getSourceLabel()}</small><div style="display:flex;gap:8px;justify-content:center;margin-top:12px"><button class="btn-small" onclick="searchTracks()">Повторить</button><button class="btn-small" onclick="openPage('settings')">Настройки</button></div></div>`
@@ -13701,37 +13645,55 @@ function searchTracks(queryOverride = '') {
   }, 350)
 }
 
-async function searchTracksDirect(query, settings = getSettings()) {
+async function searchTracksDirect(query, settings = getSettings(), filter = 'tracks') {
   const q = String(query || '').trim()
   if (!q) return []
+  const pack = await fetchSearchResultsForFilter(q, settings, filter)
+  _lastSearchMode = pack.mode
+  return pack.items.filter((it) => !it?.entityType || it.entityType === 'track').map((t) => sanitizeTrack(t))
+}
+
+function mapSearchFilterToApiType(filter) {
+  const f = String(filter || 'all').toLowerCase()
+  if (f === 'tracks') return 'track'
+  if (f === 'playlists') return 'playlist'
+  if (f === 'albums') return 'album'
+  if (f === 'artists') return 'artist'
+  if (f === 'lyrics') return 'lyrics'
+  return 'all'
+}
+
+async function fetchSearchResultsForFilter(q, settings = getSettings(), filter = 'all') {
   const src = String(settings?.activeSource || currentSource || 'hybrid').toLowerCase()
+  const apiType = mapSearchFilterToApiType(filter)
+  const needTyped = apiType !== 'track'
+
   if (src === 'yandex' || src === 'ya' || src === 'ym') {
     const token = String(settings?.yandexToken || '').trim()
     if (!token) throw new Error('Яндекс: укажи токен Музыки в настройках')
     if (!window.api?.yandexSearch) throw new Error('Яндекс поиск недоступен в этой сборке')
-    const ymList = await withTimeout(window.api.yandexSearch(q, token), 22000, 'yandex search timeout').catch((e) => {
+    const ymList = await withTimeout(window.api.yandexSearch(q, token, apiType), 24000, 'yandex search timeout').catch((e) => {
       throw new Error(normalizeInvokeError(e) || 'таймаут поиска')
     })
     if (!Array.isArray(ymList)) throw new Error('Яндекс: некорректный ответ')
-    _lastSearchMode = 'yandex'
-    return sanitizeTrackList(ymList)
+    return { mode: 'yandex', items: ymList }
   }
-  if (src === 'vk') {
-    _lastSearchMode = 'vk'
-    const token = String(settings?.vkToken || '').trim()
-    if (!token) throw new Error('VK: укажи токен в настройках → Источники → ВКонтакте')
-    if (!window.api?.vkSearch) throw new Error('VK поиск доступен только в приложении Electron')
-    const vkList = await withTimeout(searchVK(q, token), 60000, 'vk search timeout').catch((e) => {
-      throw new Error(normalizeInvokeError(e) || 'таймаут поиска')
-    })
-    if (!Array.isArray(vkList)) throw new Error('VK: некорректный ответ')
-    return sanitizeTrackList(vkList)
+
+  if (needTyped) {
+    const token = String(settings?.yandexToken || '').trim()
+    if (token && window.api?.yandexSearch) {
+      const ymList = await withTimeout(window.api.yandexSearch(q, token, apiType), 24000, 'yandex search timeout').catch(() => [])
+      if (Array.isArray(ymList) && ymList.length) return { mode: 'yandex', items: ymList }
+    }
+    throw new Error('Плейлисты, альбомы, артисты и поиск по тексту доступны с токеном Яндекс Музыки')
   }
+
   if (src === 'youtube' || src === 'yt') {
     if (!window.api?.youtubeSearch) throw new Error('YouTube поиск доступен только в Electron')
-    const result = await window.api.youtubeSearch(q)
-    if (!Array.isArray(result)) throw new Error('YouTube: unexpected response')
-    return sanitizeTrackList(result.map((t) => ({
+    const ytList = await window.api.youtubeSearch(q)
+    if (!Array.isArray(ytList)) throw new Error('YouTube: некорректный ответ')
+    const items = sanitizeTrackList(ytList.map((t) => ({
+      entityType: 'track',
       title: t?.title || 'Без названия',
       artist: t?.artist || 'YouTube',
       ytId: t?.ytId || t?.id || '',
@@ -13741,10 +13703,27 @@ async function searchTracksDirect(query, settings = getSettings()) {
       source: 'youtube',
       id: String(t?.id || t?.ytId || `${t?.title || ''}:${t?.artist || ''}`)
     }))).filter((t) => t.ytId)
+    return { mode: 'youtube', items }
   }
+
+  if (src === 'vk') {
+    const token = String(settings?.vkToken || '').trim()
+    if (!token) throw new Error('VK: укажи токен в настройках → Источники → ВКонтакте')
+    if (!window.api?.vkSearch) throw new Error('VK поиск доступен только в приложении Electron')
+    const vkList = await withTimeout(searchVK(q, token), 60000, 'vk search timeout').catch((e) => {
+      throw new Error(normalizeInvokeError(e) || 'таймаут поиска')
+    })
+    if (!Array.isArray(vkList)) throw new Error('VK: некорректный ответ')
+    return { mode: 'vk', items: sanitizeTrackList(vkList.map((t) => ({ ...t, entityType: 'track' }))) }
+  }
+
   const hybrid = await searchHybridTracks(q, settings)
-  return sanitizeTrackList(hybrid?.tracks || [])
+  return {
+    mode: hybrid.mode || 'hybrid',
+    items: sanitizeTrackList((hybrid.tracks || []).map((t) => ({ ...t, entityType: 'track' }))),
+  }
 }
+
 let _lastSearchResults = []
 let _searchFilter = 'all'
 
@@ -13753,8 +13732,9 @@ function setSearchFilter(filter) {
   document.querySelectorAll('.nx-search-filter').forEach((btn) => {
     btn.classList.toggle('active', btn.getAttribute('data-filter') === _searchFilter)
   })
-  if (_lastSearchResults.length) renderResults(_lastSearchResults)
-  else searchTracks()
+  const q = String(document.getElementById('search-input')?.value || '').trim()
+  if (q) searchTracks()
+  else if (_lastSearchResults.length) renderResults(_lastSearchResults)
 }
 window.setSearchFilter = setSearchFilter
 
@@ -13802,37 +13782,126 @@ function pickSearchSource(src) {
 }
 window.pickSearchSource = pickSearchSource
 
-function filterSearchResultsByCategory(results) {
-  const list = sanitizeTrackList(results || [])
-  const f = _searchFilter
-  if (!f || f === 'all' || f === 'tracks') return list
-  if (f === 'playlists') return list.filter((t) => /playlist|плейлист/i.test(String(t?.title || '') + String(t?.artist || '')))
-  if (f === 'albums') return list.filter((t) => /album|альбом/i.test(String(t?.title || '') + String(t?.artist || '')))
-  if (f === 'artists') return list.filter((t) => Boolean(t?.artist) && !t?.url && !t?.ytId)
-  if (f === 'lyrics') return list.filter((t) => Boolean(t?.lyrics) || /lyric|текст/i.test(String(t?.title || '')))
-  return list
+function searchEntityTypeLabel(type) {
+  const t = String(type || 'track').toLowerCase()
+  if (t === 'playlist') return 'плейлистов'
+  if (t === 'album') return 'альбомов'
+  if (t === 'artist') return 'артистов'
+  return 'треков'
 }
 
+function makeSearchEntityEl(item) {
+  const row = document.createElement('button')
+  row.type = 'button'
+  row.className = 'search-entity-row'
+  const type = String(item?.entityType || 'track').toLowerCase()
+  const cover = item?.cover
+    ? `background-image:url(${escapeHtml(item.cover)})`
+    : `background:${item?.bg || 'linear-gradient(135deg,#7c3aed,#a855f7)'}`
+  const badge = typeof flowTrackSourceBadgeHtml === 'function' ? flowTrackSourceBadgeHtml(item) : ''
+  const meta =
+    type === 'playlist' || type === 'album'
+      ? `${item?.trackCount ? `${item.trackCount} треков` : 'Коллекция'}`
+      : type === 'artist'
+        ? `${item?.trackCount ? `${item.trackCount} треков` : 'Артист'}`
+        : ''
+  row.innerHTML = `
+    <span class="search-entity-cover" style="${cover}"></span>
+    <span class="search-entity-meta">
+      <strong>${escapeHtml(item?.title || '—')}</strong>
+      <span>${escapeHtml(item?.artist || '—')}${meta ? ` · ${escapeHtml(meta)}` : ''}</span>
+    </span>
+    <span class="search-entity-kind">${escapeHtml(type === 'track' ? 'Трек' : type === 'playlist' ? 'Плейлист' : type === 'album' ? 'Альбом' : 'Артист')}</span>
+    ${badge ? `<span class="search-entity-src">${badge}</span>` : ''}
+  `
+  return row
+}
+
+async function openSearchEntity(item) {
+  const type = String(item?.entityType || 'track').toLowerCase()
+  if (type === 'track' || !type) {
+    const track = sanitizeTrack(item)
+    queue = [track]
+    queueIndex = 0
+    queueScope = 'search'
+    await playTrackObj(track)
+    return
+  }
+  if (type === 'artist') {
+    const q = String(item?.title || item?.artist || '').trim()
+    if (!q) return
+    _searchFilter = 'tracks'
+    document.querySelectorAll('.nx-search-filter').forEach((btn) => {
+      btn.classList.toggle('active', btn.getAttribute('data-filter') === 'tracks')
+    })
+    const input = document.getElementById('search-input')
+    if (input) input.value = q
+    return searchTracks()
+  }
+  const url = String(item?.importUrl || '').trim()
+  if (!url || !window.api?.importPlaylistLink) {
+    showToast('Для этого результата нет ссылки импорта', true)
+    return
+  }
+  showToast('Импорт коллекции...')
+  const imported = await window.api.importPlaylistLink(url, {
+    yandex: String(getSettings()?.yandexToken || '').trim(),
+    vk: String(getSettings()?.vkToken || '').trim(),
+    spotify: String(getSettings()?.spotifyToken || '').trim(),
+  }).catch((e) => ({ ok: false, error: normalizeInvokeError(e) }))
+  if (!imported?.ok || !imported?.tracks?.length) {
+    showToast(imported?.error || 'Не удалось загрузить коллекцию', true)
+    return
+  }
+  const tracks = sanitizeTrackList(imported.tracks)
+  queue = tracks
+  queueIndex = 0
+  queueScope = 'search'
+  showToast(`${imported.name || 'Коллекция'}: ${tracks.length} треков`)
+  await playTrackObj(tracks[0])
+}
+window.openSearchEntity = openSearchEntity
+
 function renderResults(results) {
-  _lastSearchResults = sanitizeTrackList(results)
-  results = filterSearchResultsByCategory(_lastSearchResults)
+  _lastSearchResults = Array.isArray(results) ? results.slice() : []
   const container = document.getElementById('search-results')
   const meta = document.getElementById('search-results-meta')
   const countEl = document.getElementById('results-count')
   const srcEl = document.getElementById('results-source-label')
-  if (!results?.length) {
+  if (!container) return
+  if (!_lastSearchResults.length) {
     container.innerHTML = `<div class="empty-state"><div class="empty-icon"><svg class="ui-icon lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg></div><p>Ничего не найдено</p><small>Попробуй другой запрос или источник</small></div>`
     if (meta) meta.style.display = 'none'
     return
   }
-  queue = results; queueIndex = 0; queueScope = 'search'
-  if (meta) { meta.style.display = 'flex'; }
-  if (countEl) countEl.textContent = `${results.length} треков`
+  const tracksOnly = _lastSearchResults.filter((it) => !it?.entityType || it.entityType === 'track')
+  if (tracksOnly.length === _lastSearchResults.length) {
+    queue = sanitizeTrackList(tracksOnly)
+    queueIndex = 0
+    queueScope = 'search'
+  }
+  if (meta) meta.style.display = 'flex'
+  const kind = _lastSearchResults[0]?.entityType || 'track'
+  if (countEl) countEl.textContent = `${_lastSearchResults.length} ${searchEntityTypeLabel(kind)}`
   if (srcEl) srcEl.textContent = getSourceLabel()
   container.innerHTML = ''
-  results.forEach((track, i) => {
-    const el = makeTrackEl(track, true, false)
-    el.addEventListener('click', () => { queueIndex=i; playTrackObj(track) })
+  let trackQueueIdx = 0
+  _lastSearchResults.forEach((item, i) => {
+    const type = String(item?.entityType || 'track').toLowerCase()
+    if (type === 'track') {
+      const track = sanitizeTrack(item)
+      const el = makeTrackEl(track, true, false)
+      const qi = trackQueueIdx
+      trackQueueIdx += 1
+      el.addEventListener('click', () => {
+        queueIndex = qi
+        playTrackObj(track)
+      })
+      container.appendChild(el)
+      return
+    }
+    const el = makeSearchEntityEl(item)
+    el.addEventListener('click', () => openSearchEntity(item))
     container.appendChild(el)
   })
   try {

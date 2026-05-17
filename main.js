@@ -2484,18 +2484,123 @@ ipcMain.handle('yandex-validate-token', async (e, { token }) => {
   return { ok: true, login }
 })
 
-ipcMain.handle('yandex-search', async (e, { q, token }) => {
-  const r = await httpsGetJson('api.music.yandex.net', `/search?text=${encodeURIComponent(q)}&type=track&page=0`, {
-    'Authorization': `OAuth ${token}`, 'X-Yandex-Music-Client': 'WindowsPhone/3.20', 'User-Agent': 'Windows 10'
-  })
-  if (!r.body) throw new Error('РЇРЅРґРµРєСЃ: РїСѓСЃС‚РѕР№ РѕС‚РІРµС‚')
-  return (r.body.result?.tracks?.results || []).map(t => ({
-    title: t.title || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ',
-    artist: t.artists?.map(a => a.name).join(', ') || 'вЂ”',
+function ymCoverUrl(uri, size = '300x300') {
+  if (!uri) return null
+  return `https://${String(uri).replace('%%', size)}`
+}
+
+function mapYandexTrackRow(t) {
+  return {
+    entityType: 'track',
+    title: t.title || 'Без названия',
+    artist: t.artists?.map((a) => a.name).join(', ') || '—',
     url: null,
-    cover: t.coverUri ? 'https://' + t.coverUri.replace('%%', '300x300') : null,
-    bg: 'linear-gradient(135deg,#fc3f1d,#ff6534)', source: 'yandex', id: String(t.id)
-  }))
+    cover: ymCoverUrl(t.coverUri),
+    bg: 'linear-gradient(135deg,#fc3f1d,#ff6534)',
+    source: 'yandex',
+    id: String(t.id),
+  }
+}
+
+async function yandexSearchTyped(q, token, type = 'track') {
+  const headers = {
+    Authorization: `OAuth ${token}`,
+    'X-Yandex-Music-Client': 'WindowsPhone/3.20',
+    'User-Agent': 'Windows 10',
+  }
+  const rawType = String(type || 'track').toLowerCase()
+
+  if (rawType === 'all') {
+    const kinds = ['track', 'album', 'artist', 'playlist']
+    const chunks = await Promise.all(
+      kinds.map((k) => yandexSearchTyped(q, token, k).catch(() => [])),
+    )
+    return chunks.flat().slice(0, 80)
+  }
+
+  if (rawType === 'lyrics') {
+    const instant = await httpsGetJson(
+      'api.music.yandex.net',
+      `/search/instant/mixed?text=${encodeURIComponent(q)}&inputType=lyrics&limit=24`,
+      headers,
+      16000,
+    ).catch(() => ({ body: null }))
+    const instantTracks = Array.isArray(instant?.body?.result?.tracks?.results)
+      ? instant.body.result.tracks.results
+      : []
+    if (instantTracks.length) return instantTracks.map(mapYandexTrackRow)
+    const r = await httpsGetJson(
+      'api.music.yandex.net',
+      `/search?text=${encodeURIComponent(q)}&type=track&page=0`,
+      headers,
+    )
+    if (!r.body) throw new Error('Яндекс: пустой ответ')
+    return (r.body.result?.tracks?.results || []).map(mapYandexTrackRow)
+  }
+
+  const ymType =
+    rawType === 'tracks' ? 'track'
+      : rawType === 'playlists' ? 'playlist'
+        : rawType === 'albums' ? 'album'
+          : rawType === 'artists' ? 'artist'
+            : rawType
+
+  const r = await httpsGetJson(
+    'api.music.yandex.net',
+    `/search?text=${encodeURIComponent(q)}&type=${encodeURIComponent(ymType)}&page=0`,
+    headers,
+  )
+  if (!r.body) throw new Error('Яндекс: пустой ответ')
+  const result = r.body.result || {}
+
+  if (ymType === 'track') {
+    return (result.tracks?.results || []).map(mapYandexTrackRow)
+  }
+  if (ymType === 'album') {
+    return (result.albums?.results || []).map((a) => ({
+      entityType: 'album',
+      title: a.title || 'Альбом',
+      artist: a.artists?.map((x) => x.name).join(', ') || '—',
+      cover: ymCoverUrl(a.coverUri),
+      bg: 'linear-gradient(135deg,#fc3f1d,#ff6534)',
+      source: 'yandex',
+      id: `album:${a.id}`,
+      yandexAlbumId: String(a.id),
+      importUrl: `https://music.yandex.ru/album/${a.id}`,
+      trackCount: Number(a.trackCount || 0) || null,
+    }))
+  }
+  if (ymType === 'playlist') {
+    return (result.playlists?.results || []).map((p) => ({
+      entityType: 'playlist',
+      title: p.title || 'Плейлист',
+      artist: p.owner?.name || p.uid || '—',
+      cover: ymCoverUrl(p.cover?.uri || p.coverUri),
+      bg: 'linear-gradient(135deg,#fc3f1d,#ff6534)',
+      source: 'yandex',
+      id: `playlist:${p.kind || 'playlists'}:${p.owner?.uid || p.uid || ''}:${p.kind || ''}`,
+      importUrl: p.url || (p.owner?.uid && p.kind != null ? `https://music.yandex.ru/users/${p.owner.uid}/playlists/${p.kind}` : null),
+      trackCount: Number(p.trackCount || 0) || null,
+    }))
+  }
+  if (ymType === 'artist') {
+    return (result.artists?.results || []).map((a) => ({
+      entityType: 'artist',
+      title: a.name || 'Артист',
+      artist: a.name || '—',
+      cover: ymCoverUrl(a.cover?.uri || a.coverUri),
+      bg: 'linear-gradient(135deg,#fc3f1d,#ff6534)',
+      source: 'yandex',
+      id: `artist:${a.id}`,
+      yandexArtistId: String(a.id),
+      trackCount: Number(a.tracksCount || 0) || null,
+    }))
+  }
+  return []
+}
+
+ipcMain.handle('yandex-search', async (e, { q, token, type }) => {
+  return yandexSearchTyped(q, token, type || 'track')
 })
 
 function resolveYandexHelperCommand() {

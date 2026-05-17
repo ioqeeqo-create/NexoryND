@@ -14,7 +14,7 @@ contextBridge.exposeInMainWorld('api', {
   vkSearch: (q, token, allowSeleniumBridge) => ipcRenderer.invoke('vk-search', { q, token, allowSeleniumBridge: Boolean(allowSeleniumBridge) }),
   vkValidateToken: (token) => ipcRenderer.invoke('vk-validate-token', { token }),
   yandexValidateToken: (token) => ipcRenderer.invoke('yandex-validate-token', { token }),
-  yandexSearch: (q, token) => ipcRenderer.invoke('yandex-search', { q, token }),
+  yandexSearch: (q, token, type) => ipcRenderer.invoke('yandex-search', { q, token, type }),
   serverSearch: (q, settings = {}) => ipcRenderer.invoke('server-search', { q, settings }),
   importPlaylistLink: (url, tokens = {}) => ipcRenderer.invoke('import-playlist-link', { url, tokens }),
   audiusSearch: (q) => ipcRenderer.invoke('audius-search', { q }),
