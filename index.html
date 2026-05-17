@@ -247,7 +247,10 @@
             </div>
             <div class="home-clone-progress-wrap">
               <span id="home-clone-time-cur">0:00</span>
-              <input type="range" id="home-clone-progress" min="0" max="1" step="0.001" value="0" oninput="seekTo(this.value)">
+              <div class="home-slider-track-host" id="home-slider-track-host">
+                <canvas class="home-slider-wave-canvas hidden" id="home-clone-progress-wave" width="640" height="28" aria-hidden="true"></canvas>
+                <input type="range" id="home-clone-progress" min="0" max="1" step="0.001" value="0" oninput="seekTo(this.value)">
+              </div>
               <span id="home-clone-time-total">0:00</span>
             </div>
             <div class="home-visualizer-wrap" id="home-visualizer-wrap">
@@ -1439,7 +1442,10 @@
 
   <div class="pm-progress-wrap">
     <span class="pm-time" id="pm-time-current">0:00</span>
-    <input type="range" id="pm-progress" class="pm-progress" value="0" step="0.001" max="1" oninput="seekTo(this.value)">
+    <div class="home-slider-track-host" id="pm-slider-track-host">
+      <canvas class="home-slider-wave-canvas hidden" id="pm-progress-wave" width="640" height="28" aria-hidden="true"></canvas>
+      <input type="range" id="pm-progress" class="pm-progress" value="0" step="0.001" max="1" oninput="seekTo(this.value)">
+    </div>
     <span class="pm-time" id="pm-time-total">0:00</span>
   </div>
 
@@ -1708,7 +1714,7 @@
     <div class="flow-game-sleep-title">Sleep mode</div>
     <div class="flow-game-sleep-sub">Только воспроизведение · верни Nexory на экран</div>
   </div>
-  <script src="renderer.js?v=bceb0c0fda07-mp94bqbs"></script>
+  <script src="renderer.js?v=6534498f1b85-mp9n41i7"></script>
 </body>
 </html>
 

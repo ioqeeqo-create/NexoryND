@@ -1562,6 +1562,79 @@ function setHomeSliderStyle(style) {
   applyHomeSliderStyle()
 }
 
+let _homeWaveSliderResizeBound = false
+const _homeWaveSliderBars = new Map()
+
+function getHomeWaveSliderBars(key) {
+  const k = String(key || 'default')
+  if (_homeWaveSliderBars.has(k)) return _homeWaveSliderBars.get(k)
+  const bars = 56
+  const data = new Uint8Array(bars)
+  for (let i = 0; i < bars; i++) {
+    const t = i * 0.37 + k.length * 0.11
+    data[i] = Math.floor(72 + Math.abs(Math.sin(t)) * 118 + Math.sin(t * 2.1) * 24)
+  }
+  _homeWaveSliderBars.set(k, data)
+  return data
+}
+
+function drawHomeWaveSliderCanvas(canvas, progress, trackKey) {
+  if (!canvas) return
+  const host = canvas.parentElement
+  const wCss = Math.max(120, Math.floor(host?.clientWidth || canvas.clientWidth || 320))
+  const hCss = 28
+  const dpr = Math.min(window.devicePixelRatio || 1, 2)
+  const w = Math.floor(wCss * dpr)
+  const h = Math.floor(hCss * dpr)
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w
+    canvas.height = h
+  }
+  let ctx = canvas._flowWave2d
+  if (!ctx) {
+    ctx = canvas.getContext('2d', { alpha: true })
+    canvas._flowWave2d = ctx
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  ctx.clearRect(0, 0, wCss, hCss)
+  const bars = getHomeWaveSliderBars(trackKey).length
+  const data = getHomeWaveSliderBars(trackKey)
+  const ratio = Math.max(0, Math.min(1, Number(progress) || 0))
+  const pad = 2
+  const bw = (wCss - pad * 2) / bars
+  for (let i = 0; i < bars; i++) {
+    const bh = 4 + (data[i] / 255) * (hCss - 8)
+    const x = pad + i * bw
+    const y = hCss - bh
+    const played = (i + 0.5) / bars <= ratio
+    ctx.fillStyle = played ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.28)'
+    ctx.fillRect(x, y, Math.max(2, bw - 1.2), bh)
+  }
+  const px = pad + ratio * (wCss - pad * 2)
+  ctx.fillStyle = '#fff'
+  ctx.fillRect(px - 1, 2, 2, hCss - 4)
+}
+
+function syncHomeWaveSliderCanvases(progress) {
+  const style = normalizeHomeSliderStyle(getVisual().homeSliderStyle)
+  const isWave = style === 'wave'
+  const ratio = Math.max(0, Math.min(1, Number(progress) || 0))
+  const trackKey = currentTrack ? `${currentTrack.source || ''}:${currentTrack.id || currentTrack.title || ''}` : 'idle'
+  for (const [canvasId, inputId] of [
+    ['home-clone-progress-wave', 'home-clone-progress'],
+    ['pm-progress-wave', 'pm-progress'],
+  ]) {
+    const canvas = document.getElementById(canvasId)
+    const input = document.getElementById(inputId)
+    if (!canvas || !input) continue
+    canvas.classList.toggle('hidden', !isWave)
+    input.classList.toggle('home-slider-wave-active', isWave)
+    if (!isWave) continue
+    const p = Number.isFinite(progress) ? ratio : Number(input.value) || 0
+    drawHomeWaveSliderCanvas(canvas, p, trackKey)
+  }
+}
+
 function applyHomeSliderStyle() {
   const v = getVisual()
   const style = normalizeHomeSliderStyle(v.homeSliderStyle)
@@ -1569,7 +1642,7 @@ function applyHomeSliderStyle() {
     const el = document.getElementById(id)
     if (!el) continue
     el.dataset.sliderStyle = style
-    el.classList.remove('home-slider-wave', 'home-slider-ios', 'home-slider-line')
+    el.classList.remove('home-slider-wave', 'home-slider-ios', 'home-slider-line', 'home-slider-wave-active')
     if (style === 'wave') el.classList.add('home-slider-wave')
     else if (style === 'ios') el.classList.add('home-slider-ios')
     else el.classList.add('home-slider-line')
@@ -1589,7 +1662,17 @@ function applyHomeSliderStyle() {
   try { startSliderPreviewLoop() } catch (_) {}
   try {
     if (typeof syncHomeClonePlaybackProgress === 'function') syncHomeClonePlaybackProgress()
+    else syncHomeWaveSliderCanvases(0)
   } catch (_) {}
+  if (!_homeWaveSliderResizeBound) {
+    _homeWaveSliderResizeBound = true
+    window.addEventListener('resize', () => {
+      try {
+        const prog = document.getElementById('home-clone-progress')
+        syncHomeWaveSliderCanvases(prog ? Number(prog.value) : 0)
+      } catch (_) {}
+    })
+  }
 }
 
 let _sliderPreviewRaf = 0
@@ -11628,6 +11711,9 @@ function syncHomeClonePlaybackProgress() {
   try {
     if (typeof syncHomeNxCoverModeProgress === 'function') syncHomeNxCoverModeProgress()
   } catch (_) {}
+  try {
+    if (typeof syncHomeWaveSliderCanvases === 'function') syncHomeWaveSliderCanvases(ratio)
+  } catch (_) {}
 }
 
 let _trackDownloadBusy = false
@@ -13383,6 +13469,9 @@ function seekTo(val) {
     return
   }
   if (audio.duration) audio.currentTime = val * audio.duration
+  try {
+    if (typeof syncHomeWaveSliderCanvases === 'function') syncHomeWaveSliderCanvases(Number(val))
+  } catch (_) {}
 }
 function setVolume(val) {
   const slider = Math.max(0, Math.min(1, Number(val) || 0))

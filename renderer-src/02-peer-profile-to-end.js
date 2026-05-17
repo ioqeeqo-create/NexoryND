@@ -4780,6 +4780,9 @@ function syncHomeClonePlaybackProgress() {
   try {
     if (typeof syncHomeNxCoverModeProgress === 'function') syncHomeNxCoverModeProgress()
   } catch (_) {}
+  try {
+    if (typeof syncHomeWaveSliderCanvases === 'function') syncHomeWaveSliderCanvases(ratio)
+  } catch (_) {}
 }
 
 let _trackDownloadBusy = false
@@ -6535,6 +6538,9 @@ function seekTo(val) {
     return
   }
   if (audio.duration) audio.currentTime = val * audio.duration
+  try {
+    if (typeof syncHomeWaveSliderCanvases === 'function') syncHomeWaveSliderCanvases(Number(val))
+  } catch (_) {}
 }
 function setVolume(val) {
   const slider = Math.max(0, Math.min(1, Number(val) || 0))

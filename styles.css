@@ -14043,3 +14043,70 @@ body.nexory-desk .settings-category-panel .glass-card {
   width: 16px !important;
   height: 16px !important;
 }
+
+/* v291 — canvas wave slider (matches settings preview) */
+.home-slider-track-host {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  display: flex;
+  align-items: center;
+}
+.home-slider-wave-canvas {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 100%;
+  height: 28px;
+  pointer-events: none;
+  z-index: 0;
+}
+.home-slider-track-host input[type="range"] {
+  position: relative;
+  z-index: 1;
+  width: 100% !important;
+  background: transparent !important;
+}
+.home-clone-progress-wrap .home-slider-track-host,
+.pm-progress-wrap .home-slider-track-host {
+  grid-column: auto;
+}
+#home-clone-progress.home-slider-wave-active,
+#pm-progress.home-slider-wave-active {
+  height: 28px !important;
+}
+#home-clone-progress.home-slider-wave-active::-webkit-slider-runnable-track,
+#pm-progress.home-slider-wave-active::-webkit-slider-runnable-track {
+  background: transparent !important;
+  height: 28px !important;
+}
+#home-clone-progress.home-slider-wave-active::-moz-range-track,
+#pm-progress.home-slider-wave-active::-moz-range-track {
+  background: transparent !important;
+  height: 28px !important;
+}
+#home-clone-progress.home-slider-wave-active::-moz-range-progress,
+#pm-progress.home-slider-wave-active::-moz-range-progress {
+  background: transparent !important;
+}
+#home-clone-progress.home-slider-wave-active::-webkit-slider-thumb,
+#pm-progress.home-slider-wave-active::-webkit-slider-thumb {
+  opacity: 0 !important;
+  width: 2px !important;
+  height: 28px !important;
+  border-radius: 0 !important;
+  margin-top: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+#home-clone-progress.home-slider-wave-active::-moz-range-thumb,
+#pm-progress.home-slider-wave-active::-moz-range-thumb {
+  opacity: 0 !important;
+  width: 2px !important;
+  height: 28px !important;
+  border: none !important;
+  background: transparent !important;
+}
