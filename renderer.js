@@ -1565,7 +1565,7 @@ function setHomeSliderStyle(style) {
 let _homeWaveSliderResizeBound = false
 const _homeWaveSliderBars = new Map()
 const _homeWavePeaksCache = new Map()
-const _homeWavePeaksPending = new Map()
+let _homeWavePeaksAccum = null
 
 function getTrackWaveformCacheKey(track) {
   if (!track) return 'idle'
@@ -1601,67 +1601,37 @@ function getLiveAnalyserWavePeaks(bars = 96) {
   return data
 }
 
-async function decodeWaveformPeaksFromUrl(url, barCount = 96) {
-  const res = await fetch(url, { cache: 'force-cache' })
-  if (!res.ok) throw new Error(`waveform fetch ${res.status}`)
-  const ab = await res.arrayBuffer()
-  const ac = new (window.AudioContext || window.webkitAudioContext)()
-  try {
-    const buf = await ac.decodeAudioData(ab.slice(0))
-    const ch0 = buf.getChannelData(0)
-    const ch1 = buf.numberOfChannels > 1 ? buf.getChannelData(1) : null
-    const len = ch0.length
-    const block = Math.max(1, Math.floor(len / barCount))
-    const peaks = new Uint8Array(barCount)
-    for (let i = 0; i < barCount; i++) {
-      const start = i * block
-      const end = Math.min(len, start + block)
-      let max = 0
-      for (let j = start; j < end; j++) {
-        let v = Math.abs(ch0[j])
-        if (ch1) v = Math.max(v, Math.abs(ch1[j]))
-        if (v > max) max = v
-      }
-      peaks[i] = Math.max(28, Math.min(255, Math.floor(max * 255 * 1.45)))
-    }
-    return peaks
-  } finally {
-    try { await ac.close() } catch (_) {}
+function accumulateAnalyserWavePeaks(trackKey, bars = 96) {
+  const live = getLiveAnalyserWavePeaks(bars)
+  if (!live) return false
+  if (!_homeWavePeaksAccum || _homeWavePeaksAccum.key !== trackKey) {
+    const seed = buildProceduralWavePeaks(bars, trackKey)
+    _homeWavePeaksAccum = { key: trackKey, data: seed.slice(), frames: 0 }
   }
+  const acc = _homeWavePeaksAccum
+  for (let i = 0; i < bars; i++) {
+    acc.data[i] = Math.min(255, Math.max(acc.data[i], live[i]))
+  }
+  acc.frames += 1
+  _homeWaveSliderBars.set(trackKey, acc.data)
+  if (acc.frames === 1 || acc.frames % 4 === 0) {
+    _homeWavePeaksCache.set(trackKey, acc.data.slice())
+  }
+  return true
 }
 
-function ensureTrackWaveformPeaks(track, url) {
+/** Без decodeAudioData/fetch — иначе OOM/краш на длинных треках. Пики накапливаются из analyser во время play. */
+function ensureTrackWaveformPeaks(track) {
   const key = getTrackWaveformCacheKey(track)
   if (_homeWavePeaksCache.has(key)) {
     _homeWaveSliderBars.set(key, _homeWavePeaksCache.get(key))
     try { syncHomeWaveSliderCanvases() } catch (_) {}
     return
   }
-  const src = String(url || audio?.currentSrc || audio?.src || '').trim()
-  if (!src) return
-  if (_homeWavePeaksPending.has(key)) return
-  _homeWaveSliderBars.set(key, buildProceduralWavePeaks(96, key))
-  const job = decodeWaveformPeaksFromUrl(src, 96)
-    .then((peaks) => {
-      _homeWavePeaksCache.set(key, peaks)
-      _homeWaveSliderBars.set(key, peaks)
-      if (currentTrack && getTrackWaveformCacheKey(currentTrack) === key) {
-        try { syncHomeWaveSliderCanvases() } catch (_) {}
-      }
-      return peaks
-    })
-    .catch(() => {
-      const live = getLiveAnalyserWavePeaks(96)
-      const peaks = live || buildProceduralWavePeaks(96, key)
-      _homeWaveSliderBars.set(key, peaks)
-      if (currentTrack && getTrackWaveformCacheKey(currentTrack) === key) {
-        try { syncHomeWaveSliderCanvases() } catch (_) {}
-      }
-    })
-    .finally(() => {
-      _homeWavePeaksPending.delete(key)
-    })
-  _homeWavePeaksPending.set(key, job)
+  const seed = buildProceduralWavePeaks(96, key)
+  _homeWaveSliderBars.set(key, seed)
+  _homeWavePeaksAccum = { key, data: seed.slice(), frames: 0 }
+  try { syncHomeWaveSliderCanvases() } catch (_) {}
 }
 
 function getHomeWaveSliderBars(key) {
@@ -1732,9 +1702,8 @@ function syncHomeWaveSliderCanvases(progress) {
   const isWave = style === 'wave'
   const ratio = Math.max(0, Math.min(1, Number(progress) || 0))
   const trackKey = getTrackWaveformCacheKey(currentTrack)
-  if (isWave && currentTrack && !_homeWavePeaksCache.has(trackKey)) {
-    const live = getLiveAnalyserWavePeaks(96)
-    if (live) _homeWaveSliderBars.set(trackKey, live)
+  if (isWave && currentTrack && !audio.paused) {
+    try { accumulateAnalyserWavePeaks(trackKey, 96) } catch (_) {}
   }
   for (const [canvasId, inputId] of [
     ['home-clone-progress-wave', 'home-clone-progress'],
@@ -1784,9 +1753,7 @@ function applyHomeSliderStyle() {
   try { drawSliderPreviewFrame() } catch (_) {}
   try { startSliderPreviewLoop() } catch (_) {}
   try {
-    if (style === 'wave' && currentTrack) {
-      ensureTrackWaveformPeaks(currentTrack, audio?.currentSrc || audio?.src || '')
-    }
+    if (style === 'wave' && currentTrack) ensureTrackWaveformPeaks(currentTrack)
   } catch (_) {}
   try {
     if (typeof syncHomeClonePlaybackProgress === 'function') syncHomeClonePlaybackProgress()
@@ -13232,7 +13199,7 @@ async function playTrackObj(track, opts = {}) {
     setStage('Старт воспроизведения…')
     audio.src = url
     try {
-      if (typeof ensureTrackWaveformPeaks === 'function' && track) ensureTrackWaveformPeaks(track, url)
+      if (typeof ensureTrackWaveformPeaks === 'function' && track) ensureTrackWaveformPeaks(track)
     } catch (_) {}
     const guestRoomBuffer =
       Boolean(opts?.remoteSync) && Boolean(_roomState?.roomId) && !_roomState?.host
