@@ -1579,6 +1579,8 @@ function applyHomeSliderStyle() {
   if (b3) b3.classList.toggle('active', style === 'ios')
   const preview = document.getElementById('vs-slider-preview')
   if (preview) preview.dataset.sliderStyle = style
+  document.body.classList.remove('flow-slider-style-line', 'flow-slider-style-wave', 'flow-slider-style-ios')
+  document.body.classList.add('flow-slider-style-' + style)
   try { drawSliderPreviewFrame() } catch (_) {}
   try { startSliderPreviewLoop() } catch (_) {}
 }

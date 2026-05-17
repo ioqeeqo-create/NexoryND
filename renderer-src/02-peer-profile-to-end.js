@@ -232,7 +232,7 @@ function updateYandexWaveDislikeButtonsVisible() {
     String(currentTrack.source || '').toLowerCase() === 'yandex' &&
     Boolean(currentTrack?.yandexRotor?.batchId)
   )
-  ;['player-wave-dislike-btn', 'pm-wave-dislike-btn', 'pm-dislike-btn', 'home-wave-dislike-btn'].forEach((id) => {
+  ;['player-wave-dislike-btn', 'pm-wave-dislike-btn', 'pm-dislike-btn', 'pm-vol-dislike-btn', 'home-wave-dislike-btn', 'home-nx-vol-dislike-btn'].forEach((id) => {
     const b = document.getElementById(id)
     if (b) b.classList.toggle('hidden', !show)
   })
@@ -4769,13 +4769,11 @@ function syncHomeClonePlaybackProgress() {
   tot.textContent = fmtTime(audio.duration)
   const ratio = audio.duration ? audio.currentTime / audio.duration : 0
   prog.value = ratio
-  const nxLine = document.getElementById('page-home')?.classList.contains('media-queue-off')
-  if (!nxLine) {
-    const fill = ratio * 100
-    prog.style.setProperty('--progress-fill', `${Math.max(0, Math.min(100, fill))}%`)
-  } else {
-    prog.style.removeProperty('--progress-fill')
-  }
+  const fill = ratio * 100
+  const fillPct = `${Math.max(0, Math.min(100, fill))}%`
+  prog.style.setProperty('--progress-fill', fillPct)
+  const pmProg = document.getElementById('pm-progress')
+  if (pmProg) pmProg.style.setProperty('--progress-fill', fillPct)
   try {
     if (typeof syncHomeNxCoverModeProgress === 'function') syncHomeNxCoverModeProgress()
   } catch (_) {}
@@ -7350,8 +7348,12 @@ function updatePlayerLikeBtn() {
     btn.classList.toggle('liked', liked)
   }
   const pmCoverBtn = document.getElementById('pm-cover-like-btn')
+  const pmVolLike = document.getElementById('pm-vol-like-btn')
   const homeNxBtn = document.getElementById('home-nx-like-btn')
+  const homeVolLike = document.getElementById('home-nx-vol-like-btn')
   if (pmCoverBtn) { pmCoverBtn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; pmCoverBtn.classList.toggle('liked', liked) }
+  if (pmVolLike) { pmVolLike.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; pmVolLike.classList.toggle('liked', liked) }
+  if (homeVolLike) { homeVolLike.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; homeVolLike.classList.toggle('liked', liked) }
   if (homeNxBtn) { homeNxBtn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; homeNxBtn.classList.toggle('liked', liked) }
 }
 
