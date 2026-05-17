@@ -1564,22 +1564,136 @@ function setHomeSliderStyle(style) {
 
 let _homeWaveSliderResizeBound = false
 const _homeWaveSliderBars = new Map()
+const _homeWavePeaksCache = new Map()
+const _homeWavePeaksPending = new Map()
+
+function getTrackWaveformCacheKey(track) {
+  if (!track) return 'idle'
+  return `${track.source || ''}:${track.id || track.url || track.title || ''}`
+}
+
+function buildProceduralWavePeaks(bars = 96, seed = 0) {
+  const data = new Uint8Array(bars)
+  const s = String(seed || 'x')
+  for (let i = 0; i < bars; i++) {
+    const t = i * 0.27 + s.length * 0.13
+    data[i] = Math.floor(48 + Math.abs(Math.sin(t)) * 150 + Math.sin(t * 2.4) * 32)
+  }
+  return data
+}
+
+function getLiveAnalyserWavePeaks(bars = 96) {
+  if (!_analyser || !_freqData) return null
+  try {
+    _analyser.getByteFrequencyData(_freqData)
+  } catch (_) {
+    return null
+  }
+  const data = new Uint8Array(bars)
+  const n = _freqData.length
+  for (let i = 0; i < bars; i++) {
+    const a = Math.floor((i / bars) * n)
+    const b = Math.min(n, Math.floor(((i + 1) / bars) * n))
+    let max = 0
+    for (let j = a; j < b; j++) max = Math.max(max, _freqData[j])
+    data[i] = Math.max(32, Math.min(255, Math.floor(max * 1.15)))
+  }
+  return data
+}
+
+async function decodeWaveformPeaksFromUrl(url, barCount = 96) {
+  const res = await fetch(url, { cache: 'force-cache' })
+  if (!res.ok) throw new Error(`waveform fetch ${res.status}`)
+  const ab = await res.arrayBuffer()
+  const ac = new (window.AudioContext || window.webkitAudioContext)()
+  try {
+    const buf = await ac.decodeAudioData(ab.slice(0))
+    const ch0 = buf.getChannelData(0)
+    const ch1 = buf.numberOfChannels > 1 ? buf.getChannelData(1) : null
+    const len = ch0.length
+    const block = Math.max(1, Math.floor(len / barCount))
+    const peaks = new Uint8Array(barCount)
+    for (let i = 0; i < barCount; i++) {
+      const start = i * block
+      const end = Math.min(len, start + block)
+      let max = 0
+      for (let j = start; j < end; j++) {
+        let v = Math.abs(ch0[j])
+        if (ch1) v = Math.max(v, Math.abs(ch1[j]))
+        if (v > max) max = v
+      }
+      peaks[i] = Math.max(28, Math.min(255, Math.floor(max * 255 * 1.45)))
+    }
+    return peaks
+  } finally {
+    try { await ac.close() } catch (_) {}
+  }
+}
+
+function ensureTrackWaveformPeaks(track, url) {
+  const key = getTrackWaveformCacheKey(track)
+  if (_homeWavePeaksCache.has(key)) {
+    _homeWaveSliderBars.set(key, _homeWavePeaksCache.get(key))
+    try { syncHomeWaveSliderCanvases() } catch (_) {}
+    return
+  }
+  const src = String(url || audio?.currentSrc || audio?.src || '').trim()
+  if (!src) return
+  if (_homeWavePeaksPending.has(key)) return
+  _homeWaveSliderBars.set(key, buildProceduralWavePeaks(96, key))
+  const job = decodeWaveformPeaksFromUrl(src, 96)
+    .then((peaks) => {
+      _homeWavePeaksCache.set(key, peaks)
+      _homeWaveSliderBars.set(key, peaks)
+      if (currentTrack && getTrackWaveformCacheKey(currentTrack) === key) {
+        try { syncHomeWaveSliderCanvases() } catch (_) {}
+      }
+      return peaks
+    })
+    .catch(() => {
+      const live = getLiveAnalyserWavePeaks(96)
+      const peaks = live || buildProceduralWavePeaks(96, key)
+      _homeWaveSliderBars.set(key, peaks)
+      if (currentTrack && getTrackWaveformCacheKey(currentTrack) === key) {
+        try { syncHomeWaveSliderCanvases() } catch (_) {}
+      }
+    })
+    .finally(() => {
+      _homeWavePeaksPending.delete(key)
+    })
+  _homeWavePeaksPending.set(key, job)
+}
 
 function getHomeWaveSliderBars(key) {
   const k = String(key || 'default')
   if (_homeWaveSliderBars.has(k)) return _homeWaveSliderBars.get(k)
-  const bars = 72
-  const data = new Uint8Array(bars)
-  for (let i = 0; i < bars; i++) data[i] = 200
+  const data = buildProceduralWavePeaks(96, k)
   _homeWaveSliderBars.set(k, data)
   return data
+}
+
+function drawWaveBarPill(ctx, x, y, w, h, r) {
+  const rr = Math.min(r, w * 0.5, h * 0.5)
+  if (h < 1 || w < 1) return
+  ctx.beginPath()
+  ctx.moveTo(x + rr, y)
+  ctx.lineTo(x + w - rr, y)
+  ctx.quadraticCurveTo(x + w, y, x + w, y + rr)
+  ctx.lineTo(x + w, y + h - rr)
+  ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h)
+  ctx.lineTo(x + rr, y + h)
+  ctx.quadraticCurveTo(x, y + h, x, y + h - rr)
+  ctx.lineTo(x, y + rr)
+  ctx.quadraticCurveTo(x, y, x + rr, y)
+  ctx.closePath()
+  ctx.fill()
 }
 
 function drawHomeWaveSliderCanvas(canvas, progress, trackKey) {
   if (!canvas) return
   const host = canvas.parentElement
   const wCss = Math.max(120, Math.floor(host?.clientWidth || canvas.clientWidth || 320))
-  const hCss = 22
+  const hCss = 44
   const dpr = Math.min(window.devicePixelRatio || 1, 2)
   const w = Math.floor(wCss * dpr)
   const h = Math.floor(hCss * dpr)
@@ -1594,31 +1708,34 @@ function drawHomeWaveSliderCanvas(canvas, progress, trackKey) {
   }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   ctx.clearRect(0, 0, wCss, hCss)
-  const bars = getHomeWaveSliderBars(trackKey).length
+  const data = getHomeWaveSliderBars(trackKey)
+  const bars = data.length
   const ratio = Math.max(0, Math.min(1, Number(progress) || 0))
-  const pad = 3
+  const pad = 2
+  const mid = hCss * 0.5
   const bw = (wCss - pad * 2) / bars
-  const barW = Math.max(1.5, Math.min(3, bw - 1.2))
-  const bh = 4
-  const y = Math.round((hCss - bh) * 0.5)
+  const barW = Math.max(2, Math.min(4.5, bw * 0.72))
+  const maxHalf = mid - 4
   for (let i = 0; i < bars; i++) {
+    const norm = data[i] / 255
+    const halfH = 2 + norm * maxHalf
     const x = pad + i * bw + (bw - barW) * 0.5
     const center = (i + 0.5) / bars
     const played = center <= ratio
-    const alpha = played ? 0.92 : 0.28
-    ctx.fillStyle = `rgba(255,255,255,${alpha})`
-    ctx.fillRect(x, y, barW, bh)
+    ctx.fillStyle = played ? 'rgba(255,255,255,0.96)' : 'rgba(255,255,255,0.28)'
+    drawWaveBarPill(ctx, x, mid - halfH, barW, halfH * 2, barW * 0.5)
   }
-  const px = pad + ratio * (wCss - pad * 2)
-  ctx.fillStyle = 'rgba(255,255,255,0.95)'
-  ctx.fillRect(Math.round(px), y - 1, 1, bh + 2)
 }
 
 function syncHomeWaveSliderCanvases(progress) {
   const style = normalizeHomeSliderStyle(getVisual().homeSliderStyle)
   const isWave = style === 'wave'
   const ratio = Math.max(0, Math.min(1, Number(progress) || 0))
-  const trackKey = currentTrack ? `${currentTrack.source || ''}:${currentTrack.id || currentTrack.title || ''}` : 'idle'
+  const trackKey = getTrackWaveformCacheKey(currentTrack)
+  if (isWave && currentTrack && !_homeWavePeaksCache.has(trackKey)) {
+    const live = getLiveAnalyserWavePeaks(96)
+    if (live) _homeWaveSliderBars.set(trackKey, live)
+  }
   for (const [canvasId, inputId] of [
     ['home-clone-progress-wave', 'home-clone-progress'],
     ['pm-progress-wave', 'pm-progress'],
@@ -1645,6 +1762,7 @@ function applyHomeSliderStyle() {
     el.dataset.sliderStyle = style
     el.classList.remove('home-slider-wave', 'home-slider-ios', 'home-slider-line', 'home-slider-wave-active')
     if (style === 'wave') el.classList.add('home-slider-wave-active')
+    else if (style === 'ios') el.classList.add('home-slider-ios')
     el.style.removeProperty('background')
   }
   const b1 = document.getElementById('slider-style-line')
@@ -1665,6 +1783,11 @@ function applyHomeSliderStyle() {
   if (pmWrap) pmWrap.classList.toggle('flow-slider-host--wave', style === 'wave')
   try { drawSliderPreviewFrame() } catch (_) {}
   try { startSliderPreviewLoop() } catch (_) {}
+  try {
+    if (style === 'wave' && currentTrack) {
+      ensureTrackWaveformPeaks(currentTrack, audio?.currentSrc || audio?.src || '')
+    }
+  } catch (_) {}
   try {
     if (typeof syncHomeClonePlaybackProgress === 'function') syncHomeClonePlaybackProgress()
     else syncHomeWaveSliderCanvases(0)
@@ -13108,6 +13231,9 @@ async function playTrackObj(track, opts = {}) {
     if (isStale()) throw new Error('stale playback request')
     setStage('Старт воспроизведения…')
     audio.src = url
+    try {
+      if (typeof ensureTrackWaveformPeaks === 'function' && track) ensureTrackWaveformPeaks(track, url)
+    } catch (_) {}
     const guestRoomBuffer =
       Boolean(opts?.remoteSync) && Boolean(_roomState?.roomId) && !_roomState?.host
     if (guestRoomBuffer) {

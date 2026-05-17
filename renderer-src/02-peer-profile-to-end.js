@@ -6169,6 +6169,9 @@ async function playTrackObj(track, opts = {}) {
     if (isStale()) throw new Error('stale playback request')
     setStage('Старт воспроизведения…')
     audio.src = url
+    try {
+      if (typeof ensureTrackWaveformPeaks === 'function' && track) ensureTrackWaveformPeaks(track, url)
+    } catch (_) {}
     const guestRoomBuffer =
       Boolean(opts?.remoteSync) && Boolean(_roomState?.roomId) && !_roomState?.host
     if (guestRoomBuffer) {
