@@ -1587,6 +1587,9 @@ function applyHomeSliderStyle() {
   document.body.classList.add('flow-slider-style-' + style)
   try { drawSliderPreviewFrame() } catch (_) {}
   try { startSliderPreviewLoop() } catch (_) {}
+  try {
+    if (typeof syncHomeClonePlaybackProgress === 'function') syncHomeClonePlaybackProgress()
+  } catch (_) {}
 }
 
 let _sliderPreviewRaf = 0

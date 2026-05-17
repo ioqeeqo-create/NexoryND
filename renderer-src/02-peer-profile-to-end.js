@@ -4773,11 +4773,94 @@ function syncHomeClonePlaybackProgress() {
   const fillPct = `${Math.max(0, Math.min(100, fill))}%`
   prog.style.setProperty('--progress-fill', fillPct)
   const pmProg = document.getElementById('pm-progress')
-  if (pmProg) pmProg.style.setProperty('--progress-fill', fillPct)
+  if (pmProg) {
+    pmProg.value = ratio
+    pmProg.style.setProperty('--progress-fill', fillPct)
+  }
   try {
     if (typeof syncHomeNxCoverModeProgress === 'function') syncHomeNxCoverModeProgress()
   } catch (_) {}
 }
+
+let _trackDownloadBusy = false
+
+function sanitizeDownloadFileBase(name = '') {
+  return String(name || 'track')
+    .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 180) || 'track'
+}
+
+async function resolveTrackRemoteStreamUrl(track) {
+  if (!track) return ''
+  let streamUrl = String(track.url || '').trim()
+  const src = String(track.source || '').toLowerCase()
+  if (src === 'yandex' && !/^https?:\/\//i.test(streamUrl) && track.id && window.api?.yandexStream) {
+    const ymTok = String(getSettings()?.yandexToken || '').trim()
+    if (!ymTok) throw new Error('Яндекс: укажи токен в настройках')
+    const ymRes = await window.api.yandexStream(String(track.id), ymTok).catch((e) => ({ ok: false, error: e?.message || String(e) }))
+    if (!ymRes?.ok || !ymRes?.url) throw new Error(ymRes?.error || 'не удалось получить поток')
+    streamUrl = String(ymRes.url)
+  }
+  if (src === 'soundcloud' && track.scTranscoding && window.api?.scStream) {
+    const res = await window.api.scStream(track.scTranscoding, track.scClientId).catch((e) => ({ ok: false, error: e?.message || String(e) }))
+    if (!res?.ok || !res?.url) throw new Error(res?.error || 'SoundCloud: ошибка потока')
+    streamUrl = String(res.url)
+  }
+  if (src === 'youtube' && track.ytId && window.api?.youtubeStream) {
+    if (!/^https?:\/\//i.test(streamUrl)) {
+      const res = await window.api
+        .youtubeStream(track.ytId, typeof _ytInstanceCache !== 'undefined' ? _ytInstanceCache : null, { forceFresh: true })
+        .catch((e) => ({ ok: false, error: e?.message || String(e) }))
+      if (!res?.ok || !res?.url) throw new Error(res?.error || 'YouTube: ошибка потока')
+      streamUrl = String(res.url)
+    }
+  }
+  if (!streamUrl) throw new Error('Нет URL потока')
+  return streamUrl
+}
+
+async function downloadCurrentTrack() {
+  if (_trackDownloadBusy) return
+  const track = currentTrack
+  if (!track) {
+    showToast('Нет активного трека', true)
+    return
+  }
+  if (!window.api?.downloadTrackToFile) {
+    showToast('Скачивание недоступно', true)
+    return
+  }
+  const btn = document.getElementById('home-nx-download-btn')
+  _trackDownloadBusy = true
+  if (btn) btn.classList.add('is-busy')
+  try {
+    let srcUrl = ''
+    const audioSrc = String(audio?.currentSrc || audio?.src || '')
+    if (/^file:\/\//i.test(audioSrc)) {
+      srcUrl = audioSrc
+    } else {
+      const cacheKey = typeof getStreamCacheKey === 'function' ? getStreamCacheKey(track) : ''
+      if (cacheKey && window.api?.streamCacheLookup) {
+        const hit = await window.api.streamCacheLookup({ cacheKey }).catch(() => ({ hit: false }))
+        if (hit?.hit && hit.url) srcUrl = String(hit.url)
+      }
+      if (!srcUrl) srcUrl = await resolveTrackRemoteStreamUrl(track)
+    }
+    const defaultName = sanitizeDownloadFileBase(`${track.artist || 'Artist'} - ${track.title || 'Track'}`)
+    const res = await window.api.downloadTrackToFile({ url: srcUrl, defaultName })
+    if (res?.canceled) return
+    if (!res?.ok) throw new Error(res?.error || 'ошибка сохранения')
+    showToast(`Сохранено: ${res.fileName || 'файл'}`)
+  } catch (e) {
+    showToast('Скачивание: ' + sanitizeDisplayText(e?.message || String(e)), true)
+  } finally {
+    _trackDownloadBusy = false
+    if (btn) btn.classList.remove('is-busy')
+  }
+}
+window.downloadCurrentTrack = downloadCurrentTrack
 
 function syncHomeNxFooter() {
   const vol = document.getElementById('home-nx-volume')

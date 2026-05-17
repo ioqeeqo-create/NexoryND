@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage } = require('electron')
+const { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage, dialog } = require('electron')
 const { execFile } = require('child_process')
 const path = require('path')
 const fs = require('fs')
@@ -454,6 +454,66 @@ ipcMain.handle('stream-cache-lookup', async (e, { cacheKey } = {}) => {
     return { hit: true, url: pathToFileURL(full).toString(), path: full }
   } catch (err) {
     return { hit: false, error: err?.message || String(err) }
+  }
+})
+
+function sanitizeDownloadBaseName(name = '') {
+  return String(name || 'track')
+    .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 180) || 'track'
+}
+
+ipcMain.handle('download-track-to-file', async (event, { url, defaultName } = {}) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  const src = String(url || '').trim()
+  if (!src) return { ok: false, error: 'empty url' }
+  const safeBase = sanitizeDownloadBaseName(defaultName)
+  let defaultPath = path.join(app.getPath('music'), `${safeBase}.mp3`)
+  try {
+    const { canceled, filePath } = await dialog.showSaveDialog(win || undefined, {
+      title: 'Сохранить трек',
+      defaultPath,
+      filters: [
+        { name: 'Audio', extensions: ['mp3', 'm4a', 'aac', 'ogg', 'opus', 'webm', 'wav', 'flac'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+    })
+    if (canceled || !filePath) return { ok: false, canceled: true }
+    let partPath = ''
+    try {
+      if (/^file:\/\//i.test(src)) {
+        const abs = fileURLToPath(src)
+        if (!fs.existsSync(abs)) return { ok: false, error: 'file not found' }
+        fs.copyFileSync(abs, filePath)
+        return { ok: true, path: filePath, fileName: path.basename(filePath) }
+      }
+      if (!/^https?:\/\//i.test(src)) return { ok: false, error: 'unsupported url' }
+      partPath = `${filePath}.part`
+      const { contentType } = await downloadStreamToCacheFile(src, partPath, 250 * 1024 * 1024)
+      let finalPath = filePath
+      if (!path.extname(finalPath)) {
+        finalPath = `${finalPath}${extFromAudioMime(contentType)}`
+      }
+      if (fs.existsSync(finalPath)) {
+        try {
+          fs.unlinkSync(finalPath)
+        } catch {}
+      }
+      fs.renameSync(partPath, finalPath)
+      partPath = ''
+      return { ok: true, path: finalPath, fileName: path.basename(finalPath) }
+    } catch (err) {
+      if (partPath && fs.existsSync(partPath)) {
+        try {
+          fs.unlinkSync(partPath)
+        } catch {}
+      }
+      return { ok: false, error: err?.message || String(err) }
+    }
+  } catch (err) {
+    return { ok: false, error: err?.message || String(err) }
   }
 })
 
