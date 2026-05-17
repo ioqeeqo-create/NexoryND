@@ -1566,6 +1566,7 @@ let _homeWaveSliderResizeBound = false
 let _homeWaveSliderRaf = 0
 let _homeWaveSliderLastAt = 0
 let _homeWaveSliderPending = null
+let _homeProgressSeeking = false
 let _homeWaveAccumTick = 0
 const _homeWaveSliderBars = new Map()
 const _homeWavePeaksCache = new Map()
@@ -1810,6 +1811,22 @@ function applyHomeSliderStyle() {
         syncHomeWaveSliderCanvases(prog ? Number(prog.value) : 0)
       } catch (_) {}
     })
+  }
+  bindHomeProgressSeekGuards()
+}
+
+function bindHomeProgressSeekGuards() {
+  for (const id of ['home-clone-progress', 'pm-progress']) {
+    const el = document.getElementById(id)
+    if (!el || el._flowSeekBound) continue
+    el._flowSeekBound = true
+    const onStart = () => { _homeProgressSeeking = true }
+    const onEnd = () => { _homeProgressSeeking = false }
+    el.addEventListener('pointerdown', onStart)
+    el.addEventListener('pointerup', onEnd)
+    el.addEventListener('pointercancel', onEnd)
+    el.addEventListener('lostpointercapture', onEnd)
+    el.addEventListener('change', onEnd)
   }
 }
 
@@ -3988,6 +4005,7 @@ function getSettings() {
   if (typeof raw.optGameSleepMode !== 'boolean') raw.optGameSleepMode = false
   if (typeof raw.minimizeToTrayOnClose !== 'boolean') raw.minimizeToTrayOnClose = true
   if (typeof raw.launchAtLogin !== 'boolean') raw.launchAtLogin = false
+  if (typeof raw.offlineStreamCache !== 'boolean') raw.offlineStreamCache = true
   if (typeof raw.vkSeleniumBridge !== 'boolean') raw.vkSeleniumBridge = false
   const prevActive = raw.activeSource
   raw.activeSource = normalizeStoredActiveSource(raw.activeSource)
@@ -4746,12 +4764,61 @@ function initHomeNxMediaTools() {
   }
 }
 
+function isOfflineStreamCacheEnabled() {
+  const s = getSettings()
+  if (typeof s.offlineStreamCache === 'boolean') return s.offlineStreamCache
+  return true
+}
+
+function syncOfflineCacheUI() {
+  const el = document.getElementById('toggle-offline-cache')
+  if (el) el.classList.toggle('active', isOfflineStreamCacheEnabled())
+}
+
+function toggleOfflineStreamCache() {
+  const s = getSettings()
+  s.offlineStreamCache = !isOfflineStreamCacheEnabled()
+  try { localStorage.setItem('flow_settings', JSON.stringify(s)) } catch {}
+  syncOfflineCacheUI()
+  showToast(s.offlineStreamCache ? 'Оффлайн-кэш включён' : 'Оффлайн-кэш выключен')
+}
+
+async function clearOfflineCaches() {
+  const btn = document.getElementById('btn-clear-offline-cache')
+  if (btn) btn.disabled = true
+  try {
+    let removed = 0
+    if (window.api?.streamCacheClear) {
+      const res = await window.api.streamCacheClear().catch(() => null)
+      if (res?.ok) removed += Number(res.removed || res.files || 0)
+    }
+    const db = await openCoverCacheDb()
+    if (db) {
+      await coverCacheTx(db, 'readwrite', (store, done) => {
+        const req = store.clear()
+        req.onsuccess = () => done(true)
+        req.onerror = () => done(null)
+      })
+      _coverObjectUrlMap.forEach((url) => {
+        try { URL.revokeObjectURL(url) } catch (_) {}
+      })
+      _coverObjectUrlMap.clear()
+    }
+    showToast(removed ? `Кэш очищен (${removed} файлов)` : 'Кэш очищен')
+  } catch (_) {
+    showToast('Не удалось очистить кэш', true)
+  } finally {
+    if (btn) btn.disabled = false
+  }
+}
+
 function syncPlaybackSystemToggles() {
   const s = getSettings()
   const tray = document.getElementById('toggle-minimize-to-tray')
   if (tray) tray.classList.toggle('active', Boolean(s.minimizeToTrayOnClose))
   const login = document.getElementById('toggle-launch-at-login')
   if (login) login.classList.toggle('active', Boolean(s.launchAtLogin))
+  syncOfflineCacheUI()
   syncMediaQueueToggle()
 }
 
@@ -11840,14 +11907,19 @@ function syncHomeClonePlaybackProgress() {
   cur.textContent = fmtTime(audio.currentTime)
   tot.textContent = fmtTime(audio.duration)
   const ratio = audio.duration ? audio.currentTime / audio.duration : 0
-  prog.value = ratio
-  const fill = ratio * 100
-  const fillPct = `${Math.max(0, Math.min(100, fill))}%`
-  prog.style.setProperty('--progress-fill', fillPct)
-  const pmProg = document.getElementById('pm-progress')
-  if (pmProg) {
-    pmProg.value = ratio
-    pmProg.style.setProperty('--progress-fill', fillPct)
+  const seeking = (typeof _homeProgressSeeking !== 'undefined' && _homeProgressSeeking)
+    || document.activeElement?.id === 'home-clone-progress'
+    || document.activeElement?.id === 'pm-progress'
+  if (!seeking) {
+    prog.value = ratio
+    const fill = ratio * 100
+    const fillPct = `${Math.max(0, Math.min(100, fill))}%`
+    prog.style.setProperty('--progress-fill', fillPct)
+    const pmProg = document.getElementById('pm-progress')
+    if (pmProg) {
+      pmProg.value = ratio
+      pmProg.style.setProperty('--progress-fill', fillPct)
+    }
   }
   try {
     if (typeof syncHomeNxCoverModeProgress === 'function') syncHomeNxCoverModeProgress()
@@ -13148,6 +13220,7 @@ async function playTrackObj(track, opts = {}) {
 
   if (
     streamCacheKey &&
+    typeof isOfflineStreamCacheEnabled === 'function' && isOfflineStreamCacheEnabled() &&
     window.api?.streamCacheLookup &&
     track.source !== 'youtube' &&
     /^https?:\/\//i.test(streamUrl) &&
@@ -13345,6 +13418,7 @@ async function playTrackObj(track, opts = {}) {
 
   if (
     streamCacheKey &&
+    typeof isOfflineStreamCacheEnabled === 'function' && isOfflineStreamCacheEnabled() &&
     !usedStreamCache &&
     started &&
     remoteUrlForCache &&
@@ -13382,6 +13456,9 @@ async function playTrackObj(track, opts = {}) {
   }
   const cover = document.getElementById('player-cover')
   const effectiveCover = getEffectiveCoverUrl(track)
+  if (effectiveCover && typeof getAndCacheCover === 'function' && typeof isOfflineStreamCacheEnabled === 'function' && isOfflineStreamCacheEnabled()) {
+    void getAndCacheCover(effectiveCover, String(track.id || track.ytId || track.spotifyId || ''))
+  }
   if (playBtn) playBtn.innerHTML = ICONS.pause
   const pmIcon = document.getElementById('pm-play-icon')
   if (pmIcon) pmIcon.innerHTML = PM_PAUSE_INNER

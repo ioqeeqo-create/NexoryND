@@ -4768,14 +4768,19 @@ function syncHomeClonePlaybackProgress() {
   cur.textContent = fmtTime(audio.currentTime)
   tot.textContent = fmtTime(audio.duration)
   const ratio = audio.duration ? audio.currentTime / audio.duration : 0
-  prog.value = ratio
-  const fill = ratio * 100
-  const fillPct = `${Math.max(0, Math.min(100, fill))}%`
-  prog.style.setProperty('--progress-fill', fillPct)
-  const pmProg = document.getElementById('pm-progress')
-  if (pmProg) {
-    pmProg.value = ratio
-    pmProg.style.setProperty('--progress-fill', fillPct)
+  const seeking = (typeof _homeProgressSeeking !== 'undefined' && _homeProgressSeeking)
+    || document.activeElement?.id === 'home-clone-progress'
+    || document.activeElement?.id === 'pm-progress'
+  if (!seeking) {
+    prog.value = ratio
+    const fill = ratio * 100
+    const fillPct = `${Math.max(0, Math.min(100, fill))}%`
+    prog.style.setProperty('--progress-fill', fillPct)
+    const pmProg = document.getElementById('pm-progress')
+    if (pmProg) {
+      pmProg.value = ratio
+      pmProg.style.setProperty('--progress-fill', fillPct)
+    }
   }
   try {
     if (typeof syncHomeNxCoverModeProgress === 'function') syncHomeNxCoverModeProgress()
@@ -6076,6 +6081,7 @@ async function playTrackObj(track, opts = {}) {
 
   if (
     streamCacheKey &&
+    typeof isOfflineStreamCacheEnabled === 'function' && isOfflineStreamCacheEnabled() &&
     window.api?.streamCacheLookup &&
     track.source !== 'youtube' &&
     /^https?:\/\//i.test(streamUrl) &&
@@ -6273,6 +6279,7 @@ async function playTrackObj(track, opts = {}) {
 
   if (
     streamCacheKey &&
+    typeof isOfflineStreamCacheEnabled === 'function' && isOfflineStreamCacheEnabled() &&
     !usedStreamCache &&
     started &&
     remoteUrlForCache &&
@@ -6310,6 +6317,9 @@ async function playTrackObj(track, opts = {}) {
   }
   const cover = document.getElementById('player-cover')
   const effectiveCover = getEffectiveCoverUrl(track)
+  if (effectiveCover && typeof getAndCacheCover === 'function' && typeof isOfflineStreamCacheEnabled === 'function' && isOfflineStreamCacheEnabled()) {
+    void getAndCacheCover(effectiveCover, String(track.id || track.ytId || track.spotifyId || ''))
+  }
   if (playBtn) playBtn.innerHTML = ICONS.pause
   const pmIcon = document.getElementById('pm-play-icon')
   if (pmIcon) pmIcon.innerHTML = PM_PAUSE_INNER

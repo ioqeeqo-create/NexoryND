@@ -30,6 +30,8 @@ contextBridge.exposeInMainWorld('api', {
   presetEmbedMedia: (fileUrl) => ipcRenderer.invoke('preset-embed-media', fileUrl),
   streamCacheLookup: (payload) => ipcRenderer.invoke('stream-cache-lookup', payload),
   streamCacheStore: (payload) => ipcRenderer.invoke('stream-cache-store', payload),
+  streamCacheClear: () => ipcRenderer.invoke('stream-cache-clear'),
+  streamCacheStats: () => ipcRenderer.invoke('stream-cache-stats'),
   downloadTrackToFile: (payload) => ipcRenderer.invoke('download-track-to-file', payload),
   appVersion: () => ipcRenderer.invoke('app-version'),
   appUpdateCheck: () => ipcRenderer.invoke('app-update-check'),

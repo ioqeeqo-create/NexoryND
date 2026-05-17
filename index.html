@@ -886,12 +886,12 @@
               </div>
             </div>
             <div class="vs-row">
-              <label class="vs-label">Перемешка</label>
-              <button class="vsb" id="toggle-shuffle-btn" onclick="toggleShuffleMode()">Выключена</button>
+              <label class="vs-label" title="Кэш обложек и потоков SoundCloud / Audius / Spotify">Оффлайн-кэш</label>
+              <div class="vs-toggle active" id="toggle-offline-cache" onclick="toggleOfflineStreamCache()" title="Локальное кэширование"><div class="vs-toggle-thumb"></div></div>
             </div>
             <div class="vs-row">
-              <label class="vs-label">Повтор</label>
-              <button class="vsb" id="toggle-repeat-btn" onclick="toggleRepeatMode()">Выкл</button>
+              <label class="vs-label">Кэш на диске</label>
+              <button type="button" class="vsb" id="btn-clear-offline-cache" onclick="clearOfflineCaches()">Очистить</button>
             </div>
             <div class="vs-row">
               <label class="vs-label">Закрытие в трей</label>
@@ -1402,8 +1402,9 @@
 <!-- FULLSCREEN PLAYER MODE -->
 <div id="player-mode" class="player-mode hidden">
   <div class="pm-bg" id="pm-bg"></div>
-  <button class="pm-close" onclick="exitPlayerMode()">
+  <button type="button" class="pm-close" onclick="exitPlayerMode()" aria-label="Назад" title="Назад">
     <svg class="ui-icon lg" data-lucide="arrow-left" viewBox="0 0 24 24"></svg>
+    <span class="pm-close-label">Назад</span>
   </button>
 
   <div class="pm-layout" id="pm-layout">
@@ -1709,7 +1710,7 @@
     <div class="flow-game-sleep-title">Sleep mode</div>
     <div class="flow-game-sleep-sub">Только воспроизведение · верни Nexory на экран</div>
   </div>
-  <script src="renderer.js?v=69f3840b2147-mp9s9lht"></script>
+  <script src="renderer.js?v=cf5d0a23ac65-mp9tfw8w"></script>
 </body>
 </html>
 

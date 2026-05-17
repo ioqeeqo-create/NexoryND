@@ -517,6 +517,30 @@ ipcMain.handle('download-track-to-file', async (event, { url, defaultName } = {}
   }
 })
 
+ipcMain.handle('stream-cache-clear', async () => {
+  try {
+    const dir = getStreamCacheDir()
+    const entries = listStreamCacheFilesWithStats(dir)
+    for (const e of entries) {
+      try { fs.unlinkSync(e.full) } catch {}
+    }
+    return { ok: true, removed: entries.length, files: entries.length }
+  } catch (err) {
+    return { ok: false, error: err?.message || String(err) }
+  }
+})
+
+ipcMain.handle('stream-cache-stats', async () => {
+  try {
+    const dir = getStreamCacheDir()
+    const entries = listStreamCacheFilesWithStats(dir)
+    const bytes = entries.reduce((s, e) => s + e.size, 0)
+    return { ok: true, files: entries.length, bytes }
+  } catch (err) {
+    return { ok: false, error: err?.message || String(err) }
+  }
+})
+
 ipcMain.handle('stream-cache-store', async (e, { cacheKey, url } = {}) => {
   const key = String(cacheKey || '').trim()
   const remoteUrl = String(url || '').trim()
