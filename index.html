@@ -257,7 +257,8 @@
                                     <div class="home-clone-controls home-clone-controls--nx">
               <span id="host-lock-indicator-home" style="display:none;align-items:center;gap:4px;font-size:11px;opacity:.75;padding:0 4px">🔒 Host only</span>
               <div class="home-nx-ctrl-dock">
-                <div class="home-nx-ctrl-row home-nx-ctrl-row--grid">
+                <div class="home-nx-ctrl-row home-nx-ctrl-row--sym">
+                  <div class="home-nx-ctrl-wing home-nx-ctrl-wing--l">
                   <div class="home-nx-menu-wrap home-nx-ctrl-slot home-nx-slot-src">
                     <button type="button" class="ctrl-btn home-nx-ctrl-btn home-nx-source-btn" id="home-nx-source-btn" onclick="toggleHomeNxSourceMenu(event)" title="Источник" aria-expanded="false"><img class="home-nx-src-logo" id="home-nx-src-logo" src="assets/icon-source.png" alt=""></button>
                     <div class="home-nx-dropdown home-nx-dropdown--up hidden" id="home-nx-source-menu" role="menu">
@@ -266,11 +267,14 @@
                       <button type="button" class="home-nx-src-opt" data-src="hybrid" onclick="pickHomeNxSource('hybrid')"><img src="assets/icon-source.png" alt=""><span>Classic</span></button>
                     </div>
                   </div>
-                  <button type="button" class="ctrl-btn home-nx-ctrl-add" id="home-nx-row-add-btn" onclick="addCurrentTrackToPlaylist()" title="Добавить в плейлист"><svg class="ui-icon" data-lucide="plus" viewBox="0 0 24 24"></svg></button>
                   <button type="button" class="ctrl-btn home-nx-slot-repeat" id="home-repeat-btn" onclick="toggleRepeatMode()" title="Повтор"><svg class="ui-icon flow-ref-ctrl" data-lucide="repeat" viewBox="0 0 24 24"></svg></button>
+                  </div>
+                  <div class="home-nx-ctrl-core">
                   <button class="ctrl-btn home-nx-slot-prev" onclick="prevTrack()"><svg class="ui-icon" data-lucide="skip-back" viewBox="0 0 24 24"></svg></button>
                   <button class="ctrl-btn play-btn home-nx-slot-play" id="home-play-btn" onclick="togglePlay()"><svg class="ui-icon ctrl-play-icon" data-lucide="play" viewBox="0 0 24 24"></svg></button>
                   <button class="ctrl-btn home-nx-slot-next" onclick="nextTrack()"><svg class="ui-icon" data-lucide="skip-forward" viewBox="0 0 24 24"></svg></button>
+                  </div>
+                  <div class="home-nx-ctrl-wing home-nx-ctrl-wing--r">
                   <button class="ctrl-btn home-nx-slot-shuffle" id="home-shuffle-btn" onclick="toggleShuffleMode()" title="Перемешка"><svg class="ui-icon flow-ref-ctrl" data-lucide="shuffle" viewBox="0 0 24 24"></svg></button>
                   <div class="home-nx-menu-wrap home-nx-ctrl-slot home-nx-slot-speed">
                     <button type="button" class="ctrl-btn home-nx-ctrl-btn" id="home-nx-speed-btn" onclick="toggleHomeNxSpeedMenu(event)" title="Скорость" aria-expanded="false"><svg class="ui-icon" data-lucide="gauge" viewBox="0 0 24 24"></svg><span class="home-nx-ctrl-badge" id="home-nx-speed-badge">1×</span></button>
@@ -300,6 +304,7 @@
                       </div>
                     </div>
                   </div>
+                  </div>
                   <button type="button" class="ctrl-btn hidden" id="home-wave-dislike-btn" onclick="dislikeCurrentYandexWaveTrack()" title="Не нравится"><svg class="ui-icon" data-lucide="thumbs-down" viewBox="0 0 24 24"></svg></button>
                 </div>
               </div>
@@ -309,7 +314,7 @@
               <svg class="ui-icon" data-lucide="volume-2" viewBox="0 0 24 24" aria-hidden="true"></svg>
               <input type="range" class="home-nx-volume" id="home-nx-volume" min="0" max="1" step="0.01" value="0.8" oninput="setVolume(this.value)">
               <span class="home-nx-vol-val" id="home-nx-vol-val">8</span>
-              <button type="button" class="home-nx-vol-side home-nx-vol-dislike hidden" id="home-nx-vol-dislike-btn" onclick="dislikeCurrentYandexWaveTrack()" title="Не нравится"><svg class="ui-icon" data-lucide="thumbs-down" viewBox="0 0 24 24"></svg></button>
+              <button type="button" class="home-nx-vol-side home-nx-vol-add-icon" id="home-nx-vol-add-btn" onclick="addCurrentTrackToPlaylist()" title="Добавить в плейлист"><svg class="ui-icon" data-lucide="plus" viewBox="0 0 24 24"></svg></button>
             </div>
           </div>
         </div>
@@ -1460,7 +1465,7 @@
     <svg class="flow-vol-icon ui-icon md" data-lucide="volume-2" viewBox="0 0 24 24" style="opacity:0.75;flex-shrink:0"></svg>
     <input type="range" class="pm-volume" min="0" max="1" step="0.01" value="0.8" oninput="setVolume(this.value)" id="pm-volume">
     <span class="pm-vol-val" id="pm-vol-val">8</span>
-    <button type="button" class="pm-vol-side pm-vol-dislike hidden" id="pm-vol-dislike-btn" onclick="dislikeCurrentYandexWaveTrack()" title="Не нравится"><svg class="ui-icon" data-lucide="thumbs-down" viewBox="0 0 24 24"></svg></button>
+    <button type="button" class="pm-vol-side pm-vol-add-icon" id="pm-vol-add-btn" onclick="addCurrentTrackToPlaylist()" title="Добавить в плейлист"><svg class="ui-icon" data-lucide="plus" viewBox="0 0 24 24"></svg></button>
   </div>
   </div>
   </div>
@@ -1702,7 +1707,7 @@
     <div class="flow-game-sleep-title">Sleep mode</div>
     <div class="flow-game-sleep-sub">Только воспроизведение · верни Nexory на экран</div>
   </div>
-  <script src="renderer.js?v=41b85515fff9-mp938bym"></script>
+  <script src="renderer.js?v=7146ba7f57df-mp93tzid"></script>
 </body>
 </html>
 

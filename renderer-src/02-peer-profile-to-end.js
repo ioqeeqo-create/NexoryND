@@ -7368,10 +7368,15 @@ function updatePlayerLikeBtn() {
   const pmVolLike = document.getElementById('pm-vol-like-btn')
   const homeNxBtn = document.getElementById('home-nx-like-btn')
   const homeVolLike = document.getElementById('home-nx-vol-like-btn')
-  if (pmCoverBtn) { pmCoverBtn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; pmCoverBtn.classList.toggle('liked', liked) }
-  if (pmVolLike) { pmVolLike.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; pmVolLike.classList.toggle('liked', liked) }
-  if (homeVolLike) { homeVolLike.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; homeVolLike.classList.toggle('liked', liked) }
-  if (homeNxBtn) { homeNxBtn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; homeNxBtn.classList.toggle('liked', liked) }
+  const setLikeBtn = (btn) => {
+    if (!btn) return
+    btn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE
+    btn.classList.toggle('liked', liked)
+  }
+  setLikeBtn(pmCoverBtn)
+  setLikeBtn(pmVolLike)
+  setLikeBtn(homeVolLike)
+  setLikeBtn(homeNxBtn)
 }
 
 /** Склонение для «N трек/трека/треков» (рус.). */

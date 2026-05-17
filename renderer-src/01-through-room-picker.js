@@ -1568,8 +1568,12 @@ function applyHomeSliderStyle() {
   for (const id of ['home-clone-progress', 'pm-progress']) {
     const el = document.getElementById(id)
     if (!el) continue
-    el.classList.toggle('home-slider-wave', style === 'wave')
-    el.classList.toggle('home-slider-ios', style === 'ios')
+    el.dataset.sliderStyle = style
+    el.classList.remove('home-slider-wave', 'home-slider-ios', 'home-slider-line')
+    if (style === 'wave') el.classList.add('home-slider-wave')
+    else if (style === 'ios') el.classList.add('home-slider-ios')
+    else el.classList.add('home-slider-line')
+    el.style.removeProperty('background')
   }
   const b1 = document.getElementById('slider-style-line')
   const b2 = document.getElementById('slider-style-wave')

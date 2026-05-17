@@ -1568,8 +1568,12 @@ function applyHomeSliderStyle() {
   for (const id of ['home-clone-progress', 'pm-progress']) {
     const el = document.getElementById(id)
     if (!el) continue
-    el.classList.toggle('home-slider-wave', style === 'wave')
-    el.classList.toggle('home-slider-ios', style === 'ios')
+    el.dataset.sliderStyle = style
+    el.classList.remove('home-slider-wave', 'home-slider-ios', 'home-slider-line')
+    if (style === 'wave') el.classList.add('home-slider-wave')
+    else if (style === 'ios') el.classList.add('home-slider-ios')
+    else el.classList.add('home-slider-line')
+    el.style.removeProperty('background')
   }
   const b1 = document.getElementById('slider-style-line')
   const b2 = document.getElementById('slider-style-wave')
@@ -14209,10 +14213,15 @@ function updatePlayerLikeBtn() {
   const pmVolLike = document.getElementById('pm-vol-like-btn')
   const homeNxBtn = document.getElementById('home-nx-like-btn')
   const homeVolLike = document.getElementById('home-nx-vol-like-btn')
-  if (pmCoverBtn) { pmCoverBtn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; pmCoverBtn.classList.toggle('liked', liked) }
-  if (pmVolLike) { pmVolLike.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; pmVolLike.classList.toggle('liked', liked) }
-  if (homeVolLike) { homeVolLike.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; homeVolLike.classList.toggle('liked', liked) }
-  if (homeNxBtn) { homeNxBtn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE; homeNxBtn.classList.toggle('liked', liked) }
+  const setLikeBtn = (btn) => {
+    if (!btn) return
+    btn.innerHTML = liked ? HEART_FILLED : HEART_OUTLINE
+    btn.classList.toggle('liked', liked)
+  }
+  setLikeBtn(pmCoverBtn)
+  setLikeBtn(pmVolLike)
+  setLikeBtn(homeVolLike)
+  setLikeBtn(homeNxBtn)
 }
 
 /** Склонение для «N трек/трека/треков» (рус.). */
