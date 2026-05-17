@@ -1563,6 +1563,10 @@ function setHomeSliderStyle(style) {
 }
 
 let _homeWaveSliderResizeBound = false
+let _homeWaveSliderRaf = 0
+let _homeWaveSliderLastAt = 0
+let _homeWaveSliderPending = null
+let _homeWaveAccumTick = 0
 const _homeWaveSliderBars = new Map()
 const _homeWavePeaksCache = new Map()
 let _homeWavePeaksAccum = null
@@ -1572,7 +1576,7 @@ function getTrackWaveformCacheKey(track) {
   return `${track.source || ''}:${track.id || track.url || track.title || ''}`
 }
 
-function buildProceduralWavePeaks(bars = 96, seed = 0) {
+function buildProceduralWavePeaks(bars = 72, seed = 0) {
   const data = new Uint8Array(bars)
   const s = String(seed || 'x')
   for (let i = 0; i < bars; i++) {
@@ -1582,20 +1586,31 @@ function buildProceduralWavePeaks(bars = 96, seed = 0) {
   return data
 }
 
-function getLiveAnalyserWavePeaks(bars = 96) {
+let _flowFreqCacheAt = 0
+
+function flowRefreshFreqData() {
   if (!_analyser || !_freqData) return null
+  const now = performance.now()
+  if (now - _flowFreqCacheAt < 36) return _freqData
   try {
     _analyser.getByteFrequencyData(_freqData)
+    _flowFreqCacheAt = now
+    return _freqData
   } catch (_) {
     return null
   }
+}
+
+function getLiveAnalyserWavePeaks(bars = 96) {
+  const src = flowRefreshFreqData()
+  if (!src) return null
   const data = new Uint8Array(bars)
-  const n = _freqData.length
+  const n = src.length
   for (let i = 0; i < bars; i++) {
     const a = Math.floor((i / bars) * n)
     const b = Math.min(n, Math.floor(((i + 1) / bars) * n))
     let max = 0
-    for (let j = a; j < b; j++) max = Math.max(max, _freqData[j])
+    for (let j = a; j < b; j++) max = Math.max(max, src[j])
     data[i] = Math.max(32, Math.min(255, Math.floor(max * 1.15)))
   }
   return data
@@ -1628,7 +1643,7 @@ function ensureTrackWaveformPeaks(track) {
     try { syncHomeWaveSliderCanvases() } catch (_) {}
     return
   }
-  const seed = buildProceduralWavePeaks(96, key)
+  const seed = buildProceduralWavePeaks(72, key)
   _homeWaveSliderBars.set(key, seed)
   _homeWavePeaksAccum = { key, data: seed.slice(), frames: 0 }
   try { syncHomeWaveSliderCanvases() } catch (_) {}
@@ -1663,7 +1678,7 @@ function drawHomeWaveSliderCanvas(canvas, progress, trackKey) {
   if (!canvas) return
   const host = canvas.parentElement
   const wCss = Math.max(120, Math.floor(host?.clientWidth || canvas.clientWidth || 320))
-  const hCss = 44
+  const hCss = 40
   const dpr = Math.min(window.devicePixelRatio || 1, 2)
   const w = Math.floor(wCss * dpr)
   const h = Math.floor(hCss * dpr)
@@ -1697,13 +1712,16 @@ function drawHomeWaveSliderCanvas(canvas, progress, trackKey) {
   }
 }
 
-function syncHomeWaveSliderCanvases(progress) {
+function paintHomeWaveSliderCanvases(progress) {
   const style = normalizeHomeSliderStyle(getVisual().homeSliderStyle)
   const isWave = style === 'wave'
   const ratio = Math.max(0, Math.min(1, Number(progress) || 0))
   const trackKey = getTrackWaveformCacheKey(currentTrack)
   if (isWave && currentTrack && !audio.paused) {
-    try { accumulateAnalyserWavePeaks(trackKey, 96) } catch (_) {}
+    _homeWaveAccumTick += 1
+    if (_homeWaveAccumTick % 14 === 0) {
+      try { accumulateAnalyserWavePeaks(trackKey, 72) } catch (_) {}
+    }
   }
   for (const [canvasId, inputId] of [
     ['home-clone-progress-wave', 'home-clone-progress'],
@@ -1720,6 +1738,31 @@ function syncHomeWaveSliderCanvases(progress) {
     const p = Number.isFinite(progress) ? ratio : Number(input.value) || 0
     drawHomeWaveSliderCanvas(canvas, p, trackKey)
   }
+  _homeWaveSliderLastAt = performance.now()
+}
+
+function syncHomeWaveSliderCanvases(progress) {
+  const style = normalizeHomeSliderStyle(getVisual().homeSliderStyle)
+  const isWave = style === 'wave'
+  if (!isWave) {
+    paintHomeWaveSliderCanvases(progress)
+    return
+  }
+  _homeWaveSliderPending = progress
+  const seeking = document.activeElement?.id === 'home-clone-progress' || document.activeElement?.id === 'pm-progress'
+  const now = performance.now()
+  if (!seeking && now - _homeWaveSliderLastAt < 48) {
+    if (!_homeWaveSliderRaf) {
+      _homeWaveSliderRaf = requestAnimationFrame(() => {
+        _homeWaveSliderRaf = 0
+        const p = _homeWaveSliderPending
+        _homeWaveSliderPending = null
+        paintHomeWaveSliderCanvases(p)
+      })
+    }
+    return
+  }
+  paintHomeWaveSliderCanvases(progress)
 }
 
 function applyHomeSliderStyle() {

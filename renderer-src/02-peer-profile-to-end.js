@@ -5603,11 +5603,16 @@ function drawHomeVisualizerFrame() {
   const h = canvas.height
   ctx.clearRect(0, 0, w, h)
   const canAnalyze = ensureAudioAnalyzer() && !audio.paused && !audio.ended
+  let data = null
   if (canAnalyze) {
     try { _analyser.smoothingTimeConstant = Math.max(0.2, Math.min(0.95, Number(hw.smoothing || 72) / 100)) } catch (_) {}
-    _analyser.getByteFrequencyData(_freqData)
+    data = typeof flowRefreshFreqData === 'function' ? flowRefreshFreqData() : null
+    if (!data) {
+      try { _analyser.getByteFrequencyData(_freqData) } catch (_) {}
+      data = _freqData
+    }
   }
-  const data = _freqData || new Uint8Array(128)
+  if (!data) data = _freqData || new Uint8Array(128)
   const intensityScale = Math.max(0.6, Math.min(1.8, Number(hw.intensity || 100) / 100))
   const baseColor = v.accent2 || '#9ca3af'
   ctx.strokeStyle = baseColor
@@ -5693,7 +5698,8 @@ function startHomeVisualizerLoop() {
           const now = performance.now()
           const mode = typeof normalizeHomeWidgetMode === 'function' ? normalizeHomeWidgetMode(hw.mode) : hw.mode
           const heavy = mode === 'liquid'
-          const minMs = playing ? (heavy ? 66 : 40) : 240
+          const waveSlider = document.body.classList.contains('flow-slider-style-wave')
+          const minMs = playing ? (heavy ? 72 : (waveSlider ? 56 : 44)) : 260
           if (now - _homeVizLastDrawAt < minMs) shouldDraw = false
           else _homeVizLastDrawAt = now
         }
