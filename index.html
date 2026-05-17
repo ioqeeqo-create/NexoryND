@@ -253,11 +253,12 @@
               </div>
               <span id="home-clone-time-total">0:00</span>
             </div>
+            <div class="home-nx-viz-ctrl-stack" id="home-nx-viz-ctrl-stack">
             <div class="home-visualizer-wrap" id="home-visualizer-wrap">
               <canvas class="home-visualizer-canvas" id="home-visualizer-canvas" width="640" height="130"></canvas>
               <div class="home-visualizer-image hidden" id="home-visualizer-image"></div>
             </div>
-                                    <div class="home-clone-controls home-clone-controls--nx">
+            <div class="home-clone-controls home-clone-controls--nx">
               <span id="host-lock-indicator-home" style="display:none;align-items:center;gap:4px;font-size:11px;opacity:.75;padding:0 4px">🔒 Host only</span>
               <div class="home-nx-ctrl-dock">
                 <div class="home-nx-ctrl-row home-nx-ctrl-row--sym">
@@ -271,7 +272,7 @@
                       <button type="button" class="home-nx-src-opt" data-src="hybrid" onclick="pickHomeNxSource('hybrid')"><img src="assets/icon-source.png" alt=""><span>Classic</span></button>
                     </div>
                   </div>
-                  <button type="button" class="ctrl-btn home-nx-slot-repeat" id="home-repeat-btn" onclick="toggleRepeatMode()" title="Повтор"><svg class="ui-icon flow-ref-ctrl" data-lucide="repeat" viewBox="0 0 24 24"></svg></button>
+                  <button type="button" class="ctrl-btn home-nx-slot-dislike" id="home-nx-dislike-btn" onclick="dislikeCurrentYandexWaveTrack()" title="Не нравится"><svg class="ui-icon" data-lucide="thumbs-down" viewBox="0 0 24 24"></svg></button>
                   </div>
                   <div class="home-nx-ctrl-core">
                   <button class="ctrl-btn home-nx-slot-prev" onclick="prevTrack()"><svg class="ui-icon" data-lucide="skip-back" viewBox="0 0 24 24"></svg></button>
@@ -279,6 +280,7 @@
                   <button class="ctrl-btn home-nx-slot-next" onclick="nextTrack()"><svg class="ui-icon" data-lucide="skip-forward" viewBox="0 0 24 24"></svg></button>
                   </div>
                   <div class="home-nx-ctrl-wing home-nx-ctrl-wing--r">
+                  <button type="button" class="ctrl-btn home-nx-slot-repeat" id="home-repeat-btn" onclick="toggleRepeatMode()" title="Повтор"><svg class="ui-icon flow-ref-ctrl" data-lucide="repeat" viewBox="0 0 24 24"></svg></button>
                   <button class="ctrl-btn home-nx-slot-shuffle" id="home-shuffle-btn" onclick="toggleShuffleMode()" title="Перемешка"><svg class="ui-icon flow-ref-ctrl" data-lucide="shuffle" viewBox="0 0 24 24"></svg></button>
                   <div class="home-nx-menu-wrap home-nx-ctrl-slot home-nx-slot-speed">
                     <button type="button" class="ctrl-btn home-nx-ctrl-btn" id="home-nx-speed-btn" onclick="toggleHomeNxSpeedMenu(event)" title="Скорость" aria-expanded="false"><svg class="ui-icon" data-lucide="gauge" viewBox="0 0 24 24"></svg><span class="home-nx-ctrl-badge" id="home-nx-speed-badge">1×</span></button>
@@ -312,6 +314,7 @@
                   <button type="button" class="ctrl-btn hidden" id="home-wave-dislike-btn" onclick="dislikeCurrentYandexWaveTrack()" title="Не нравится"><svg class="ui-icon" data-lucide="thumbs-down" viewBox="0 0 24 24"></svg></button>
                 </div>
               </div>
+            </div>
             </div>
             <div class="home-nx-vol-row" id="home-nx-vol-row">
               <button type="button" class="home-nx-vol-side home-nx-vol-like" id="home-nx-vol-like-btn" onclick="likeCurrentTrack()" title="Лайк"><svg class="ui-icon flow-ref-heart-player" data-lucide="heart" viewBox="0 0 24 24"></svg></button>
@@ -1714,7 +1717,7 @@
     <div class="flow-game-sleep-title">Sleep mode</div>
     <div class="flow-game-sleep-sub">Только воспроизведение · верни Nexory на экран</div>
   </div>
-  <script src="renderer.js?v=6534498f1b85-mp9n41i7"></script>
+  <script src="renderer.js?v=7c10325a32f7-mp9nhqmy"></script>
 </body>
 </html>
 

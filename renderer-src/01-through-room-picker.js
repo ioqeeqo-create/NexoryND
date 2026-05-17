@@ -1582,7 +1582,7 @@ function drawHomeWaveSliderCanvas(canvas, progress, trackKey) {
   if (!canvas) return
   const host = canvas.parentElement
   const wCss = Math.max(120, Math.floor(host?.clientWidth || canvas.clientWidth || 320))
-  const hCss = 28
+  const hCss = 32
   const dpr = Math.min(window.devicePixelRatio || 1, 2)
   const w = Math.floor(wCss * dpr)
   const h = Math.floor(hCss * dpr)
@@ -1602,17 +1602,21 @@ function drawHomeWaveSliderCanvas(canvas, progress, trackKey) {
   const ratio = Math.max(0, Math.min(1, Number(progress) || 0))
   const pad = 2
   const bw = (wCss - pad * 2) / bars
+  const barW = Math.max(2.5, bw - 1.4)
   for (let i = 0; i < bars; i++) {
-    const bh = 4 + (data[i] / 255) * (hCss - 8)
-    const x = pad + i * bw
-    const y = hCss - bh
-    const played = (i + 0.5) / bars <= ratio
-    ctx.fillStyle = played ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.28)'
-    ctx.fillRect(x, y, Math.max(2, bw - 1.2), bh)
+    const norm = data[i] / 255
+    const bh = 6 + norm * (hCss - 12)
+    const x = pad + i * bw + (bw - barW) * 0.5
+    const y = hCss - bh - 2
+    const center = (i + 0.5) / bars
+    const played = center <= ratio
+    const alpha = played ? 0.94 : 0.34
+    ctx.fillStyle = `rgba(255,255,255,${alpha})`
+    ctx.fillRect(x, y, barW, bh)
   }
   const px = pad + ratio * (wCss - pad * 2)
-  ctx.fillStyle = '#fff'
-  ctx.fillRect(px - 1, 2, 2, hCss - 4)
+  ctx.fillStyle = 'rgba(255,255,255,0.98)'
+  ctx.fillRect(Math.round(px) - 1, 3, 2, hCss - 6)
 }
 
 function syncHomeWaveSliderCanvases(progress) {
@@ -1698,18 +1702,21 @@ function drawSliderPreviewFrame() {
     data[i] = Math.floor(90 + Math.abs(Math.sin(t)) * 120 + Math.sin(t * 2.3) * 28)
   }
   if (style === 'wave') {
-    const bw = (w - 8) / bars
+    const pad = 4
+    const bw = (w - pad * 2) / bars
+    const barW = Math.max(2.5, bw - 1.4)
     for (let i = 0; i < bars; i++) {
-      const bh = 6 + (data[i] / 255) * (h - 10)
-      const x = 4 + i * bw
-      const y = h - bh
-      const played = i / bars <= progress
-      ctx.fillStyle = played ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.28)'
-      ctx.fillRect(x, y, Math.max(2, bw - 1.5), bh)
+      const norm = data[i] / 255
+      const bh = 6 + norm * (h - 12)
+      const x = pad + i * bw + (bw - barW) * 0.5
+      const y = h - bh - 2
+      const played = (i + 0.5) / bars <= progress
+      ctx.fillStyle = played ? 'rgba(255,255,255,0.94)' : 'rgba(255,255,255,0.34)'
+      ctx.fillRect(x, y, barW, bh)
     }
-    const px = 4 + progress * (w - 8)
+    const px = pad + progress * (w - pad * 2)
     ctx.fillStyle = '#fff'
-    ctx.fillRect(px - 1, 2, 2, h - 4)
+    ctx.fillRect(Math.round(px) - 1, 3, 2, h - 6)
   } else if (style === 'ios') {
     const trackY = h / 2
     ctx.fillStyle = 'rgba(255,255,255,0.22)'

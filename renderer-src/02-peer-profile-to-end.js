@@ -232,7 +232,7 @@ function updateYandexWaveDislikeButtonsVisible() {
     String(currentTrack.source || '').toLowerCase() === 'yandex' &&
     Boolean(currentTrack?.yandexRotor?.batchId)
   )
-  ;['player-wave-dislike-btn', 'pm-wave-dislike-btn', 'pm-dislike-btn', 'pm-vol-dislike-btn', 'home-wave-dislike-btn', 'home-nx-vol-dislike-btn'].forEach((id) => {
+  ;['player-wave-dislike-btn', 'pm-wave-dislike-btn', 'pm-dislike-btn', 'pm-vol-dislike-btn', 'home-wave-dislike-btn', 'home-nx-vol-dislike-btn', 'home-nx-dislike-btn'].forEach((id) => {
     const b = document.getElementById(id)
     if (b) b.classList.toggle('hidden', !show)
   })
